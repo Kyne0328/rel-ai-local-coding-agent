@@ -44,8 +44,7 @@ function workspaceState(alias, workspace, config, tasks, activity) {
 
 function workspaceGitState(alias, workspace, config) {
   const workspacePath = String(workspace?.path || '');
-  const allowed = Array.isArray(workspace.allowedRemotes) && workspace.allowedRemotes.length ? workspace.allowedRemotes : ['origin'];
-  const cacheKey = workspaceStateCacheKey(alias, workspacePath, allowed);
+  const cacheKey = workspaceStateCacheKey(alias, workspacePath);
   let cached = gitStateCache.get(cacheKey);
   if (!cached) {
     cached = {
@@ -55,17 +54,17 @@ function workspaceGitState(alias, workspace, config) {
       value: baseWorkspaceGitState(workspacePath)
     };
     gitStateCache.set(cacheKey, cached);
-    if (cached.value.isGit) scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, allowed);
+    if (cached.value.isGit) scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config);
     return cached.value;
   }
   if (cached.value.isGit && Date.now() - cached.createdAt >= WORKSPACE_GIT_STATE_TTL_MS) {
-    scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, allowed);
+    scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config);
   }
   return cached.value;
 }
 
-function workspaceStateCacheKey(alias, workspacePath, allowed) {
-  return [alias, workspacePath, ...allowed].join('\u0000');
+function workspaceStateCacheKey(alias, workspacePath) {
+  return [alias, workspacePath].join('\u0000');
 }
 
 function baseWorkspaceGitState(workspacePath) {
@@ -86,17 +85,17 @@ function baseWorkspaceGitState(workspacePath) {
   };
 }
 
-function scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, allowed) {
+function scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config) {
   if (cached.refreshing) return cached.refreshPromise;
   cached.refreshing = true;
-  const run = () => refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config, allowed);
+  const run = () => refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config);
   const refreshPromise = refreshQueue.then(run, run);
   refreshQueue = refreshPromise.catch(() => {});
   cached.refreshPromise = refreshPromise;
   return refreshPromise;
 }
 
-async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config, allowed) {
+async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config) {
   const workspacePath = String(workspace?.path || '');
   try {
     const base = baseWorkspaceGitState(workspacePath);
@@ -122,7 +121,7 @@ async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, conf
     if (remotes.exitCode === 0 && !remotes.stdoutTruncated) {
       next.remotes = String(remotes.stdout || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
     }
-    next.remoteAvailable = allowed.some(remote => next.remotes.includes(remote));
+    next.remoteAvailable = next.remotes.length > 0;
     commitWorkspaceGitState(cacheKey, cached, alias, next);
     return next;
   } catch (error) {

@@ -43,7 +43,7 @@ function makeDefaultPatchConfig() {
 
 function makeDefaultConfig() {
   return {
-    version: 3,
+    version: 4,
     stateDir: defaultStateDir(),
     auditLogPath: "",
     maxOutputBytes: 2 * 1024 * 1024,
@@ -51,7 +51,6 @@ function makeDefaultConfig() {
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
     productUx: {
-      showAutomaticValidation: true,
       staleHours: 24,
       cleanupOlderThanHours: 168,
       enableStateExport: true
@@ -189,7 +188,7 @@ function mergeConfigBase(base, input) {
 }
 
 function normalizeCorePaths(next, base) {
-  next.version = 3;
+  next.version = 4;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
@@ -212,7 +211,6 @@ function normalizeProductSettings(next, base, input) {
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   const product = { ...base.productUx, ...objectOrEmpty(input.productUx) };
   next.productUx = {
-    showAutomaticValidation: normalizeBoolean(product.showAutomaticValidation, base.productUx.showAutomaticValidation),
     staleHours: clampNumber(product.staleHours, 1, 24 * 365, base.productUx.staleHours),
     cleanupOlderThanHours: clampNumber(product.cleanupOlderThanHours, 1, 24 * 365, base.productUx.cleanupOlderThanHours),
     enableStateExport: normalizeBoolean(product.enableStateExport, base.productUx.enableStateExport)
@@ -250,9 +248,6 @@ function normalizeWorkspace(workspace) {
     path: workspace.path,
     testCommands: normalizeWorkspaceCommandMap(workspace.testCommands),
     commands: normalizeWorkspaceCommandMap(workspace.commands),
-    protectedBranches: workspace.protectedBranches || ["main", "master"],
-    defaultBaseBranch: workspace.defaultBaseBranch || "main",
-    allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
     context: normalizeContextConfig(workspace.context),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
@@ -438,9 +433,6 @@ function resolveWorkspace(config, alias) {
     path: realRoot,
     testCommands: entry.testCommands || {},
     commands: entry.commands || {},
-    protectedBranches: entry.protectedBranches || ["main", "master"],
-    defaultBaseBranch: entry.defaultBaseBranch || "main",
-    allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
@@ -495,9 +487,6 @@ function publicConfigSummary(config) {
         path: entry.path,
         testCommandKeys: Object.keys(entry.testCommands || {}).sort((a, b) => a.localeCompare(b)),
         commandKeys: Object.keys(entry.commands || {}).sort((a, b) => a.localeCompare(b)),
-        protectedBranches: entry.protectedBranches || ["main", "master"],
-        defaultBaseBranch: entry.defaultBaseBranch || "main",
-        allowedRemotes: entry.allowedRemotes || ["origin"],
         repoSlug: entry.repoSlug || "",
         context: normalizeContextConfig(entry.context),
         discoveredCommands: discovered,

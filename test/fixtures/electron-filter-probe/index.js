@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#workspaces'`);
-    await waitFor(win, `document.querySelector('.workspace-validation-preferences input[type="checkbox"]') && document.querySelector('.workspace-grid')`);
+    await waitFor(win, `document.querySelector('.workspace-grid')`);
     const workspaces = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const waitUntil = async (predicate, timeout = 4000) => {
@@ -222,14 +222,8 @@ app.whenReady().then(async () => {
         }
         return false;
       };
-      const hasValidationMetric = () => document.querySelector('.summary-metrics')?.textContent.includes('Validation ready') || false;
-      const before = hasValidationMetric();
-      let toggle = document.querySelector('.workspace-validation-preferences input[type="checkbox"]');
-      toggle.checked = false; toggle.dispatchEvent(new Event('change', { bubbles: true }));
-      const hidden = await waitUntil(() => !hasValidationMetric());
-      toggle = document.querySelector('.workspace-validation-preferences input[type="checkbox"]');
-      toggle.checked = true; toggle.dispatchEvent(new Event('change', { bubbles: true }));
-      const restored = await waitUntil(hasValidationMetric);
+      const validationPreferenceRemoved = !document.querySelector('.workspace-validation-preferences');
+      const validationMetricRemoved = !document.querySelector('.summary-metrics')?.textContent.includes('Validation ready');
       const detailsTrigger = document.querySelector('[data-repository-details]');
       detailsTrigger?.click();
       const detailsModal = await waitUntil(() => document.querySelector('#__relai-modal-title')?.textContent.includes('Repository details'));
@@ -238,9 +232,8 @@ app.whenReady().then(async () => {
       location.hash = '#tasks';
       await waitUntil(() => Boolean(document.querySelector('.workspace-menu-trigger')));
       return {
-        before,
-        hidden,
-        restored,
+        validationPreferenceRemoved,
+        validationMetricRemoved,
         detailsModal,
         detailsInlineVisible,
         scopeName: document.querySelector('.workspace-menu-trigger')?.getAttribute('aria-label') || ''

@@ -29,10 +29,7 @@ function read(rel) {
   const missingPath = path.join(tmpRoot, 'future-repo-does-not-exist');
   const result = updateWorkspace(cfg, {
     alias: 'future-repo',
-    path: missingPath,
-    protectedBranches: ['main'],
-    defaultBaseBranch: 'main',
-    allowedRemotes: ['origin']
+    path: missingPath
   });
   assert.equal(result.ok, true);
   assert.equal(result.config.workspaces.find((item) => item.alias === 'future-repo')?.path, missingPath);

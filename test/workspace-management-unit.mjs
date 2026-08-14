@@ -21,9 +21,6 @@ try {
     workspaces: {
       alpha: {
         path: first,
-        protectedBranches: ['main'],
-        defaultBaseBranch: 'main',
-        allowedRemotes: ['origin'],
         context: { snapshotMaxFiles: 321 },
         testCommands: { test: 'npm test' }
       }

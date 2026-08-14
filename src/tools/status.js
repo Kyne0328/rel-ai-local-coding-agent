@@ -113,7 +113,6 @@ function workspaceList(config) {
       repoSlug: item.repoSlug || '',
       testCommandKeys: sortedKeys(item.testCommands),
       commandKeys: sortedKeys(item.commands),
-      protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
       context: item.context || {}
     };
   }).sort((left, right) => left.alias.localeCompare(right.alias));

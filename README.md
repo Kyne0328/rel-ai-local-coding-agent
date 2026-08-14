@@ -141,7 +141,7 @@ Validation can be selected from the task-owned change scope, and fresh evidence 
 
 ### Git actions that remain deliberate
 
-Rel.AI can review task changes, commit scoped work, push to configured remotes, and prepare pull-request draft text. Publishing remains a separate decision from editing. Protected branches, sensitive staged paths, existing workspace state, and allowed remotes remain part of the repository policy rather than being left to a generic shell command.
+Rel.AI can review task changes, commit scoped work, push to an existing Git remote, and prepare pull-request draft text. Publishing remains a separate decision from editing. Sensitive staged paths remain explicitly authorized, push targets must already exist in the repository, unsafe Git remote-helper transports are rejected, and pull-request base branches are detected from Git instead of workspace settings.
 
 ## Local execution is the point
 

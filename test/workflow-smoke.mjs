@@ -37,7 +37,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   workspaces: {
     smoke: {
       path: workspace,
-      protectedBranches: ['main', 'master'],
       testCommands: { check: 'npm run check' },
       commands: {}
     }

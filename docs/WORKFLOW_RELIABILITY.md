@@ -137,6 +137,6 @@ Ordinary workflow assembly consumes existing authority facts and cached topology
 
 ## Recovery and publishing
 
-Use `relai_changes` restore/reset/tidy actions only for the requested recovery scope. Publishing remains explicit through `relai_publish`; workflow guidance never commits, pushes, or widens a protected branch/remote policy automatically.
+Use `relai_changes` restore/reset/tidy actions only for the requested recovery scope. Publishing remains explicit through `relai_publish`; workflow guidance never commits or pushes automatically, and push targets are validated from the repository's actual Git remotes at execution time.
 
 When executing an approved multi-task plan, keep the same work session, verify each completion condition, and update its checklist only when evidence proves the task complete. Consolidate accumulated implementation as the plan advances instead of layering duplicate owners or compatibility paths.

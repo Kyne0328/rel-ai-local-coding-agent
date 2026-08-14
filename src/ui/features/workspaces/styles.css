@@ -30,14 +30,15 @@
 .workspace-readiness-fact dt i { @apply size-1.5 rounded-full; background: var(--ui-status-warning-foreground); }
 .workspace-readiness-fact.good dt i { background: var(--ui-status-success-foreground); }
 .workspace-readiness-fact.bad dt i { background: var(--ui-status-danger-foreground); }
+.workspace-readiness-fact.neutral dt i { background: var(--ui-text-tertiary); }
 .workspace-readiness-fact dd { @apply m-0 mt-2; }
 .workspace-readiness-fact dd strong { @apply block text-[12px]; }
 .workspace-readiness-fact dd small { @apply mt-1 block text-[11px] leading-5; color: var(--ui-text-secondary); }
 .workspace-notice { @apply flex flex-wrap gap-2 border-b px-4 py-3 text-[12px]; background: var(--ui-status-warning-background); color: var(--ui-status-warning-foreground); border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 25%, transparent); }
 .workspace-actions { @apply flex flex-wrap items-center gap-2 px-4 py-3; }
 .workspace-primary-actions { @apply border-b; border-color: var(--ui-border-default); }
-.workspace-operational, .workspace-policy-grid { @apply grid gap-0; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.workspace-operational > *, .workspace-policy-grid > * { @apply border-b border-r p-3; border-color: var(--ui-border-subtle); }
+.workspace-operational { @apply grid gap-0; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.workspace-operational > * { @apply border-b border-r p-3; border-color: var(--ui-border-subtle); }
 .workspace-secondary-actions { @apply flex flex-wrap gap-2 border-t p-4; border-color: var(--ui-border-default); }
 .workspace-empty-state { @apply grid min-h-72 place-items-center rounded-xl p-8 text-center; background: var(--ui-surface-primary); border: 1px dashed var(--ui-border-default); }
 .workspace-empty-state > * { @apply max-w-xl; }
@@ -56,10 +57,6 @@
 .ws-form-status.warn { color: var(--ui-status-warning-foreground); }
 .ws-form-status.error { color: var(--ui-status-danger-foreground); }
 .ws-form-conflict { @apply mt-2 rounded-lg px-3 py-2 text-[12px] leading-5; background: var(--ui-status-danger-background); border: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 38%, transparent); color: var(--ui-status-danger-foreground); }
-.ws-form-advanced { @apply mt-4 overflow-hidden rounded-xl; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
-.ws-form-advanced > summary { @apply flex min-h-14 list-none items-center justify-between gap-3 px-3; }
-.ws-form-advanced[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
-.ws-form-advanced-body { @apply px-3 pb-4; }
 .ws-form-actions { @apply mt-4 flex justify-end gap-2; }
 .workspace-repair-identity { @apply mt-3 grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
 .workspace-repair-identity span { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
@@ -83,29 +80,18 @@
 }
 
 @media (max-width: 520px) {
-  .workspace-readiness-facts, .workspace-operational, .workspace-policy-grid { grid-template-columns: 1fr; }
+  .workspace-readiness-facts, .workspace-operational { grid-template-columns: 1fr; }
   .workspace-readiness-fact { border-left: 0; border-bottom: 1px solid var(--ui-border-subtle); }
 }
 
 @layer components {
-  .workspace-operational > *, .workspace-policy-grid > * { min-width: 0; display: grid; gap: 3px; }
-  .workspace-operational span, .workspace-policy-grid span, .workspace-section-label { color: var(--ui-text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
-  .workspace-operational strong, .workspace-policy-grid strong { min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
-  .workspace-validation { display: grid; gap: 10px; padding: 12px; border-bottom: 1px solid var(--ui-border-subtle); }
-  .workspace-validation-head { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .workspace-validation-head > div { display: grid; min-width: 0; gap: 3px; }
-  .workspace-validation-head strong { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
-  .workspace-validation-empty { color: var(--ui-text-secondary); font-size: 12px; line-height: 1.5; }
-  .validation-command-list { display: grid; min-width: 0; gap: 6px; }
-  .validation-command { min-width: 0; overflow-x: auto; border-radius: 6px; padding: 7px 8px; background: var(--ui-surface-secondary); color: var(--ui-text-secondary); font-size: 11px; white-space: nowrap; }
+  .workspace-operational > * { min-width: 0; display: grid; gap: 3px; }
+  .workspace-operational span { color: var(--ui-text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  .workspace-operational strong { min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.4; }
 }
 
 @media (max-width: 1250px) {
   .workspace-grid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 520px) {
-  .workspace-validation-head { flex-direction: column; }
 }
 
 

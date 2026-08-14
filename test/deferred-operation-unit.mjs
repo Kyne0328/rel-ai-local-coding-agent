@@ -22,9 +22,6 @@ fs.writeFileSync(configPath, JSON.stringify({
       path: workspaceRoot,
       testCommands: {},
       commands: {},
-      protectedBranches: ['main'],
-      defaultBaseBranch: 'main',
-      allowedRemotes: ['origin'],
       context: { snapshotMaxFiles: 1000, includeRoots: [], excludePaths: ['.git', 'node_modules'] },
       validationRules: {}
     }

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
   "maxOutputBytes": 2097152,
@@ -7,7 +7,6 @@
   "trustedLocalAgent": true,
   "trustedBudgetMultiplier": 2,
   "productUx": {
-    "showAutomaticValidation": true,
     "staleHours": 24,
     "cleanupOlderThanHours": 168,
     "enableStateExport": true
@@ -33,14 +32,6 @@
       "path": "/absolute/path/to/myapp",
       "testCommands": {},
       "commands": {},
-      "protectedBranches": [
-        "main",
-        "master"
-      ],
-      "defaultBaseBranch": "main",
-      "allowedRemotes": [
-        "origin"
-      ],
       "repoSlug": "",
       "context": {
         "snapshotMaxFiles": 3000,

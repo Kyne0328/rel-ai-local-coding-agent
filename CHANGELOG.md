@@ -3,6 +3,7 @@
 ## [0.25.2] — 2026-08-14
 
 ### Repository workflow hardening
+- **Hard-cut stale workspace Git settings.** Workspace setup now stores only project configuration that Rel.AI actually needs: Git branch/base/remotes are derived from the repository at runtime, publish rejects unknown or unsafe remote-helper targets, non-Git folders remain first-class workspaces, and the obsolete validation-display preference is removed.
 - **Removed managed worktree isolation from the public workflow.** Work sessions now stay bound to configured repositories instead of exposing a second dynamic-workspace lifecycle that could lose dependencies or become unavailable mid-session.
 - **Fixed Repository Intelligence diagnostics contracts.** Diagnostic language summaries now validate correctly, and command-discovery failures are retained as bounded warnings instead of disappearing behind empty catches.
 - **Standardized project instructions on AGENTS files.** Automatic instruction discovery now uses only `AGENTS.md` and `AGENTS.override.md`; legacy Rel.AI instruction paths remain ordinary repository files but no longer affect agent behavior.

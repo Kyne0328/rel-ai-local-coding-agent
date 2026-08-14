@@ -276,23 +276,72 @@ function sensitiveUnifiedDiffError(relativePath) {
   return error;
 }
 
-// Enforce the workspace's allowedRemotes allowlist. Beyond honoring a configured
-// setting, this blocks git's command-executing transports (ext::, fd::, a remote
-// whose URL starts with a shell command) by refusing any remote name not on the list.
-function allowedRemoteSet(workspace) {
-  const list = Array.isArray(workspace.allowedRemotes) && workspace.allowedRemotes.length
-    ? workspace.allowedRemotes
-    : ["origin"];
-  return new Set(list.map((item) => String(item).trim()).filter(Boolean));
-}
-
-function assertRemoteAllowed(workspace, remote) {
-  const name = String(remote || "").trim();
-  const allowed = allowedRemoteSet(workspace);
-  if (!name || !allowed.has(name)) {
-    throw new Error(`Remote '${name || "(empty)"}' is not in this workspace's allowedRemotes (${[...allowed].join(", ")}). Add it to the workspace config to use it.`);
+function safeRemoteName(value) {
+  const name = String(value || "").trim();
+  if (!/^[A-Za-z0-9._/-]{1,200}$/.test(name) || name.startsWith("-") || name.includes("..")) {
+    throw new Error(`Git remote name is not safe to use: ${name || "(empty)"}.`);
   }
   return name;
+}
+
+function configuredRemoteNames(output) {
+  return String(output || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function hasControlCharacters(value) {
+  return Array.from(String(value || "")).some(character => {
+    const code = character.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
+}
+
+function assertSafeRemoteUrl(remote, url) {
+  const value = String(url || "").trim();
+  if (!value || value.startsWith("-") || hasControlCharacters(value)) {
+    throw new Error(`Git remote '${remote}' has an invalid push URL.`);
+  }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*::/.test(value)) {
+    throw new Error(`Git remote '${remote}' uses an unsafe Git remote-helper transport. Configure a standard Git URL before publishing.`);
+  }
+}
+
+async function resolvePublishRemote(workspace, config, requestedRemote) {
+  const remote = safeRemoteName(requestedRemote || "origin");
+  const listed = await runProcess("git", ["remote"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (listed.exitCode !== 0) throw new Error(`Could not read configured Git remotes: ${listed.stderr || listed.stdout || listed.exitCode}`);
+  const configured = configuredRemoteNames(listed.stdout);
+  if (!configured.includes(remote)) {
+    throw new Error(`Git remote '${remote}' is not configured in this repository. Available remotes: ${configured.join(", ") || "none"}.`);
+  }
+  const urls = await runProcess("git", ["remote", "get-url", "--push", "--all", remote], { cwd: workspace.path, timeout: 30000 }, config);
+  if (urls.exitCode !== 0) throw new Error(`Could not read push URL for Git remote '${remote}': ${urls.stderr || urls.stdout || urls.exitCode}`);
+  const pushUrls = configuredRemoteNames(urls.stdout);
+  if (!pushUrls.length) throw new Error(`Git remote '${remote}' has no push URL configured.`);
+  for (const url of pushUrls) assertSafeRemoteUrl(remote, url);
+  return remote;
+}
+
+async function gitRefExists(workspace, config, ref) {
+  const result = await runProcess("git", ["rev-parse", "--verify", "--quiet", ref], { cwd: workspace.path, timeout: 30000 }, config);
+  return result.exitCode === 0;
+}
+
+async function detectDefaultBaseBranch(workspace, config) {
+  const remotes = await runProcess("git", ["remote"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (remotes.exitCode === 0) {
+    const names = configuredRemoteNames(remotes.stdout).filter((name) => /^[A-Za-z0-9._/-]{1,200}$/.test(name) && !name.startsWith("-") && !name.includes(".."));
+    names.sort((left, right) => Number(right === "origin") - Number(left === "origin") || left.localeCompare(right));
+    for (const remote of names) {
+      const symbolic = await runProcess("git", ["symbolic-ref", "--quiet", "--short", `refs/remotes/${remote}/HEAD`], { cwd: workspace.path, timeout: 30000 }, config);
+      const value = String(symbolic.stdout || "").trim();
+      const prefix = `${remote}/`;
+      if (symbolic.exitCode === 0 && value.startsWith(prefix) && value.length > prefix.length) return value.slice(prefix.length);
+    }
+  }
+  for (const candidate of ["main", "master"]) {
+    if (await gitRefExists(workspace, config, `refs/heads/${candidate}`)) return candidate;
+  }
+  return currentGitBranch(workspace, config);
 }
 
 async function currentGitBranch(workspace, config) {
@@ -484,7 +533,7 @@ function assertPlainBranchName(branch) {
 
 async function relaiGitPush(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
-  const remote = assertRemoteAllowed(workspace, String(args.remote || "origin").trim());
+  const remote = await resolvePublishRemote(workspace, config, args.remote || "origin");
   const branch = String(args.branch || await currentGitBranch(workspace, config)).trim();
   if (!branch) throw new Error("relai_git_push could not determine the branch to push.");
   // git push treats this argument as a refspec: ":main" deletes the remote branch and
@@ -500,7 +549,7 @@ async function relaiGitPush(workspace, config, args = {}) {
 async function relaiGitDraftPr(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const head = String(args.head || await currentGitBranch(workspace, config)).trim();
-  const base = String(args.base || workspace.defaultBaseBranch || "main").trim();
+  const base = String(args.base || await detectDefaultBaseBranch(workspace, config)).trim();
   const title = String(args.title || "").trim();
   const body = String(args.body || "").trim();
   const diff = await runProcess("git", ["diff", `${base}...${head}`], { cwd: workspace.path, timeout: 60000 }, { ...config, maxOutputBytes: 2 * 1024 * 1024 });
