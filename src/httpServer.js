@@ -13,6 +13,9 @@ import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
+import { flushAuditWrites } from './audit.js';
+import { flushLocalAnalytics } from './localAnalytics.js';
+import { flushTaskHistoryPersistence } from './taskHistoryStore.js';
 import { stopAllUiSessions } from './webAutomationManager.js';
 import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
 import { ensureConfig, getConfigPath, readConfig } from './config.js';
@@ -86,6 +89,9 @@ function startHttpServer(options = {}) {
     shutdownPromise = Promise.allSettled([
       shutdownMcpTransport(),
       mcpConnectionManager.shutdown('http_server_closed'),
+      flushAuditWrites(),
+      flushTaskHistoryPersistence(),
+      flushLocalAnalytics(runtimeConfig),
       stopAllManagedProcesses(runtimeConfig),
       stopAllUiSessions(),
       shutdownTelemetry()

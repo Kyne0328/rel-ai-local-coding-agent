@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import { combineAbortSignals } from './abortSignals.js';
-import { readJsonFile, writeJsonAtomic } from './durableState.js';
+import { readJsonFile, writeJsonAtomic, writeJsonAtomicAsync } from './durableState.js';
 import { normalizeExecutionInvocation, resolveCommandCwd, normalizeCommandEnv, redactCommandForAudit } from './bridge/exec.js';
 import { isProcessTreeAlive, terminateProcessTree } from './process.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
@@ -20,11 +20,16 @@ const DEFAULT_STARTUP_WAIT_MS = 750;
 const DEFAULT_STOP_GRACE_MS = 3000;
 const DEFAULT_FORCE_WAIT_MS = 2000;
 const METADATA_FLUSH_DELAY_MS = 50;
+const METADATA_RESCAN_INTERVAL_MS = 30_000;
+const METADATA_PRUNE_INTERVAL_MS = 60_000;
 const LOG_FLUSH_DELAY_MS = 10;
 const LOG_FLUSH_MAX_BYTES = 64 * 1024;
 const ACTIVE_STATUSES = new Set(['starting', 'running', 'stopping']);
 const TERMINAL_STATUSES = new Set(['exited', 'failed', 'stopped']);
 const processes = new Map();
+const metadataScanAt = new Map();
+const metadataPruneAt = new Map();
+const metadataWriteQueues = new Map();
 
 function processRoot(config) {
   return path.join(getStateDir(config), 'processes');
@@ -669,7 +674,7 @@ function finishRecord(config, record, fields) {
   Object.assign(record, fields, { endedAt: new Date().toISOString() });
   record.child = null;
   if (!record.discarded) {
-    void drainLogWrites(config, record).then(() => safePersistMetadata(config, record));
+    void drainLogWrites(config, record).then(() => queueMetadataPersist(config, record));
   }
 }
 
@@ -689,6 +694,29 @@ function persistMetadata(config, record) {
   const directory = processDirectory(config, record.processId);
   const target = path.join(directory, 'metadata.json');
   writeJsonAtomic(target, metadataRecord(record), { mode: 0o600, backup: true });
+}
+
+function persistMetadataAsync(config, record) {
+  const directory = processDirectory(config, record.processId);
+  const target = path.join(directory, 'metadata.json');
+  return writeJsonAtomicAsync(target, metadataRecord(record), { mode: 0o600, backup: true, durable: false });
+}
+
+function queueMetadataPersist(config, record) {
+  if (record.discarded || record.persistenceFailureHandled) return Promise.resolve(false);
+  const previous = metadataWriteQueues.get(record.processId) || Promise.resolve();
+  const next = previous
+    .then(() => persistMetadataAsync(config, record))
+    .then(() => true)
+    .catch(error => {
+      handlePersistenceFailure(config, record, error);
+      return false;
+    })
+    .finally(() => {
+      if (metadataWriteQueues.get(record.processId) === next) metadataWriteQueues.delete(record.processId);
+    });
+  metadataWriteQueues.set(record.processId, next);
+  return next;
 }
 
 function metadataRecord(record) {
@@ -739,7 +767,7 @@ function scheduleMetadataPersist(config, record) {
   if (record.persistTimer || record.persistenceFailureHandled) return;
   record.persistTimer = setTimeout(() => {
     record.persistTimer = null;
-    safePersistMetadata(config, record);
+    void queueMetadataPersist(config, record);
   }, METADATA_FLUSH_DELAY_MS);
   record.persistTimer.unref?.();
 }
@@ -846,6 +874,9 @@ function reconcileRestoredRecord(config, record) {
 
 function hydrateProcessMetadata(config) {
   const root = processRoot(config);
+  const now = Date.now();
+  if (now - Number(metadataScanAt.get(root) || 0) < METADATA_RESCAN_INTERVAL_MS) return;
+  metadataScanAt.set(root, now);
   if (!fs.existsSync(root)) return;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || processes.has(entry.name)) continue;
@@ -939,6 +970,9 @@ async function stopAllManagedProcesses(config) {
 
 function pruneManagedProcesses(config) {
   const root = processRoot(config);
+  const now = Date.now();
+  if (now - Number(metadataPruneAt.get(root) || 0) < METADATA_PRUNE_INTERVAL_MS) return { removed: 0 };
+  metadataPruneAt.set(root, now);
   if (!fs.existsSync(root)) return { removed: 0 };
   let removed = 0;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {

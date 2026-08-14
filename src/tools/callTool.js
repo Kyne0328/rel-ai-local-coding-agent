@@ -260,7 +260,7 @@ async function persistWorkflowEvidence(config, args, operationName, action, valu
       repositoryFingerprint,
       commandId: workflowCommandId(operationName, action, args)
     });
-    if (receipt && options.persist === true) recordWorkflowEvidence(config, workId, receipt);
+    if (receipt && options.persist === true) recordWorkflowEvidence(config, workId, receipt, { defer: true });
     return receipt;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow evidence:', error);
@@ -293,7 +293,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       processes,
       operation: { kind: operationName === 'relai_run_checks' && args?.migration === true ? 'migration' : '' }
     });
-    recordWorkflowState(config, workId, { receipt, workflow });
+    recordWorkflowState(config, workId, { receipt, workflow }, { defer: true });
     return workflow;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow snapshot:', error);

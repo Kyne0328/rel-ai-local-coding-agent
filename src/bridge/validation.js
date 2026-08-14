@@ -146,7 +146,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
         repositoryFingerprint: currentFingerprint.fingerprint,
         commandId: unit.id || `explicit:${index}`
       });
-      if (receipt) recordWorkflowEvidence(config, currentTaskId, receipt);
+      if (receipt) recordWorkflowEvidence(config, currentTaskId, receipt, { defer: true });
     }
     const status = checkResultStatus(summary);
     publishValidationProgress({

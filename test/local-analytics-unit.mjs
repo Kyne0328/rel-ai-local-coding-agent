@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { recordLocalToolOutcome, readLocalUsageSnapshot } from '../src/localAnalytics.js';
+import { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot } from '../src/localAnalytics.js';
 import { failureCategoryFromCode } from '../src/analyticsFailureCategory.js';
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-local-analytics-'));
@@ -29,6 +29,7 @@ try {
   assert.deepEqual(snapshot.failureCategorySeries, [{ hour: '2026-08-08T11', category: 'policy', failures: 1 }]);
   assert.deepEqual(snapshot.workspaceFailureCategorySeries, [{ hour: '2026-08-08T11', deviceId: 'local-device', workspace: 'repo', workspaceKey: 'local-device::repo', category: 'policy', failures: 1 }]);
 
+  await flushLocalAnalytics(config);
   const persisted = fs.readFileSync(path.join(stateDir, 'analytics', 'local', '2026-08.json'), 'utf8');
   for (const secret of ['SECRET_PROMPT', 'SECRET_PATH', 'SECRET_RESULT', 'SECRET_COMMAND', 'SECRET_ERROR_MESSAGE', 'SENSITIVE_PATH_RESTRICTED']) assert.equal(persisted.includes(secret), false, `local analytics must not persist ${secret}`);
 } finally {

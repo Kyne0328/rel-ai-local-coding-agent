@@ -7,6 +7,7 @@ import path from 'node:path';
 import { listSessions, readSession, resetTaskHistoryCaches, writeSession } from "../src/taskHistoryStorage.js";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-history-storage-'));
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const id = 'shared-task';
 const file = path.join(directory, `${crypto.createHash('sha256').update(id).digest('hex')}.json`);
 
@@ -20,7 +21,12 @@ try {
   const future = new Date(Date.now() + 2000);
   fs.utimesSync(file, future, future);
 
-  assert.equal(listSessions(directory, 10)[0]?.summary, 'after!');
+  let refreshed = listSessions(directory, 10)[0]?.summary;
+  for (let attempt = 0; refreshed !== 'after!' && attempt < 20; attempt += 1) {
+    await delay(10);
+    refreshed = listSessions(directory, 10)[0]?.summary;
+  }
+  assert.equal(refreshed, 'after!', 'directory watcher invalidation must surface external session rewrites promptly');
   assert.equal(readSession(directory, id)?.summary, 'after!');
 
   const completedId = 'completed-task';

@@ -23,7 +23,7 @@ async function handleApiHistoryReset(ctx) {
       return;
     }
   }
-  const cleared = clearAuditHistory(readConfig());
+  const cleared = await clearAuditHistory(readConfig());
   sendJson(ctx.res, 200, {
     ok: true,
     message: 'Session and activity history cleared.',

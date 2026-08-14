@@ -84,7 +84,7 @@ export function mountActivity(container, data = {}) {
 export function updateActivityLiveState(data = {}) {
   const sessionsChanged = updateSessionIndex(data.tasks || []);
   const liveEntries = Array.isArray(data.auditTail?.entries) ? data.auditTail.entries : [];
-  const liveFingerprint = JSON.stringify(liveEntries);
+  const liveFingerprint = activityEntriesFingerprint(liveEntries);
   const entriesChanged = liveFingerprint === _liveSnapshotFingerprint ? false : mergeEntries(liveEntries);
   _liveSnapshotFingerprint = liveFingerprint;
   if (sessionsChanged && !entriesChanged) {
