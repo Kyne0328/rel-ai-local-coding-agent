@@ -51,6 +51,7 @@ if (surface === 'dashboard') {
     wizardDone: config => ipcRenderer.invoke('wizard:done', config),
     closeWizard: () => ipcRenderer.invoke('wizard:cancel'),
     getRecoveryConfig: () => ipcRenderer.invoke('recovery:get-config'),
+    openOpenAISetup: destination => ipcRenderer.invoke('wizard:open-openai-setup', destination),
     openRecoverySetup: () => ipcRenderer.invoke('recovery:open-setup'),
     startServer: () => ipcRenderer.invoke('server:start'),
     stopServer: () => ipcRenderer.invoke('server:stop'),

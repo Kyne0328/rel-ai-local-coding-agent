@@ -13,29 +13,72 @@ function validTunnelId(value) {
   return /^tunnel_[A-Za-z0-9_-]{8,200}$/.test(String(value || '').trim());
 }
 
-async function copySetupValue(button) {
-  const value = String(button?.dataset?.copyValue || '').trim();
-  if (!value) return;
-  const previous = button.textContent;
+function validRuntimeKey(value) {
+  const key = String(value || '').trim();
+  return key.length >= 12 && !/\s/.test(key);
+}
+
+function clearFieldError(inputId, errorId) {
+  const input = $(inputId);
+  const error = $(errorId);
+  input?.setAttribute('aria-invalid', 'false');
+  if (error) {
+    error.textContent = '';
+    error.hidden = true;
+  }
+}
+
+function setFieldError(inputId, errorId, message) {
+  const input = $(inputId);
+  const error = $(errorId);
+  input?.setAttribute('aria-invalid', 'true');
+  if (error) {
+    error.textContent = message;
+    error.hidden = false;
+  }
+  input?.focus();
+}
+
+function clearValidationErrors() {
+  clearFieldError('tunnelIdInput', 'tunnelIdError');
+  clearFieldError('tunnelApiKeyInput', 'runtimeKeyError');
+  clearFieldError('portInput', 'portError');
+}
+
+async function openOpenAISetup(button) {
+  const destination = String(button?.dataset?.openOpenai || '');
+  if (!destination) return;
+  setError();
   try {
-    await window.electronAPI.copyText(value);
-    button.textContent = 'Copied';
-    setTimeout(() => {
-      if (button.isConnected) button.textContent = previous;
-    }, 1200);
+    await window.electronAPI.openOpenAISetup(destination);
   } catch (error) {
-    setError(`Could not copy the OpenAI Platform URL: ${messageOf(error)}`);
+    setError(`Could not open OpenAI setup: ${messageOf(error)}`);
   }
 }
 
 async function connect() {
   const tunnelId = $('tunnelIdInput').value.trim();
   const tunnelApiKey = $('tunnelApiKeyInput').value.trim();
+  const runtimeKeyConfigured = $('tunnelApiKeyInput').dataset.configured === '1';
   const port = Number($('portInput').value);
   setError();
-  if (!validTunnelId(tunnelId)) return setError('Enter a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.');
-  if (!validPort(port)) return setError('Local connection port must be between 1024 and 65535.');
-  if (!tunnelApiKey && !$('tunnelApiKeyInput').dataset.configured) return setError('Enter the OpenAI tunnel runtime API key from Organization settings → API Keys.');
+  clearValidationErrors();
+  if (!validTunnelId(tunnelId)) {
+    setFieldError('tunnelIdInput', 'tunnelIdError', 'Paste a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.');
+    return;
+  }
+  if (!tunnelApiKey && !runtimeKeyConfigured) {
+    setFieldError('tunnelApiKeyInput', 'runtimeKeyError', 'Paste the restricted runtime API key you created in this Platform organization.');
+    return;
+  }
+  if (tunnelApiKey && !validRuntimeKey(tunnelApiKey)) {
+    setFieldError('tunnelApiKeyInput', 'runtimeKeyError', 'Paste a valid OpenAI tunnel runtime API key with no spaces.');
+    return;
+  }
+  if (!validPort(port)) {
+    setFieldError('portInput', 'portError', 'Enter a local connection port from 1024 to 65535.');
+    return;
+  }
 
   const button = $('connectBtn');
   button.disabled = true;
@@ -60,6 +103,7 @@ async function loadExistingSettings() {
     if (config?.tunnelApiKeyConfigured) {
       $('tunnelApiKeyInput').placeholder = 'Stored securely — leave blank to keep it';
       $('tunnelApiKeyInput').dataset.configured = '1';
+      $('tunnelApiKeyInput').required = false;
     }
   } catch {}
 }
@@ -70,5 +114,8 @@ function messageOf(error) {
 
 $('connectBtn').addEventListener('click', connect);
 $('cancelWizardBtn').addEventListener('click', () => window.electronAPI.closeWizard());
-document.querySelectorAll('[data-copy-value]').forEach(button => button.addEventListener('click', () => copySetupValue(button)));
+document.querySelectorAll('[data-open-openai]').forEach(button => button.addEventListener('click', () => openOpenAISetup(button)));
+for (const [inputId, errorId] of [['tunnelIdInput', 'tunnelIdError'], ['tunnelApiKeyInput', 'runtimeKeyError'], ['portInput', 'portError']]) {
+  $(inputId).addEventListener('input', () => clearFieldError(inputId, errorId));
+}
 void loadExistingSettings();

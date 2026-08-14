@@ -394,27 +394,25 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
 .wizard-cloud-hero p, .wizard-advanced-section p { margin: 0; color: var(--ui-text-secondary); font-size: var(--font-13); line-height: 1.6; }
 .wizard-eyebrow { color: var(--ui-action-primary); font-size: var(--font-12); font-weight: var(--weight-bold); letter-spacing: .07em; text-transform: uppercase; }
 .wizard-cloud-card { display: grid; gap: 16px; padding: 20px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); background: var(--ui-surface-primary); }
-.wizard-platform-guide { overflow: hidden; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--ui-status-info-background) 58%, var(--ui-surface-primary)); }
-.wizard-platform-guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--ui-status-info-border); }
-.wizard-platform-guide-head > div { display: grid; gap: 3px; min-width: 0; }
-.wizard-platform-guide-head strong { font-size: var(--font-14); }
-.wizard-platform-guide-head span { color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.5; }
-.wizard-step-badge { flex: none; padding: 4px 8px; border: 1px solid var(--ui-status-info-border); border-radius: 999px; color: var(--ui-action-primary) !important; background: var(--ui-surface-primary); font-size: var(--font-11) !important; font-weight: var(--weight-bold); }
-.wizard-platform-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; counter-reset: setup-step; }
-.wizard-platform-steps > li { counter-increment: setup-step; display: grid; gap: 10px; padding: 14px 16px 14px 52px; position: relative; border-bottom: 1px solid var(--ui-border-subtle); }
-.wizard-platform-steps > li:last-child { border-bottom: 0; }
-.wizard-platform-steps > li::before { content: counter(setup-step); position: absolute; top: 15px; left: 16px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--ui-status-info-border); border-radius: 50%; color: var(--ui-action-primary); background: var(--ui-surface-primary); font-size: var(--font-11); font-weight: var(--weight-bold); }
-.wizard-platform-step-copy { display: grid; gap: 3px; }
-.wizard-platform-step-copy strong { font-size: var(--font-13); }
-.wizard-platform-step-copy span { color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.55; }
-.wizard-platform-step-copy code { font-family: var(--font-mono); color: var(--ui-code-accent); }
-.wizard-copy-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.wizard-copy-row code { min-width: 0; padding: 8px 10px; overflow: hidden; border: 1px solid var(--ui-border-control); border-radius: var(--radius-md); background: var(--ui-surface-input); color: var(--ui-text-secondary); font: var(--font-11)/1.45 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-.wizard-copy-button { min-height: 44px; font-size: var(--font-11); }
-.wizard-field-group { display: grid; gap: 7px; }
+.wizard-value-step { display: grid; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--ui-border-subtle); }
+.wizard-value-step + .wizard-value-step { padding-top: 2px; }
+.wizard-value-step-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.wizard-value-step-head > div { min-width: 0; }
+.wizard-value-step-head strong { display: block; font-size: var(--font-14); }
+.wizard-value-step-head p { margin: 3px 0 0; color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.55; }
+.wizard-step-number { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--ui-status-info-border); border-radius: 50%; background: var(--ui-status-info-background); color: var(--ui-action-primary); font-size: var(--font-11); font-weight: var(--weight-bold); }
+.wizard-context-check { display: grid; gap: 5px; margin-left: 36px; padding: 10px 12px; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--ui-status-info-background) 58%, var(--ui-surface-primary)); }
+.wizard-context-check strong { font-size: var(--font-12); }
+.wizard-context-check span { color: var(--ui-text-secondary); font-size: var(--font-11); line-height: 1.5; }
+.wizard-context-check b { color: var(--ui-text-primary); }
+.wizard-open-button { width: fit-content; min-height: 44px; margin-left: 36px; }
+.wizard-field-group { display: grid; gap: 7px; margin-left: 36px; }
 .wizard-field-group label, .wizard-advanced-content label { margin: 0; font-size: var(--font-12); }
 .wizard-field-help { margin: 0; color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.5; }
 .wizard-field-help code { font-family: var(--font-mono); color: var(--ui-code-accent); }
+.wizard-field-error { margin: 0; color: var(--ui-status-danger-foreground); font-size: var(--font-12); line-height: 1.45; }
+.wizard-field-error[hidden] { display: none; }
+.wizard-field-group input[aria-invalid="true"], .wizard-advanced-content input[aria-invalid="true"] { border-color: var(--ui-status-danger-foreground); }
 .wizard-cloud-status { display: grid; gap: 4px; }
 .wizard-cloud-status strong { font-size: var(--font-14); }
 .wizard-cloud-status span { color: var(--ui-text-secondary); font-size: var(--font-11); line-height: 1.5; }
@@ -423,15 +421,7 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
 .wizard-pairing-copy code { min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: var(--ui-text-primary); font-size: 26px; font-weight: var(--weight-bold); letter-spacing: .09em; }
 .wizard-pairing-copy span { flex: none; color: var(--ui-action-primary); font-size: var(--font-11); font-weight: var(--weight-bold); }
 .wizard-pairing-panel > span:last-child { color: var(--ui-text-secondary); font-size: var(--font-11); }
-.wizard-chatgpt-path { display: grid; gap: 7px; padding: 13px 14px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); background: var(--ui-surface-secondary); }
-.wizard-chatgpt-path strong { font-size: var(--font-13); }
-.wizard-chatgpt-path p { margin: 0; color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.55; }
-.wizard-chatgpt-path > span { color: var(--ui-text-tertiary); font-size: var(--font-12); line-height: 1.5; }
-.wizard-choice-row { display: flex; flex-wrap: wrap; gap: 7px; }
-.wizard-choice-row span { padding: 5px 8px; border: 1px solid var(--ui-border-default); border-radius: 999px; color: var(--ui-text-secondary); background: var(--ui-surface-primary); font-size: var(--font-11); }
-.wizard-choice-row b { color: var(--ui-text-primary); }
 .wizard-main-action { width: 100%; min-height: 44px; }
-.wizard-security-card > div:first-child { display: grid; gap: 5px; }
 .wizard-recovery-output { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; }
 .wizard-recovery-output code { min-width: 0; overflow-wrap: anywhere; padding: 10px; border: 1px solid var(--ui-border-control); border-radius: var(--radius-md); background: var(--ui-surface-input); color: var(--ui-code-accent); font-size: var(--font-11); }
 .wizard-ready-hero { text-align: center; justify-items: center; }
@@ -462,11 +452,8 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
   .wizard-progress-item strong { display: none; }
   .wizard-cloud-hero { padding-top: 10px; }
   .wizard-cloud-card { padding: 14px; }
-  .wizard-platform-guide-head { flex-direction: column; }
-  .wizard-platform-steps > li { padding-left: 46px; }
-  .wizard-platform-steps > li::before { left: 12px; }
-  .wizard-copy-row { grid-template-columns: minmax(0, 1fr); }
-  .wizard-copy-button { width: 100%; }
+  .wizard-context-check, .wizard-open-button, .wizard-field-group { margin-left: 0; }
+  .wizard-open-button { width: 100%; }
   .wizard-actions { align-items: stretch; flex-direction: column-reverse; }
   .wizard-actions button, .wizard-advanced-section > button { width: 100%; }
   .wizard-recovery-output { grid-template-columns: minmax(0,1fr); }
