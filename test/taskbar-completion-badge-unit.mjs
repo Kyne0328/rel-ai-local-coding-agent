@@ -84,6 +84,14 @@ assert.equal(direct.isEmpty(), false);
 const repeated = createBadgeImage(nativeImage, 7);
 assert.equal(Buffer.compare(direct.buffer, repeated.buffer), 0, 'the same unread count must render a stable taskbar badge image');
 
+const overflowBadge = createBadgeImage(nativeImage, 10);
+const cappedOverflowBadge = createBadgeImage(nativeImage, MAX_BADGE_COUNT);
+assert.equal(
+  Buffer.compare(overflowBadge.buffer, cappedOverflowBadge.buffer),
+  0,
+  'double-digit unread counts must share the compact 9+ badge instead of squeezing two digits into the overlay'
+);
+
 const linuxBadgeCounts = [];
 const linuxBadge = createTaskbarCompletionBadge({
   app: {
