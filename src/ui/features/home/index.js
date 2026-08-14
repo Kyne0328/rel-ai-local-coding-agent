@@ -153,7 +153,7 @@ function taskActivityCard(activity = {}, persistedTask = null) {
   const activeTasks = activeTaskList(activity);
   const active = activeTasks.length > 0;
   const completedWithWarnings = persistedTask?.status === 'completed' && Number(persistedTask?.failedToolCallCount ?? persistedTask?.failures ?? 0) > 0;
-  if (!active && !['failed', 'blocked', 'attention', 'validation_failed'].includes(persistedTask?.status) && !completedWithWarnings) return null;
+  if (!active && !['failed', 'blocked', 'validation_failed'].includes(persistedTask?.status) && !completedWithWarnings) return null;
   const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
   if (!task) return null;
   const card = document.createElement('section');
@@ -207,7 +207,7 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
 }
 
 function renderInactiveSessionCard(card, task) {
-  const attention = ['failed', 'blocked', 'attention', 'validation_failed'].includes(task.status);
+  const attention = ['failed', 'blocked', 'validation_failed'].includes(task.status);
   const completed = task.status === 'completed' && task.completionKnown === true;
   const failed = Number(task.failures || 0);
   const callCount = Number(task.calls || 0);
@@ -480,7 +480,7 @@ function recentTasksCard(tasks) {
 }
 
 function recentTaskStatus(status) {
-  if (status === 'failed' || status === 'attention') return pillHtml('failed');
+  if (status === 'failed') return pillHtml('failed');
   if (status === 'blocked') return pillHtml('blocked');
   if (status === 'completed') return pillHtml('completed');
   if (status === 'running' || status === 'working') return pillHtml('running');

@@ -155,7 +155,7 @@ assert.match(read('src/ui/components/toast.js'), /toast-marker/);
 
 const statusExpectations = Object.freeze({
   danger: [
-    'blocked', 'validation_failed', 'failed', 'error', 'unavailable', 'attention', 'needs attention'
+    'blocked', 'validation_failed', 'failed', 'error', 'unavailable', 'needs attention'
   ],
   warning: [
     'waiting_for_approval', 'approval', 'input_required', 'degraded', 'paused', 'stale',

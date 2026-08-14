@@ -1,4 +1,3 @@
-import * as worktreeManager from './worktreeManager.js';
 import { telemetryStatus } from './telemetry.js';
 import { detectVerifyChecks } from './bridge/checkDetection.js';
 import { getToolNames } from './tools/schema.js';
@@ -444,29 +443,16 @@ function resolveWorkspace(config, alias) {
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
-    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
-    ...(entry.managedWorktree ? {
-      managedWorktree: true,
-      sourceAlias: entry.sourceAlias,
-      branch: entry.branch,
-      base: entry.base
-    } : {})
+    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
   };
 }
 
 function allWorkspaceAliases(config) {
-  const staticAliases = Object.keys(config.workspaces || {});
-  let managedAliases = [];
-  try { managedAliases = worktreeManager.managedWorktreeAliases(config); } catch {}
-  return [...new Set([...staticAliases, ...managedAliases])].sort((left, right) => left.localeCompare(right));
+  return Object.keys(config.workspaces || {}).sort((left, right) => left.localeCompare(right));
 }
 
 function workspaceEntryForAlias(config, alias) {
-  if (Object.hasOwn(config.workspaces || {}, alias)) return config.workspaces[alias];
-  try { return worktreeManager.resolveManagedWorktree(config, alias); } catch (error) {
-    if (/was not found|source workspace/.test(String(error?.message || ''))) return null;
-    throw error;
-  }
+  return Object.hasOwn(config.workspaces || {}, alias) ? config.workspaces[alias] : null;
 }
 
 function isSafeWorkspaceAlias(value) {
@@ -500,14 +486,6 @@ function publicConfigSummary(config) {
     productUx: config.productUx,
     release: config.release,
     telemetry: telemetryStatus(config),
-    managedWorktrees: Object.values(worktreeManager.readRegistry(config).worktrees || {}).map((entry) => ({
-      alias: entry.alias,
-      sourceAlias: entry.sourceAlias,
-      path: entry.path,
-      branch: entry.branch,
-      base: entry.base,
-      createdAt: entry.createdAt
-    })).sort((left, right) => left.alias.localeCompare(right.alias)),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
       const discovered = safeDiscoverCommands(entry.path);
       const validationCommands = safeDetectValidationChecks(entry.path);

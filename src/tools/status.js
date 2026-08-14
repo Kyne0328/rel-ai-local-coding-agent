@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { packageMetadata, packageRoot } from '../packageMetadata.js';
 import { resolveWorkspace, allWorkspaceAliases } from '../config.js';
 import { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } from '../safety.js';
-import { discoverCommands, staleCommandKeys as staleCommandKeyList } from '../commandDiscovery.js';
+import { commandDiscoveryWarnings, discoverCommands, staleCommandKeys as staleCommandKeyList } from '../commandDiscovery.js';
 import { summarizeOperations } from '../journal.js';
 import { resolvePolicy } from '../policyResolver.js';
 import { getVersion } from '../version.js';
@@ -31,6 +31,7 @@ async function relaiStatus(config, args = {}, context = {}) {
     try {
       const workspace = resolveWorkspace(config, args.workspace);
       const discovered = discoverCommands(workspace.path);
+      const discoveryWarnings = commandDiscoveryWarnings(workspace.path);
       const commandKeys = sortedKeys(workspace.commands);
       const testCommandKeys = sortedKeys(workspace.testCommands);
       const staleCommandKeys = staleCommandKeyList(workspace.commands || {}, discovered);
@@ -42,6 +43,7 @@ async function relaiStatus(config, args = {}, context = {}) {
         testCommandKeys,
         ...(staleCommandKeys.length > 0 ? { staleCommandKeys } : {}),
         ...(staleTestCommandKeys.length > 0 ? { staleTestCommandKeys } : {}),
+        ...(discoveryWarnings.length > 0 ? { discoveryWarnings } : {}),
         policy: resolvePolicy(workspace, config),
         repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes })
       };
@@ -112,10 +114,7 @@ function workspaceList(config) {
       testCommandKeys: sortedKeys(item.testCommands),
       commandKeys: sortedKeys(item.commands),
       protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
-      context: item.context || {},
-      managedWorktree: item.managedWorktree === true,
-      ...(item.sourceAlias ? { sourceAlias: item.sourceAlias } : {}),
-      ...(item.branch ? { branch: item.branch } : {})
+      context: item.context || {}
     };
   }).sort((left, right) => left.alias.localeCompare(right.alias));
   return { ok: true, count: workspaces.length, workspaces };

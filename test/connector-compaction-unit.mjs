@@ -162,7 +162,7 @@ const snapshotCompact = compactForConnector('relai_repo_snapshot', {
   manifests: ['package.json'],
   manifestContents: { 'package.json': '{"a":1}'.repeat(500) },
   discoveredCommands: { test: 'npm test' },
-  projectInstructions: { sources: ['REL_AI.md'], content: 'Follow the repository rules.', truncated: false },
+  projectInstructions: { sources: ['AGENTS.md'], content: 'Follow the repository rules.', truncated: false },
   fileCount: 10, files: ['a.js'], hints: ['Node'],
   effectiveMaxEntries: 1000, budgetMultiplied: false,
   recommendedFlow: ['relai_read'],
@@ -180,7 +180,7 @@ assert.equal(snapshotCompact.operationJournal, undefined, 'journal dropped');
 assert.equal(snapshotCompact.writeGuidance, undefined, 'static guidance blob dropped');
 assert.deepEqual(snapshotCompact.manifests, ['package.json'], 'manifest names kept');
 assert.deepEqual(snapshotCompact.hints, ['Node']);
-assert.deepEqual(snapshotCompact.projectInstructions, { sources: ['REL_AI.md'], content: 'Follow the repository rules.', truncated: false });
+assert.deepEqual(snapshotCompact.projectInstructions, { sources: ['AGENTS.md'], content: 'Follow the repository rules.', truncated: false });
 assert.equal(snapshotCompact.skipped, undefined, 'skipped entry list dropped on connector');
 assert.equal(snapshotCompact.skippedCount, 1, 'skipped list replaced by a count');
 assert.deepEqual(snapshotCompact.git, { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] }, 'git summary passes through compaction');

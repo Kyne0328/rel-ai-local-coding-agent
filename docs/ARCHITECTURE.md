@@ -87,7 +87,7 @@ Display state and 100% progress are never completion authority. Final completion
 
 Factories remain only where a module owns mutable state, a framework object, an operating-system resource, events, timers, or lifecycle. Examples include window managers, tray, updater, lifecycle manager, task activity runtime, shutdown coordinator, runtime log buffer, tunnel runtime, tunnel credential store, and diagnostic path owner.
 
-`electron/ipc-handlers.js` exposes sender-constrained capabilities for setup, recovery, service lifecycle, dashboard window management, desktop settings, updater actions, diagnostics, notifications, and shared utilities. There are no provider-switch, device-pairing, hosted-usage, or approval-token IPC channels.
+`electron/ipc-handlers.js` owns sender-constrained setup, recovery, service lifecycle, dashboard-window management, notifications, and shared utilities. `electron/ipc-handlers-dashboard.js` owns the dashboard-only analytics, desktop-settings, updater, and diagnostics capabilities. There are no provider-switch, device-pairing, hosted-usage, or approval-token IPC channels.
 
 Connection status is projected through the existing server-status path and updates only the relevant dashboard regions. A tunnel reconnect does not remount the application or restart unrelated managed developer processes.
 
@@ -102,7 +102,6 @@ Local durable stores include configuration, connection profile, connection gener
 Retained compatibility is intentionally narrow:
 
 - HTTP `2025-11-25` stateless initialization for supported ChatGPT clients;
-- read tolerance for old native Task records containing bounded compatibility metadata until their normal TTL removes them;
 - historical task-status aliases normalized on read; and
 - stable internal operation names retained in audit/history/authorization evidence where they are data contracts rather than transport modes.
 
@@ -113,6 +112,7 @@ Compatibility code must remain isolated and tested. It must not create a second 
 | Metric | Current contract |
 | --- | ---: |
 | Public tools | 12 |
+| Public actions | 43 |
 | Active public tool-schema source | 1 canonical catalog |
 | MCP protocol | `2026-07-28` |
 | Release schema version | 7 |

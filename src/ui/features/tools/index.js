@@ -222,7 +222,7 @@ function legacyToolCapability(name) {
   if (value === 'relai_work') return 'workflow';
   if (value === 'relai_exec' || value === 'relai_process') return 'execute';
   if (value === 'relai_changes') return 'review';
-  if (value.startsWith('relai_git_') || value === 'relai_worktree' || value === 'relai_publish') return 'git';
+  if (value.startsWith('relai_git_') || value === 'relai_publish') return 'git';
   if (/restore|reset|tidy/.test(value)) return 'recover';
   if (/run_checks|http_probe|ui_check|browser/.test(value) || value === 'relai_validate') return 'validate';
   if (/edit|write|replace/.test(value)) return 'edit';

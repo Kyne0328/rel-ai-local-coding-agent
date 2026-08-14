@@ -12,13 +12,13 @@ import { OPERATION_DEFINITION_VALUES } from './operationDefinitionValues.js';
 
 const READ_ONLY_TOOLS = new Set([
   'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
-  'relai_process_read', 'relai_process_list', 'relai_worktree_list',
+  'relai_process_read', 'relai_process_list',
   'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
   'relai_ui',
-  'relai_worktree_remove', 'relai_diagnostics_run', 'relai_tidy_run', 'relai_run_checks',
+  'relai_diagnostics_run', 'relai_tidy_run', 'relai_run_checks',
   'relai_restore_paths', 'relai_reset_workspace', 'relai_edit'
 ]);
 const IDEMPOTENT_TOOLS = new Set([
@@ -332,33 +332,6 @@ const PUBLIC_DEFINITION_VALUES = [
     },
     annotations: annotations(false, true, false, true),
     dashboard: { capabilities: ['execute'] }
-  }),
-  define({
-    name: 'relai_worktree',
-    title: 'Manage Worktree',
-    description: 'Manage Git worktrees.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['create', 'list', 'remove']),
-        name: { type: 'string', minLength: 1, maxLength: 80 },
-        base: { type: 'string', maxLength: 200 },
-        branch: { type: 'string', maxLength: 200 },
-        alias: { type: 'string', minLength: 1, maxLength: 180 },
-        force: { type: 'boolean' }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('create', ['name'], ['alias', 'force']),
-        branch('list', [], ['name', 'base', 'branch', 'alias', 'force']),
-        branch('remove', ['alias'], ['name', 'base', 'branch'])
-      ],
-      additionalProperties: false
-    },
-    annotations: annotations(false, true, false, false),
-    dashboard: { capabilities: ['git'] },
-    groups: ['git']
   }),
   define({
     name: 'relai_validate',

@@ -6,7 +6,6 @@ import { looksBinary } from "./safety.js";
 import { discoverProjectInstructionPaths } from './projectInstructionDiscovery.js';
 
 const MAX_PROJECT_INSTRUCTION_BYTES = 64 * 1024;
-const LEGACY_PROJECT_INSTRUCTION_PATHS = Object.freeze(['REL_AI.md', '.relai/instructions.md']);
 const instructionCache = new Map();
 
 function readProjectInstructions(workspace, options = {}) {
@@ -17,7 +16,7 @@ function readProjectInstructions(workspace, options = {}) {
   catch (error) { return emptyInstructions(error instanceof Error ? error.message : String(error)); }
 
   const maxBytes = clampBytes(options.maxBytes, MAX_PROJECT_INSTRUCTION_BYTES);
-  const target = discoverProjectInstructionPaths(root, options.targetPath, LEGACY_PROJECT_INSTRUCTION_PATHS);
+  const target = discoverProjectInstructionPaths(root, options.targetPath);
   if (target.error) return emptyInstructions(target.error);
   const instructionPaths = target.instructionPaths;
   const signature = instructionSignature(root, instructionPaths);

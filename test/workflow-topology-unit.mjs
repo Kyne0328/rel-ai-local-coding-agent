@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { discoverRepositoryTopology, packageForPath } from '../src/workflow/topology.js';
-import { discoverCommands } from '../src/commandDiscovery.js';
+import { commandDiscoveryWarnings, discoverCommands } from '../src/commandDiscovery.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-workflow-topology-'));
 try {
@@ -28,6 +28,12 @@ try {
   assert.equal(commands['npm:front-end:test'], 'npm test');
   assert.equal(commands['npm:back-end:test'], 'npm test');
   assert.equal(commands['npm:front-end:build'], 'npm run build');
+
+  const malformed = path.join(root, 'malformed');
+  fs.mkdirSync(malformed, { recursive: true });
+  fs.writeFileSync(path.join(malformed, 'package.json'), '{malformed', 'utf8');
+  assert.deepEqual(discoverCommands(malformed), {});
+  assert.ok(commandDiscoveryWarnings(malformed).some(item => item.source === 'package.json'), 'manifest discovery failures must remain visible to diagnostics');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

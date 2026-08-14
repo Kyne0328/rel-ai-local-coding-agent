@@ -53,7 +53,7 @@ try {
 
   const compressed = await fetch(`${base}/api/tools?token=${encodeURIComponent(token)}`, { headers: { 'accept-encoding': 'gzip' } });
   assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  assert.equal((await compressed.json()).length, 13);
+  assert.equal((await compressed.json()).length, 12);
 
   const dashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(dashboard.ok, true);
@@ -65,8 +65,8 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 39);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 13);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 40);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
     discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'],
@@ -86,7 +86,7 @@ try {
   assert.deepEqual(liveDashboard.mcpConnection.activeSessions, []);
 
   const listed = await client.request('tools/list');
-  assert.equal(listed.body.result?.tools?.length, 13);
+  assert.equal(listed.body.result?.tools?.length, 12);
   const listedToolBytes = Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools }));
   assert.ok(listedToolBytes < 65_536, `HTTP tools/list is ${listedToolBytes} bytes`);
   const names = listed.body.result.tools.map(tool => tool.name);
@@ -166,7 +166,7 @@ try {
   assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
 
   const synchronizedTools = await client.request('tools/list');
-  assert.equal(synchronizedTools.body.result?.tools?.length, 13);
+  assert.equal(synchronizedTools.body.result?.tools?.length, 12);
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.equal(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
@@ -178,9 +178,9 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 39);
+  assert.equal(manifest.toolSurfaceVersion, 40);
   assert.equal(Object.hasOwn(manifest, 'profile'), false);
-  assert.equal(manifest.toolCount, 13);
+  assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
   assert.equal(surfaceByName.get('relai_exec').executionClass, 'bounded_synchronous');
   assert.equal(surfaceByName.get('relai_exec').taskSupport, 'forbidden');

@@ -61,23 +61,20 @@ await assert.doesNotReject(() => validateToolOutput({}, 'relai_snapshot', {
   next: 'Use relai_search or targeted relai_read calls for omitted repository paths.'
 }));
 
-await assert.doesNotReject(() => validateToolOutput({}, 'relai_worktree', {
-  action: 'create',
-  work_id: 'work_output',
-  name: 'feature'
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_inspect', {
+  action: 'diagnostics',
+  work_id: 'work_output'
 }, {
   ok: true,
+  workspace: 'repo',
   work_id: 'work_output',
-  id: 'wt_123',
-  alias: 'repo--feature',
-  sourceAlias: 'repo',
-  sourcePath: 'C:/repo',
-  path: 'C:/state/worktrees/repo/feature',
-  branch: 'relai/feature',
-  base: 'main',
-  owningTaskId: 'work_output',
-  createdAt: '2026-08-08T00:00:00.000Z',
-  git: { exitCode: 0 }
+  action: 'diagnostics',
+  index: {},
+  languages: { javascript: 12 },
+  diagnosticCommands: [],
+  discoveryWarnings: [{ source: 'package.json', message: 'Invalid JSON.' }],
+  validationCommands: { quick: [], standard: [], release: [] },
+  configuredTestCommands: []
 }));
 await assert.doesNotReject(() => validateToolOutput({}, 'relai_work', {
   action: 'cancel',
@@ -164,8 +161,6 @@ function requiredArgs(entry) {
     case 'relai_process:read':
     case 'relai_process:stop': return { processId: 'proc_output' };
     case 'relai_process:write': return { processId: 'proc_output', input: 'status\n' };
-    case 'relai_worktree:create': return { name: 'feature' };
-    case 'relai_worktree:remove': return { alias: 'repo--feature' };
     case 'relai_validate:http': return { route: '/health' };
     case 'relai_changes:restore': return { paths: ['README.md'] };
     case 'relai_changes:reset': return { confirmation: 'RESET' };

@@ -102,33 +102,6 @@ const OPERATION_DEFINITION_VALUES = [
     behavior: {"audit":"exec"},
   },
   {
-    name: "relai_worktree_create",
-    title: "Create Managed Worktree",
-    description: "Create a Git worktree and branch under Rel.AI-managed storage and register its dynamic workspace alias.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"name":{"type":"string","minLength":1,"maxLength":80},"base":{"type":"string","maxLength":200},"branch":{"type":"string","maxLength":200}},"required":["workspace","name"],"additionalProperties":false},
-    handlerName: 'worktreeCreate',
-    groups: ["git"],
-    behavior: {"audit":"exec","cache":"workspace","concurrencyScope":"workspace"},
-  },
-  {
-    name: "relai_worktree_list",
-    title: "List Managed Worktrees",
-    description: "List managed worktrees with branch, availability, and dirty-state information.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"}},"required":[],"additionalProperties":false},
-    handlerName: 'worktreeList',
-    groups: ["git","audit"],
-  },
-  {
-    name: "relai_worktree_remove",
-    title: "Remove Managed Worktree",
-    description: "Remove one managed worktree. Dirty worktrees and active managed processes are refused unless separately resolved; the branch is preserved.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"alias":{"type":"string","minLength":1,"maxLength":180},"force":{"type":"boolean"}},"required":["workspace","alias"],"additionalProperties":false},
-    handlerName: 'worktreeRemove',
-    groups: ["git","cleanup"],
-    behavior: {"audit":"exec","cache":"workspace","concurrencyScope":"workspace"},
-    dashboard: {"requiresApproval":true}
-  },
-  {
     name: "relai_semantic_search",
     title: "Hybrid Semantic Search",
     description: "Read-only. Rank local source files with persistent Tree-sitter structure, code-graph, Zoekt when available, FTS5 lexical, path, and symbol signals. No neural model is used and no source text leaves the machine.",

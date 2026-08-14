@@ -23,8 +23,8 @@ assert.equal(desktopNavigationOwner('diagnostics'), 'system');
 assert.equal(desktopNavigationOwner('system'), 'system');
 assert.equal(desktopNavigationOwner('settings'), 'settings');
 
-assert.equal(canonicalPathFor('settings/connection'), 'connection');
-assert.equal(canonicalPathFor('settings/diagnostics'), 'diagnostics');
+assert.equal(canonicalPathFor('settings/connection'), 'home');
+assert.equal(canonicalPathFor('settings/diagnostics'), 'home');
 assert.equal(canonicalPathFor('settings/tools-validation'), 'home');
 assert.equal(normalizeRouteKey('activity?status=succeeded'), 'activity?status=succeeded');
 assert.equal(normalizeRouteKey('activity?status=active'), 'activity?status=active');

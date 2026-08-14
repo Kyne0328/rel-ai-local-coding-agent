@@ -22,8 +22,8 @@ const currentDefinitions = getToolDefinitions();
 const currentMetadata = new Map(getToolMetadata().map(item => [item.name, item]));
 
 assert.equal(catalogTools.length, 12);
-assert.equal(catalog.length, 36);
-assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, 36);
+assert.equal(catalog.length, 43);
+assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, 43);
 assert.deepEqual(getCatalogToolDefinitions(), currentDefinitions);
 assert.deepEqual(
   getCatalogToolDefinitions().map(definition => {
@@ -94,7 +94,7 @@ for (const entry of catalog) {
 
 assert.equal(getCatalogAction('unknown', {}), null);
 assert.throws(() => getCatalogAction('relai_work', { action: 'unknown' }), /Unsupported action/);
-console.log('Canonical 12-tool, 36-action catalog execution and policy parity passed.');
+console.log('Canonical 12-tool, 43-action catalog execution and policy parity passed.');
 
 function sampleArgs(entry) {
   const key = `${entry.publicTool}:${entry.action}`;
@@ -115,8 +115,16 @@ function sampleArgs(entry) {
     case 'relai_process:read':
     case 'relai_process:stop': args.processId = 'proc_catalog'; break;
     case 'relai_process:write': Object.assign(args, { processId: 'proc_catalog', input: 'status\n' }); break;
-    case 'relai_worktree:create': args.name = 'feature'; break;
-    case 'relai_worktree:remove': args.alias = 'repo--feature'; break;
+    case 'relai_ui:start': args.port = 3000; break;
+    case 'relai_ui:navigate': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', route: '/' }); break;
+    case 'relai_ui:snapshot':
+    case 'relai_ui:screenshot':
+    case 'relai_ui:console':
+    case 'relai_ui:network':
+    case 'relai_ui:reload':
+    case 'relai_ui:stop': args.sessionId = 'ui_abcdefghijklmnopqrst'; break;
+    case 'relai_ui:interact': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', interaction: 'click', target: { by: 'text', value: 'Save' } }); break;
+    case 'relai_ui:viewport': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', width: 1280, height: 720 }); break;
     case 'relai_validate:http': args.route = '/health'; break;
     case 'relai_changes:restore': args.paths = ['README.md']; break;
     case 'relai_changes:reset': args.confirmation = 'RESET'; break;

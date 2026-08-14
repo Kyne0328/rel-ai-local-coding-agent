@@ -37,25 +37,25 @@ const consolidatedToolCapabilities = Object.fromEntries(
   consolidatedToolMetadata.map(tool => [tool.name, toolCapabilities(tool)])
 );
 assert.deepEqual(consolidatedToolCapabilities, {
-  relai_work: ['inspect'],
+  relai_work: ['workflow'],
   relai_snapshot: ['inspect'],
   relai_read: ['inspect'],
   relai_search: ['inspect'],
   relai_inspect: ['inspect'],
   relai_edit: ['edit'],
-  relai_exec: ['inspect'],
-  relai_process: ['inspect'],
-  relai_worktree: ['git'],
+  relai_exec: ['execute'],
+  relai_process: ['execute'],
+  relai_ui: ['execute'],
   relai_validate: ['validate'],
-  relai_changes: ['validate', 'recover'],
+  relai_changes: ['review', 'recover'],
   relai_publish: ['git']
 });
 assert.deepEqual(
-  Object.fromEntries(['inspect', 'edit', 'validate', 'git', 'recover'].map(capability => [
+  Object.fromEntries(['workflow', 'inspect', 'edit', 'execute', 'validate', 'review', 'git', 'recover'].map(capability => [
     capability,
     consolidatedToolMetadata.filter(tool => toolCapabilities(tool).includes(capability)).length
   ])),
-  { inspect: 7, edit: 1, validate: 2, git: 2, recover: 1 }
+  { workflow: 1, inspect: 4, edit: 1, execute: 3, validate: 1, review: 1, git: 1, recover: 1 }
 );
 
 const sessions = [
@@ -68,13 +68,13 @@ assert.deepEqual(orderSessionsForDisplay([
   { id: 'completed-newest', status: 'completed', completedAt: '2026-07-25T12:04:00.000Z' },
   { id: 'waiting-newer', status: 'waiting', lastActivityAt: '2026-07-25T12:02:00.000Z' },
   { id: 'working-older', status: 'working', lastActivityAt: '2026-07-25T12:01:00.000Z' },
-  { id: 'attention-middle', status: 'attention', endedAt: '2026-07-25T12:03:00.000Z' },
+  { id: 'failed-middle', status: 'failed', endedAt: '2026-07-25T12:03:00.000Z' },
   { id: 'inactive-oldest', status: 'inactive', endedAt: '2026-07-25T12:00:00.000Z' }
 ]).map(session => session.id), [
-  'waiting-newer',
   'working-older',
   'completed-newest',
-  'attention-middle',
+  'failed-middle',
+  'waiting-newer',
   'inactive-oldest'
 ]);
 assert.deepEqual(orderOverviewTasks(sessions).map(session => session.id), ['newer', 'older', 'invalid']);

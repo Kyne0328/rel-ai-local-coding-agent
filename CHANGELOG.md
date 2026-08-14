@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.25.2] — 2026-08-14
+
+### Repository workflow hardening
+- **Removed managed worktree isolation from the public workflow.** Work sessions now stay bound to configured repositories instead of exposing a second dynamic-workspace lifecycle that could lose dependencies or become unavailable mid-session.
+- **Fixed Repository Intelligence diagnostics contracts.** Diagnostic language summaries now validate correctly, and command-discovery failures are retained as bounded warnings instead of disappearing behind empty catches.
+- **Standardized project instructions on AGENTS files.** Automatic instruction discovery now uses only `AGENTS.md` and `AGENTS.override.md`; legacy Rel.AI instruction paths remain ordinary repository files but no longer affect agent behavior.
+- **Simplified current task and route state.** The duplicate live `attention` task status and legacy dashboard route aliases were removed while historical task records remain readable through canonical normalization.
+- **Reconciled the public tool contract.** The release now records 12 public tools, 43 actions, tool-surface version 40, and matching catalog, dashboard, HTTP, output-schema, and architecture invariants.
+- **Reduced duplicated utility code and connector noise.** Numeric bounds share focused helpers, and successful command results omit unnecessary shell metadata while failures retain it for diagnosis.
+
+### Validation
+- Expanded repository contract coverage for the 12-tool/43-action surface, diagnostics output, command-discovery warnings, AGENTS-only instruction discovery, task-state normalization, route hard cutover, UI capability categories, IPC ownership, and connector compaction.
+
+Bump root/electron/status UI/lockfiles to 0.25.2.
+
 ## [0.25.1] — 2026-08-13
 
 ### Process reliability

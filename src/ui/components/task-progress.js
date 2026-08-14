@@ -2,7 +2,6 @@ import { esc } from '../utils.js';
 
 const STATIC_PROGRESS_STATES = Object.freeze({
   failed: Object.freeze({ fallback: 'Work session failed', state: 'Failed', className: 'terminal failed' }),
-  attention: Object.freeze({ fallback: 'Work session failed', state: 'Failed', className: 'terminal failed' }),
   cancelled: Object.freeze({ fallback: 'Work session cancelled', state: 'Cancelled', className: 'terminal cancelled' }),
   inactive: Object.freeze({ fallback: 'Ready to resume', state: 'Inactive', className: 'paused' }),
   expired: Object.freeze({ fallback: 'Work session expired', state: 'Expired', className: 'terminal cancelled' }),

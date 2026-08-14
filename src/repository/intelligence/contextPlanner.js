@@ -4,6 +4,7 @@ import { analyzeArchitecture } from './architecture.js';
 import { analyzeCrossWorkspace } from './crossWorkspace.js';
 import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
+import { boundedInteger } from './limits.js';
 
 const BOOTSTRAP_MAX_MODULES = 6;
 const BOOTSTRAP_MAX_ENTRY_POINTS = 8;
@@ -169,12 +170,6 @@ function normalizePath(value) {
 
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
-}
-
-function boundedInteger(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(parsed)));
 }
 
 export { cachedRepositoryContext, cachedSearchGraphContext };

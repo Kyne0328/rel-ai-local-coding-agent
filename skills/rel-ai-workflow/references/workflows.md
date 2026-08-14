@@ -29,10 +29,6 @@ For a browser-rendered local app, retain the development-server `processId`, the
 
 Retain `processId`. Read logs with byte offsets and reuse `metadataRevision` after the first read to avoid unchanged metadata. Stop the process when it is no longer required. A process handle is separate from `work_id` and native MCP Task IDs.
 
-## Worktrees
-
-Use `relai_worktree` when isolation is appropriate and would preserve the state required by the objective. Before creating isolation from a dirty checkout, verify that the work does not depend on uncommitted state that the new worktree would omit. Continue using the returned workspace alias after creation.
-
 ## Change review and publishing
 
 Use `relai_changes` action `diff` for focused status and patch review. Use `relai_publish` action `draft_pr` to prepare pull-request text. Commit or push only when the user requested it or the objective explicitly requires it; scope publication to task-owned changes.

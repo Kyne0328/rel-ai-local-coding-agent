@@ -8,7 +8,7 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 39;
+const TOOL_SURFACE_VERSION = 40;
 const ACTION_OPERATIONS = Object.freeze({
   relai_work: Object.freeze({
     begin: operation('relai_begin_work'),
@@ -52,11 +52,6 @@ const ACTION_OPERATIONS = Object.freeze({
     reload: operation('relai_ui', true),
     stop: operation('relai_ui', true)
   }),
-  relai_worktree: Object.freeze({
-    create: operation('relai_worktree_create'),
-    list: operation('relai_worktree_list'),
-    remove: operation('relai_worktree_remove')
-  }),
   relai_validate: Object.freeze({
     checks: operation('relai_run_checks'),
     diagnostics: operation('relai_diagnostics_run'),
@@ -85,7 +80,6 @@ const OPERATION_CAPABILITIES = Object.freeze({
   relai_semantic_search: 'repository:read',
   relai_process_read: 'repository:read',
   relai_process_list: 'repository:read',
-  relai_worktree_list: 'repository:read',
   relai_tidy_plan: 'repository:read',
   relai_http_probe: 'repository:read',
   relai_diff: 'repository:read',
@@ -97,8 +91,6 @@ const OPERATION_CAPABILITIES = Object.freeze({
   relai_restore_paths: 'repository:write',
   relai_reset_workspace: 'repository:write',
   relai_tidy_run: 'repository:write',
-  relai_worktree_create: 'repository:write',
-  relai_worktree_remove: 'repository:write',
   relai_git_commit: 'repository:write',
   relai_exec: 'command:execute',
   relai_diagnostics_run: 'command:execute',
@@ -113,9 +105,6 @@ const OPERATION_CAPABILITIES = Object.freeze({
 const APPROVAL_POLICIES = Object.freeze({
   relai_reset_workspace: args => ({
     message: `Discard workspace changes using ${args.removeUntracked ? 'RESET_AND_CLEAN' : 'RESET'}?`
-  }),
-  relai_worktree_remove: args => ({
-    message: `Remove managed worktree ${args.alias || ''}${args.force ? ' with force' : ''}? The Git branch will be preserved.`
   }),
   relai_git_push: args => ({
     message: `Publish branch ${args.branch || '(current branch)'} to ${args.remote || 'origin'}?`
