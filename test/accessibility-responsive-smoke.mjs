@@ -17,6 +17,9 @@ assert.match(filterCss, /safe-area-inset-bottom/);
 assert.match(filterCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
 assert.match(appCss, /@import "\.\.\/components\/filter-controls\.css"/);
 assert.match(appCss, /\.nav a:focus-visible \.nav-label, \.secondary-nav a:focus-visible \.nav-label/);
+assert.match(appCss, /:root:not\(\[data-sidebar="collapsed"\]\) \.sidebar \{ padding-inline: 12px; \}/, 'narrow expanded sidebars must reclaim horizontal space without shrinking controls');
+assert.match(appCss, /:root:not\(\[data-sidebar="collapsed"\]\) \.brand-identity \{ flex: 1 1 auto; gap: 8px; \}/, 'narrow expanded sidebars must reserve the remaining row width for the Rel.AI identity');
+assert.doesNotMatch(appCss, /:root:not\(\[data-sidebar="collapsed"\]\) \.sidebar-toggle \{ width: (?:3[0-9]|4[0-3])px; \}/, 'the sidebar collapse control must keep its full touch target while the brand is visible');
 for (const feature of ['sessions', 'activity', 'workspaces', 'tools', 'processes']) {
   assert.match(appCss, new RegExp(`@import "\\.\\.\\/features\\/${feature}\\/styles\\.css"`));
 }
