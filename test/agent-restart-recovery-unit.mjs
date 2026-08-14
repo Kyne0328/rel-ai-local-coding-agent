@@ -47,7 +47,7 @@ try {
   assert.deepEqual(reconcileOrphanedAgents(config, { now: recoveredAt }), { reconciled: 0 }, 'recovery must be idempotent');
   const servicePending = createAgent(config, { work_id: 'parent_service', workspace: 'repo', objective: 'Recover on service start.' }, owner);
   const service = await getAgentService(config);
-  assert.equal(service.status({ agent_id: servicePending.agent_id }, owner).status, 'failed', 'default agent service creation must reconcile orphaned durable agents');
+  assert.equal((await service.status({ agent_id: servicePending.agent_id }, owner)).status, 'failed', 'default agent service creation must reconcile orphaned durable agents');
   await disposeAgentServices(config);
   console.log('Orphaned delegated agents fail safely on restart while terminal records, auth metadata, and ownership remain intact.');
 } finally {

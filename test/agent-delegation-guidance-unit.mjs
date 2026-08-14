@@ -15,6 +15,8 @@ assert.match(instructions, /highest available level at or below/i);
 assert.match(instructions, /Do not infer a ChatGPT subscription tier/i);
 assert.match(instructions, /ask for an API key/i);
 assert.match(instructions, /relai_agent action "status"/);
+assert.match(instructions, /waitMs up to 60000/);
+assert.match(instructions, /terminal result/);
 assert.match(instructions, /do not tight-loop poll/i);
 assert.match(instructions, /child alone owns relai_agent attach, complete, and fail/i);
 assert.match(instructions, /distinct child work_id/i);

@@ -6,6 +6,9 @@ import { AgentOrchestrator } from './orchestrator.js';
 const servicePromises = new Map();
 const DEFAULT_AGENT_ATTACH_TIMEOUT_MS = 120_000;
 const ATTACH_TIMEOUT_CODE = 'AGENT_ATTACH_TIMEOUT';
+const MAX_AGENT_STATUS_WAIT_MS = 60_000;
+const AGENT_STATUS_POLL_MS = 250;
+const WAITABLE_AGENT_STATES = new Set(['pending', 'starting', 'working', 'input_required']);
 
 class AgentService {
   constructor({ config, runtime, connectorName = 'Rel.AI MCP', attachTimeoutMs = DEFAULT_AGENT_ATTACH_TIMEOUT_MS } = {}) {
@@ -30,8 +33,18 @@ class AgentService {
     return agent;
   }
 
-  status(args = {}, context = {}) {
-    return getAgentStatus(this.config, args, context);
+  async status(args = {}, context = {}) {
+    const waitMs = normalizeStatusWait(args.waitMs);
+    let status = getAgentStatus(this.config, args, context);
+    if (!waitMs || !WAITABLE_AGENT_STATES.has(status.status)) return status;
+    const deadline = Date.now() + waitMs;
+    while (WAITABLE_AGENT_STATES.has(status.status)) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await delay(Math.min(AGENT_STATUS_POLL_MS, remaining));
+      status = getAgentStatus(this.config, args, context);
+    }
+    return status;
   }
 
   async complete(args = {}, context = {}) {
@@ -157,6 +170,19 @@ function normalizeAttachTimeout(value) {
   return Math.floor(timeout);
 }
 
+function normalizeStatusWait(value) {
+  if (value == null) return 0;
+  const waitMs = Number(value);
+  if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > MAX_AGENT_STATUS_WAIT_MS) {
+    throw new Error(`Agent status waitMs must be an integer between 0 and ${MAX_AGENT_STATUS_WAIT_MS}.`);
+  }
+  return waitMs;
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function unsupportedAuthentication() {
   const error = new Error('This agent runtime does not support interactive authentication.');
   error.code = 'AGENT_AUTH_UNSUPPORTED';
@@ -167,6 +193,7 @@ export {
   AgentService,
   ATTACH_TIMEOUT_CODE,
   DEFAULT_AGENT_ATTACH_TIMEOUT_MS,
+  MAX_AGENT_STATUS_WAIT_MS,
   disposeAgentServices,
   getAgentService
 };

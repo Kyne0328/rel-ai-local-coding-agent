@@ -83,8 +83,32 @@ try {
   assert.equal(runtime.active.size, 0, 'parent cancellation must close the hidden runtime session');
   assert.equal(runtime.cancelled.length, 3);
 
+  const waitingAgent = await service.create({
+    work_id: 'work_parent_4', workspace: 'repo', objective: 'Wait for delegated MCP result.'
+  }, principal);
+  service.attach({ agent_id: waitingAgent.agent_id, work_id: 'work_child_4', workspace: 'repo' }, principal);
+  const immediate = await service.status({ agent_id: waitingAgent.agent_id, waitMs: 0 }, principal);
+  assert.equal(immediate.status, 'working', 'waitMs 0 must preserve immediate status behavior');
+  const completion = new Promise(resolve => {
+    setTimeout(() => {
+      void service.complete({
+        agent_id: waitingAgent.agent_id,
+        child_work_id: 'work_child_4',
+        result: { summary: 'Returned while parent waited.' }
+      }, principal).then(resolve);
+    }, 20);
+  });
+  const waited = await service.status({ agent_id: waitingAgent.agent_id, waitMs: 1000 }, principal);
+  assert.equal(waited.status, 'completed');
+  assert.equal(waited.agentResult.summary, 'Returned while parent waited.');
+  await completion;
+  await assert.rejects(
+    () => service.status({ agent_id: waitingAgent.agent_id, waitMs: 60001 }, principal),
+    /waitMs must be an integer between 0 and 60000/
+  );
+
   await service.dispose();
-  console.log('Agent service launches delegated runtime sessions and closes them on complete, fail, and cancel.');
+  console.log('Agent service launches delegated runtime sessions, supports bounded status waits, and closes them on complete, fail, and cancel.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

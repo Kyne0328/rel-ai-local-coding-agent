@@ -40,7 +40,7 @@ const PERSISTENT_PROCESS_TOOLS = new Set([
 const ALWAYS_IMMEDIATE_TOOLS = new Set([
   'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search',
   'relai_status', 'relai_cancel_work', 'relai_finish_work',
-  'relai_agent_create', 'relai_agent_attach', 'relai_agent_status', 'relai_agent_complete', 'relai_agent_fail', 'relai_agent_cancel'
+  'relai_agent_create', 'relai_agent_attach', 'relai_agent_complete', 'relai_agent_fail', 'relai_agent_cancel'
 ]);
 
 function annotationsFor(name) {
@@ -124,6 +124,7 @@ const PUBLIC_DEFINITION_VALUES = [
         action: ACTION(['create', 'attach', 'status', 'complete', 'fail', 'cancel']),
         workspace: WORKSPACE,
         agent_id: { type: 'string', pattern: '^agent_[A-Za-z0-9_-]{32,160}$' },
+        waitMs: { type: 'number', minimum: 0, maximum: 60000, multipleOf: 1 },
         child_work_id: { type: 'string', minLength: 1, maxLength: 200 },
         role: { type: 'string', enum: ['investigator', 'reviewer', 'planner', 'verifier', 'implementer'] },
         reasoning: { type: 'string', enum: ['instant', 'medium', 'high', 'extra_high', 'pro'] },
@@ -135,17 +136,17 @@ const PUBLIC_DEFINITION_VALUES = [
       },
       required: ['action'],
       oneOf: [
-        branch('create', ['workspace', 'objective', 'work_id'], ['agent_id', 'child_work_id', 'result', 'error', 'reason']),
-        branch('attach', ['agent_id', 'work_id'], ['workspace', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'reason']),
+        branch('create', ['workspace', 'objective', 'work_id'], ['agent_id', 'waitMs', 'child_work_id', 'result', 'error', 'reason']),
+        branch('attach', ['agent_id', 'work_id'], ['workspace', 'waitMs', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'reason']),
         branch('status', ['agent_id'], ['workspace', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'reason', 'work_id']),
-        branch('complete', ['agent_id', 'child_work_id', 'result'], ['workspace', 'role', 'reasoning', 'objective', 'connectorName', 'error', 'reason', 'work_id']),
-        branch('fail', ['agent_id', 'child_work_id', 'error'], ['workspace', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'reason', 'work_id']),
-        branch('cancel', ['agent_id'], ['workspace', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'work_id'])
+        branch('complete', ['agent_id', 'child_work_id', 'result'], ['workspace', 'waitMs', 'role', 'reasoning', 'objective', 'connectorName', 'error', 'reason', 'work_id']),
+        branch('fail', ['agent_id', 'child_work_id', 'error'], ['workspace', 'waitMs', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'reason', 'work_id']),
+        branch('cancel', ['agent_id'], ['workspace', 'waitMs', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'work_id'])
       ],
       additionalProperties: false
     },
     annotations: annotations(false, false, false, false),
-    behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
+    behavior: { taskScope: 'optional' },
     dashboard: { category: 'Workflow', capabilities: ['workflow'] }
   }),
   define({

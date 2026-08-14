@@ -28,8 +28,8 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_agent_status",
     title: "Delegated Agent Status",
-    description: "Read the current state and structured result of a delegated agent owned by the current principal.",
-    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"}},"required":["agent_id"],"additionalProperties":false},
+    description: "Read the current state and structured result of a delegated agent owned by the current principal, optionally waiting briefly for a terminal result.",
+    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"},"waitMs":{"type":"number","minimum":0,"maximum":60000,"multipleOf":1}},"required":["agent_id"],"additionalProperties":false},
     handlerName: 'agentStatus',
     behavior: {"taskScope":"none"},
     dashboard: {"category":"Workflow"}

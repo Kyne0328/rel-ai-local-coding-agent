@@ -6,11 +6,11 @@ import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolMa
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = '75c1dfefa2990e1c85d58c836d7a9fd7d1dab96b2e253e01857d677c4cf50da4';
+const EXPECTED_HASH = '0106b8eac790e7af35b56ede8e78e7334041f6eae5d6da038606dc663950200f';
 const rows = `
 relai_agent|create|relai_agent_create|agentCreate|repository:read|none|required|task|always_immediate|forbidden
 relai_agent|attach|relai_agent_attach|agentAttach|repository:read|none|required|task|always_immediate|forbidden
-relai_agent|status|relai_agent_status|agentStatus|repository:read|none|none|task|always_immediate|forbidden
+relai_agent|status|relai_agent_status|agentStatus|repository:read|none|none|task|bounded_synchronous|forbidden
 relai_agent|complete|relai_agent_complete|agentComplete|repository:read|none|none|task|always_immediate|forbidden
 relai_agent|fail|relai_agent_fail|agentFail|repository:read|none|none|task|always_immediate|forbidden
 relai_agent|cancel|relai_agent_cancel|agentCancel|repository:read|none|none|task|always_immediate|forbidden
@@ -176,7 +176,7 @@ function sampleArgs(expected) {
   switch (key) {
     case 'relai_agent:create': Object.assign(args, { workspace: 'repo', objective: 'Contract delegated review.' }); break;
     case 'relai_agent:attach': args.agent_id = `agent_${'a'.repeat(43)}`; break;
-    case 'relai_agent:status':
+    case 'relai_agent:status': Object.assign(args, { agent_id: `agent_${'b'.repeat(43)}`, waitMs: 250 }); break;
     case 'relai_agent:cancel': args.agent_id = `agent_${'b'.repeat(43)}`; break;
     case 'relai_agent:complete': Object.assign(args, { agent_id: `agent_${'c'.repeat(43)}`, child_work_id: 'work_child', result: { summary: 'done' } }); break;
     case 'relai_agent:fail': Object.assign(args, { agent_id: `agent_${'d'.repeat(43)}`, child_work_id: 'work_child', error: 'failed' }); break;
