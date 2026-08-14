@@ -3,9 +3,10 @@ import { deflateSync } from 'node:zlib';
 const MAX_BADGE_COUNT = 99;
 const MAX_SEEN_TASKS = 256;
 const BADGE_SIZE = 16;
+const BADGE_VISIBLE_COUNT_LIMIT = 9;
 const BADGE_SCALE_FACTORS = Object.freeze([1, 1.25, 1.5, 1.75, 2, 2.5, 3]);
+const BADGE_BACKGROUND_COLOR = Object.freeze([242, 63, 66, 255]);
 const BADGE_TEXT_COLOR = Object.freeze([255, 255, 255, 255]);
-const BADGE_SHADOW_COLOR = Object.freeze([0, 0, 0, 180]);
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const DIGIT_BITMAPS = Object.freeze({
   0: ['11111', '10001', '10011', '10101', '11001', '10001', '11111'],
@@ -17,7 +18,8 @@ const DIGIT_BITMAPS = Object.freeze({
   6: ['01111', '10000', '10000', '11110', '10001', '10001', '01110'],
   7: ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
   8: ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
-  9: ['01110', '10001', '10001', '01111', '00001', '00001', '11110']
+  9: ['01110', '10001', '10001', '01111', '00001', '00001', '11110'],
+  '+': ['00000', '00100', '00100', '11111', '00100', '00100', '00000']
 });
 
 function createTaskbarCompletionBadge(options = {}) {
@@ -137,8 +139,10 @@ function createBadgeImage(nativeImage, count) {
 
 function createBadgePng(count, size = BADGE_SIZE) {
   const pixelSize = Math.max(BADGE_SIZE, Math.round(Number(size) || BADGE_SIZE));
-  const label = String(Math.min(MAX_BADGE_COUNT, Math.max(1, Number(count) || 1)));
+  const normalizedCount = Math.min(MAX_BADGE_COUNT, Math.max(1, Number(count) || 1));
+  const label = normalizedCount > BADGE_VISIBLE_COUNT_LIMIT ? `${BADGE_VISIBLE_COUNT_LIMIT}+` : String(normalizedCount);
   const pixels = Buffer.alloc(pixelSize * pixelSize * 4);
+  drawBadgeBackground(pixels, pixelSize);
   drawLabel(pixels, label, pixelSize);
   const scanlines = Buffer.alloc((pixelSize * 4 + 1) * pixelSize);
   for (let y = 0; y < pixelSize; y += 1) {
@@ -158,26 +162,31 @@ function createBadgePng(count, size = BADGE_SIZE) {
     pngChunk('IEND', Buffer.alloc(0))
   ]);
 }
+function drawBadgeBackground(pixels, size) {
+  const representationScale = size / BADGE_SIZE;
+  const center = (size - 1) / 2;
+  const radius = 7.25 * representationScale;
+  const edgeWidth = Math.max(1, representationScale);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const distance = Math.hypot(x - center, y - center);
+      const coverage = Math.max(0, Math.min(1, (radius + edgeWidth / 2 - distance) / edgeWidth));
+      if (coverage > 0) blendPixel(pixels, size, x, y, BADGE_BACKGROUND_COLOR, coverage);
+    }
+  }
+}
+
 function drawLabel(pixels, label, size) {
   const representationScale = size / BADGE_SIZE;
   const glyphWidth = 5;
   const glyphHeight = 7;
   const spacing = 1;
-  const glyphScale = label.length === 1 ? 1.35 : 1;
-  const pixelScale = representationScale * glyphScale;
+  const pixelScale = representationScale;
   const totalWidth = (label.length * glyphWidth + (label.length - 1) * spacing) * pixelScale;
-  const startX = Math.max(0, size - totalWidth - 1.25 * representationScale);
-  const startY = 1.25 * representationScale;
+  const totalHeight = glyphHeight * pixelScale;
+  const startX = Math.round((size - totalWidth) / 2);
+  const startY = Math.round((size - totalHeight) / 2 - 0.25 * representationScale);
 
-  drawGlyphs(pixels, label, size, {
-    glyphWidth,
-    glyphHeight,
-    spacing,
-    pixelScale,
-    startX: startX + 0.6 * representationScale,
-    startY: startY + 0.7 * representationScale,
-    color: BADGE_SHADOW_COLOR
-  });
   drawGlyphs(pixels, label, size, {
     glyphWidth,
     glyphHeight,
