@@ -1,8 +1,6 @@
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
+import { resolveChromiumRuntime as discoverChromiumRuntime } from './chromiumRuntime.js';
 import { taskError } from './toolActivity.js';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -445,53 +443,19 @@ function isAllowedPageUrl(value, allowedPorts) {
 
 function resolveChromiumRuntime() {
   const override = String(process.env.REL_AI_UI_CHROMIUM_PATH || '').trim();
-  if (override) {
-    if (!isExecutableFile(override)) throw new Error('REL_AI_UI_CHROMIUM_PATH does not point to an available file.');
-    return { executablePath: override, product: 'configured Chromium' };
-  }
-  for (const candidate of chromiumCandidates()) {
-    if (isExecutableFile(candidate.executablePath)) return candidate;
-  }
-  throw taskError(
-    'UI_RUNTIME_UNAVAILABLE',
-    'No supported local Chromium runtime was found. Install Chrome, Edge, or Chromium, or set REL_AI_UI_CHROMIUM_PATH.'
-  );
-}
-
-function chromiumCandidates() {
-  const candidates = [];
-  if (process.platform === 'win32') {
-    const roots = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean);
-    for (const root of roots) {
-      candidates.push({ executablePath: path.join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'), product: 'Microsoft Edge' });
-      candidates.push({ executablePath: path.join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'), product: 'Google Chrome' });
-      candidates.push({ executablePath: path.join(root, 'Chromium', 'Application', 'chrome.exe'), product: 'Chromium' });
-    }
-  } else if (process.platform === 'darwin') {
-    candidates.push(
-      { executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', product: 'Google Chrome' },
-      { executablePath: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', product: 'Microsoft Edge' },
-      { executablePath: '/Applications/Chromium.app/Contents/MacOS/Chromium', product: 'Chromium' }
-    );
-  } else {
-    for (const [name, product] of [
-      ['google-chrome', 'Google Chrome'],
-      ['google-chrome-stable', 'Google Chrome'],
-      ['microsoft-edge', 'Microsoft Edge'],
-      ['microsoft-edge-stable', 'Microsoft Edge'],
-      ['chromium', 'Chromium'],
-      ['chromium-browser', 'Chromium']
-    ]) {
-      const resolved = spawnSync('which', [name], { encoding: 'utf8', windowsHide: true });
-      const executablePath = String(resolved.stdout || '').trim().split(/\r?\n/, 1)[0];
-      if (executablePath) candidates.push({ executablePath, product });
-    }
-  }
   try {
-    const bundled = chromium.executablePath();
-    if (bundled) candidates.push({ executablePath: bundled, product: 'Chromium' });
-  } catch {}
-  return candidates;
+    return discoverChromiumRuntime({ override });
+  } catch (error) {
+    if (override && error?.code === 'CHROMIUM_RUNTIME_OVERRIDE_INVALID') {
+      throw new Error('REL_AI_UI_CHROMIUM_PATH does not point to an available file.', { cause: error });
+    }
+    const unavailable = taskError(
+      'UI_RUNTIME_UNAVAILABLE',
+      'No supported local Chromium runtime was found. Install Chrome, Edge, or Chromium, or set REL_AI_UI_CHROMIUM_PATH.'
+    );
+    unavailable.cause = error;
+    throw unavailable;
+  }
 }
 
 function normalizeAllowedPorts(primaryPort, values) {
@@ -552,10 +516,6 @@ function defaultPortForProtocol(protocol) {
 
 function taskIdFor(args, context) {
   return String(context.taskId || args.work_id || '').trim();
-}
-
-function isExecutableFile(file) {
-  try { return fs.statSync(file).isFile(); } catch { return false; }
 }
 
 async function safeTitle(page) {
