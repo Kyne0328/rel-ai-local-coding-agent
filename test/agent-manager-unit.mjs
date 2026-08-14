@@ -40,6 +40,12 @@ try {
   assert.equal(attached.status, 'working');
   assert.equal(attached.child_work_id, 'work_child');
   assert.ok(attached.attachedAt);
+  assert.throws(
+    () => createAgent(config, { work_id: 'work_child', workspace: 'repo', objective: 'Recursive grandchild.' }, sameUser),
+    error => error?.code === 'AGENT_RECURSIVE_DELEGATION'
+  );
+  const sameWorkOtherPrincipal = createAgent(config, { work_id: 'work_child', workspace: 'repo', objective: 'Independent principal.' }, otherUser);
+  assert.equal(sameWorkOtherPrincipal.status, 'pending', 'recursive-delegation detection must not cross principal boundaries');
   assert.equal(attachAgent(config, { agent_id: created.agent_id, work_id: 'work_child', workspace: 'repo' }, sameUser).child_work_id, 'work_child');
   assert.throws(
     () => attachAgent(config, { agent_id: created.agent_id, work_id: 'work_other_child', workspace: 'repo' }, sameUser),

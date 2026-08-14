@@ -11,14 +11,18 @@ const ACTIVE_STATES = new Set(['pending', 'starting', 'working', 'input_required
 const RESTART_FAILURE = 'Rel.AI restarted before this delegated agent returned an MCP result. The browser session was closed; create a new delegated agent if the subtask is still needed.';
 
 function createAgent(config, args = {}, context = {}) {
+  const parentWorkId = requiredText(args.work_id, 'work_id');
+  const workspace = requiredText(args.workspace, 'workspace');
+  const ownerFingerprint = principalFingerprint(principalForContext(context, Boolean(context?.publicHttpOnly)));
+  assertNotDelegatedChildWork(config, parentWorkId, ownerFingerprint);
   const agentId = `agent_${crypto.randomBytes(32).toString('base64url')}`;
   const now = new Date().toISOString();
   const record = {
     schemaVersion: 1,
     agentId,
-    parentWorkId: requiredText(args.work_id, 'work_id'),
-    workspace: requiredText(args.workspace, 'workspace'),
-    principalFingerprint: principalFingerprint(principalForContext(context, Boolean(context?.publicHttpOnly))),
+    parentWorkId,
+    workspace,
+    principalFingerprint: ownerFingerprint,
     role: normalizeAgentRole(args.role || 'investigator'),
     reasoning: normalizeReasoningLevel(args.reasoning || 'medium'),
     objective: boundedText(args.objective, 20_000),
@@ -191,6 +195,26 @@ function requireAgent(config, agentId) {
   const record = readRecord(config, id);
   if (!record) throw agentError('AGENT_NOT_FOUND', 'Unknown or unavailable delegated agent.');
   return record;
+}
+
+function assertNotDelegatedChildWork(config, workId, ownerFingerprint) {
+  let entries;
+  try {
+    entries = fs.readdirSync(agentDirectory(config), { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const agentId = entry.name.slice(0, -'.json'.length);
+    if (!AGENT_ID.test(agentId)) continue;
+    let record;
+    try { record = readRecord(config, agentId); } catch { continue; }
+    if (!record || record.childWorkId !== workId) continue;
+    if (!safeEqual(record.principalFingerprint, ownerFingerprint)) continue;
+    throw agentError('AGENT_RECURSIVE_DELEGATION', 'Delegated child work sessions cannot create additional subagents.');
+  }
 }
 
 function compareDashboardAgents(left, right) {

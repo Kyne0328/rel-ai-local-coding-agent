@@ -83,6 +83,18 @@ try {
   assert.equal(runtime.active.size, 0, 'parent cancellation must close the hidden runtime session');
   assert.equal(runtime.cancelled.length, 3);
 
+  const recursiveParent = await service.create({
+    work_id: 'work_recursive_parent', workspace: 'repo', objective: 'Parent delegated task.'
+  }, principal);
+  service.attach({ agent_id: recursiveParent.agent_id, work_id: 'work_recursive_child', workspace: 'repo' }, principal);
+  const launchesBeforeRecursiveAttempt = runtime.sequence;
+  await assert.rejects(
+    () => service.create({ work_id: 'work_recursive_child', workspace: 'repo', objective: 'Forbidden grandchild.' }, principal),
+    error => error?.code === 'AGENT_RECURSIVE_DELEGATION'
+  );
+  assert.equal(runtime.sequence, launchesBeforeRecursiveAttempt, 'recursive delegation must fail before opening another browser page');
+  await service.cancel({ agent_id: recursiveParent.agent_id, reason: 'Recursive-delegation test cleanup.' }, principal);
+
   const waitingAgent = await service.create({
     work_id: 'work_parent_4', workspace: 'repo', objective: 'Wait for delegated MCP result.'
   }, principal);
@@ -118,7 +130,7 @@ try {
   assert.equal(runtime.active.size, 0, 'desktop cancellation must close the hidden runtime session');
 
   await service.dispose();
-  console.log('Agent service launches delegated runtime sessions, supports bounded status waits and desktop visibility, and closes them on complete, fail, and cancel.');
+  console.log('Agent service launches delegated runtime sessions, enforces non-recursive delegation, supports bounded status waits and desktop visibility, and closes them on complete, fail, and cancel.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
