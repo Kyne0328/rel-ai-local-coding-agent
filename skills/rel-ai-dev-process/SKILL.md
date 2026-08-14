@@ -1,6 +1,6 @@
 ---
 name: rel-ai-dev-process
-description: Use when repository work needs a persistent development server, file watcher, long-lived preview, or interactive CLI.
+description: Use only when repository work requires a persistent development server, file watcher, long-lived preview, or interactive CLI that must stay alive across later steps. Do not use for one-shot tests, builds, linters, migrations, checks, diagnostics, or release gates.
 ---
 
 # Rel.AI Development Process

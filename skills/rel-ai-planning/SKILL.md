@@ -1,6 +1,6 @@
 ---
 name: rel-ai-planning
-description: Use when a repository feature, refactor, migration, or multi-stage change has non-trivial architecture, sequencing, dependencies, or durable tracking needs.
+description: Use for non-trivial repository features, refactors, migrations, or multi-stage changes where architecture, sequencing, dependencies, or durable task tracking must be decided before implementation. Do not use for small localized changes with an already-clear implementation path.
 ---
 
 # Rel.AI Planning
