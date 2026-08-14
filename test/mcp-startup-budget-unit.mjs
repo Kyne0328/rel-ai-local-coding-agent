@@ -19,7 +19,6 @@ const warmListBudgetMs = Number(process.env.REL_AI_MCP_WARM_LIST_BUDGET_MS || 20
 fs.writeFileSync(configPath, JSON.stringify({
   version: 3,
   stateDir: path.join(temp, 'state'),
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
   workspaces: { repo: { path: root } }
 }, null, 2));
 

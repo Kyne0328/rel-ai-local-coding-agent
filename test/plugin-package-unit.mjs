@@ -82,7 +82,6 @@ try {
   const config = {
     version: 3,
     stateDir: path.join(temp, 'state'),
-    patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
     workspaces: { repo: { path: root } }
   };
   const configPath = path.join(temp, 'config.json');

@@ -1,10 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getConfigPath, publicConfigSummary, writeConfig, normalizePatchConfig } from './config.js';
+import { getConfigPath, publicConfigSummary, writeConfig } from './config.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 import { discoverCommands, staleCommandKeys } from "./commandDiscovery.js";
-
-const NUMBER_KEYS = ["maxOutputBytes"];
 
 // Only these nested keys may be written through the settings API; anything else is
 // rejected so junk keys never persist into config.json.
@@ -39,12 +37,6 @@ function updateSettings(current, payload = {}) {
   const changed = [];
   const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
 
-  for (const key of NUMBER_KEYS) {
-    if (!Object.hasOwn(values, key)) continue;
-    setIfChanged(next, key, finiteNumber(values[key], key), changed);
-  }
-
-  applyPatchSettings(next, values, changed);
   applyAllowedSections(next, values, changed);
 
   const normalized = writeConfig(next);
@@ -59,12 +51,6 @@ function updateSettings(current, payload = {}) {
 
 function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function applyPatchSettings(next, values, changed) {
-  if (!values.patch || typeof values.patch !== "object") return;
-  next.patch = normalizePatchConfig({ ...objectOrEmpty(next.patch), ...values.patch });
-  changed.push("patch");
 }
 
 function coerceSettingValue(value, label, currentValue) {
@@ -294,13 +280,6 @@ function validateAlias(alias) {
 
 function validateCommandKey(key) {
   if (!/^[A-Za-z0-9._:-]{1,120}$/.test(key)) throw new Error(`Invalid command key: ${key}`);
-}
-
-function setIfChanged(target, key, value, changed) {
-  if (JSON.stringify(target[key]) !== JSON.stringify(value)) {
-    target[key] = value;
-    changed.push(key);
-  }
 }
 
 function setNestedIfChanged(target, section, key, value, changed) {

@@ -39,7 +39,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir,
   auditLogPath,
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
   workspaces: {
     appA: { path: workspaceA, commands: {}, testCommands: { check: 'node --check src/index.js' } },
     appB: { path: workspaceB, commands: {}, testCommands: { check: 'node --check src/index.js' } }

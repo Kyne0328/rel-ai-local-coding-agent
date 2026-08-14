@@ -11,7 +11,7 @@ const workspacePath = path.join(root, 'workspace');
 const scriptPath = path.join(workspacePath, 'mutate.js');
 const dirtyPath = path.join(workspacePath, 'dirty.txt');
 const workspace = { alias: 'app', path: workspacePath };
-const config = { maxOutputBytes: 1024 * 1024 };
+const config = {};
 
 function quote(value) {
   const text = String(value);

@@ -33,20 +33,11 @@ function makeDefaultContextConfig() {
   };
 }
 
-function makeDefaultPatchConfig() {
-  return {
-    backup: true,
-    requireCleanGit: false,
-    maxUpdateBytes: 50 * 1024 * 1024
-  };
-}
-
 function makeDefaultConfig() {
   return {
-    version: 4,
+    version: 5,
     stateDir: defaultStateDir(),
     auditLogPath: "",
-    maxOutputBytes: 2 * 1024 * 1024,
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
@@ -67,7 +58,6 @@ function makeDefaultConfig() {
     processEnvironment: {
       allow: []
     },
-    patch: makeDefaultPatchConfig(),
     workspaces: {}
   };
 }
@@ -166,7 +156,6 @@ function normalizeConfig(config) {
   normalizeCorePaths(next, base);
   normalizeTrustedMode(next, input);
   normalizeProductSettings(next, base, input);
-  next.patch = normalizePatchConfig(input.patch);
   normalizeWorkspaces(next);
   return next;
 }
@@ -176,19 +165,17 @@ function mergeConfigBase(base, input) {
     ...base,
     stateDir: input.stateDir ?? base.stateDir,
     auditLogPath: input.auditLogPath ?? base.auditLogPath,
-    maxOutputBytes: input.maxOutputBytes ?? base.maxOutputBytes,
     trustedBudgetMultiplier: input.trustedBudgetMultiplier ?? base.trustedBudgetMultiplier,
     productUx: { ...base.productUx, ...objectOrEmpty(input.productUx) },
     release: { ...base.release, ...objectOrEmpty(input.release) },
     telemetry: { ...base.telemetry, ...objectOrEmpty(input.telemetry) },
     processEnvironment: { ...base.processEnvironment, ...objectOrEmpty(input.processEnvironment) },
-    patch: { ...objectOrEmpty(input.patch) },
     workspaces: { ...objectOrEmpty(input.workspaces) }
   };
 }
 
 function normalizeCorePaths(next, base) {
-  next.version = 4;
+  next.version = 5;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
@@ -208,7 +195,6 @@ function normalizeTrustedBudgetMultiplier(value) {
 }
 
 function normalizeProductSettings(next, base, input) {
-  next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   const product = { ...base.productUx, ...objectOrEmpty(input.productUx) };
   next.productUx = {
     staleHours: clampNumber(product.staleHours, 1, 24 * 365, base.productUx.staleHours),
@@ -272,16 +258,6 @@ function normalizeContextConfig(value) {
 
 function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function normalizePatchConfig(value) {
-  const base = makeDefaultPatchConfig();
-  const current = objectOrEmpty(value);
-  return {
-    backup: current.backup == null ? base.backup : Boolean(current.backup),
-    requireCleanGit: current.requireCleanGit == null ? base.requireCleanGit : Boolean(current.requireCleanGit),
-    maxUpdateBytes: base.maxUpdateBytes
-  };
 }
 
 function normalizeStringList(value) {
@@ -464,10 +440,8 @@ function publicConfigSummary(config) {
     configPath: getConfigPath(),
     stateDir: config.stateDir,
     auditLogPath: config.auditLogPath,
-    maxOutputBytes: config.maxOutputBytes,
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
-    patch: normalizePatchConfig(config.patch),
     localRepoBridge: {
       mode: "trusted",
       visibleTools: getToolNames(config),
@@ -524,11 +498,6 @@ function safeDetectValidationChecks(workspacePath) {
   }
 }
 
-function positiveNumber(value, fallback) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
 function clampRatio(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -541,5 +510,5 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(n), min), max);
 }
 
-export { getConfigPath, makeDefaultConfig, makeDefaultContextConfig,  makeDefaultPatchConfig, normalizePatchConfig, readConfig, invalidateConfigCache, ensureConfig, writeConfig, normalizeConfig,  resolveWorkspaceInput, normalizeWorkspacePathForComparison, resolveWorkspace, publicConfigSummary, allWorkspaceAliases,  };
+export { getConfigPath, makeDefaultConfig, makeDefaultContextConfig, readConfig, invalidateConfigCache, ensureConfig, writeConfig, normalizeConfig, resolveWorkspaceInput, normalizeWorkspacePathForComparison, resolveWorkspace, publicConfigSummary, allWorkspaceAliases };
 

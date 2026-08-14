@@ -47,7 +47,7 @@ const workspace = {
   commands: {},
   context: { snapshotMaxFiles: 3000 }
 };
-const config = { stateDir: path.join(root, 'state'), patch: { requireCleanGit: false, backup: false, maxUpdateBytes: 2 * 1024 * 1024 } };
+const config = { stateDir: path.join(root, 'state') };
 
 // Start a session against the clean worktree first — this mirrors the real
 // connector flow (a write auto-starts a session before git_status is consulted),
@@ -71,8 +71,7 @@ assert.deepEqual(dryScopedCommit.paths, ['notes.txt']);
 
 const dryPatch = await relaiApplyPatch(workspace, config, {
   updateText: '--- a/README.md\n+++ b/README.md\n@@ -1 +1,2 @@\n # Git smoke\n+dry patch\n',
-  dryRun: true,
-  requireCleanGit: false
+  dryRun: true
 });
 assert.equal(dryPatch.ok, true);
 assert.equal(dryPatch.dryRun, true);

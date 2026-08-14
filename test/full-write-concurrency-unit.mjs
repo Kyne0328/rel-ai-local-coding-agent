@@ -17,7 +17,6 @@ const workspace = {
 };
 const config = {
   stateDir: path.join(root, '.state'),
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 }
 };
 const target = path.join(root, 'config.txt');
 const sha = (text) => crypto.createHash('sha256').update(text, 'utf8').digest('hex');

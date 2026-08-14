@@ -12,7 +12,6 @@ const configPath = path.join(temp, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir: path.join(temp, 'state'),
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
   workspaces: { repo: { path: root } }
 }, null, 2));
 

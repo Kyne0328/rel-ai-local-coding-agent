@@ -17,7 +17,7 @@ assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspa
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['connection', 'processes', 'diagnostics', 'tools', 'usage']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Application', 'Advanced', 'About']);
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Application', 'About']);
 assert.equal(desktopNavigationOwner('connection'), 'system');
 assert.equal(desktopNavigationOwner('diagnostics'), 'system');
 assert.equal(desktopNavigationOwner('system'), 'system');
@@ -121,7 +121,7 @@ assert.match(workspaceActions, /Repository details/, 'Repository details modal m
 assert.doesNotMatch(read('src/ui/features/workspaces/details.js'), /<details class="workspace-details">/, 'Repository details must not remain an inline disclosure');
 const connectorSource = read('src/ui/features/settings/connector.js');
 assert.match(connectorSource, /card connection-layer-disclosure connector-details|card connector-details connection-layer-disclosure/, 'Connection layers must share the aligned connector disclosure contract');
-assert.doesNotMatch(read('src/ui/features/settings/advanced.js'), /Patch limit \(MiB\)/, 'patch sizing must not remain a normal user setting');
+assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/advanced.js')), false, 'technical Advanced settings must not remain in the product surface');
 
 const publicRouteOwners = [
   'electron/main.js',

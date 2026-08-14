@@ -25,17 +25,14 @@ fs.writeFileSync(path.join(workspacePath, '.npmrc'), 'registry=https://registry.
 git(['add', 'hello.txt', '.npmrc'], { cwd: workspacePath });
 git(['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore' });
 
-const config = {
-  stateDir,
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2 * 1024 * 1024 }
-};
+const config = { stateDir };
 const workspace = { alias: 'smoke', path: workspacePath };
 
 try {
   fs.writeFileSync(path.join(workspacePath, 'hello.txt'), 'Hello, updated world!\n');
   const diff = git(['diff', 'hello.txt'], { cwd: workspacePath }).toString('utf8');
   git(['checkout', '--', 'hello.txt'], { cwd: workspacePath });
-  const applied = await relaiApplyPatch(workspace, config, { patch: diff, returnDiff: false });
+  const applied = await relaiApplyPatch(workspace, { ...config, patch: { backup: false, requireCleanGit: true, maxUpdateBytes: 10 } }, { patch: diff, returnDiff: false });
   assert.equal(applied.ok, true);
   assert.match(fs.readFileSync(path.join(workspacePath, 'hello.txt'), 'utf8'), /updated world/);
   git(['checkout', '--', 'hello.txt'], { cwd: workspacePath });
@@ -113,10 +110,7 @@ rename to public-config.txt
     () => relaiApplyPatch(workspace, config, { patch: '   ' }),
     /relai_edit requires non-empty updateText/
   );
-  await assert.rejects(
-    () => relaiApplyPatch(workspace, { ...config, patch: { ...config.patch, maxUpdateBytes: 10 } }, { patch: 'x'.repeat(20) }),
-    /relai_edit refused 20 byte patch/
-  );
+  assert.equal(applied.ok, true, 'legacy patch tuning must not throttle or reject a valid edit after the hard cutover');
 
   const openAiPatch = `*** Begin Patch
 *** Update File: hello.txt

@@ -19,7 +19,7 @@ const base = `http://127.0.0.1:${address.port}`;
 try {
   assert.equal(fs.existsSync(configPath), true, 'Hard-cutover server startup should materialize the canonical config immediately');
   const startupConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  assert.equal(startupConfig.version, 3);
+  assert.equal(startupConfig.version, 5);
   assert.deepEqual(startupConfig.workspaces, {});
 
   const skip = await fetch(`${base}/api/onboarding/complete`, {

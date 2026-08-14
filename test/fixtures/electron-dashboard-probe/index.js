@@ -410,7 +410,6 @@ async function exerciseNavigationControls(win, failures) {
     { opener: '[data-nav-accordion="system"] > summary', selector: '[data-nav-accordion="system"] .sidebar-subnav a[data-nav-id="connection"]', hash: '#connection', ready: `document.querySelector('.system-shell')` },
     { opener: '[data-nav-accordion="settings"] > summary', selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="preferences"]', hash: '#settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="application"]', hash: '#settings/application', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
-    { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="advanced"]', hash: '#settings/advanced', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="about"]', hash: '#settings/about', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` }
   ];
   const results = [];

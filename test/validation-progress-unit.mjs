@@ -25,7 +25,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   version: 3,
   stateDir,
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
-  maxOutputBytes: 1024 * 1024,
   workspaces: { app: { path: workspace, commands: {}, testCommands: {} } }
 }, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;

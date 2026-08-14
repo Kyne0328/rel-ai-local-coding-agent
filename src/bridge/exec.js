@@ -210,7 +210,7 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
-  const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, config.maxOutputBytes || 2 * 1024 * 1024);
+  const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, 2 * 1024 * 1024);
   const statusBefore = await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),

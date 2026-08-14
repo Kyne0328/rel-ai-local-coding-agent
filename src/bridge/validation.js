@@ -71,9 +71,6 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
 
   const stopOnFailure = args.stopOnFailure !== false;
   const fullOutput = Boolean(args.fullOutput);
-  const runConfig = fullOutput
-    ? { ...config, maxOutputBytes: Math.max(Number(config.maxOutputBytes) || 0, 16 * 1024 * 1024) }
-    : config;
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const results = [];
   const currentFingerprint = await createValidationFingerprint(workspace, config);
@@ -126,8 +123,9 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
       shell: true,
       commandString: command,
       timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000),
-      signal
-    }, runConfig));
+      signal,
+      ...(fullOutput ? { maxOutputBytes: 16 * 1024 * 1024 } : {})
+    }, config));
     const summary = boundCheckOutput({ command, ...summarizeCommand(result) }, tailChars);
     executedUnits += 1;
     results.push(summary);

@@ -7,6 +7,7 @@ const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 const WINDOWS_POWERSHELL_EXE = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
 const DEFAULT_TERMINATION_GRACE_MS = 1000;
 const DEFAULT_FORCE_WAIT_MS = 2000;
+const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
 function processPid(target) {
   const value = typeof target === 'number' ? target : target?.pid;
@@ -222,10 +223,10 @@ function runProcess(command, args, options = {}, config = {}) {
     let settled = false;
     let timer = null;
     let terminationRequest = null;
-    const configuredMaxOutputBytes = Number(options.maxOutputBytes ?? config.maxOutputBytes ?? 1024 * 1024);
+    const configuredMaxOutputBytes = Number(options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES);
     const maxOutputBytes = Number.isFinite(configuredMaxOutputBytes) && configuredMaxOutputBytes > 0
       ? configuredMaxOutputBytes
-      : 1024 * 1024;
+      : DEFAULT_MAX_OUTPUT_BYTES;
     const timeoutMs = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
       ? Number(options.timeout)
       : 0;

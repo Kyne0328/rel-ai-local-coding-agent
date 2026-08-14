@@ -6,26 +6,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { normalizePatchConfig, makeDefaultPatchConfig, normalizeConfig, ensureConfig, invalidateConfigCache } from "../src/config.js";
+import { normalizeConfig, ensureConfig, invalidateConfigCache } from "../src/config.js";
 
 const exampleConfig = JSON.parse(fs.readFileSync(path.resolve('examples/config.example.json'), 'utf8'));
 assert.equal(exampleConfig.auditLogPath, '', 'the portable example must not mix Windows and Unix path syntax');
 
-assert.deepEqual(makeDefaultPatchConfig(), {
-  backup: true,
-  requireCleanGit: false,
-  maxUpdateBytes: 50 * 1024 * 1024
-});
-assert.equal(Object.hasOwn(exampleConfig.patch || {}, 'maxUpdateBytes'), false, 'normal configuration should not expose a user-tuned patch size');
-
-assert.deepEqual(normalizePatchConfig(undefined), makeDefaultPatchConfig());
-assert.deepEqual(normalizePatchConfig({ backup: false, requireCleanGit: true, maxUpdateBytes: 4096 }), {
-  backup: false,
-  requireCleanGit: true,
-  maxUpdateBytes: 50 * 1024 * 1024
-});
-assert.equal(normalizePatchConfig({ maxUpdateBytes: 1 }).maxUpdateBytes, 50 * 1024 * 1024, 'legacy low patch limits must not throttle upgraded installations');
-assert.equal(normalizePatchConfig({ maxUpdateBytes: 100 * 1024 * 1024 }).maxUpdateBytes, 50 * 1024 * 1024);
+assert.equal(Object.hasOwn(exampleConfig, 'patch'), false, 'normal configuration must not expose internal patch safety policy');
+assert.equal(Object.hasOwn(exampleConfig, 'maxOutputBytes'), false, 'normal configuration must not expose internal subprocess output limits');
 
 const strict = normalizeConfig({
   stateDir: path.join(os.tmpdir(), 'relai-state'),
@@ -45,10 +32,8 @@ const strict = normalizeConfig({
     }
   }
 });
-assert.deepEqual(strict.patch, { backup: true, requireCleanGit: false, maxUpdateBytes: 50 * 1024 * 1024 });
-for (const key of ['workflow', 'flow', 'cautionZone', 'maxIndexFiles']) assert.equal(Object.hasOwn(strict, key), false);
+for (const key of ['workflow', 'flow', 'cautionZone', 'maxIndexFiles', 'patch', 'maxOutputBytes']) assert.equal(Object.hasOwn(strict, key), false);
 assert.equal(Object.hasOwn(normalizeConfig({ toolProfile: 'core' }), 'toolProfile'), false, 'removed toolProfile configuration must be discarded');
-assert.equal(Object.hasOwn(strict.patch, 'maxPatchBytes'), false);
 assert.equal(Object.hasOwn(strict.workspaces.repo, 'fastTask'), false);
 assert.equal(strict.workspaces.repo.context.snapshotMaxFiles, 44);
 assert.deepEqual(strict.workspaces.repo.context.includeRoots, ['src']);
@@ -79,6 +64,8 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
       stateDir: tmpDir,
       trustedLocalAgent: true,
       productUx: { showAutomaticValidation: false },
+      maxOutputBytes: 64 * 1024 * 1024,
+      patch: { backup: false, requireCleanGit: true, maxUpdateBytes: 1 },
       workspaces: {
         keep: {
           path: tmpDir,
@@ -92,10 +79,12 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     invalidateConfigCache();
     const migrated = ensureConfig();
     const persisted = JSON.parse(fs.readFileSync(tmpConfig, 'utf8'));
-    assert.equal(migrated.version, 4, 'v3 configuration must normalize to the hard-cutover schema');
-    assert.equal(persisted.version, 4, 'hard-cutover normalization must be persisted before desktop startup continues');
+    assert.equal(migrated.version, 5, 'older configuration must normalize to the hard-cutover schema');
+    assert.equal(persisted.version, 5, 'hard-cutover normalization must be persisted before desktop startup continues');
     assert.equal(Object.hasOwn(persisted, 'sourceVersion'), false, 'obsolete sourceVersion must not survive migration');
     assert.equal(Object.hasOwn(persisted.productUx, 'showAutomaticValidation'), false, 'removed validation display preference must not survive migration');
+    assert.equal(Object.hasOwn(persisted, 'patch'), false, 'legacy patch tuning must not survive migration');
+    assert.equal(Object.hasOwn(persisted, 'maxOutputBytes'), false, 'legacy subprocess output tuning must not survive migration');
     for (const key of ['protectedBranches', 'defaultBaseBranch', 'allowedRemotes']) assert.equal(Object.hasOwn(persisted.workspaces.keep, key), false, `removed workspace field ${key} must not survive migration`);
     assert.equal(persisted.workspaces.keep.path, tmpDir, 'valid workspaces must survive configuration migration');
     assert.equal(fs.existsSync(`${tmpConfig}.bak`), true, 'configuration migration must preserve the original file as a backup');
@@ -116,8 +105,8 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     fs.writeFileSync(tmpConfig, '{ invalid json');
     invalidateConfigCache();
     const recovered = ensureConfig();
-    assert.equal(recovered.version, 4, 'invalid persisted configuration must recover to a valid current config');
-    assert.equal(JSON.parse(fs.readFileSync(tmpConfig, 'utf8')).version, 4);
+    assert.equal(recovered.version, 5, 'invalid persisted configuration must recover to a valid current config');
+    assert.equal(JSON.parse(fs.readFileSync(tmpConfig, 'utf8')).version, 5);
     assert.equal(
       fs.readdirSync(tmpDir).some(name => name.startsWith('config.json.invalid-')),
       true,

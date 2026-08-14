@@ -20,7 +20,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   version: 3,
   stateDir,
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
   workspaces: {
     repo: {
       path: workspace,
