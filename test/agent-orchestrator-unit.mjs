@@ -1,0 +1,99 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { AgentOrchestrator } from '../src/agents/orchestrator.js';
+import { attachAgent, completeAgent, getAgentStatus } from '../src/agents/manager.js';
+import { buildDelegatedAgentPrompt, MAX_PROMPT_CHARS } from '../src/agents/prompt.js';
+import { AgentRuntime, FakeAgentRuntime } from '../src/agents/runtime.js';
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-agent-orchestrator-'));
+const config = { stateDir: root };
+const principal = { principal: { issuer: 'test', clientId: 'client-a', subject: 'user-1' }, publicHttpOnly: true };
+let runtimeContext;
+
+try {
+  const runtime = new FakeAgentRuntime({
+    availableReasoning: ['instant', 'medium', 'high'],
+    handler: async (_task, context) => {
+      runtimeContext = context;
+      return { summary: 'A runtime response must not auto-complete the MCP agent.' };
+    }
+  });
+  const orchestrator = new AgentOrchestrator({ config, runtime, connectorName: 'Rel.AI MCP' });
+  const spawned = await orchestrator.spawn({
+    work_id: 'work_parent',
+    workspace: 'repo',
+    objective: 'Review the connection lifecycle.',
+    role: 'reviewer',
+    reasoning: 'pro',
+    context: { known: 'Only inspect the relevant connection files.' }
+  }, principal);
+
+  assert.equal(spawned.agent.status, 'pending');
+  assert.equal(spawned.agent.reasoning, 'high', 'runtime capability negotiation must safely fall back from pro to high');
+  assert.equal(spawned.launch.runtime, 'fake');
+  assert.match(spawned.launch.runtimeTaskId, /^fake_agent_/);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(runtimeContext.agentId, spawned.agent.agent_id);
+  assert.equal(runtimeContext.connectorName, 'Rel.AI MCP');
+  assert.match(runtimeContext.prompt, /connector named "Rel\.AI MCP"/);
+  assert.equal(runtimeContext.prompt.includes('@Rel.AI MCP'), false);
+  assert.match(runtimeContext.prompt, /relai_work/);
+  assert.match(runtimeContext.prompt, /action "begin"/);
+  assert.match(runtimeContext.prompt, /relai_agent/);
+  assert.match(runtimeContext.prompt, /action "attach"/);
+  assert.match(runtimeContext.prompt, /child_work_id/);
+  assert.match(runtimeContext.prompt, /action "complete"/);
+  assert.match(runtimeContext.prompt, /action "fail"/);
+  assert.equal(getAgentStatus(config, { agent_id: spawned.agent.agent_id }, principal).status, 'pending', 'runtime output is not the authoritative result channel');
+
+  attachAgent(config, { agent_id: spawned.agent.agent_id, work_id: 'work_child', workspace: 'repo' }, principal);
+  completeAgent(config, {
+    agent_id: spawned.agent.agent_id,
+    child_work_id: 'work_child',
+    result: { summary: 'Reviewed through MCP.', findings: ['No blocker'] }
+  }, principal);
+  assert.equal(orchestrator.status(spawned.agent.agent_id, principal).agentResult.summary, 'Reviewed through MCP.');
+  assert.equal(orchestrator.release(spawned.agent.agent_id), true);
+
+  const cancellable = await orchestrator.spawn({
+    work_id: 'work_parent_2', workspace: 'repo', objective: 'Inspect cancellation.'
+  }, principal);
+  assert.equal((await orchestrator.cancel(cancellable.agent.agent_id, principal)).status, 'cancelled');
+  assert.equal(orchestrator.getLaunch(cancellable.agent.agent_id), null);
+
+  class FailingRuntime extends AgentRuntime {
+    constructor() { super('failing'); }
+    async getCapabilities() { return { runtime: 'failing', reasoning: ['medium'] }; }
+    async spawn() { throw new Error('browser unavailable'); }
+    async cancel() { return { cancelled: false }; }
+  }
+  const failing = new AgentOrchestrator({ config, runtime: new FailingRuntime() });
+  let failedAgentId = '';
+  await assert.rejects(
+    async () => failing.spawn({ work_id: 'work_parent_3', workspace: 'repo', objective: 'Fail launch.' }, principal),
+    error => {
+      failedAgentId = error?.agentId || '';
+      return error?.code === 'AGENT_RUNTIME_START_FAILED';
+    }
+  );
+  assert.equal(getAgentStatus(config, { agent_id: failedAgentId }, principal).status, 'cancelled');
+
+  const boundedPrompt = buildDelegatedAgentPrompt({
+    agentId: `agent_${'x'.repeat(43)}`,
+    connectorName: 'Rel.AI MCP',
+    workspace: 'repo',
+    objective: 'Inspect bounded context.',
+    context: { huge: 'x'.repeat(100_000) }
+  });
+  assert.equal(boundedPrompt.length < MAX_PROMPT_CHARS, true);
+  assert.match(boundedPrompt, /"truncated": true/);
+
+  await orchestrator.dispose();
+  await failing.dispose();
+  console.log('Subagent prompt protocol, runtime negotiation, MCP-authoritative completion, cancellation, and launch-failure tests passed.');
+} finally {
+  fs.rmSync(root, { recursive: true, force: true });
+}
