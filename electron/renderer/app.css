@@ -401,12 +401,12 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
 .wizard-value-step-head strong { display: block; font-size: var(--font-14); }
 .wizard-value-step-head p { margin: 3px 0 0; color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.55; }
 .wizard-step-number { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--ui-status-info-border); border-radius: 50%; background: var(--ui-status-info-background); color: var(--ui-action-primary); font-size: var(--font-11); font-weight: var(--weight-bold); }
-.wizard-context-check { display: grid; gap: 5px; margin-left: 36px; padding: 10px 12px; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--ui-status-info-background) 58%, var(--ui-surface-primary)); }
-.wizard-context-check strong { font-size: var(--font-12); }
-.wizard-context-check span { color: var(--ui-text-secondary); font-size: var(--font-11); line-height: 1.5; }
-.wizard-context-check b { color: var(--ui-text-primary); }
 .wizard-open-button { width: fit-content; min-height: 44px; margin-left: 36px; }
 .wizard-field-group { display: grid; gap: 7px; margin-left: 36px; }
+.wizard-help-details { margin-left: 36px; border-top: 1px solid var(--ui-border-subtle); }
+.wizard-help-details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: var(--font-11); font-weight: var(--weight-bold); }
+.wizard-help-details > div { display: grid; gap: 6px; padding: 0 0 4px; }
+.wizard-help-details p { margin: 0; color: var(--ui-text-secondary); font-size: var(--font-11); line-height: 1.5; }
 .wizard-field-group label, .wizard-advanced-content label { margin: 0; font-size: var(--font-12); }
 .wizard-field-help { margin: 0; color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.5; }
 .wizard-field-help code { font-family: var(--font-mono); color: var(--ui-code-accent); }
@@ -452,7 +452,7 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
   .wizard-progress-item strong { display: none; }
   .wizard-cloud-hero { padding-top: 10px; }
   .wizard-cloud-card { padding: 14px; }
-  .wizard-context-check, .wizard-open-button, .wizard-field-group { margin-left: 0; }
+  .wizard-open-button, .wizard-field-group, .wizard-help-details { margin-left: 0; }
   .wizard-open-button { width: 100%; }
   .wizard-actions { align-items: stretch; flex-direction: column-reverse; }
   .wizard-actions button, .wizard-advanced-section > button { width: 100%; }

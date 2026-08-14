@@ -15,7 +15,7 @@
       <div class="wizard-cloud-hero">
         <span class="wizard-eyebrow">OpenAI Secure MCP Tunnel</span>
         <h1>Connect this computer to ChatGPT</h1>
-        <p>Create the tunnel in the OpenAI organization and ChatGPT workspace you actually plan to use, then paste each value directly into Rel.AI.</p>
+        <p>Open each OpenAI page, copy the value, and paste it directly into Rel.AI.</p>
       </div>
 
       <div class="wizard-cloud-card wizard-security-card">
@@ -23,39 +23,48 @@
           <div class="wizard-value-step-head">
             <span class="wizard-step-number" aria-hidden="true">1</span>
             <div>
-              <strong id="tunnelStepTitle">Create the tunnel in the right OpenAI context</strong>
-              <p>Open Platform tunnel settings and first select the Platform organization that should own this tunnel.</p>
+              <strong id="tunnelStepTitle">Create your tunnel</strong>
+              <p>Choose the OpenAI organization and ChatGPT workspace where you will use Rel.AI.</p>
             </div>
-          </div>
-          <div class="wizard-context-check">
-            <strong>Choose the matching ChatGPT workspace</strong>
-            <span>In the tunnel associations, add the ChatGPT workspace where you will use Rel.AI. For a personal account, use the personal Platform organization for that account and associate its target personal ChatGPT workspace.</span>
-            <span>If you cannot create or edit a tunnel, ask the Platform organization owner for Tunnels <b>Read + Manage</b>.</span>
           </div>
           <button class="secondary wizard-open-button" type="button" data-open-openai="tunnels">Open OpenAI Tunnels</button>
           <div class="wizard-field-group">
             <label for="tunnelIdInput"><span>Paste Tunnel ID here</span></label>
             <input id="tunnelIdInput" type="text" autocomplete="off" spellcheck="false" placeholder="tunnel_…" aria-describedby="tunnelIdHelp tunnelIdError" aria-invalid="false" required />
-            <p class="wizard-field-help" id="tunnelIdHelp">Copy the <code>tunnel_</code> ID from the tunnel you just created or selected.</p>
+            <p class="wizard-field-help" id="tunnelIdHelp">Copy the ID that starts with <code>tunnel_</code>.</p>
             <p class="wizard-field-error" id="tunnelIdError" role="alert" hidden></p>
           </div>
+          <details class="wizard-help-details">
+            <summary>Having trouble?</summary>
+            <div>
+              <p>Make sure the tunnel belongs to the OpenAI organization you intend to use and is associated with the ChatGPT workspace where you use Rel.AI.</p>
+              <p>If you cannot create or edit tunnels, your OpenAI organization owner may need to grant you tunnel access.</p>
+            </div>
+          </details>
         </section>
 
         <section class="wizard-value-step" aria-labelledby="runtimeKeyStepTitle">
           <div class="wizard-value-step-head">
             <span class="wizard-step-number" aria-hidden="true">2</span>
             <div>
-              <strong id="runtimeKeyStepTitle">Create the runtime key in the same Platform organization</strong>
-              <p>Create a restricted API key for the tunnel client with Tunnels <b>Read + Use</b>, then copy it while OpenAI still shows it.</p>
+              <strong id="runtimeKeyStepTitle">Create a runtime key</strong>
+              <p>Create it in the same OpenAI organization as your tunnel, then copy it while OpenAI still shows it.</p>
             </div>
           </div>
           <button class="secondary wizard-open-button" type="button" data-open-openai="apiKeys">Open OpenAI API Keys</button>
           <div class="wizard-field-group">
             <label for="tunnelApiKeyInput"><span>Paste Runtime API key here</span></label>
             <input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the restricted runtime key" aria-describedby="runtimeKeyHelp runtimeKeyError" aria-invalid="false" required />
-            <p class="wizard-field-help" id="runtimeKeyHelp">Rel.AI uses this key only to run the OpenAI tunnel client. It is encrypted with the operating system credential store and the saved value is never shown again.</p>
+            <p class="wizard-field-help" id="runtimeKeyHelp">Stored securely on this computer.</p>
             <p class="wizard-field-error" id="runtimeKeyError" role="alert" hidden></p>
           </div>
+          <details class="wizard-help-details">
+            <summary>About the runtime key</summary>
+            <div>
+              <p>Use a restricted API key from the same OpenAI organization as the tunnel and allow it to access the tunnel.</p>
+              <p>Rel.AI uses the key only to run the OpenAI tunnel client. It is encrypted with the operating system credential store and the saved value is never shown again.</p>
+            </div>
+          </details>
         </section>
 
         <details class="wizard-advanced-card">

@@ -21,10 +21,12 @@ assert.match(html, /id="cancelWizardBtn"/);
 assert.match(html, /operating system credential store/i);
 assert.match(html, /data-open-openai="tunnels"/);
 assert.match(html, /data-open-openai="apiKeys"/);
-assert.match(html, /Platform organization/i);
-assert.match(html, /ChatGPT workspace/i);
-assert.match(html, /Tunnels <b>Read \+ Manage<\/b>/i);
-assert.match(html, /Tunnels <b>Read \+ Use<\/b>/i);
+assert.match(html, /Choose the OpenAI organization and ChatGPT workspace where you will use Rel\.AI/i);
+assert.match(html, /same OpenAI organization as your tunnel/i);
+assert.match(html, /Having trouble\?/i);
+assert.match(html, /About the runtime key/i);
+assert.match(html, /Stored securely on this computer/i);
+assert.doesNotMatch(html, /Read \+ Manage|Read \+ Use|For a personal account/i, 'Administrative edge cases should not clutter the happy path.');
 assert.doesNotMatch(html, /https:\/\/platform\.openai\.com\/settings\/organization\//, 'Raw setup URLs should not look like paste fields in the wizard.');
 assert.doesNotMatch(html, /wizard-chatgpt-path|What you will choose in ChatGPT next/i, 'Future ChatGPT configuration belongs after the tunnel is running.');
 assert.ok(html.indexOf('data-open-openai="tunnels"') < html.indexOf('id="tunnelIdInput"'), 'Tunnel source action must immediately precede its destination field.');
@@ -64,7 +66,7 @@ assert.match(main, /showDashboardWindow\(''\)/, 'Successful setup must hand off 
 assert.match(css, /\.wizard-/);
 assert.match(css, /Segoe UI Variable/);
 assert.match(css, /\.wizard-value-step/);
-assert.match(css, /\.wizard-context-check/);
+assert.match(css, /\.wizard-help-details/);
 assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.wizard-/);
 
 console.log('Secure MCP Tunnel wizard contracts passed.');
