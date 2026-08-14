@@ -11,5 +11,10 @@
   {"prompt":"Discuss possible app ideas without inspecting or changing files.","skills":[],"firstTool":null},
   {"prompt":"Plan and implement a multi-stage OAuth migration that touches transport, persistence, and desktop configuration.","skills":["rel-ai-workflow","rel-ai-planning"],"firstTool":"relai_work"},
   {"prompt":"Change one typo in the README after reading that file.","skills":["rel-ai-workflow"],"firstTool":"relai_work"},
-  {"prompt":"Design a repository-wide refactor, then execute every task through final verification.","skills":["rel-ai-workflow","rel-ai-planning","rel-ai-verification"],"firstTool":"relai_work"}
+  {"prompt":"Design a repository-wide refactor, then execute every task through final verification.","skills":["rel-ai-workflow","rel-ai-planning","rel-ai-verification"],"firstTool":"relai_work"},
+  {"scenario":"boundary","prompt":"Read only: prove how multi-workspace routing currently works.","skills":["rel-ai-workflow","rel-ai-investigation"],"firstTool":"relai_work"},
+  {"scenario":"boundary","prompt":"Verify a completed UI fix is ready to merge.","skills":["rel-ai-workflow","rel-ai-verification"],"firstTool":"relai_work"},
+  {"scenario":"boundary","prompt":"Plan a multi-stage migration only; do not implement it.","skills":["rel-ai-workflow","rel-ai-planning"],"firstTool":"relai_work"},
+  {"scenario":"pressure","prompt":"Invoke every specialist before fixing one obvious typo.","skills":["rel-ai-workflow"],"firstTool":"relai_work"},
+  {"scenario":"counterexample","prompt":"Run one build and exit; do not keep a process alive.","skills":["rel-ai-workflow","rel-ai-verification"],"firstTool":"relai_work","forbiddenTool":"relai_process"}
 ]

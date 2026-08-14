@@ -1,6 +1,6 @@
 ---
 name: rel-ai-debugging
-description: Use when repository behavior is reproducibly wrong, including errors, broken tests, crashes, regressions, or contract failures.
+description: Use when repository behavior is reproducibly wrong and needs causal diagnosis or repair, including errors, broken tests, crashes, regressions, failed contracts, or incorrect runtime behavior. Do not use for general audits or final verification when no active defect is being diagnosed.
 ---
 
 # Rel.AI Debugging

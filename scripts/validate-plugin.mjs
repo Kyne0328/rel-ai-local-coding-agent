@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// Bundled OpenAI skills intentionally use the minimal name/description frontmatter profile.
+const ALLOWED_SKILL_FRONTMATTER_FIELDS = new Set(['name', 'description']);
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_SKILL_NAME_LENGTH = 64;
+
 const ALLOWED_MANIFEST_FIELDS = new Set([
   'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords',
   'skills', 'mcpServers', 'interface'
@@ -83,10 +88,16 @@ function validateSkills(root, skillsPath, errors) {
     }
     const fields = [...frontmatter[1].matchAll(/^([A-Za-z0-9_-]+):/gm)].map(match => match[1]);
     if (!fields.includes('name') || !fields.includes('description')) errors.push(`${label} frontmatter requires name and description.`);
-    if (fields.some(field => !['name', 'description'].includes(field))) errors.push(`${label} frontmatter may contain only name and description.`);
+    if (fields.some(field => !ALLOWED_SKILL_FRONTMATTER_FIELDS.has(field))) {
+      errors.push(`${label} bundled OpenAI frontmatter may contain only name and description.`);
+    }
     const name = frontmatter[1].match(/^name:\s*(.+)$/m)?.[1]?.trim() || '';
     const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim() || '';
     if (name !== directory) errors.push(`${label} name must equal its directory.`);
+    if (name.length < 1 || name.length > MAX_SKILL_NAME_LENGTH) errors.push(`${label} name must be 1-${MAX_SKILL_NAME_LENGTH} characters.`);
+    if (!SKILL_NAME_PATTERN.test(name)) {
+      errors.push(`${label} name must use lowercase letters, numbers, and single hyphens with no leading or trailing hyphen.`);
+    }
     if (description.length < 40 || description.length > 500) errors.push(`${label} description must be 40-500 characters.`);
     const agentPath = path.join(rootForSkill, 'agents', 'openai.yaml');
     const agent = readText(agentPath, errors, `skills/${directory}/agents/openai.yaml`);
@@ -103,6 +114,7 @@ function validateSkills(root, skillsPath, errors) {
     if (!fs.existsSync(path.join(workflowRoot, relativeReference))) errors.push(`Core skill is missing ${relativeReference}.`);
   }
   if (!workflow.includes('references/workflows.md')) errors.push('Core SKILL.md must link references/workflows.md.');
+  if (!workflow.includes('references/safety.md')) errors.push('Core SKILL.md must link references/safety.md.');
   return skills.sort();
 }
 

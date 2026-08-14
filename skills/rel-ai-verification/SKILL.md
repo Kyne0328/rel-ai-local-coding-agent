@@ -1,6 +1,6 @@
 ---
 name: rel-ai-verification
-description: Use when repository work needs final verification, release readiness proof, a completion audit, or confirmation that a fix truly works.
+description: Use after repository changes, fixes, or release work when the task needs proof of completion, including targeted regression checks, final verification, release readiness, completion audits, or confirmation that implemented behavior works. Do not use for open-ended architecture or feasibility investigation before implementation.
 ---
 
 # Rel.AI Verification

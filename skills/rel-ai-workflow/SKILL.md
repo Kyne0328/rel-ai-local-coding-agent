@@ -1,6 +1,6 @@
 ---
 name: rel-ai-workflow
-description: Use when a request requires repository access or local execution through Rel.AI.
+description: Use when work must inspect, read, edit, test, build, debug, validate, review, or publish a configured repository through Rel.AI, including local UI or process execution. Do not use when the request needs no repository or local runtime access.
 ---
 
 # Rel.AI Workflow
@@ -49,3 +49,4 @@ Stop mid-plan only for a genuine blocker, a material design change that invalida
 Runtime policy remains authoritative. Done means the requested behavior is implemented, required risk-based evidence is current, material task-owned changes are understood, and the shared work session is explicitly completed or cancelled. Runtime workflow guidance calibrates the route; it never overrides hard safety or completion authority.
 
 Load [references/workflows.md](references/workflows.md) for uncommon worktree, publishing, recovery, migration, process, and plan-execution details.
+Load [references/safety.md](references/safety.md) before restore/reset, worktree removal, commit/push, sensitive authorization, or any other destructive or approval-gated operation.

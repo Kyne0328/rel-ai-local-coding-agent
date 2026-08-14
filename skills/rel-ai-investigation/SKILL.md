@@ -1,6 +1,6 @@
 ---
 name: rel-ai-investigation
-description: Use when a configured repository needs an architecture audit, feasibility study, dependency trace, impact analysis, or evidence-backed verification.
+description: Use for read-only repository questions that need evidence, including architecture audits, feasibility studies, dependency or caller tracing, impact analysis, implementation-status checks, and proof of how something works. Do not use to implement fixes or for final completion or release verification of changes already made.
 ---
 
 # Rel.AI Investigation
