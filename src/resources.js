@@ -88,7 +88,7 @@ function resourceRevision(config, uri) {
       const workspace = resolveWorkspace(config, parsed.workspace);
       const stat = fs.statSync(workspace.path);
       hash.update('\0').update(workspace.path).update('\0').update(String(stat.mtimeMs));
-      for (const relative of ['package.json', 'AGENTS.override.md', 'AGENTS.md', 'REL_AI.md', '.relai/instructions.md']) {
+      for (const relative of ['package.json', 'AGENTS.override.md', 'AGENTS.md']) {
         try {
           const fileStat = fs.statSync(path.join(workspace.path, relative));
           hash.update(relative).update(String(fileStat.mtimeMs)).update(String(fileStat.size));
@@ -113,7 +113,7 @@ Rel.AI targets MCP ${MCP_PROTOCOL_VERSION}. Every request carries its own protoc
 
 ## Workflow
 
-Call \`relai_work\` with action \`begin\` once per independent objective. Use \`relai_snapshot\`, \`relai_search\`, \`relai_inspect\`, and \`relai_read\` only as needed. Use \`relai_process\` for persistent commands, \`relai_worktree\` for isolated branches, and \`relai_validate\` for checks, diagnostics, or local HTTP probes.
+Call \`relai_work\` with action \`begin\` once per independent objective. Use \`relai_snapshot\`, \`relai_search\`, \`relai_inspect\`, and \`relai_read\` only as needed. Use \`relai_process\` for persistent commands and \`relai_validate\` for checks, diagnostics, or local HTTP probes.
 
 Use \`relai_edit\` as the single file mutation tool. Destructive operations may return \`input_required\`; retry with the accepted response and integrity-protected requestState. Native asynchronous work is returned only when the current request advertises \`io.modelcontextprotocol/tasks\`, then polled with \`tasks/get\` and controlled with \`tasks/update\` or \`tasks/cancel\`.
 

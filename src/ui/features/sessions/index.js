@@ -389,7 +389,7 @@ function durationDetail(session, live) {
 function sessionNeedsAttention(session) {
   if (workSessionStateView(session).status === 'completed') return false;
   return session.validation === 'failed'
-    || ['failed', 'validation_failed', 'blocked', 'attention'].includes(String(session.status || ''));
+    || ['failed', 'validation_failed', 'blocked'].includes(String(session.status || ''));
 }
 
 function attentionSection(session) {
@@ -399,7 +399,7 @@ function attentionSection(session) {
   if (failures) items.push(`${failures} tool call${failures === 1 ? '' : 's'} failed`);
   if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Validation failed');
   if (session.status === 'blocked') items.push(session.endReason || 'Session is blocked');
-  if (session.status === 'failed' || session.status === 'attention') items.push(session.endReason || 'The work session ended with an unresolved failure');
+  if (session.status === 'failed') items.push(session.endReason || 'The work session ended with an unresolved failure');
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
 }
 

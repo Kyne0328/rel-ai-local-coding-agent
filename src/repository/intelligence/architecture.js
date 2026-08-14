@@ -1,3 +1,5 @@
+import { boundedInteger } from './limits.js';
+
 const DEFAULT_MAX_RESULTS = 50;
 const DEFAULT_MAX_NODES = 5000;
 const DEFAULT_MAX_EDGES = 20000;
@@ -278,12 +280,6 @@ function communityName(paths) {
     common.push(value);
   }
   return common.join('/') || moduleForPath(paths[0]);
-}
-
-function boundedInteger(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(parsed)));
 }
 
 export { analyzeArchitecture };

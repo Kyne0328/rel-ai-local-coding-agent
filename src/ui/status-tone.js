@@ -1,7 +1,6 @@
 const EXACT_STATUS_TONES = Object.freeze({
   active: 'information',
   approval: 'warning',
-  attention: 'danger',
   available: 'success',
   blocked: 'danger',
   cancelled: 'neutral',
@@ -67,7 +66,7 @@ const EXACT_STATUS_TONES = Object.freeze({
 });
 
 const FALLBACK_TERMS = Object.freeze({
-  danger: ['fail', 'error', 'denied', 'blocked', 'invalid', 'unavailable', 'rejected', 'critical', 'attention'],
+  danger: ['fail', 'error', 'denied', 'blocked', 'invalid', 'unavailable', 'rejected', 'critical'],
   warning: ['pending', 'warn', 'approval', 'authentication_required', 'input_required', 'retry', 'rate_limit', 'degraded', 'partial', 'incomplete', 'paused', 'stale', 'mismatch', 'orphaned', 'unsupported', 'not_configured', 'check'],
   neutral: ['cancel', 'disconnect', 'expired', 'unknown', 'inactive', 'idle', 'stopped', 'disabled', 'offline'],
   information: ['validating', 'planning', 'run', 'active', 'starting', 'stopping', 'connecting', 'reconnecting', 'open', 'wait', 'settling', 'queued', 'working', 'live', 'checking', 'downloading', 'installing', 'info'],

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { canonicalPathFor, normalizeRouteKey, routeAllowsParam } from '../src/ui/route-policy.js';
 
-assert.equal(canonicalPathFor('settings/connection'), 'connection');
-assert.equal(canonicalPathFor('settings/diagnostics'), 'diagnostics');
-assert.equal(canonicalPathFor('settings/general'), 'settings');
-assert.equal(canonicalPathFor('settings/dashboard'), 'settings/advanced');
-assert.equal(canonicalPathFor('settings/desktop'), 'settings/application');
+assert.equal(canonicalPathFor('settings/connection'), 'home');
+assert.equal(canonicalPathFor('settings/diagnostics'), 'home');
+assert.equal(canonicalPathFor('settings/general'), 'home');
+assert.equal(canonicalPathFor('settings/dashboard'), 'home');
+assert.equal(canonicalPathFor('settings/desktop'), 'home');
 assert.equal(canonicalPathFor('missing'), 'home');
 assert.equal(canonicalPathFor('tools'), 'tools');
 assert.equal(canonicalPathFor('settings/advanced'), 'settings/advanced');
@@ -23,7 +23,7 @@ assert.equal(normalizeRouteKey('activity?status=other'), 'activity?status=other'
 assert.equal(normalizeRouteKey('activity?token=secret&search=hello'), 'activity?search=hello');
 assert.equal(normalizeRouteKey('workspaces?focus=1'), 'workspaces');
 assert.equal(normalizeRouteKey('workspaces?workspace=myapp&focus=1'), 'workspaces?workspace=myapp&focus=1');
-assert.equal(normalizeRouteKey('settings/connection?workspace=app'), 'connection');
+assert.equal(normalizeRouteKey('settings/connection?workspace=app'), 'home');
 
 assert.equal(routeAllowsParam('activity', 'search'), true);
 assert.equal(routeAllowsParam('activity', 'token'), false);

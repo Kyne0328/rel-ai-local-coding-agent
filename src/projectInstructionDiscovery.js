@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 const AGENT_INSTRUCTION_NAMES = Object.freeze(['AGENTS.override.md', 'AGENTS.md']);
 
-function discoverProjectInstructionPaths(root, requestedPath, legacyPaths = []) {
+function discoverProjectInstructionPaths(root, requestedPath) {
   const target = resolveInstructionTarget(root, requestedPath);
   if (target.error) return target;
   const agentPaths = [];
@@ -19,7 +19,7 @@ function discoverProjectInstructionPaths(root, requestedPath, legacyPaths = []) 
   }
   return {
     ...target,
-    instructionPaths: [...legacyPaths, ...agentPaths.reverse()]
+    instructionPaths: agentPaths.reverse()
   };
 }
 

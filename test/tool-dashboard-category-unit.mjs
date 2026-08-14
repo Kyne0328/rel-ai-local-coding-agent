@@ -13,7 +13,6 @@ const expected = new Map([
   ['relai_work', ['workflow']],
   ['relai_changes', ['review', 'recover']],
   ['relai_validate', ['validate']],
-  ['relai_worktree', ['git']],
   ['relai_publish', ['git']]
 ]);
 for (const [name, capabilities] of expected) {

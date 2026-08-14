@@ -249,7 +249,6 @@ export function workSessionStateView(value = {}) {
     validation_failed: ['Validation failed', false, false, 'bad'],
     completed: ['Completed', true, false, 'ok'],
     failed: ['Failed', true, false, 'bad'],
-    attention: ['Failed', true, false, 'bad'],
     cancelled: ['Cancelled', true, false, ''],
     expired: ['Expired', true, false, ''],
     inactive: ['Inactive', false, false, '']

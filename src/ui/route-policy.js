@@ -14,18 +14,6 @@ const CANONICAL_PATHS = new Set([
   'settings/about'
 ]);
 
-const LEGACY_PATHS = new Map([
-  ['system', 'connection'],
-  ['connector', 'connection'],
-  ['settings/connection', 'connection'],
-  ['settings/connector', 'connection'],
-  ['settings/diagnostics', 'diagnostics'],
-  ['settings/general', 'settings'],
-  ['settings/preferences', 'settings'],
-  ['settings/dashboard', 'settings/advanced'],
-  ['settings/desktop', 'settings/application']
-]);
-
 const ALLOWED_PARAMS = {
   home: new Set(['workspace']),
   tasks: new Set(['workspace']),
@@ -60,8 +48,6 @@ export function routeAllowsParam(path, key) {
 }
 
 function resolvePath(path) {
-  const legacy = LEGACY_PATHS.get(path);
-  if (legacy) return { path: legacy, recognized: true };
   const recognized = CANONICAL_PATHS.has(path);
   return { path: recognized ? path : 'home', recognized };
 }

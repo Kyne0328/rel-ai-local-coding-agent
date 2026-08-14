@@ -4,11 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { DurableStateError } from '../src/durableState.js';
 import { resolveConnectionGenerations } from '../src/mcp/connectionGenerations.js';
-import { readRegistry } from '../src/worktreeManager.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-persistence-contract-'));
-const worktreeState = path.join(root, 'worktree-state');
-const registryFile = path.join(worktreeState, 'worktrees', 'index.json');
 const generationFile = path.join(root, 'connection-generations.json');
 const generationOptions = {
   file: generationFile,
@@ -17,63 +14,8 @@ const generationOptions = {
   host: '127.0.0.1',
   port: 3333
 };
+
 try {
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), { worktrees: {} });
-  fs.mkdirSync(path.dirname(registryFile), { recursive: true });
-  const validEntry = {
-    id: 'wt_contract',
-    alias: 'repo--feature',
-    sourceAlias: 'repo',
-    sourcePath: '/tmp/repo',
-    path: '/tmp/repo-feature',
-    branch: 'relai/feature',
-    base: 'main',
-    owningTaskId: 'task-contract',
-    createdAt: '2026-08-05T00:00:00.000Z'
-  };
-  const validRegistry = { worktrees: { 'repo--feature': validEntry } };
-  fs.writeFileSync(registryFile, JSON.stringify(validRegistry), 'utf8');
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), validRegistry);
-
-  fs.writeFileSync(`${registryFile}.interrupted.tmp`, '{partial', 'utf8');
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), validRegistry);
-
-  fs.writeFileSync(registryFile, '{malformed', 'utf8');
-  fs.writeFileSync(`${registryFile}.bak`, JSON.stringify(validRegistry), 'utf8');
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), validRegistry, 'malformed primary must recover its valid backup');
-  assert.deepEqual(JSON.parse(fs.readFileSync(registryFile, 'utf8')), validRegistry, 'backup recovery must restore the primary registry');
-
-  fs.writeFileSync(registryFile, '{malformed', 'utf8');
-  fs.writeFileSync(`${registryFile}.bak`, '{also-malformed', 'utf8');
-  assert.throws(
-    () => readRegistry({ stateDir: worktreeState }),
-    error => error instanceof DurableStateError
-      && error.code === 'DURABLE_STATE_READ_FAILED'
-      && error.details.path === path.resolve(registryFile)
-      && error.details.reason === 'malformed_json'
-      && error.details.backupAttempted === true
-      && error.details.backupReason === 'malformed_json'
-  );
-
-  fs.writeFileSync(registryFile, JSON.stringify({ worktrees: [] }), 'utf8');
-  fs.rmSync(`${registryFile}.bak`, { force: true });
-  assert.throws(
-    () => readRegistry({ stateDir: worktreeState }),
-    error => error instanceof DurableStateError
-      && error.details.reason === 'validation_failed'
-      && error.details.backupAttempted === true
-      && error.details.backupReason === 'missing'
-  );
-
-  fs.rmSync(registryFile, { force: true });
-  fs.mkdirSync(registryFile);
-  assert.throws(
-    () => readRegistry({ stateDir: worktreeState }),
-    error => error instanceof DurableStateError
-      && error.details.reason === 'read_failed'
-      && error.details.backupAttempted === true
-  );
-
   const first = resolveConnectionGenerations({}, generationOptions);
   assert.deepEqual(first, { credentialGeneration: 1, configurationGeneration: 1 });
   const firstSource = fs.readFileSync(generationFile, 'utf8');
@@ -131,4 +73,5 @@ try {
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
-console.log('Worktree and connection-generation persistence failure contracts passed.');
+
+console.log('Connection-generation persistence failure contracts passed.');

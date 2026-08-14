@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import { discoverCommands } from '../../commandDiscovery.js';
+import { commandDiscoveryWarnings, discoverCommands } from '../../commandDiscovery.js';
 import { resolveSafePath } from '../../safety.js';
 import { detectVerifyChecks } from '../../bridge/checkDetection.js';
 import { clampNumber } from '../../bridge/limits.js';
@@ -404,6 +404,7 @@ function traceAnalysis(db, symbol, definitions, references, impact, maxResults) 
 }
 function diagnosticReadiness(workspace, db) {
   const discovered = discoverCommands(workspace.path);
+  const discoveryWarnings = commandDiscoveryWarnings(workspace.path);
   const diagnosticCommands = Object.entries(discovered)
     .filter(([key, command]) => /(?:typecheck|lint|check|analy|vet|clippy|doctor)/i.test(`${key} ${command}`))
     .map(([key, command]) => ({ key, command }));
@@ -414,6 +415,7 @@ function diagnosticReadiness(workspace, db) {
   return {
     languages,
     diagnosticCommands,
+    ...(discoveryWarnings.length ? { discoveryWarnings } : {}),
     validationCommands: {
       quick: detectVerifyChecks(workspace.path, 'quick'),
       standard: detectVerifyChecks(workspace.path, 'standard'),

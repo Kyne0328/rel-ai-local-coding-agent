@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 assert.equal(getCatalogTools().length, 12);
-assert.equal(getToolActionCatalog().length, 35);
+assert.equal(getToolActionCatalog().length, 43);
 assert.equal(Number.isInteger(TOOL_SURFACE_VERSION), true);
 
 const sourceFiles = collectJavaScript(path.join(root, 'src'));
@@ -21,8 +21,10 @@ const actionDefinitionsPath = path.join(root, 'src/tools/actionDefinitions.js');
 assert.equal(fs.existsSync(actionDefinitionsPath), true, 'immutable tool definitions must have a focused owner');
 const actionCatalogSource = read('src/tools/actionCatalog.js');
 const actionDefinitionsSource = read('src/tools/actionDefinitions.js');
+const operationDefinitionValuesSource = read('src/tools/operationDefinitionValues.js');
 assert.equal(actionCatalogSource.split(/\r?\n/).length <= 400, true, 'action catalog resolution must remain bounded');
-assert.match(actionDefinitionsSource, /const OPERATION_DEFINITION_VALUES\s*=/);
+assert.match(actionDefinitionsSource, /from '.\/operationDefinitionValues\.js'/);
+assert.match(operationDefinitionValuesSource, /const OPERATION_DEFINITION_VALUES\s*=/);
 assert.match(actionDefinitionsSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
 assert.doesNotMatch(actionCatalogSource, /const OPERATION_DEFINITION_VALUES\s*=/);
 assert.doesNotMatch(actionCatalogSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
@@ -31,7 +33,8 @@ for (const removed of [
   'src/tools/compactRegistry.js',
   'src/tools/registry.js',
   'src/tools/dispatch.js',
-  'src/operationTasks.js'
+  'src/operationTasks.js',
+  'src/worktreeManager.js'
 ]) assert.equal(fs.existsSync(path.join(root, removed)), false, `${removed} must remain removed`);
 
 assert.deepEqual(Object.keys(nativeToolTasks).sort(), [
@@ -54,14 +57,17 @@ for (const name of [
   'registerRecoveryIpc',
   'registerServiceIpc',
   'registerDashboardWindowIpc',
-  'registerDesktopSettingsIpc',
-  'registerUpdaterIpc',
-  'registerDiagnosticsIpc',
   'registerSharedUtilityIpc'
 ]) assert.match(ipc, new RegExp(`function ${name}\\(\\{`), `${name} must receive a narrow capability object`);
+const dashboardIpc = read('electron/ipc-handlers-dashboard.js');
+for (const name of [
+  'registerAnalyticsIpc',
+  'registerDesktopSettingsIpc',
+  'registerUpdaterIpc',
+  'registerDiagnosticsIpc'
+]) assert.match(dashboardIpc, new RegExp(`function ${name}\\(\\{`), `${name} must receive a narrow capability object`);
 
 for (const [file, expectedImport] of [
-  ['src/worktreeManager.js', "from './durableState.js'"],
   ['src/mcp/connectionGenerations.js', "from '../durableState.js'"]
 ]) {
   const source = read(file);
@@ -77,8 +83,8 @@ const architecture = read('docs/ARCHITECTURE.md');
 for (const heading of [
   '## Composition roots',
   '## Canonical tool and action catalog',
-  '## Native MCP Tasks',
-  '## Task-state authorities and projections',
+  '## MCP transports and compatibility',
+  '## Task-state authorities',
   '## Electron ownership and IPC',
   '## Durable persistence',
   '## Compatibility exceptions',

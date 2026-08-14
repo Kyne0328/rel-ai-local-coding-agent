@@ -6,7 +6,7 @@ import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolMa
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = 'f695fc87c02356dd87a56c41f0416dafbb8034996a8fbc9b6b5e03586c97eeed';
+const EXPECTED_HASH = '25368512a74e3a370b06986e15f0b4c42dccc2e2a2ab8a3a1314f38d74292e44';
 const rows = `
 relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
 relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden
@@ -30,9 +30,16 @@ relai_process|read|relai_process_read|processRead|repository:read|none|required|
 relai_process|write|relai_process_write|processWrite|process:manage|none|required|task|persistent_process|forbidden
 relai_process|stop|relai_process_stop|processStop|process:manage|none|required|task|persistent_process|forbidden
 relai_process|list|relai_process_list|processList|repository:read|none|required|task|persistent_process|forbidden
-relai_worktree|create|relai_worktree_create|worktreeCreate|repository:write|none|required|workspace|bounded_synchronous|forbidden
-relai_worktree|list|relai_worktree_list|worktreeList|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_worktree|remove|relai_worktree_remove|worktreeRemove|repository:write|always|required|workspace|bounded_synchronous|forbidden
+relai_ui|start|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|navigate|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|snapshot|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|interact|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|screenshot|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|console|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|network|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|viewport|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|reload|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
+relai_ui|stop|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
 relai_validate|checks|relai_run_checks|runChecks|command:execute|none|required|task|bounded_synchronous|forbidden
 relai_validate|diagnostics|relai_diagnostics_run|diagnosticsRun|command:execute|none|required|task|bounded_synchronous|forbidden
 relai_validate|http|relai_http_probe|httpProbe|repository:read|none|required|task|bounded_synchronous|forbidden
@@ -74,7 +81,7 @@ const manifestByName = new Map(getToolSurfaceManifest().tools.map(item => [item.
 const contract = definitions.map(definition => contractEntry(definition, metadataByName.get(definition.name)));
 const hash = crypto.createHash('sha256').update(stableJson(contract)).digest('hex');
 assert.equal(definitions.length, 12);
-assert.equal(rows.length, 36);
+assert.equal(rows.length, 43);
 assert.equal(hash, EXPECTED_HASH, 'public tool contract changed without an explicit baseline update');
 const editDefinition = definitions.find(definition => definition.name === "relai_edit");
 assert.ok(editDefinition, "relai_edit definition must exist");
@@ -172,8 +179,16 @@ function sampleArgs(expected) {
     case 'relai_process:read':
     case 'relai_process:stop': args.processId = 'proc_contract'; break;
     case 'relai_process:write': Object.assign(args, { processId: 'proc_contract', input: 'status\n' }); break;
-    case 'relai_worktree:create': args.name = 'feature'; break;
-    case 'relai_worktree:remove': args.alias = 'repo--feature'; break;
+    case 'relai_ui:start': args.port = 3000; break;
+    case 'relai_ui:navigate': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', route: '/' }); break;
+    case 'relai_ui:snapshot':
+    case 'relai_ui:screenshot':
+    case 'relai_ui:console':
+    case 'relai_ui:network':
+    case 'relai_ui:reload':
+    case 'relai_ui:stop': args.sessionId = 'ui_abcdefghijklmnopqrst'; break;
+    case 'relai_ui:interact': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', interaction: 'click', target: { by: 'text', value: 'Save' } }); break;
+    case 'relai_ui:viewport': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', width: 1280, height: 720 }); break;
     case 'relai_validate:http': args.route = '/health'; break;
     case 'relai_changes:restore': args.paths = ['README.md']; break;
     case 'relai_changes:reset': args.confirmation = 'RESET'; break;

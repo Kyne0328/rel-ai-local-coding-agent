@@ -56,17 +56,18 @@ function _discoverPython(discovered, root) {
 // tool call. Caching against a stat signature of the manifests keeps discovery honest
 // (any manifest edit changes the signature) while collapsing repeats to seven stats.
 const DISCOVERY_CACHE_LIMIT = 32;
+const MAX_DISCOVERY_WARNINGS = 8;
 const discoveryCache = new Map();
 
 function discoveryManifestSignature(workspacePath) {
   return discoverRepositoryTopology(String(workspacePath || "")).fingerprint;
 }
 
-function cacheDiscovery(root, signature, value) {
+function cacheDiscovery(root, signature, value, warnings) {
   if (discoveryCache.size >= DISCOVERY_CACHE_LIMIT && !discoveryCache.has(root)) {
     discoveryCache.delete(discoveryCache.keys().next().value);
   }
-  discoveryCache.set(root, { signature, value });
+  discoveryCache.set(root, { signature, value, warnings });
 }
 
 function discoverCommands(workspacePath) {
@@ -77,15 +78,32 @@ function discoverCommands(workspacePath) {
   if (cached?.signature === signature) return { ...cached.value };
 
   const discovered = {};
-  try { _discoverNpmScripts(discovered, root); } catch {}
-  try { _discoverMakefile(discovered, root); } catch {}
-  try { _discoverFlutter(discovered, root); } catch {}
-  try { _discoverGo(discovered, root); } catch {}
-  try { _discoverCargo(discovered, root); } catch {}
-  try { _discoverPython(discovered, root); } catch {}
-  try { projectNestedPackageCommands(discovered, discoverRepositoryTopology(root)); } catch {}
-  cacheDiscovery(root, signature, discovered);
+  const warnings = [];
+  attemptDiscovery('package.json', () => _discoverNpmScripts(discovered, root), warnings);
+  attemptDiscovery('Makefile', () => _discoverMakefile(discovered, root), warnings);
+  attemptDiscovery('Flutter/Dart', () => _discoverFlutter(discovered, root), warnings);
+  attemptDiscovery('Go', () => _discoverGo(discovered, root), warnings);
+  attemptDiscovery('Cargo', () => _discoverCargo(discovered, root), warnings);
+  attemptDiscovery('Python', () => _discoverPython(discovered, root), warnings);
+  attemptDiscovery('nested package manifests', () => projectNestedPackageCommands(discovered, discoverRepositoryTopology(root)), warnings);
+  cacheDiscovery(root, signature, discovered, warnings);
   return { ...discovered };
+}
+
+function commandDiscoveryWarnings(workspacePath) {
+  const root = String(workspacePath || "");
+  discoverCommands(root);
+  return (discoveryCache.get(root)?.warnings || []).map(item => ({ ...item }));
+}
+
+function attemptDiscovery(source, operation, warnings) {
+  try {
+    operation();
+  } catch (error) {
+    if (warnings.length >= MAX_DISCOVERY_WARNINGS) return;
+    const message = error instanceof Error ? error.message : String(error);
+    warnings.push({ source, message: message.slice(0, 500) });
+  }
 }
 
 function projectNestedPackageCommands(discovered, topology) {
@@ -109,4 +127,4 @@ function staleCommandKeys(configured = {}, discovered = {}) {
   });
 }
 
-export { discoverCommands, discoveryManifestSignature,  staleCommandKeys };
+export { commandDiscoveryWarnings, discoverCommands, discoveryManifestSignature, staleCommandKeys };

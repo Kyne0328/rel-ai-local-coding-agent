@@ -216,12 +216,12 @@ function renderLastTask() {
   const card = document.getElementById('lastTaskCard');
   card.hidden = !task;
   if (!task) return;
-  const attention = task.status === 'attention';
+  const failed = task.status === 'failed';
   const completed = task.status === 'completed' && task.completionKnown === true;
-  card.className = `app-card last-task-card ${attention ? 'attention' : 'completed'}`;
+  card.className = `app-card last-task-card ${failed ? 'attention' : 'completed'}`;
   let icon = '•';
   let title = 'Last logical task is inactive';
-  if (attention) {
+  if (failed) {
     icon = '!';
     title = 'Last logical task had a failed call';
   } else if (completed) {
@@ -232,7 +232,7 @@ function renderLastTask() {
   document.getElementById('lastTaskTitle').textContent = title;
   const workspace = task.workspace || 'workspace';
   const calls = `${task.calls} tool call${task.calls === 1 ? '' : 's'}`;
-  const failures = attention ? ` · ${task.failures} failed` : '';
+  const failures = failed ? ` · ${task.failures} failed` : '';
   const completion = completed
     ? ` · ${task.summary || 'final validation passed'}`
     : ' · overall ChatGPT completion not reported';

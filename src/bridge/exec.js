@@ -10,6 +10,7 @@ import { combineAbortSignals } from '../abortSignals.js';
 import { runSpan } from '../telemetry.js';
 import { isPathInside } from '../safety.js';
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } from '../repo/gitStatus.js';
+import { clampNumber } from './limits.js';
 const WHERE_EXE = String.raw`C:\Windows\System32\where.exe`;
 const MAX_CHANGED_FILES = 200;
 const MAX_DIRECT_ARGV_ITEMS = 100;
@@ -18,12 +19,6 @@ const MAX_DIRECT_INPUT_LENGTH = 1024 * 1024;
 /** @typedef {{ executable: string, label: string, args: (command: string) => string[] }} CommandHost */
 /** @type {CommandHost | null} */
 let cachedShell = null;
-
-function clampNumber(value, min, max, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(Math.max(number, min), max);
-}
 
 function resolveCommandCwd(workspace, value) {
   const raw = String(value == null || value === '' ? '.' : value).trim() || '.';

@@ -106,7 +106,7 @@ function compactForConnector(name, value, args = {}) {
         ok: value.ok,
         workspace: value.workspace,
         command: value.command,
-        shell: value.shell,
+        shell: value.ok === false ? value.shell : undefined,
         cwd: value.cwd && value.cwd !== '.' ? value.cwd : undefined,
         exitCode: value.exitCode,
         durationMs: value.durationMs,

@@ -1,3 +1,5 @@
+import { boundedInteger } from './limits.js';
+
 const DEFAULT_MAX_RESULTS = 10;
 const DEFAULT_MAX_EDGES = 4000;
 const DEFAULT_MAX_SEEDS = 20;
@@ -224,10 +226,4 @@ function fileRow(row) {
 }
 function normalizePath(value) { return String(value || '').trim().replaceAll('\\', '/').replace(/^\.\//, ''); }
 function emptyResult() { return { results: [], analyzedEdgeCount: 0, candidateCount: 0, expandedCandidateCount: 0, truncated: false }; }
-function boundedInteger(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(parsed)));
-}
-
 export { isReliableDiffusionEdge, rankWithGraphDiffusion };

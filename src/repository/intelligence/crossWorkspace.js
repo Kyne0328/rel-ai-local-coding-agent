@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
+import { boundedInteger } from './limits.js';
 
 const DEFAULT_MAX_PEERS = 24;
 const DEFAULT_MAX_HINTS_PER_WORKSPACE = 1200;
@@ -263,12 +264,6 @@ function normalizeFsPath(value) {
 function graphFreshness(status = {}) {
   if (status.metadata) return status.dirty ? 'stale' : 'current';
   return 'cached-unverified';
-}
-
-function boundedInteger(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(parsed)));
 }
 
 export { analyzeCrossWorkspace };
