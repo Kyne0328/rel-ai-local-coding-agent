@@ -1,4 +1,5 @@
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readJsonFile, writeJsonAtomic } from '../durableState.js';
 import { getStateDir } from '../statePaths.js';
@@ -6,7 +7,8 @@ import { principalFingerprint, principalForContext } from '../mcp/principal.js';
 import { normalizeAgentResult, normalizeAgentRole, normalizeReasoningLevel } from './contracts.js';
 
 const AGENT_ID = /^agent_[A-Za-z0-9_-]{32,160}$/;
-const ACTIVE_STATES = new Set(['pending', 'working']);
+const ACTIVE_STATES = new Set(['pending', 'starting', 'working', 'input_required']);
+const RESTART_FAILURE = 'Rel.AI restarted before this delegated agent returned an MCP result. The browser session was closed; create a new delegated agent if the subtask is still needed.';
 
 function createAgent(config, args = {}, context = {}) {
   const agentId = `agent_${crypto.randomBytes(32).toString('base64url')}`;
@@ -93,6 +95,35 @@ function cancelAgent(config, args = {}, context = {}) {
   touch(record);
   persist(config, record);
   return publicRecord(record);
+}
+
+function reconcileOrphanedAgents(config, options = {}) {
+  const directory = agentDirectory(config);
+  let entries;
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { reconciled: 0 };
+    throw error;
+  }
+  const now = String(options.now || new Date().toISOString());
+  const reason = boundedText(options.reason || RESTART_FAILURE, 12_000);
+  let reconciled = 0;
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^agent_[A-Za-z0-9_-]{32,160}\.json$/.test(entry.name)) continue;
+    const agentId = entry.name.slice(0, -'.json'.length);
+    let record;
+    try { record = readRecord(config, agentId); } catch { continue; }
+    if (!record || !ACTIVE_STATES.has(record.status)) continue;
+    record.result = null;
+    record.error = reason;
+    record.status = 'failed';
+    record.completedAt = now;
+    record.updatedAt = now;
+    persist(config, record);
+    reconciled += 1;
+  }
+  return { reconciled };
 }
 
 function requireOwnedAgent(config, agentId, context = {}) {
@@ -182,4 +213,4 @@ function agentError(code, message) {
   return error;
 }
 
-export { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, getAgentStatus };
+export { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, getAgentStatus, reconcileOrphanedAgents };

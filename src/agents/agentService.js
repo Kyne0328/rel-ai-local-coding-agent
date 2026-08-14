@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { getStateDir } from '../statePaths.js';
-import { attachAgent, completeAgent, failAgent, getAgentStatus } from './manager.js';
+import { attachAgent, completeAgent, failAgent, getAgentStatus, reconcileOrphanedAgents } from './manager.js';
 import { AgentOrchestrator } from './orchestrator.js';
 const servicePromises = new Map();
 class AgentService {
@@ -63,6 +63,7 @@ async function getAgentService(config) {
   return servicePromise;
 }
 async function createDefaultService(config) {
+  reconcileOrphanedAgents(config);
   const { ChatGptWebRuntime } = await import('./chatgptWebRuntime.js');
   return new AgentService({ config, runtime: new ChatGptWebRuntime({ config }) });
 }
