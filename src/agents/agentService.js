@@ -91,21 +91,19 @@ class AgentService {
 
   async expireUnattachedAgent(agentId, context) {
     this.pendingAttachTimers.delete(agentId);
-    let current;
-    try {
-      current = getAgentStatus(this.config, { agent_id: agentId }, context);
-    } catch {
-      return;
-    }
-    if (current.status !== 'pending') return;
     const seconds = Math.ceil(this.attachTimeoutMs / 1000);
+    let timedOut;
     try {
-      failAgentLaunch(this.config, {
+      timedOut = failAgentLaunch(this.config, {
         agent_id: agentId,
         errorCode: ATTACH_TIMEOUT_CODE,
         error: `Delegated ChatGPT agent did not attach to Rel.AI MCP within ${seconds} seconds. The connector may be unavailable in the spawned chat; confirm Rel.AI MCP is enabled in ChatGPT and retry.`
       }, context);
-    } finally {
+    } catch {
+      await this.orchestrator.close(agentId);
+      return;
+    }
+    if (timedOut.status === 'failed' && timedOut.errorCode === ATTACH_TIMEOUT_CODE) {
       await this.orchestrator.close(agentId);
     }
   }

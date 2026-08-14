@@ -77,7 +77,7 @@ function completeAgent(config, args = {}, context = {}) {
 function failAgentLaunch(config, args = {}, context = {}) {
   const record = requireOwnedAgent(config, args.agent_id, context);
   if (record.status === 'failed') return publicRecord(record);
-  assertActive(record);
+  if (record.status !== 'pending' || record.childWorkId) return publicRecord(record);
   record.result = null;
   record.error = boundedText(args.error || 'Agent runtime failed to start delegated agent.', 12_000);
   record.errorCode = boundedText(args.errorCode || 'AGENT_RUNTIME_START_FAILED', 200) || 'AGENT_RUNTIME_START_FAILED';

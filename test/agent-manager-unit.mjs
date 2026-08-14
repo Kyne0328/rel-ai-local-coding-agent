@@ -76,6 +76,18 @@ try {
   assert.equal(launchFailure.errorCode, 'AGENT_RUNTIME_START_FAILED');
   assert.throws(() => failAgentLaunch(config, { agent_id: launchFailing.agent_id, error: 'ignored' }, otherUser), error => error?.code === 'AGENT_NOT_FOUND');
 
+  const attachedBeforeLaunchFailure = createAgent(config, { work_id: 'work_parent', workspace: 'repo', objective: 'Attach wins timeout race.' }, parent);
+  attachAgent(config, { agent_id: attachedBeforeLaunchFailure.agent_id, work_id: 'work_child_race', workspace: 'repo' }, sameUser);
+  const preservedAfterLateLaunchFailure = failAgentLaunch(config, {
+    agent_id: attachedBeforeLaunchFailure.agent_id,
+    error: 'late timeout',
+    errorCode: 'AGENT_ATTACH_TIMEOUT'
+  }, sameUser);
+  assert.equal(preservedAfterLateLaunchFailure.status, 'working');
+  assert.equal(preservedAfterLateLaunchFailure.child_work_id, 'work_child_race');
+  assert.equal(preservedAfterLateLaunchFailure.error, null);
+  assert.equal(preservedAfterLateLaunchFailure.errorCode, null);
+
   const cancelling = createAgent(config, { work_id: 'work_parent', workspace: 'repo', objective: 'Cancel.' }, parent);
   const cancelled = cancelAgent(config, { agent_id: cancelling.agent_id, reason: 'parent cancelled' }, sameUser);
   assert.equal(cancelled.status, 'cancelled');

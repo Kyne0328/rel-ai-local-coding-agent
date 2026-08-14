@@ -80,6 +80,18 @@ try {
   await service.cancel({ agent_id: attached.agent_id, reason: 'Test cleanup.' }, owner);
   assert.equal(runtime.active.size, 0);
 
+  const raceWinner = await service.create({
+    work_id: 'parent_race', workspace: 'repo', objective: 'Attach before late timeout callback.'
+  }, owner);
+  service.attach({ agent_id: raceWinner.agent_id, work_id: 'child_race', workspace: 'repo' }, owner);
+  const activeBeforeLateTimeout = runtime.active.size;
+  await service.expireUnattachedAgent(raceWinner.agent_id, owner);
+  const raceStatus = service.status({ agent_id: raceWinner.agent_id }, owner);
+  assert.equal(raceStatus.status, 'working');
+  assert.equal(raceStatus.errorCode, null);
+  assert.equal(runtime.active.size, activeBeforeLateTimeout, 'a late timeout callback must not close a child that already attached');
+  await service.cancel({ agent_id: raceWinner.agent_id, reason: 'Race test cleanup.' }, owner);
+
   const disposed = await service.create({
     work_id: 'parent_disposed', workspace: 'repo', objective: 'Dispose before attach timeout.'
   }, owner);
