@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 
-import { shouldShowUpdateModal, supportPolicyModalView } from '../src/ui/update-available-modal.js';
+import {
+  downloadUpdateFromModal,
+  shouldShowUpdateModal,
+  supportPolicyModalView
+} from '../src/ui/update-available-modal.js';
 
 const preferences = {
   enabled: true,
@@ -34,4 +38,27 @@ assert.equal(supportPolicyModalView(requiredPolicy).allowLater, false);
 assert.match(supportPolicyModalView(emergencyPolicy).title, /critical/i);
 assert.equal(shouldShowUpdateModal({ ...available, supportPolicy: deprecatedPolicy }, preferences, new Set()), false);
 
-console.log('Update available modal eligibility tests passed.');
+let resolveDownload;
+let closed = 0;
+const pending = downloadUpdateFromModal({
+  downloadUpdate: () => new Promise(resolve => { resolveDownload = resolve; })
+}, {
+  close: () => { closed += 1; },
+  notify: () => assert.fail('successful update should not notify an error')
+});
+assert.equal(closed, 1, 'update modal must close synchronously before the download finishes');
+resolveDownload({ ok: true });
+assert.equal((await pending).ok, true);
+
+const errors = [];
+const failed = await downloadUpdateFromModal({
+  downloadUpdate: async () => ({ ok: false, error: 'network unavailable' })
+}, {
+  close: () => { closed += 1; },
+  notify: message => errors.push(message)
+});
+assert.equal(closed, 2, 'failed update attempts still close the modal immediately');
+assert.equal(failed.ok, false);
+assert.deepEqual(errors, ['network unavailable']);
+
+console.log('Update available modal eligibility and interaction tests passed.');

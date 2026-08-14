@@ -1,3 +1,4 @@
+import { fetchJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
 import { pillHtml } from '../../components/pill.js';
 import { panel } from './shared.js';
@@ -21,12 +22,18 @@ export function applicationUpdatesPanel() {
     return updates;
   }
 
+  let installedReleaseNotes = null;
+  const render = status => renderStatus(updates.body, status, installedReleaseNotes);
   if (typeof bridge.onUpdateStatus === 'function') {
-    removeUpdateListener = bridge.onUpdateStatus(status => renderStatus(updates.body, status));
+    removeUpdateListener = bridge.onUpdateStatus(status => render(status));
   }
-  void bridge.getUpdateStatus()
-    .then(status => renderStatus(updates.body, status))
-    .catch(error => renderFailure(updates.body, messageOf(error)));
+  void Promise.all([
+    bridge.getUpdateStatus(),
+    fetchJson('/api/release-notes').catch(() => null)
+  ]).then(([status, notes]) => {
+    installedReleaseNotes = notes?.ok === false ? null : notes;
+    render(status);
+  }).catch(error => renderFailure(updates.body, messageOf(error), installedReleaseNotes));
   return updates;
 }
 
@@ -39,7 +46,7 @@ function hasUpdateBridge(bridge) {
   );
 }
 
-function renderStatus(container, status = {}) {
+function renderStatus(container, status = {}, installedReleaseNotes = null) {
   const state = String(status.state || 'idle');
   const currentVersion = status.currentVersion ? `v${escapeHtml(status.currentVersion)}` : 'Unknown version';
   const availableVersion = status.availableVersion ? `v${escapeHtml(status.availableVersion)}` : '';
@@ -54,6 +61,7 @@ function renderStatus(container, status = {}) {
     </div>
     <p class="muted application-update-copy">${escapeHtml(view.description)}</p>
     ${supportPolicyHtml(status.supportPolicy)}
+    ${releaseNotesHtml(status, installedReleaseNotes)}
     ${progressHtml(state, status.progress)}
     ${status.errorCode ? `<code class="application-update-code">${escapeHtml(status.errorCode)}</code>` : ''}
     <div class="connection-actions application-update-actions">
@@ -116,6 +124,34 @@ function updateView(state, status, currentVersion, availableVersion) {
   };
 }
 
+function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
+  const available = Array.isArray(status.releaseNotes)
+    ? status.releaseNotes.filter(entry => String(entry?.note || '').trim())
+    : [];
+  if (available.length) {
+    const version = status.availableVersion ? `v${escapeHtml(status.availableVersion)}` : 'the update';
+    const notes = available.map(entry => {
+      const noteVersion = entry?.version && entry.version !== status.availableVersion
+        ? `<strong>v${escapeHtml(entry.version)}</strong>`
+        : '';
+      return `<div class="application-update-release-note">${noteVersion}<p>${escapeHtml(entry.note)}</p></div>`;
+    }).join('');
+    return `<details class="application-update-release-notes" open><summary>What's new in ${version}</summary><div class="application-update-release-notes-body">${notes}</div></details>`;
+  }
+
+  const version = String(installedReleaseNotes?.version || '').trim();
+  const headline = String(installedReleaseNotes?.headline || '').trim();
+  const bullets = Array.isArray(installedReleaseNotes?.bullets)
+    ? installedReleaseNotes.bullets.filter(Boolean).slice(0, 8)
+    : [];
+  if (!version || (!headline && !bullets.length)) return '';
+  const body = [
+    headline ? `<p class="application-update-release-headline">${escapeHtml(headline)}</p>` : '',
+    bullets.length ? `<ul>${bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''
+  ].join('');
+  return `<details class="application-update-release-notes"><summary>Changelog · v${escapeHtml(version)}</summary><div class="application-update-release-notes-body">${body}</div></details>`;
+}
+
 function supportPolicyHtml(policy) {
   if (!policy || String(policy.state || '') === 'current') return '';
   const view = supportPolicyView(policy);
@@ -167,8 +203,8 @@ function renderManual(container, reason) {
     <div class="connection-actions"><a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">Open GitHub Releases</a></div>`;
 }
 
-function renderFailure(container, message) {
-  renderStatus(container, { state: 'error', error: message, errorCode: 'update_failed' });
+function renderFailure(container, message, installedReleaseNotes = null) {
+  renderStatus(container, { state: 'error', error: message, errorCode: 'update_failed' }, installedReleaseNotes);
 }
 
 function formatBytes(value) {
@@ -188,4 +224,4 @@ function messageOf(error) {
 }
 
 
-export { supportPolicyView };
+export { releaseNotesHtml, supportPolicyView };

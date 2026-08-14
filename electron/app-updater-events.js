@@ -29,6 +29,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, h
       state: 'available', availableVersion,
       availableCompatibility, updateSynchronization,
       releaseDate: cleanText(info?.releaseDate, 80),
+      releaseNotes: info?.releaseNotes,
       checkedAt: isoNow(now), downloadedAt: '', progress: null,
       integrityVerified: false, error: '', errorCode: ''
     });
@@ -37,7 +38,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, h
     store.writeLastCheck(now());
     log('Rel.AI MCP is up to date.');
     emit({
-      state: 'up_to_date', availableVersion: '', releaseDate: '',
+      state: 'up_to_date', availableVersion: '', releaseDate: '', releaseNotes: [],
       availableCompatibility: null, updateSynchronization: null,
       checkedAt: isoNow(now), downloadedAt: '', progress: null,
       integrityVerified: false, error: '', errorCode: ''
@@ -53,6 +54,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, h
     emit({
       state: 'downloaded', availableVersion: downloadedVersion,
       releaseDate: cleanText(info?.releaseDate, 80) || status().releaseDate,
+      releaseNotes: info?.releaseNotes || status().releaseNotes,
       downloadedAt: isoNow(now),
       progress: progressPayload({ percent: 100, total: status().progress?.total, transferred: status().progress?.total }),
       integrityVerified: true, error: '', errorCode: ''

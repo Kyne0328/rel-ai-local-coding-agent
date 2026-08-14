@@ -145,12 +145,21 @@ nonTransientCheck.updater.start();
 assert.equal((await nonTransientCheck.updater.checkForUpdates()).ok, false);
 assert.equal(nonTransientCheck.fake.checkCalls, 1, 'non-transient updater failures must fail without retrying');
 
-valid.fake.emit('update-available', { version: '0.21.0', releaseDate: '2026-07-26T00:00:00.000Z', relai: { schemaVersion: 3, manifestHash: 'hash-current', deviceProtocolVersion: 1, minimumCompatibleDeviceProtocol: 1 } });
+valid.fake.emit('update-available', {
+  version: '0.21.0',
+  releaseDate: '2026-07-26T00:00:00.000Z',
+  releaseNotes: '### Improvements\n- Faster updater\n- Clearer release notes',
+  relai: { schemaVersion: 3, manifestHash: 'hash-current', deviceProtocolVersion: 1, minimumCompatibleDeviceProtocol: 1 }
+});
 assert.equal(valid.updater.getStatus().state, 'available');
 assert.equal(valid.updater.getStatus().availableVersion, '0.21.0');
 assert.equal(valid.updater.getStatus().canDownload, true);
 assert.deepEqual(valid.updater.getStatus().updateSynchronization, { status: 'current', toolRefreshRequired: false, deviceUpdateRequired: false });
 assert.equal(valid.updater.getStatus().availableCompatibility.schemaVersion, 3);
+assert.deepEqual(valid.updater.getStatus().releaseNotes, [{
+  version: '0.21.0',
+  note: '### Improvements\n- Faster updater\n- Clearer release notes'
+}]);
 
 const downloadPromise = valid.updater.downloadUpdate();
 assert.equal(valid.updater.getStatus().state, 'downloading');
@@ -219,6 +228,20 @@ metadataUnknown.updater.start();
 metadataUnknown.fake.emit('update-available', { version: '0.21.0' });
 assert.equal(metadataUnknown.updater.getStatus().updateSynchronization, null, 'missing compatibility metadata must not invent a refresh warning');
 assert.equal(metadataUnknown.updater.getStatus().availableCompatibility, null);
+
+const multiReleaseNotes = normalizeStatus({
+  supported: true,
+  state: 'available',
+  availableVersion: '0.21.0',
+  releaseNotes: [
+    { version: '0.21.0', note: 'Latest notes' },
+    { version: '0.20.9', note: 'Previous notes' }
+  ]
+});
+assert.deepEqual(multiReleaseNotes.releaseNotes, [
+  { version: '0.21.0', note: 'Latest notes' },
+  { version: '0.20.9', note: 'Previous notes' }
+]);
 
 const invalidInstalled = createHarness({ currentVersion: 'development' });
 invalidInstalled.updater.start();
