@@ -88,8 +88,9 @@ class AgentOrchestrator {
 
   async cancel(agentId, requestContext = {}, reason = 'Parent cancelled delegated agent.') {
     const id = String(agentId || '').trim();
+    const agent = cancelAgent(this.config, { agent_id: id, reason }, requestContext);
     await this.close(id);
-    return cancelAgent(this.config, { agent_id: id, reason }, requestContext);
+    return agent;
   }
 
   getLaunch(agentId) {

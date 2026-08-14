@@ -11,6 +11,7 @@ import { AgentRuntime, FakeAgentRuntime } from '../src/agents/runtime.js';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-agent-orchestrator-'));
 const config = { stateDir: root };
 const principal = { principal: { issuer: 'test', clientId: 'client-a', subject: 'user-1' }, publicHttpOnly: true };
+const otherPrincipal = { principal: { issuer: 'test', clientId: 'client-b', subject: 'user-2' }, publicHttpOnly: true };
 let runtimeContext;
 
 try {
@@ -59,11 +60,30 @@ try {
   assert.equal(await orchestrator.close(spawned.agent.agent_id), true);
   assert.equal(orchestrator.getLaunch(spawned.agent.agent_id), null);
 
-  const cancellable = await orchestrator.spawn({
+  class CancelOrderRuntime extends AgentRuntime {
+    constructor() { super('cancel-order'); this.agentId = ''; this.cancelCalls = 0; this.statusDuringCancel = ''; }
+    async getCapabilities() { return { runtime: this.name, reasoning: ['medium'] }; }
+    async spawn(_task, context) { this.agentId = context.agentId; return { runtimeTaskId: 'cancel_order_task', reasoning: 'medium' }; }
+    async cancel() {
+      this.cancelCalls += 1;
+      this.statusDuringCancel = getAgentStatus(config, { agent_id: this.agentId }, principal).status;
+      return { cancelled: true, alreadyTerminal: false };
+    }
+  }
+  const cancelRuntime = new CancelOrderRuntime();
+  const cancelOrchestrator = new AgentOrchestrator({ config, runtime: cancelRuntime, connectorName: 'Rel.AI MCP' });
+  const cancellable = await cancelOrchestrator.spawn({
     work_id: 'work_parent_2', workspace: 'repo', objective: 'Inspect cancellation.'
   }, principal);
-  assert.equal((await orchestrator.cancel(cancellable.agent.agent_id, principal)).status, 'cancelled');
-  assert.equal(orchestrator.getLaunch(cancellable.agent.agent_id), null);
+  await assert.rejects(
+    () => cancelOrchestrator.cancel(cancellable.agent.agent_id, otherPrincipal),
+    error => error?.code === 'AGENT_NOT_FOUND'
+  );
+  assert.equal(cancelRuntime.cancelCalls, 0, 'ownership must be checked before runtime cleanup');
+  assert.equal(cancelOrchestrator.getLaunch(cancellable.agent.agent_id)?.runtimeTaskId, 'cancel_order_task');
+  assert.equal((await cancelOrchestrator.cancel(cancellable.agent.agent_id, principal)).status, 'cancelled');
+  assert.equal(cancelRuntime.statusDuringCancel, 'cancelled', 'durable cancellation must be visible before runtime cleanup');
+  assert.equal(cancelOrchestrator.getLaunch(cancellable.agent.agent_id), null);
 
   class KnownFailingRuntime extends AgentRuntime {
     constructor() { super('known-failing'); }
@@ -119,6 +139,7 @@ try {
   assert.match(boundedPrompt, /"truncated": true/);
 
   await orchestrator.dispose();
+  await cancelOrchestrator.dispose();
   await knownFailing.dispose();
   await unknownFailing.dispose();
   console.log('Subagent prompt protocol, runtime negotiation, MCP-authoritative completion, cancellation, and launch-failure tests passed.');
