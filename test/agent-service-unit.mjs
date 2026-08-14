@@ -48,9 +48,11 @@ try {
     work_id: 'work_parent_1', workspace: 'repo', objective: 'Review lifecycle.', reasoning: 'high'
   }, principal);
   assert.equal(completedAgent.status, 'pending');
+  assert.equal(service.pendingAttachTimers.size, 1);
   assert.equal(runtime.active.size, 1);
   assert.match(runtime.prompts[0], /connector named "Rel\.AI MCP"/);
   service.attach({ agent_id: completedAgent.agent_id, work_id: 'work_child_1', workspace: 'repo' }, principal);
+  assert.equal(service.pendingAttachTimers.size, 0);
   const completed = await service.complete({
     agent_id: completedAgent.agent_id,
     child_work_id: 'work_child_1',
@@ -62,7 +64,9 @@ try {
   const failedAgent = await service.create({
     work_id: 'work_parent_2', workspace: 'repo', objective: 'Fail lifecycle.'
   }, principal);
+  assert.equal(service.pendingAttachTimers.size, 1);
   service.attach({ agent_id: failedAgent.agent_id, work_id: 'work_child_2', workspace: 'repo' }, principal);
+  assert.equal(service.pendingAttachTimers.size, 0);
   const failed = await service.fail({
     agent_id: failedAgent.agent_id, child_work_id: 'work_child_2', error: 'Child reported failure.'
   }, principal);
@@ -72,7 +76,9 @@ try {
   const cancelledAgent = await service.create({
     work_id: 'work_parent_3', workspace: 'repo', objective: 'Cancel lifecycle.'
   }, principal);
+  assert.equal(service.pendingAttachTimers.size, 1);
   const cancelled = await service.cancel({ agent_id: cancelledAgent.agent_id, reason: 'Parent stopped.' }, principal);
+  assert.equal(service.pendingAttachTimers.size, 0);
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(runtime.active.size, 0, 'parent cancellation must close the hidden runtime session');
   assert.equal(runtime.cancelled.length, 3);

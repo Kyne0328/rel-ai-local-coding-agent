@@ -33,11 +33,13 @@ try {
     const record = getAgentStatus(config, { agent_id: agent.agent_id }, owner);
     assert.equal(record.status, 'failed');
     assert.equal(record.completedAt, recoveredAt);
+    assert.equal(record.errorCode, 'AGENT_RESTARTED');
     assert.match(record.error, /Rel\.AI restarted before this delegated agent returned an MCP result/);
     assert.match(record.error, /create a new delegated agent/i);
     assert.throws(() => getAgentStatus(config, { agent_id: agent.agent_id }, other), error => error?.code === 'AGENT_NOT_FOUND');
   }
   assert.equal(getAgentStatus(config, { agent_id: completed.agent_id }, owner).agentResult.summary, 'Done.');
+  assert.equal(getAgentStatus(config, { agent_id: completed.agent_id }, owner).errorCode, null);
   assert.equal(getAgentStatus(config, { agent_id: failed.agent_id }, owner).error, 'Original failure.');
   assert.equal(getAgentStatus(config, { agent_id: cancelled.agent_id }, owner).error, 'Already cancelled.');
   assert.deepEqual(JSON.parse(fs.readFileSync(metadataPath, 'utf8')), metadata, 'ChatGPT authentication metadata must not be treated as an agent record');

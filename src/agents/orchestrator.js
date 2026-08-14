@@ -64,7 +64,11 @@ class AgentOrchestrator {
       return { agent, launch: { ...launchRecord } };
     } catch (error) {
       const publicError = publicLaunchError(error, agent.agent_id);
-      failAgentLaunch(this.config, { agent_id: agent.agent_id, error: publicError.message }, requestContext);
+      failAgentLaunch(this.config, {
+        agent_id: agent.agent_id,
+        error: publicError.message,
+        errorCode: publicError.code
+      }, requestContext);
       throw publicError;
     }
   }

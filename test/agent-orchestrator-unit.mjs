@@ -84,6 +84,7 @@ try {
   });
   const knownFailureRecord = getAgentStatus(config, { agent_id: knownFailedAgentId }, principal);
   assert.equal(knownFailureRecord.status, 'failed');
+  assert.equal(knownFailureRecord.errorCode, 'CHATGPT_LOGIN_REQUIRED');
   assert.equal(knownFailureRecord.error, 'ChatGPT session is not authenticated. Open Settings > ChatGPT Subagents and sign in.');
 
   class UnknownFailingRuntime extends AgentRuntime {
@@ -103,6 +104,7 @@ try {
   });
   const unknownFailureRecord = getAgentStatus(config, { agent_id: unknownFailedAgentId }, principal);
   assert.equal(unknownFailureRecord.status, 'failed');
+  assert.equal(unknownFailureRecord.errorCode, 'AGENT_RUNTIME_START_FAILED');
   assert.equal(unknownFailureRecord.error, 'Agent runtime failed to start delegated agent.');
   assert.doesNotMatch(unknownFailureRecord.error, /private-profile|abc123/);
 

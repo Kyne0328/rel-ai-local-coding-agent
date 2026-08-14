@@ -30,7 +30,8 @@ function createAgent(config, args = {}, context = {}) {
     completedAt: null,
     childWorkId: null,
     result: null,
-    error: null
+    error: null,
+    errorCode: null
   };
   persist(config, record);
   return publicRecord(record);
@@ -65,6 +66,7 @@ function completeAgent(config, args = {}, context = {}) {
   assertChildWork(record, args.child_work_id);
   record.result = normalizeAgentResult(args.result || {});
   record.error = null;
+  record.errorCode = null;
   record.status = 'completed';
   record.completedAt = new Date().toISOString();
   touch(record);
@@ -78,6 +80,7 @@ function failAgentLaunch(config, args = {}, context = {}) {
   assertActive(record);
   record.result = null;
   record.error = boundedText(args.error || 'Agent runtime failed to start delegated agent.', 12_000);
+  record.errorCode = boundedText(args.errorCode || 'AGENT_RUNTIME_START_FAILED', 200) || 'AGENT_RUNTIME_START_FAILED';
   record.status = 'failed';
   record.completedAt = new Date().toISOString();
   touch(record);
@@ -91,6 +94,7 @@ function failAgent(config, args = {}, context = {}) {
   assertActive(record);
   assertChildWork(record, args.child_work_id);
   record.error = boundedText(args.error || 'Agent failed.', 12_000);
+  record.errorCode = boundedText(args.errorCode || '', 200) || null;
   record.status = 'failed';
   record.completedAt = new Date().toISOString();
   touch(record);
@@ -103,6 +107,7 @@ function cancelAgent(config, args = {}, context = {}) {
   if (record.status === 'cancelled') return publicRecord(record);
   assertActive(record);
   record.error = boundedText(args.reason || 'Agent cancelled.', 2000);
+  record.errorCode = null;
   record.status = 'cancelled';
   record.completedAt = new Date().toISOString();
   touch(record);
@@ -130,6 +135,7 @@ function reconcileOrphanedAgents(config, options = {}) {
     if (!record || !ACTIVE_STATES.has(record.status)) continue;
     record.result = null;
     record.error = reason;
+    record.errorCode = 'AGENT_RESTARTED';
     record.status = 'failed';
     record.completedAt = now;
     record.updatedAt = now;
@@ -196,7 +202,8 @@ function publicRecord(record) {
     child_work_id: record.childWorkId,
     objective: record.objective,
     agentResult: record.result,
-    error: record.error
+    error: record.error,
+    errorCode: record.errorCode || null
   };
 }
 
