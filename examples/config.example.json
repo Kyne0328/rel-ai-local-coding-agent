@@ -1,8 +1,7 @@
 {
-  "version": 4,
+  "version": 5,
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
-  "maxOutputBytes": 2097152,
   "toolMode": "chatgpt_local_repo",
   "trustedLocalAgent": true,
   "trustedBudgetMultiplier": 2,
@@ -22,10 +21,6 @@
   },
   "processEnvironment": {
     "allow": []
-  },
-  "patch": {
-    "backup": true,
-    "requireCleanGit": false
   },
   "workspaces": {
     "myapp": {

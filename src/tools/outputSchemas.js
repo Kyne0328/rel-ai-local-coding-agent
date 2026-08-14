@@ -139,7 +139,6 @@ const FIELD_SCHEMAS = Object.freeze({
   patchBytes: NUMBER,
   sourceFormat: STRING,
   converted: BOOLEAN,
-  backup: { type: ['object', 'string', 'null'], additionalProperties: true },
   verify: OBJECT,
   apply: OBJECT,
   shaMismatch: OBJECT,
@@ -357,7 +356,7 @@ const TOOL_FIELDS = Object.freeze({
   relai_git_commit: ['ok', 'workspace', 'work_id', 'dryRun', 'message', 'addAll', 'paths', 'sensitiveAuthorization', 'statusBefore', 'add', 'commit', 'statusAfter', 'secretStagedFiles', 'unauthorizedSecretPaths', 'indexRestored', 'error'],
   relai_git_push: ['ok', 'workspace', 'work_id', 'remote', 'branch', 'dryRun', 'setUpstream', 'push'],
   relai_git_draft_pr: ['ok', 'workspace', 'work_id', 'base', 'head', 'title', 'body', 'changedFiles', 'changedFileCount', 'emptyDiff', 'draftOnly', 'remoteChanged', 'warning', 'diff'],
-  relai_edit: ['ok', 'workspace', 'work_id', 'dryRun', 'operationId', 'operation', 'path', 'changed', 'changedFiles', 'oldSha256', 'newSha256', 'shaMismatch', 'replacements', 'verified', 'bytes', 'plannerPath', 'plannerReason', 'result', 'writeId', 'chunks', 'cleared', 'staged', 'editCount', 'appliedCount', 'preflightAtomic', 'rollbackAtomic', 'batchInputBytes', 'replacementCount', 'snapshotBytes', 'resultDetailsCompacted', 'rollback', 'preflight', 'results', 'touchedPaths', 'patchBytes', 'sourceFormat', 'converted', 'backup', 'verify', 'apply', 'check', 'diagnostics', 'checks', 'diff', 'summary', 'validationStatus', 'error', 'next'],
+  relai_edit: ['ok', 'workspace', 'work_id', 'dryRun', 'operationId', 'operation', 'path', 'changed', 'changedFiles', 'oldSha256', 'newSha256', 'shaMismatch', 'replacements', 'verified', 'bytes', 'plannerPath', 'plannerReason', 'result', 'writeId', 'chunks', 'cleared', 'staged', 'editCount', 'appliedCount', 'preflightAtomic', 'rollbackAtomic', 'batchInputBytes', 'replacementCount', 'snapshotBytes', 'resultDetailsCompacted', 'rollback', 'preflight', 'results', 'touchedPaths', 'patchBytes', 'sourceFormat', 'converted', 'verify', 'apply', 'check', 'diagnostics', 'checks', 'diff', 'summary', 'validationStatus', 'error', 'next'],
   relai_cancel_work: ['ok', 'workspace', 'work_id', 'status', 'duplicate', 'endReason', 'terminalReason', 'endedAt', 'cancelledAt', 'progress'],
   relai_finish_work: ['ok', 'workspace', 'work_id', 'duplicate', 'completionKnown', 'endReason', 'completionSource', 'summary', 'validationStatus', 'validationLevel', 'validationAt', 'validationFingerprint', 'changedFiles', 'message']
 });

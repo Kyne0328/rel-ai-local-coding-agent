@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { runProcess, summarizeCommand } from "../process.js";
 import { resolveSafePath, writeTextFileSafe, fileSha256 } from "../safety.js";
 import { appendOperation, makeOperationId } from "../journal.js";
-import { assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured, shouldMakePatchBackup, makePatchBackup, inspectPatchPaths } from "../repo/gitOps.js";
+import { assertPatchUpdateSafe, ensureGitRepo, inspectPatchPaths } from "../repo/gitOps.js";
 import { clampNumber } from "./limits.js";
 import { relaiVerify, hasRequestedChecks } from "./validation.js";
 import { relaiDiff } from "./review.js";
@@ -23,7 +23,6 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const inspection = await inspectPatchPaths(workspace, config, patch, timeoutMs);
   const touchedPaths = inspection.touchedPaths;
   const check = inspection.check;
-  await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
   if (check.exitCode !== 0) {
     return {
@@ -50,8 +49,6 @@ async function relaiApplyPatch(workspace, config, args = {}) {
       sourceFormat: "unified-diff"
     };
   }
-  let backup = null;
-  if (shouldMakePatchBackup(config, args)) backup = await makePatchBackup(workspace, config, operationId, "patch");
   // Capture content hashes before apply so changedFiles reflects ACTUAL changes,
   // not every path the patch touches — a semantic no-op patch applies cleanly but
   // must report changedFiles:[].
@@ -65,7 +62,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: changedFiles, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, changedFiles, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles, touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), sourceFormat: "unified-diff", ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles, touchedPaths, patchBytes, apply: summarizeCommand(apply), sourceFormat: "unified-diff", ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 function normalizeOpenAIPatchFormat(input) {
@@ -124,7 +121,6 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
   const document = parseOpenAIPatchDocument(rawPatch);
   const plan = planStructuredPatch(workspace, document);
   const touchedPaths = plan.touchedPaths;
-  await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
   if (args.dryRun) {
     return {
@@ -140,8 +136,6 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
       touchedPaths
     };
   }
-  let backup = null;
-  if (shouldMakePatchBackup(config, args)) backup = await makePatchBackup(workspace, config, operationId, "patch");
   const applied = applyStructuredPlan(workspace, plan);
   if (!applied.ok) {
     appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok: false, paths: [], results: [{ operation: "applyPatch", rollback: applied.rollback, error: applied.error }] });
@@ -153,7 +147,6 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
       sourceFormat: "openai-patch",
       changedFiles: [],
       touchedPaths,
-      backup,
       rollback: applied.rollback,
       error: applied.error
     };
@@ -173,7 +166,6 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
     patchBytes: Buffer.byteLength(rawPatch, "utf8"),
     changedFiles,
     touchedPaths,
-    backup,
     ...(verify ? { verify } : {}),
     ...(diff ? { diff } : {})
   };

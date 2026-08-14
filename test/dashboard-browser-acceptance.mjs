@@ -94,7 +94,7 @@ try {
   assert.equal(result.initial.reducedMotion, true);
   assert.equal(result.liveToolUpdate.received, true, JSON.stringify(result.liveToolUpdate));
   assert.equal(result.liveToolUpdate.sameRouteNode, true, 'an MCP tool request must not remount the active dashboard route');
-  assert.deepEqual(result.navigationInteractions.map(item => item.hash), ['#workspaces', '#connection', '#settings', '#settings/application', '#settings/advanced', '#settings/about']);
+  assert.deepEqual(result.navigationInteractions.map(item => item.hash), ['#workspaces', '#connection', '#settings', '#settings/application', '#settings/about']);
   for (const interaction of result.navigationInteractions) {
     assert.equal(interaction.hitTarget.ownsControl, true, `${interaction.selector} is covered by another element`);
     assert.equal(interaction.opened, true, `${interaction.selector} did not open ${interaction.hash}`);

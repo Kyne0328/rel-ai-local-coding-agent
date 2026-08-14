@@ -8,7 +8,7 @@ assert.equal(canonicalPathFor('settings/dashboard'), 'home');
 assert.equal(canonicalPathFor('settings/desktop'), 'home');
 assert.equal(canonicalPathFor('missing'), 'home');
 assert.equal(canonicalPathFor('tools'), 'tools');
-assert.equal(canonicalPathFor('settings/advanced'), 'settings/advanced');
+assert.equal(canonicalPathFor('settings/advanced'), 'home');
 assert.equal(canonicalPathFor('settings/about'), 'settings/about');
 assert.equal(canonicalPathFor('processes'), 'processes');
 assert.equal(canonicalPathFor('usage'), 'usage');

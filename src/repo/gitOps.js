@@ -4,7 +4,7 @@ import { resolveSafePath, isSecretPath } from "../safety.js";
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus, formatGitStatus } from "./gitStatus.js";
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
-const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
+const MAX_PATCH_UPDATE_BYTES = 50 * 1024 * 1024;
 
 function clampNumber(value, min, max, fallback) {
   const n = Number(value);
@@ -18,28 +18,12 @@ function truncateUtf8(text, maxBytes, label) {
   return Buffer.from(value, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/u, '') + `\n[rel-ai-mcp ${label} truncated at ${maxBytes} bytes]`;
 }
 
-// ---- Patch configuration ----------------------------------------------------
+// ---- Patch bounds -----------------------------------------------------------
 
-function getPatchConfig(config) {
-  return config.patch && typeof config.patch === "object" ? config.patch : {};
-}
-
-function patchNumber(config, key, fallback) {
-  const value = getPatchConfig(config)[key];
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function patchFlag(config, key, fallback) {
-  const value = getPatchConfig(config)[key];
-  return value == null ? fallback : Boolean(value);
-}
-
-function assertPatchUpdateSafe(workspace, config, _args, patch) {
+function assertPatchUpdateSafe(workspace, _config, _args, patch) {
   if (!patch?.trim()) throw new Error("relai_edit requires non-empty updateText for patch-shaped edits.");
-  const maxBytes = patchNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
   const bytes = Buffer.byteLength(patch, "utf8");
-  if (bytes > maxBytes) throw new Error(`relai_edit refused ${bytes} byte patch; max is ${maxBytes}.`);
+  if (bytes > MAX_PATCH_UPDATE_BYTES) throw new Error(`relai_edit refused ${bytes} byte patch; max is ${MAX_PATCH_UPDATE_BYTES}.`);
   if (!workspace?.path) throw new Error("relai_edit requires a valid workspace.");
 }
 
@@ -120,59 +104,6 @@ async function ensureGitRepo(workspace, config) {
   const result = await runProcess("git", ["rev-parse", "--is-inside-work-tree"], { cwd: workspace.path, timeout: 30000 }, config);
   if (result.exitCode !== 0 || !String(result.stdout || "").trim().startsWith("true")) throw new Error(`Workspace '${workspace.alias}' is not a git work tree.`);
 }
-
-async function gitStatusShort(workspace, config) {
-  const result = await runProcess("git", gitStatusArgs({ branch: false }), {
-    cwd: workspace.path,
-    timeout: 30000,
-    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
-  }, config);
-  if (result.exitCode !== 0 || result.stdoutTruncated) {
-    throw new Error(`git status failed for ${workspace.alias}: ${result.stderr || result.stdout || (result.stdoutTruncated ? "output exceeded internal limit" : result.exitCode)}`);
-  }
-  return String(result.stdout || "");
-}
-
-async function requireCleanGitIfConfigured(workspace, config, args) {
-  const required = args.requireCleanGit == null ? patchFlag(config, "requireCleanGit", false) : Boolean(args.requireCleanGit);
-  if (!required) return;
-  const status = await gitStatusShort(workspace, config);
-  if (status.trim()) throw new Error(`Workspace '${workspace.alias}' is not clean.\n${status}`);
-}
-
-function shouldMakePatchBackup(config, args) {
-  return args.backup == null ? patchFlag(config, "backup", true) : Boolean(args.backup);
-}
-
-async function makePatchBackup(workspace, config, operationId, label) {
-  const status = await gitStatusShort(workspace, config);
-  if (!status.trim()) return { type: "none", reason: "workspace clean" };
-  const message = `rel-ai-mcp ${label} backup ${operationId}`;
-  const head = await runProcess("git", ["rev-parse", "--verify", "HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
-  if (head.exitCode !== 0) {
-    const symbolicHead = await runProcess("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
-    if (symbolicHead.exitCode === 0) {
-      return {
-        type: "unborn-worktree",
-        unborn: true,
-        reason: "Repository has no commits yet; Git stash backups are unavailable until the first commit."
-      };
-    }
-  }
-  // Snapshot tracked changes WITHOUT disturbing the working tree: `stash create`
-  // builds a stash commit but leaves the tree intact, then `stash store` records it
-  // in the stash list for manual recovery. The previous `stash push --include-untracked`
-  // moved changes away — which deleted an untracked patch/overlay target before apply,
-  // so a no-op patch on a newly-created file failed with "No such file or directory".
-  const created = await runProcess("git", ["stash", "create", message], { cwd: workspace.path, timeout: 120000 }, config);
-  if (created.exitCode !== 0) return { type: "git-stash", message, ok: false, ...summarizeCommand(created) };
-  const sha = String(created.stdout || "").trim();
-  if (!sha) return { type: "none", reason: "no tracked changes to back up" };
-  const stored = await runProcess("git", ["stash", "store", "-m", message, sha], { cwd: workspace.path, timeout: 120000 }, config);
-  return { type: "git-stash", message, sha, ok: stored.exitCode === 0, ...summarizeCommand(stored) };
-}
-
-
 
 async function inspectPatchPaths(workspace, config, patch, timeoutMs = 120000) {
   const check = await runProcess("git", ["apply", "--check", "--numstat", "-z", "--summary", "--recount", "-"], {
@@ -552,7 +483,7 @@ async function relaiGitDraftPr(workspace, config, args = {}) {
   const base = String(args.base || await detectDefaultBaseBranch(workspace, config)).trim();
   const title = String(args.title || "").trim();
   const body = String(args.body || "").trim();
-  const diff = await runProcess("git", ["diff", `${base}...${head}`], { cwd: workspace.path, timeout: 60000 }, { ...config, maxOutputBytes: 2 * 1024 * 1024 });
+  const diff = await runProcess("git", ["diff", `${base}...${head}`], { cwd: workspace.path, timeout: 60000, maxOutputBytes: 2 * 1024 * 1024 }, config);
   const diffText = diff.stdout || "";
   const changedFiles = [...new Set(String(diffText).split(/\r?\n/).filter((line) => line.startsWith("+++ b/")).map((line) => line.slice(6)))];
   const emptyDiff = diff.exitCode === 0 && changedFiles.length === 0 && !diffText.trim();
@@ -573,4 +504,4 @@ async function relaiGitDraftPr(workspace, config, args = {}) {
   };
 }
 
-export { workspaceGitStatus, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership,    assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured, shouldMakePatchBackup, makePatchBackup,   inspectPatchPaths,    };
+export { workspaceGitStatus, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership, assertPatchUpdateSafe, ensureGitRepo, inspectPatchPaths };

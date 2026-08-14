@@ -9,7 +9,7 @@ import { recordTaskHistoryEvent, recordWorkflowEvidence } from '../src/taskHisto
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-reuse-'));
 const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-state-'));
-const config = { stateDir: stateRoot, maxOutputBytes: 1024 * 1024 };
+const config = { stateDir: stateRoot };
 try {
   fs.mkdirSync(path.join(root, 'front-end'), { recursive: true });
   fs.writeFileSync(path.join(root, 'front-end', 'package.json'), JSON.stringify({ scripts: { test: `node -e "require('fs').writeFileSync('duplicate-marker.txt','ran')"` } }));

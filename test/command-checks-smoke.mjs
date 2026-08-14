@@ -145,8 +145,7 @@ fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
 // 7. Large output is truncated safely
 {
   const largeCmd = 'node -e "process.stdout.write(\'x\'.repeat(5000000))"';
-  const smallConfig = { maxOutputBytes: 100 * 1024 }; // 100 KB limit to ensure truncation
-  const result = await relaiVerify(workspace, smallConfig, mapCheckArgs({ check: largeCmd, timeoutMs: 30000 }));
+  const result = await relaiVerify(workspace, config, mapCheckArgs({ check: largeCmd, timeoutMs: 30000 }));
   // Should not throw; result should be an object with results array
   assert.ok(result && Array.isArray(result.results), 'large output result should have results array');
   const resultEntry = result.results[0];

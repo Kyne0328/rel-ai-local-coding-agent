@@ -8,7 +8,7 @@ import { relaiDiagnosticsRun } from '../src/bridge/diagnosticsRunner.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-diagnostics-progress-'));
 const workspace = { alias: 'app', path: root, commands: {}, testCommands: {} };
-const config = { maxOutputBytes: 1024 * 1024 };
+const config = {};
 const tracker = createToolActivityTracker({ idleMs: 60_000 });
 const events = [];
 tracker.onToolActivity(event => events.push(event));

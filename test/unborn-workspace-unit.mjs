@@ -24,7 +24,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   version: 3,
   stateDir,
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
-  patch: { backup: true, requireCleanGit: false, maxUpdateBytes: 2 * 1024 * 1024 },
   workspaces: {
     app: { path: workspacePath, commands: {}, testCommands: {} }
   }

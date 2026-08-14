@@ -16,7 +16,6 @@ const configPath = path.join(stateDir, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir,
-  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
   workspaces: { repo: { path: root } }
 }, null, 2));
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {

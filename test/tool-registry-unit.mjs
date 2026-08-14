@@ -94,7 +94,12 @@ const editSchema = schemaByName.get('relai_edit');
 assert.equal(editSchema.inputSchema.oneOf, undefined, 'relai_edit must not expose a non-discriminated oneOf wrapper');
 assert.match(editSchema.description, /oldText\/newText/i);
 assert.match(editSchema.description, /content for full-file replacement/i);
+assert.match(editSchema.description, /before sending the whole payload/i);
+assert.match(editSchema.description, /12 KiB/i);
 assert.match(editSchema.inputSchema.properties.content.description, /complete replacement content/i);
+assert.match(editSchema.inputSchema.properties.content.description, /8 KiB or 180 lines/i);
+assert.match(editSchema.inputSchema.properties.updateText.description, /from the first request/i);
+assert.match(editSchema.inputSchema.properties.stage.description, /12 KiB/i);
 
 await valid('relai_work', { action: 'begin', workspace: 'repo' });
 await invalid('relai_work', { action: 'begin' });

@@ -1,6 +1,5 @@
 import { mountGeneral } from './general.js';
 import { mountApplication } from './application.js';
-import { mountAdvanced } from './advanced.js';
 import { mountAbout } from './about.js';
 import { SETTINGS_NAV_ITEMS } from '../../navigation-catalog.js';
 import { navigate, routeHref } from '../../router.js';
@@ -8,7 +7,6 @@ import { navigate, routeHref } from '../../router.js';
 const MOUNTS = {
   preferences: mountGeneral,
   application: mountApplication,
-  advanced: mountAdvanced,
   about: mountAbout
 };
 

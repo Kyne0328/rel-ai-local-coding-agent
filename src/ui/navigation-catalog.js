@@ -5,7 +5,6 @@ const ICONS = Object.freeze({
   activity: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />',
   preferences: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M8 14v6" />',
   application: '<rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h5" />',
-  advanced: '<path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14" />',
   about: '<circle cx="12" cy="12" r="9" /><path d="M12 10v6M12 7h.01" />',
   connection: '<path d="M8.5 15.5 15.5 8.5M7 7h.01M17 17h.01M4 12a8 8 0 1 1 16 0 8 8 0 0 1-16 0Z" />',
   processes: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" />',
@@ -37,7 +36,7 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
   route('system', 'System', 'connection', 'Manage connection, runtime processes, diagnostics, tools, and analytics.', 'Application'),
-  route('settings', 'Settings', 'settings', 'Configure preferences, application behavior, and advanced safeguards.', 'Application')
+  route('settings', 'Settings', 'settings', 'Configure preferences and application behavior.', 'Application')
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
@@ -46,7 +45,6 @@ export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 export const SETTINGS_NAV_ITEMS = Object.freeze([
   route('preferences', 'Preferences', 'settings', 'Control appearance, density, and desktop notifications.', 'Settings'),
   route('application', 'Application', 'settings/application', 'Manage startup, recovery, and application updates.', 'Settings'),
-  route('advanced', 'Advanced', 'settings/advanced', 'Manage patch safeguards and resource limits.', 'Settings'),
   route('about', 'About', 'settings/about', 'View application, developer, repository, and license information.', 'Settings')
 ]);
 

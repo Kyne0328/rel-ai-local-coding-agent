@@ -59,7 +59,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   auditLogPath: auditPath,
   toolMode: 'chatgpt_local_repo',
   trustedLocalAgent: true,
-  maxOutputBytes: 2097152,
   workspaces: {},
   productUx: {
     staleHours: 24,
