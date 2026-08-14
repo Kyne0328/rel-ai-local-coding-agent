@@ -116,6 +116,23 @@
 .subagent-reasoning-chip { @apply rounded-full px-2.5 py-1 text-[11px] font-semibold; background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 30%, transparent); }
 .subagent-auth-actions { @apply items-center; }
 .subagent-auth-action-hint { @apply text-[12px] leading-5; }
+.subagent-agents-panel .settings-panel-body { @apply gap-3; }
+.subagent-agents-summary { @apply flex items-start justify-between gap-4; }
+.subagent-agents-summary > div { @apply grid min-w-0 gap-1; }
+.subagent-agents-summary strong { @apply text-lg; }
+.subagent-agents-summary p { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
+.subagent-agents-empty { @apply rounded-lg px-4 py-5 text-[12px]; background: var(--ui-surface-secondary); border: 1px dashed var(--ui-border-default); color: var(--ui-text-secondary); }
+.subagent-agent-list { @apply grid gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.subagent-agent-card { @apply grid min-w-0 gap-3 rounded-xl p-4; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
+.subagent-agent-card-head { @apply flex min-w-0 items-start justify-between gap-3; }
+.subagent-agent-title { @apply grid min-w-0 gap-1; }
+.subagent-agent-title strong { @apply text-[12px] leading-5; overflow-wrap: anywhere; }
+.subagent-agent-title span { @apply text-[11px] leading-4; overflow-wrap: anywhere; color: var(--ui-text-secondary); }
+.subagent-agent-timing { @apply flex flex-wrap gap-x-3 gap-y-1 text-[11px]; color: var(--ui-text-tertiary); }
+.subagent-agent-outcome { @apply grid gap-1 rounded-lg px-3 py-2; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-subtle); }
+.subagent-agent-outcome strong { @apply text-[11px] uppercase tracking-[.05em]; color: var(--ui-text-tertiary); }
+.subagent-agent-outcome p { @apply m-0 text-[12px] leading-5; overflow-wrap: anywhere; color: var(--ui-text-secondary); }
+.subagent-agent-actions { @apply flex justify-end gap-2; }
 
 .approval-token-settings { @apply gap-4; }
 .approval-token-intro { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
@@ -141,7 +158,8 @@
 @media (max-width: 520px) {
   .appearance-preview, .settings-fact-grid, .desktop-lifecycle-facts { grid-template-columns: 1fr; }
   .settings-fact-grid > div, .desktop-lifecycle-facts > div { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
-  .settings-validation-row, .application-update-summary, .subagent-auth-summary { @apply flex-col items-start; }
+  .settings-validation-row, .application-update-summary, .subagent-auth-summary, .subagent-agents-summary, .subagent-agent-card-head { @apply flex-col items-start; }
+  .subagent-agent-list { grid-template-columns: 1fr; }
   .about-detail-value { @apply w-full text-left; }
   .settings-save-row { @apply flex-col items-stretch; }
   .settings-save-actions { @apply justify-end; }

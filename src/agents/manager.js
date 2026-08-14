@@ -59,6 +59,39 @@ function getAgentStatus(config, args = {}, context = {}) {
   return publicRecord(requireOwnedAgent(config, args.agent_id, context));
 }
 
+function listAgentsForDashboard(config, options = {}) {
+  const limit = normalizeDashboardLimit(options.limit);
+  let entries;
+  try {
+    entries = fs.readdirSync(agentDirectory(config), { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
+  return entries
+    .filter(entry => entry.isFile() && AGENT_ID.test(entry.name.slice(0, -'.json'.length)) && entry.name.endsWith('.json'))
+    .map(entry => {
+      const agentId = entry.name.slice(0, -'.json'.length);
+      try { return readRecord(config, agentId); } catch { return null; }
+    })
+    .filter(Boolean)
+    .sort(compareDashboardAgents)
+    .slice(0, limit)
+    .map(publicRecord);
+}
+
+function cancelAgentForDashboard(config, args = {}) {
+  const record = requireAgent(config, args.agent_id);
+  if (!ACTIVE_STATES.has(record.status)) return publicRecord(record);
+  record.error = boundedText(args.reason || 'Cancelled from Rel.AI desktop.', 2000);
+  record.errorCode = null;
+  record.status = 'cancelled';
+  record.completedAt = new Date().toISOString();
+  touch(record);
+  persist(config, record);
+  return publicRecord(record);
+}
+
 function completeAgent(config, args = {}, context = {}) {
   const record = requireOwnedAgent(config, args.agent_id, context);
   if (record.status === 'completed') return publicRecord(record);
@@ -146,13 +179,31 @@ function reconcileOrphanedAgents(config, options = {}) {
 }
 
 function requireOwnedAgent(config, agentId, context = {}) {
+  const record = requireAgent(config, agentId);
+  const actual = principalFingerprint(principalForContext(context, Boolean(context?.publicHttpOnly)));
+  if (!safeEqual(record.principalFingerprint, actual)) throw agentError('AGENT_NOT_FOUND', 'Unknown or unavailable delegated agent.');
+  return record;
+}
+
+function requireAgent(config, agentId) {
   const id = String(agentId || '').trim();
   if (!AGENT_ID.test(id)) throw agentError('AGENT_NOT_FOUND', 'Unknown or unavailable delegated agent.');
   const record = readRecord(config, id);
   if (!record) throw agentError('AGENT_NOT_FOUND', 'Unknown or unavailable delegated agent.');
-  const actual = principalFingerprint(principalForContext(context, Boolean(context?.publicHttpOnly)));
-  if (!safeEqual(record.principalFingerprint, actual)) throw agentError('AGENT_NOT_FOUND', 'Unknown or unavailable delegated agent.');
   return record;
+}
+
+function compareDashboardAgents(left, right) {
+  const activeDelta = Number(ACTIVE_STATES.has(right.status)) - Number(ACTIVE_STATES.has(left.status));
+  if (activeDelta) return activeDelta;
+  return Date.parse(right.updatedAt || right.createdAt || 0) - Date.parse(left.updatedAt || left.createdAt || 0);
+}
+
+function normalizeDashboardLimit(value) {
+  if (value == null) return 20;
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Dashboard agent limit must be an integer between 1 and 100.');
+  return limit;
 }
 
 function assertActive(record) {
@@ -233,4 +284,15 @@ function agentError(code, message) {
   return error;
 }
 
-export { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, failAgentLaunch, getAgentStatus, reconcileOrphanedAgents };
+export {
+  attachAgent,
+  cancelAgent,
+  cancelAgentForDashboard,
+  completeAgent,
+  createAgent,
+  failAgent,
+  failAgentLaunch,
+  getAgentStatus,
+  listAgentsForDashboard,
+  reconcileOrphanedAgents
+};

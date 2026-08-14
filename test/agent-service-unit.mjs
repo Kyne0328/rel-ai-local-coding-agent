@@ -107,8 +107,18 @@ try {
     /waitMs must be an integer between 0 and 60000/
   );
 
+  const desktopAgent = await service.create({
+    work_id: 'work_parent_5', workspace: 'repo', objective: 'Desktop cancellation.', reasoning: 'medium'
+  }, principal);
+  service.attach({ agent_id: desktopAgent.agent_id, work_id: 'work_child_5', workspace: 'repo' }, principal);
+  assert.equal(service.listForDashboard({ limit: 20 }).some(agent => agent.agent_id === desktopAgent.agent_id && agent.status === 'working'), true);
+  const desktopCancelled = await service.cancelForDashboard({ agent_id: desktopAgent.agent_id });
+  assert.equal(desktopCancelled.status, 'cancelled');
+  assert.equal(desktopCancelled.error, 'Cancelled from Rel.AI desktop.');
+  assert.equal(runtime.active.size, 0, 'desktop cancellation must close the hidden runtime session');
+
   await service.dispose();
-  console.log('Agent service launches delegated runtime sessions, supports bounded status waits, and closes them on complete, fail, and cancel.');
+  console.log('Agent service launches delegated runtime sessions, supports bounded status waits and desktop visibility, and closes them on complete, fail, and cancel.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

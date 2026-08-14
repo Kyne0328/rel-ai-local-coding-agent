@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chatGptAuthView, chatGptBrowserView, formatReasoningLabel } from '../src/ui/features/settings/subagents.js';
+import { agentStatusView, chatGptAuthView, chatGptBrowserView, formatAgentTimestamp, formatReasoningLabel } from '../src/ui/features/settings/subagents.js';
 assert.deepEqual(chatGptAuthView('authentication_saved'), {
   label: 'Sign-in saved',
   tone: 'ok',
@@ -23,6 +23,10 @@ assert.deepEqual(chatGptBrowserView({ available: false }), {
 });
 assert.equal(formatReasoningLabel('extra_high'), 'Extra High');
 assert.equal(formatReasoningLabel('pro'), 'Pro');
+assert.deepEqual(agentStatusView('working'), { label: 'Working', tone: 'working' });
+assert.deepEqual(agentStatusView('completed'), { label: 'Completed', tone: 'ok' });
+assert.deepEqual(agentStatusView('failed'), { label: 'Failed', tone: 'bad' });
+assert.equal(formatAgentTimestamp('invalid'), 'Unknown');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'src/ui/features/settings/subagents.js'), 'utf8');
 assert.match(source, /aria-live/);
@@ -37,4 +41,12 @@ assert.match(source, /does not bundle another browser/);
 assert.match(source, /Browser runtime/);
 assert.doesNotMatch(source, /executablePath|REL_AI_CHATGPT_CHROMIUM_PATH/);
 assert.doesNotMatch(source, /statusÎ“Ã‡Âª/);
-console.log('ChatGPT subagent settings status, browser prerequisite, reasoning labels, privacy copy, and action-state contracts passed.');
+assert.match(source, /Delegated agents/);
+assert.match(source, /Activity unavailable/);
+assert.match(source, /Check browser again/);
+assert.match(source, /Cancel subagent:/);
+assert.match(source, /\/api\/agents\/chatgpt\/cancel/);
+assert.match(source, /escapeHtml\(resultSummary\)/);
+assert.match(source, /escapeHtml\(error\)/);
+assert.doesNotMatch(source, /principalFingerprint|child_work_id|parent_work_id/);
+console.log('ChatGPT subagent settings auth, browser prerequisite, activity controls, privacy, and accessibility contracts passed.');

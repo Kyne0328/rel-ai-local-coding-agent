@@ -1,6 +1,15 @@
 import * as path from 'node:path';
 import { getStateDir } from '../statePaths.js';
-import { attachAgent, completeAgent, failAgent, failAgentLaunch, getAgentStatus, reconcileOrphanedAgents } from './manager.js';
+import {
+  attachAgent,
+  cancelAgentForDashboard,
+  completeAgent,
+  failAgent,
+  failAgentLaunch,
+  getAgentStatus,
+  listAgentsForDashboard,
+  reconcileOrphanedAgents
+} from './manager.js';
 import { AgentOrchestrator } from './orchestrator.js';
 
 const servicePromises = new Map();
@@ -64,6 +73,21 @@ class AgentService {
   async cancel(args = {}, context = {}) {
     this.clearAttachTimeout(args.agent_id);
     return this.orchestrator.cancel(args.agent_id, context, args.reason);
+  }
+
+  listForDashboard(options = {}) {
+    return listAgentsForDashboard(this.config, options);
+  }
+
+  async cancelForDashboard(args = {}) {
+    const agentId = String(args.agent_id || '').trim();
+    const agent = cancelAgentForDashboard(this.config, {
+      agent_id: agentId,
+      reason: args.reason || 'Cancelled from Rel.AI desktop.'
+    });
+    this.clearAttachTimeout(agentId);
+    await this.orchestrator.close(agentId);
+    return agent;
   }
 
   async authenticationStatus() {

@@ -9,7 +9,7 @@ import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handle
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
-import { handleChatGptAgentStatus, handleChatGptAgentAuthOpen, handleChatGptAgentAuthFinish } from './http/dashboardAgents.js';
+import { handleChatGptAgentStatus, handleChatGptAgentAuthOpen, handleChatGptAgentAuthFinish, handleChatGptAgentCancel } from './http/dashboardAgents.js';
 import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
@@ -264,6 +264,7 @@ const POST_ROUTES = {
   "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop },
   "/api/agents/chatgpt/auth/open": { auth: authDashboard, handler: handleChatGptAgentAuthOpen },
   "/api/agents/chatgpt/auth/finish": { auth: authDashboard, handler: handleChatGptAgentAuthFinish },
+  "/api/agents/chatgpt/cancel": { auth: authDashboard, handler: handleChatGptAgentCancel },
   "/api/mcp/recovery": { auth: authDashboard, handler: handleMcpRecovery }
 };
 

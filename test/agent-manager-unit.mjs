@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, failAgentLaunch, getAgentStatus } from '../src/agents/manager.js';
+import { attachAgent, cancelAgent, cancelAgentForDashboard, completeAgent, createAgent, failAgent, failAgentLaunch, getAgentStatus, listAgentsForDashboard } from '../src/agents/manager.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-agent-manager-'));
 const config = { stateDir: root };
@@ -93,7 +93,19 @@ try {
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(cancelled.errorCode, null);
 
-  console.log('Delegated agent ownership, attachment, completion, failure, cancellation, and persistence tests passed.');
+  const dashboardActive = createAgent(config, { work_id: 'work_dashboard', workspace: 'repo', role: 'planner', reasoning: 'medium', objective: 'Visible desktop task.' }, parent);
+  const dashboardList = listAgentsForDashboard(config, { limit: 2 });
+  assert.equal(dashboardList.length, 2);
+  assert.equal(dashboardList[0].agent_id, dashboardActive.agent_id, 'active delegated agents must sort before terminal history');
+  assert.equal(Object.hasOwn(dashboardList[0], 'principalFingerprint'), false, 'desktop records must never expose principal fingerprints');
+  assert.equal(dashboardList[0].objective, 'Visible desktop task.');
+  const dashboardCancelled = cancelAgentForDashboard(config, { agent_id: dashboardActive.agent_id, reason: 'Cancelled from desktop test.' });
+  assert.equal(dashboardCancelled.status, 'cancelled');
+  assert.equal(dashboardCancelled.error, 'Cancelled from desktop test.');
+  assert.equal(cancelAgentForDashboard(config, { agent_id: completed.agent_id }).status, 'completed', 'desktop cancel must not rewrite terminal records');
+  assert.throws(() => listAgentsForDashboard(config, { limit: 101 }), /between 1 and 100/);
+
+  console.log('Delegated agent ownership, attachment, dashboard visibility, completion, failure, cancellation, and persistence tests passed.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

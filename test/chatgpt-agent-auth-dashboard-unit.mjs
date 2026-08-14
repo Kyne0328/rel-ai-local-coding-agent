@@ -6,6 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { createChatGptAgentHandlers } from '../src/http/dashboardAgents.js';
 const calls = [];
 const fakeService = {
+  listForDashboard() {
+    calls.push('list');
+    return [{ agent_id: `agent_${'a'.repeat(43)}`, status: 'working', role: 'reviewer', reasoning: 'high', objective: 'Review safely.', workspace: 'repo' }];
+  },
+  async cancelForDashboard(args) {
+    calls.push(['cancel', args.agent_id]);
+    return { agent_id: args.agent_id, status: 'cancelled', error: 'Cancelled from Rel.AI desktop.' };
+  },
   async authenticationStatus() {
     calls.push('status');
     return {
@@ -39,14 +47,37 @@ for (const [name, expected] of [
   const payload = response.json();
   assert.equal(response.status(), 200);
   assert.equal(payload.ok, true);
-  assert.equal(calls.at(-1), expected);
+  if (expected === 'status') {
+    assert.equal(calls.includes('status'), true);
+    assert.equal(calls.includes('list'), true);
+  } else {
+    assert.equal(calls.at(-1), expected);
+  }
   assert.equal(JSON.stringify(payload).includes('cookie'), false);
   assert.equal(JSON.stringify(payload).includes('profilePath'), false);
   assert.equal(JSON.stringify(payload).includes('executablePath'), false);
   if (expected === 'status') {
     assert.deepEqual(payload.browser, { available: true, product: 'Test Chrome', errorCode: null });
+    assert.equal(payload.agents.length, 1);
+    assert.equal(payload.agents[0].objective, 'Review safely.');
+    assert.equal(JSON.stringify(payload.agents).includes('principalFingerprint'), false);
   }
 }
+
+const cancelResponse = responseRecorder();
+await handlers.handleChatGptAgentCancel(context(cancelResponse.res, JSON.stringify({ agent_id: `agent_${'a'.repeat(43)}` })));
+assert.equal(cancelResponse.status(), 200);
+assert.equal(cancelResponse.json().status, 'cancelled');
+assert.deepEqual(calls.at(-1), ['cancel', `agent_${'a'.repeat(43)}`]);
+
+const missingCancelResponse = responseRecorder();
+await handlers.handleChatGptAgentCancel(context(missingCancelResponse.res, '{}'));
+assert.deepEqual(missingCancelResponse.json(), {
+  ok: false,
+  errorCode: 'AGENT_ID_REQUIRED',
+  error: 'Delegated agent id is required.'
+});
+
 const failing = createChatGptAgentHandlers({
   readConfigFn: () => ({}),
   getAgentServiceFn: async () => ({
@@ -69,10 +100,11 @@ const serverSource = fs.readFileSync(path.join(root, 'src/httpServer.js'), 'utf8
 assert.match(serverSource, /"\/api\/agents\/chatgpt".*handleChatGptAgentStatus/);
 assert.match(serverSource, /"\/api\/agents\/chatgpt\/auth\/open".*handleChatGptAgentAuthOpen/);
 assert.match(serverSource, /"\/api\/agents\/chatgpt\/auth\/finish".*handleChatGptAgentAuthFinish/);
+assert.match(serverSource, /"\/api\/agents\/chatgpt\/cancel".*handleChatGptAgentCancel/);
 
-console.log('ChatGPT subagent dashboard auth handlers expose only safe status and lifecycle results.');
-function context(res) {
-  const req = Readable.from([]);
+console.log('ChatGPT subagent dashboard handlers expose safe auth/activity status and desktop cancellation.');
+function context(res, body = '') {
+  const req = Readable.from(body ? [Buffer.from(body)] : []);
   req.headers = {};
   return { req, res, ae: '', options: { maxBodyBytes: 1024 } };
 }
