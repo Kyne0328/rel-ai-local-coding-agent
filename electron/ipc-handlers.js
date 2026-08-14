@@ -1,12 +1,18 @@
 import { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, logIpcFailure } from './ipc-security.js';
 import { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerUpdaterIpc } from './ipc-handlers-dashboard.js';
 
+const OPENAI_SETUP_URLS = Object.freeze({
+  tunnels: 'https://platform.openai.com/settings/organization/tunnels',
+  apiKeys: 'https://platform.openai.com/settings/organization/api-keys'
+});
+
 function registerIpcHandlers(deps) {
   const { isSenderWindow, windowOnly, allowedWindows } = createWindowGuards(deps.BrowserWindow);
   const dashboardOnly = (event, action) => windowOnly(event, deps.getDashboardWindow, 'Secured dashboard controls', action);
 
   registerSetupIpc({
     ipcMain: deps.ipcMain,
+    shell: deps.shell,
     windowOnly,
     getWizardWindow: deps.getWizardWindow,
     closeWizard: deps.closeWizard,
@@ -84,7 +90,7 @@ function registerIpcHandlers(deps) {
   });
 }
 
-function registerSetupIpc({ ipcMain, windowOnly, getWizardWindow, closeWizard, getRecoveryConfig, setTunnelApiKey, saveLauncherConfig, launchConfiguredDesktop }) {
+function registerSetupIpc({ ipcMain, shell, windowOnly, getWizardWindow, closeWizard, getRecoveryConfig, setTunnelApiKey, saveLauncherConfig, launchConfiguredDesktop }) {
   ipcMain.handle('wizard:done', (event, config = {}) => windowOnly(event, getWizardWindow, 'Setup completion', async () => {
     const apiKey = String(config.tunnelApiKey || '').trim();
     if (apiKey) setTunnelApiKey(apiKey);
@@ -95,6 +101,12 @@ function registerSetupIpc({ ipcMain, windowOnly, getWizardWindow, closeWizard, g
   }));
   ipcMain.handle('wizard:cancel', event => windowOnly(event, getWizardWindow, 'Setup cancellation', () => {
     closeWizard({ returnToFallback: true });
+    return { ok: true };
+  }));
+  ipcMain.handle('wizard:open-openai-setup', (event, destination) => windowOnly(event, getWizardWindow, 'OpenAI setup navigation', async () => {
+    const url = OPENAI_SETUP_URLS[String(destination || '')];
+    if (!url) throw new Error('Unknown OpenAI setup destination.');
+    await shell.openExternal(url);
     return { ok: true };
   }));
   ipcMain.handle('recovery:get-config', event => windowOnly(event, getWizardWindow, 'Recovery configuration', getRecoveryConfig));
