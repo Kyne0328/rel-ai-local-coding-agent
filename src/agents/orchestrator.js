@@ -23,16 +23,17 @@ class AgentOrchestrator {
       : ['medium'];
     const reasoning = resolveReasoningLevel(args.reasoning || 'medium', availableReasoning);
     const capabilities = capabilitiesForRole(role);
+    const connectorName = String(args.connectorName || this.connectorName).trim() || this.connectorName;
     const agent = createAgent(this.config, {
       ...args,
       role,
       reasoning,
-      connectorName: this.connectorName
+      connectorName
     }, requestContext);
     try {
       const prompt = buildDelegatedAgentPrompt({
         agentId: agent.agent_id,
-        connectorName: this.connectorName,
+        connectorName,
         workspace: agent.workspace,
         objective: agent.objective,
         role,
@@ -49,7 +50,7 @@ class AgentOrchestrator {
         agentId: agent.agent_id,
         parentWorkId: agent.parent_work_id,
         workspace: agent.workspace,
-        connectorName: this.connectorName,
+        connectorName,
         prompt,
         capabilities
       });
@@ -77,18 +78,19 @@ class AgentOrchestrator {
     return getAgentStatus(this.config, { agent_id: agentId }, requestContext);
   }
 
-  async cancel(agentId, requestContext = {}, reason = 'Parent cancelled delegated agent.') {
+  async close(agentId) {
     const id = String(agentId || '').trim();
     const launch = this.launches.get(id);
     if (launch?.runtimeTaskId && typeof this.runtime.cancel === 'function') {
       await this.runtime.cancel(launch.runtimeTaskId).catch(() => {});
     }
-    this.launches.delete(id);
-    return cancelAgent(this.config, { agent_id: id, reason }, requestContext);
+    return this.launches.delete(id);
   }
 
-  release(agentId) {
-    return this.launches.delete(String(agentId || '').trim());
+  async cancel(agentId, requestContext = {}, reason = 'Parent cancelled delegated agent.') {
+    const id = String(agentId || '').trim();
+    await this.close(id);
+    return cancelAgent(this.config, { agent_id: id, reason }, requestContext);
   }
 
   getLaunch(agentId) {

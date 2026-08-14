@@ -13,12 +13,14 @@ function main() {
   initializeTelemetry(config);
   pruneNativeToolTasks(config);
   const cleanup = async () => {
-    const [{ stopAllManagedProcesses }, { stopAllUiSessions }] = await Promise.all([
+    const [{ stopAllManagedProcesses }, { stopAllUiSessions }, { disposeAgentServices }] = await Promise.all([
       import('./processManager.js'),
-      import('./webAutomationManager.js')
+      import('./webAutomationManager.js'),
+      import('./agents/agentService.js')
     ]);
     await stopAllManagedProcesses(config).catch(() => {});
     await stopAllUiSessions().catch(() => {});
+    await disposeAgentServices(config).catch(() => {});
     await shutdownTelemetry().catch(() => {});
   };
   process.once('SIGINT', () => { void cleanup().finally(() => process.exit(0)); });

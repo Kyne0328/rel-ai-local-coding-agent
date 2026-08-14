@@ -10,7 +10,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_agent_create",
     title: "Create Delegated Agent",
-    description: "Create a principal-bound delegated agent record under a parent work session.",
+    description: "Create and launch a principal-bound delegated agent under a parent work session.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"role":{"type":"string","enum":["investigator","reviewer","planner","verifier","implementer"]},"reasoning":{"type":"string","enum":["instant","medium","high","extra_high","pro"]},"objective":{"type":"string","minLength":1,"maxLength":20000},"connectorName":{"type":"string","minLength":1,"maxLength":200}},"required":["workspace","objective"],"additionalProperties":false},
     handlerName: 'agentCreate',
     behavior: {"taskScope":"required"},

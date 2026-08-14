@@ -20,7 +20,7 @@ import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
-import { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, getAgentStatus } from '../agents/manager.js';
+import { getAgentService } from '../agents/agentService.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
@@ -43,6 +43,13 @@ function scheduleIntelligenceWarmup(workspace, config) {
   void Promise.resolve()
     .then(() => repositoryIntelligence.ensure(workspace, config, { watch: false }))
     .catch(() => {});
+}
+
+function withAgentService(method) {
+  return async (config, args, context) => {
+    const service = await getAgentService(config);
+    return service[method](args, context);
+  };
 }
 
 const HANDLERS = Object.freeze({
@@ -83,12 +90,12 @@ const HANDLERS = Object.freeze({
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
   cancelTask,
   completeTask,
-  agentCreate: createAgent,
-  agentAttach: attachAgent,
-  agentStatus: getAgentStatus,
-  agentComplete: completeAgent,
-  agentFail: failAgent,
-  agentCancel: cancelAgent
+  agentCreate: withAgentService('create'),
+  agentAttach: withAgentService('attach'),
+  agentStatus: withAgentService('status'),
+  agentComplete: withAgentService('complete'),
+  agentFail: withAgentService('fail'),
+  agentCancel: withAgentService('cancel')
 });
 
 function withWorkflowTaskContext(config, workspace, args, context = {}) {

@@ -14,6 +14,7 @@ import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcp
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
 import { stopAllUiSessions } from './webAutomationManager.js';
+import { disposeAgentServices } from './agents/agentService.js';
 import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
 import { ensureConfig, getConfigPath, readConfig } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
@@ -88,6 +89,7 @@ function startHttpServer(options = {}) {
       mcpConnectionManager.shutdown('http_server_closed'),
       stopAllManagedProcesses(runtimeConfig),
       stopAllUiSessions(),
+      disposeAgentServices(runtimeConfig),
       shutdownTelemetry()
     ]);
   });

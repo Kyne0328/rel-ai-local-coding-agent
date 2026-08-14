@@ -56,7 +56,8 @@ try {
     result: { summary: 'Reviewed through MCP.', findings: ['No blocker'] }
   }, principal);
   assert.equal(orchestrator.status(spawned.agent.agent_id, principal).agentResult.summary, 'Reviewed through MCP.');
-  assert.equal(orchestrator.release(spawned.agent.agent_id), true);
+  assert.equal(await orchestrator.close(spawned.agent.agent_id), true);
+  assert.equal(orchestrator.getLaunch(spawned.agent.agent_id), null);
 
   const cancellable = await orchestrator.spawn({
     work_id: 'work_parent_2', workspace: 'repo', objective: 'Inspect cancellation.'
