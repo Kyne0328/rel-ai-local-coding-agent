@@ -269,7 +269,7 @@ app.whenReady().then(async () => {
       while (!document.querySelector('.usage-overview') && Date.now() - started < 4000) await delay(50);
       const result = {
         overviewVisible: Boolean(document.querySelector('.usage-overview')),
-        localAggregate: /Local aggregate/.test(document.querySelector('[data-usage-content]')?.textContent || ''),
+        localAggregate: /Local activity only/.test(document.querySelector('[data-usage-page]')?.textContent || ''),
         modalVisible: Boolean(document.querySelector('#__relai-modal-title')),
         inlineUnavailable: Boolean(document.querySelector('.usage-unavailable'))
       };

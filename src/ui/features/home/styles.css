@@ -97,10 +97,6 @@
 .home-analytics-scale { @apply flex items-center justify-between text-[10px] font-medium; color: var(--ui-text-tertiary); }
 .home-analytics-pulse-empty { @apply grid min-h-[112px] place-items-center rounded-xl border border-dashed text-[12px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
 .home-analytics-foot { @apply flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-2 text-[11px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
-.home-analytics-privacy { margin-left: auto; }
-.home-analytics-privacy > summary { @apply flex min-h-11 cursor-pointer items-center text-[11px] font-semibold; color: var(--ui-text-secondary); }
-.home-analytics-privacy > p { @apply m-0 max-w-xl pb-2 text-[12px] leading-5; color: var(--ui-text-secondary); }
-.home-analytics-privacy[open] { flex: 1 1 100%; margin-left: 0; }
 .home-analytics-loading { @apply grid gap-0; grid-template-columns: repeat(4,minmax(0,1fr)); border-top: 1px solid var(--ui-border-subtle); }
 .home-analytics-loading span { @apply block min-h-20 border-r last:border-r-0; border-color: var(--ui-border-subtle); background: linear-gradient(110deg, var(--ui-surface-primary) 24%, var(--ui-surface-secondary) 38%, var(--ui-surface-primary) 52%); background-size: 220% 100%; animation: skeleton-sweep 1.3s ease-in-out infinite; }
 

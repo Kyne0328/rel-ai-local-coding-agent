@@ -32,7 +32,7 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
   route('processes', 'Processes', 'processes', 'Inspect managed processes and bounded output.', 'System'),
   route('diagnostics', 'Diagnostics', 'diagnostics', 'Review findings, service logs, export, and recovery controls.', 'System'),
   route('tools', 'Tools', 'tools', 'Browse the MCP tools available to ChatGPT.', 'System'),
-  route('usage', 'Analytics', 'usage', 'Review privacy-safe Rel.AI activity trends, outcomes, tools, and workspace aggregates stored on this device.', 'System')
+  route('usage', 'Analytics', 'usage', 'Review local activity, tool usage, and workspace trends.', 'System')
 ]);
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
