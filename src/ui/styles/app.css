@@ -545,6 +545,9 @@
 
 @media (max-width: 1250px) {
   :root { --sidebar-width: 220px; }
+  :root:not([data-sidebar="collapsed"]) .sidebar { padding-inline: 12px; }
+  :root:not([data-sidebar="collapsed"]) .brand { gap: 4px; }
+  :root:not([data-sidebar="collapsed"]) .brand-identity { flex: 1 1 auto; gap: 8px; }
   .main { padding-inline: 18px; }
   .topbar { @apply items-start; }
   .top-controls { @apply flex-wrap; }
