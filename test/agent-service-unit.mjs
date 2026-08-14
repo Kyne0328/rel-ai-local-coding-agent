@@ -95,6 +95,22 @@ try {
   assert.equal(runtime.sequence, launchesBeforeRecursiveAttempt, 'recursive delegation must fail before opening another browser page');
   await service.cancel({ agent_id: recursiveParent.agent_id, reason: 'Recursive-delegation test cleanup.' }, principal);
 
+  const implementer = await service.create({
+    work_id: 'work_impl_parent_1', workspace: 'repo', role: 'implementer', objective: 'Implement isolated change.'
+  }, principal);
+  const launchesBeforeSecondImplementer = runtime.sequence;
+  await assert.rejects(
+    () => service.create({ work_id: 'work_impl_parent_2', workspace: 'repo', role: 'implementer', objective: 'Conflicting implementation.' }, principal),
+    error => error?.code === 'AGENT_IMPLEMENTER_BUSY'
+  );
+  assert.equal(runtime.sequence, launchesBeforeSecondImplementer, 'a second implementer must fail before browser launch');
+  const parallelReviewer = await service.create({
+    work_id: 'work_review_parent', workspace: 'repo', role: 'reviewer', objective: 'Review while implementer runs.'
+  }, principal);
+  assert.equal(parallelReviewer.role, 'reviewer');
+  await service.cancel({ agent_id: parallelReviewer.agent_id, reason: 'Concurrency test cleanup.' }, principal);
+  await service.cancel({ agent_id: implementer.agent_id, reason: 'Concurrency test cleanup.' }, principal);
+
   const waitingAgent = await service.create({
     work_id: 'work_parent_4', workspace: 'repo', objective: 'Wait for delegated MCP result.'
   }, principal);
@@ -130,7 +146,7 @@ try {
   assert.equal(runtime.active.size, 0, 'desktop cancellation must close the hidden runtime session');
 
   await service.dispose();
-  console.log('Agent service launches delegated runtime sessions, enforces non-recursive delegation, supports bounded status waits and desktop visibility, and closes them on complete, fail, and cancel.');
+  console.log('Agent service launches delegated runtime sessions, enforces non-recursive delegation and implementer serialization, supports bounded status waits and desktop visibility, and closes them on complete, fail, and cancel.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

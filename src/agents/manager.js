@@ -14,7 +14,8 @@ function createAgent(config, args = {}, context = {}) {
   const parentWorkId = requiredText(args.work_id, 'work_id');
   const workspace = requiredText(args.workspace, 'workspace');
   const ownerFingerprint = principalFingerprint(principalForContext(context, Boolean(context?.publicHttpOnly)));
-  assertNotDelegatedChildWork(config, parentWorkId, ownerFingerprint);
+  const role = normalizeAgentRole(args.role || 'investigator');
+  assertAgentCreationAllowed(config, { parentWorkId, workspace, ownerFingerprint, role });
   const agentId = `agent_${crypto.randomBytes(32).toString('base64url')}`;
   const now = new Date().toISOString();
   const record = {
@@ -23,7 +24,7 @@ function createAgent(config, args = {}, context = {}) {
     parentWorkId,
     workspace,
     principalFingerprint: ownerFingerprint,
-    role: normalizeAgentRole(args.role || 'investigator'),
+    role,
     reasoning: normalizeReasoningLevel(args.reasoning || 'medium'),
     objective: boundedText(args.objective, 20_000),
     connectorName: boundedText(args.connectorName || 'Rel.AI MCP', 200),
@@ -197,7 +198,7 @@ function requireAgent(config, agentId) {
   return record;
 }
 
-function assertNotDelegatedChildWork(config, workId, ownerFingerprint) {
+function assertAgentCreationAllowed(config, { parentWorkId, workspace, ownerFingerprint, role }) {
   let entries;
   try {
     entries = fs.readdirSync(agentDirectory(config), { withFileTypes: true });
@@ -211,9 +212,13 @@ function assertNotDelegatedChildWork(config, workId, ownerFingerprint) {
     if (!AGENT_ID.test(agentId)) continue;
     let record;
     try { record = readRecord(config, agentId); } catch { continue; }
-    if (!record || record.childWorkId !== workId) continue;
-    if (!safeEqual(record.principalFingerprint, ownerFingerprint)) continue;
-    throw agentError('AGENT_RECURSIVE_DELEGATION', 'Delegated child work sessions cannot create additional subagents.');
+    if (!record || !safeEqual(record.principalFingerprint, ownerFingerprint)) continue;
+    if (record.childWorkId === parentWorkId) {
+      throw agentError('AGENT_RECURSIVE_DELEGATION', 'Delegated child work sessions cannot create additional subagents.');
+    }
+    if (role === 'implementer' && record.role === 'implementer' && record.workspace === workspace && ACTIVE_STATES.has(record.status)) {
+      throw agentError('AGENT_IMPLEMENTER_BUSY', 'Another delegated implementer is already active in this workspace. Finish or cancel it before starting another implementer.');
+    }
   }
 }
 

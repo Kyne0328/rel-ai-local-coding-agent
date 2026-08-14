@@ -46,6 +46,17 @@ try {
   );
   const sameWorkOtherPrincipal = createAgent(config, { work_id: 'work_child', workspace: 'repo', objective: 'Independent principal.' }, otherUser);
   assert.equal(sameWorkOtherPrincipal.status, 'pending', 'recursive-delegation detection must not cross principal boundaries');
+  const implementer = createAgent(config, { work_id: 'work_impl_1', workspace: 'repo', role: 'implementer', objective: 'Edit one slice.' }, sameUser);
+  assert.equal(implementer.role, 'implementer');
+  assert.throws(
+    () => createAgent(config, { work_id: 'work_impl_2', workspace: 'repo', role: 'implementer', objective: 'Edit another slice.' }, sameUser),
+    error => error?.code === 'AGENT_IMPLEMENTER_BUSY'
+  );
+  assert.equal(createAgent(config, { work_id: 'work_review_parallel', workspace: 'repo', role: 'reviewer', objective: 'Review in parallel.' }, sameUser).role, 'reviewer');
+  assert.equal(createAgent(config, { work_id: 'work_impl_other_workspace', workspace: 'other-repo', role: 'implementer', objective: 'Edit elsewhere.' }, sameUser).role, 'implementer');
+  assert.equal(createAgent(config, { work_id: 'work_impl_other_principal', workspace: 'repo', role: 'implementer', objective: 'Independent principal edit.' }, otherUser).role, 'implementer');
+  cancelAgent(config, { agent_id: implementer.agent_id, reason: 'Implementer slot test cleanup.' }, sameUser);
+  assert.equal(createAgent(config, { work_id: 'work_impl_after_cancel', workspace: 'repo', role: 'implementer', objective: 'Next serialized implementation.' }, sameUser).role, 'implementer', 'terminal implementers must release the workspace slot');
   assert.equal(attachAgent(config, { agent_id: created.agent_id, work_id: 'work_child', workspace: 'repo' }, sameUser).child_work_id, 'work_child');
   assert.throws(
     () => attachAgent(config, { agent_id: created.agent_id, work_id: 'work_other_child', workspace: 'repo' }, sameUser),
