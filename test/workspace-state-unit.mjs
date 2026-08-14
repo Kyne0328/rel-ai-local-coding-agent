@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { buildWorkspaceStates, resolveGitExecutable } from "../src/workspaceState.js";
+import { buildWorkspaceStates, onWorkspaceStateChange, resolveGitExecutable } from "../src/workspaceState.js";
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-workspace-state-'));
 const repo = path.join(sandbox, 'repo');
@@ -29,10 +29,26 @@ try {
 
   const config = {
     stateDir: path.join(sandbox, 'state'),
-    workspaces: { repo: { path: repo, allowedRemotes: ['origin'] } }
+    workspaces: { repo: { path: repo } }
   };
   const tasks = [{ workspace: 'repo', status: 'completed', validation: 'passed', completedAt: '2026-07-11T06:00:00.000Z' }];
-  const states = buildWorkspaceStates(config, tasks, { state: 'working', workspace: 'repo', tool: 'relai_read', startedAt: Date.now() });
+  const activity = { state: 'working', workspace: 'repo', tool: 'relai_read', startedAt: Date.now() };
+  let unsubscribe = () => {};
+  const refreshedState = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      unsubscribe();
+      reject(new Error('workspace Git state refresh timed out'));
+    }, 5000);
+    unsubscribe = onWorkspaceStateChange(event => {
+      if (event.alias !== 'repo') return;
+      clearTimeout(timer);
+      unsubscribe();
+      resolve(event.state);
+    });
+  });
+  buildWorkspaceStates(config, tasks, activity);
+  await refreshedState;
+  const states = buildWorkspaceStates(config, tasks, activity);
   const state = states.repo;
   assert.equal(state.exists, true);
   assert.equal(state.isGit, true);

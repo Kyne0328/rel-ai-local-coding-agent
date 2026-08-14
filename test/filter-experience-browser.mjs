@@ -20,10 +20,9 @@ const port = await availablePort();
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ name: 'filter-fixture', version: '1.0.0', scripts: { test: 'node -e "process.exit(0)"' } }));
 const config = {
-  version: 3,
+  version: 4,
   stateDir,
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
-  productUx: { showAutomaticValidation: true },
   workspaces: { app: { path: workspace, commands: {}, testCommands: { test: 'npm test' } } }
 };
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -100,7 +99,7 @@ try {
   assert.equal(result.settings.comfortable, 'comfortable');
   assert.equal(result.settings.navigationLabel, 'Settings navigation');
   assert.equal(result.settings.currentPageCount, 1);
-  assert.deepEqual(result.workspaces, { before: true, hidden: true, restored: true, detailsModal: true, detailsInlineVisible: false, scopeName: 'Workspace scope: All workspaces' });
+  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, scopeName: 'Workspace scope: All workspaces' });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
   assert.equal(result.connection.detailsDisclosure, true);
@@ -130,8 +129,6 @@ try {
   assert.equal(result.forcedColors.supported, true);
   assert.equal(result.forcedColors.visibleBoundary, true);
   assert.deepEqual(result.failures, []);
-  const savedConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  assert.equal(savedConfig.productUx.showAutomaticValidation, true, 'browser test must restore the validation preference');
   console.log('Rendered filter, settings, workspace, connection, and responsive experience passed.');
 } finally {
   if (child && child.exitCode == null) child.kill('SIGKILL');

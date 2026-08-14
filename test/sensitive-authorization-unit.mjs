@@ -8,7 +8,7 @@ import { relaiGitCommit } from "../src/repo/gitOps.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-sensitive-auth-'));
 const git = (args) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-const workspace = { alias: 'repo', path: root, allowedRemotes: [] };
+const workspace = { alias: 'repo', path: root };
 const config = { stateDir: path.join(root, '.state') };
 const removeRoot = () => {
   try {

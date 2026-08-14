@@ -112,7 +112,7 @@ app.whenReady().then(async () => {
   for (const route of [
     { hash: 'settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { hash: 'diagnostics', ready: `document.querySelector('.diagnostic-page') && !document.querySelector('[data-copy-report]')?.disabled` },
-    { hash: 'workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
+    { hash: 'workspaces', ready: `document.querySelector('.workspace-grid')` },
     { hash: 'tools', ready: `document.querySelector('.tools-section') && document.getElementById('toolsCount')?.textContent.trim() !== 'Loading…'` }
   ]) {
     passiveRouteStability.push(await measurePassiveRouteStability(win, passiveMcpSession, navigationCounts, route));
@@ -406,7 +406,7 @@ async function measurePassiveRouteStability(win, mcpSession, navigationCounts, r
 
 async function exerciseNavigationControls(win, failures) {
   const scenarios = [
-    { selector: '.nav a[data-nav-id="workspaces"]', hash: '#workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
+    { selector: '.nav a[data-nav-id="workspaces"]', hash: '#workspaces', ready: `document.querySelector('.workspace-grid')` },
     { opener: '[data-nav-accordion="system"] > summary', selector: '[data-nav-accordion="system"] .sidebar-subnav a[data-nav-id="connection"]', hash: '#connection', ready: `document.querySelector('.system-shell')` },
     { opener: '[data-nav-accordion="settings"] > summary', selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="preferences"]', hash: '#settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="application"]', hash: '#settings/application', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },

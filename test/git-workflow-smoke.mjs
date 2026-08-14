@@ -43,9 +43,6 @@ const { root, workspacePath } = makeRepo();
 const workspace = {
   alias: 'smoke',
   path: workspacePath,
-  protectedBranches: ['main', 'production'],
-  defaultBaseBranch: 'main',
-  allowedRemotes: ['origin'],
   testCommands: {},
   commands: {},
   context: { snapshotMaxFiles: 3000 }
@@ -89,12 +86,18 @@ assert.ok(/add notes/.test(JSON.stringify(commit.commit)));
 const pushDryRun = await relaiGitPush(workspace, config, { remote: 'origin', branch: 'main', dryRun: true });
 assert.equal(pushDryRun.ok, true);
 
-// allowedRemotes enforcement: a remote not on the allowlist is refused (also blocks
-// git's command-executing ext:: transport via an unexpected remote name).
+// Publishing is derived from the repository itself: unknown remotes and command-executing
+// remote-helper transports are refused without a workspace-level allowlist.
 await assert.rejects(
   () => relaiGitPush(workspace, config, { remote: 'evil', branch: 'main', dryRun: true }),
-  /allowedRemotes/,
-  'push to a non-allowlisted remote must be refused'
+  /not configured/,
+  'push to a remote that is not configured in the repository must be refused'
+);
+git(['remote', 'add', 'unsafe', 'ext::sh -c echo'], { cwd: workspace.path });
+await assert.rejects(
+  () => relaiGitPush(workspace, config, { remote: 'unsafe', branch: 'main', dryRun: true }),
+  /unsafe Git remote-helper transport/,
+  'push must reject command-executing Git remote-helper transports before invoking git push'
 );
 
 // addAll commits must refuse secret-looking staged files (e.g. .env picked up by
@@ -120,8 +123,9 @@ git(['rm', '--cached', '.env'], { cwd: workspace.path, stdio: 'ignore' });
 git(['commit', '-m', 'remove env'], { cwd: workspace.path, stdio: 'ignore' });
 fs.rmSync(path.join(workspace.path, '.env'), { force: true });
 
-const draftPr = await relaiGitDraftPr(workspace, config, { base: 'main', head: 'feature/ui-cleanup' });
+const draftPr = await relaiGitDraftPr(workspace, config, { head: 'feature/ui-cleanup' });
 assert.equal(draftPr.ok, true);
+assert.equal(draftPr.base, 'main', 'draft PR base branch must be detected from Git without workspace configuration');
 assert.equal(draftPr.draftOnly, true);
 assert.equal(draftPr.remoteChanged, false);
 assert.equal(draftPr.deprecated, undefined);

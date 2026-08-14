@@ -141,9 +141,6 @@ function handleWorkspace(subcommand, action, rest) {
   config.workspaces[alias].path = workspacePath;
   config.workspaces[alias].testCommands = config.workspaces[alias].testCommands || {};
   config.workspaces[alias].commands = config.workspaces[alias].commands || {};
-  config.workspaces[alias].protectedBranches = config.workspaces[alias].protectedBranches || ["main", "master"];
-  config.workspaces[alias].defaultBaseBranch = config.workspaces[alias].defaultBaseBranch || "main";
-  config.workspaces[alias].allowedRemotes = config.workspaces[alias].allowedRemotes || ["origin"];
   writeConfig(config);
   console.log(`Added workspace '${alias}' -> ${workspacePath}`);
 }

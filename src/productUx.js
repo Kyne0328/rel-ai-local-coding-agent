@@ -147,10 +147,7 @@ function setupWizard(args = {}) {
     config.workspaces[alias] = {
       path: workspacePath,
       testCommands: guessTestCommands(workspacePath),
-      commands: {},
-      protectedBranches: ["main", "master"],
-      defaultBaseBranch: "main",
-      allowedRemotes: ["origin"]
+      commands: {}
     };
   }
   const startCmd = setupStartCommand(token);
@@ -240,7 +237,6 @@ function importOriginalRelAiConfig(args = {}) {
     config.workspaces[alias].path = entry.path;
     config.workspaces[alias].testCommands = entry.testCommands || config.workspaces[alias].testCommands || {};
     config.workspaces[alias].commands = config.workspaces[alias].commands || {};
-    config.workspaces[alias].protectedBranches = config.workspaces[alias].protectedBranches || ["main", "master"];
     imported.push(alias);
   }
   if (args.dryRun !== true) writeConfig(config);

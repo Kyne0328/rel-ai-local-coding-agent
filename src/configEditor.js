@@ -9,7 +9,7 @@ const NUMBER_KEYS = ["maxOutputBytes"];
 // Only these nested keys may be written through the settings API; anything else is
 // rejected so junk keys never persist into config.json.
 const ALLOWED_SECTION_KEYS = {
-  productUx: new Set(["showAutomaticValidation", "staleHours", "cleanupOlderThanHours", "enableStateExport"]),
+  productUx: new Set(["staleHours", "cleanupOlderThanHours", "enableStateExport"]),
   release: new Set(["minimumReadinessScore", "requireHttpToken"]),
   telemetry: new Set(["enabled", "endpoint"])
 };
@@ -181,9 +181,6 @@ function _handleUpsertWorkspace(alias, payload, next) {
   next.workspaces[alias] = {
     ...currentWorkspace,
     path: workspacePath,
-    protectedBranches: parseList(source.protectedBranches, currentWorkspace.protectedBranches || ["main", "master"]),
-    defaultBaseBranch: String(source.defaultBaseBranch || currentWorkspace.defaultBaseBranch || "main"),
-    allowedRemotes: parseList(source.allowedRemotes, currentWorkspace.allowedRemotes || ["origin"]),
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
     context: parseContext(source.context, currentWorkspace.context),
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),

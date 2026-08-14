@@ -1,5 +1,4 @@
 // Shared add/edit workspace form. Rename and path changes are saved atomically.
-// Git and safety settings remain available under progressive disclosure.
 import { openModal, closeModal } from '../../components/modal.js';
 import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOARD_DATA_URL } from '../../api.js';
 import { toast } from '../../components/toast.js';
@@ -13,10 +12,6 @@ import { deriveWorkspaceAlias, isValidWorkspaceAlias, normalizeWorkspacePath } f
 function debounce(fn, ms) {
   let timer = 0;
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
-}
-
-function splitList(value) {
-  return String(value || '').split(/[,\n]/).map(item => item.trim()).filter(Boolean);
 }
 
 function formSnapshot(form) {
@@ -56,7 +51,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   form.innerHTML = `
     <div class="ws-form-intro">
       <strong>${isEdit ? 'Workspace settings' : 'Choose a project folder'}</strong>
-      <span>${isEdit ? 'Rename the workspace, change its folder, or review advanced Git safeguards. Name and path changes are saved together.' : 'Rel.AI uses this folder only when a ChatGPT request names this workspace.'}</span>
+      <span>${isEdit ? 'Rename the workspace or change its project folder. Name and path changes are saved together.' : 'Rel.AI uses this folder only when a ChatGPT request names this workspace.'}</span>
     </div>
 
     <label for="workspacePathInput">Project folder</label>
@@ -70,25 +65,6 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="for example employee-api" autocomplete="off">
     <div class="ws-form-help">Use 1–80 letters, numbers, dots, underscores, or dashes. This is the name used in ChatGPT prompts.</div>
     <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
-
-    <details class="ws-form-advanced">
-      <summary>
-        <span><strong>Git and safety settings</strong><small>Defaults work for most repositories</small></span>
-        <span aria-hidden="true">›</span>
-      </summary>
-      <div class="ws-form-advanced-body">
-        <label for="workspaceProtectedInput">Protected branches</label>
-        <input id="workspaceProtectedInput" name="protected" type="text" value="${esc((ws.protectedBranches?.length ? ws.protectedBranches : ['main', 'master']).join(', '))}" autocomplete="off">
-        <div class="ws-form-help">Rel.AI treats these branches as protected during Git operations.</div>
-
-        <label for="workspaceBaseInput">Default base branch</label>
-        <input id="workspaceBaseInput" name="base" type="text" value="${esc(ws.defaultBaseBranch || 'main')}" autocomplete="off">
-
-        <label for="workspaceRemotesInput">Allowed remotes</label>
-        <input id="workspaceRemotesInput" name="remotes" type="text" value="${esc((ws.allowedRemotes?.length ? ws.allowedRemotes : ['origin']).join(', '))}" autocomplete="off">
-        <div class="ws-form-help">Only these Git remote names can be used for publishing operations.</div>
-      </div>
-    </details>
 
     <div class="ws-form-actions">
       <button type="button" class="secondary" data-cancel>Cancel</button>
@@ -200,11 +176,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       originalAlias: isEdit ? originalAlias : alias,
       alias,
       path: wsPath,
-      enforceUniquePath: true,
-      protectedBranches: splitList(form.querySelector('input[name="protected"]').value),
-      defaultBaseBranch: String(form.querySelector('input[name="base"]').value || 'main').trim() || 'main',
-      allowedRemotes: splitList(form.querySelector('input[name="remotes"]').value),
-      confirmDangerous: true
+      enforceUniquePath: true
     }));
     if (result?.ok) {
       markUnsaved(form, false);

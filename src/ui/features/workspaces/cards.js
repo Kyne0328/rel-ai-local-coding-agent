@@ -20,14 +20,12 @@ function buildWorkspaces(data) {
   const findings = actionableFindings(health);
   const views = workspaces.map(workspace => workspaceCardView(workspace, healthByAlias.get(workspace.alias)));
   const availableCount = views.filter(view => view.available).length;
-  const validationReady = views.filter(view => view.validationCommands.length > 0).length;
-  const showAutomaticValidation = config.productUx?.showAutomaticValidation !== false;
 
   const root = document.createElement('div');
   root.className = 'section';
   root.innerHTML = `
     <div class="feature-toolbar workspace-toolbar">
-      <p>Common status and actions stay visible. Open Repository details for branch, worktree, validation, policies, remotes, and history.</p>
+      <p>Common status and actions stay visible. Repository details show live Git state and recent workspace activity when available.</p>
       <div class="section-head-actions">
         ${workspaceFilter ? `<span class="workspace-focus-label" title="Focused workspace: ${esc(workspaceFilter)}">Focused: ${esc(workspaceFilter)}</span><a class="buttonlike secondary compact-button" href="#workspaces">Clear focus</a>` : ''}
         <span class="feature-count">${allWorkspaces.length} configured</span>
@@ -44,16 +42,15 @@ function buildWorkspaces(data) {
   }
 
   const metrics = document.createElement('div');
-  metrics.className = `overview-grid overview-grid-compact summary-metrics${showAutomaticValidation ? '' : ' overview-grid-two'}`;
+  metrics.className = 'overview-grid overview-grid-compact summary-metrics overview-grid-two';
   metrics.innerHTML = `
     ${metricHtml('Available to ChatGPT', `${availableCount}/${workspaces.length}`, availableCount === workspaces.length ? 'all selected folders are available' : 'one or more paths need attention', availableCount === workspaces.length ? 'good' : 'warn')}
-    ${showAutomaticValidation ? metricHtml('Validation ready', `${validationReady}/${workspaces.length}`, validationReady ? 'automatic checks detected' : 'no automatic checks detected', validationReady === workspaces.length ? 'good' : 'warn') : ''}
     ${metricHtml('Needs attention', findings.length, findings.length ? 'workspace or configuration findings' : 'no blocking findings', findings.length ? 'bad' : 'good')}`;
   root.appendChild(metrics);
 
   const grid = document.createElement('div');
   grid.className = 'workspace-grid workspace-grid-detailed';
-  grid.innerHTML = views.map(view => workspaceCard(view, showAutomaticValidation)).join('');
+  grid.innerHTML = views.map(workspaceCard).join('');
   root.appendChild(grid);
   void hydrateWorkspaceAnalytics(grid, views.map(view => view.alias));
 
@@ -80,7 +77,7 @@ function emptyWorkspaceState() {
   return empty;
 }
 
-function workspaceCard(view, showAutomaticValidation) {
+function workspaceCard(view) {
   return `
     <article class="workspace-card workspace-card-detailed" data-workspace-card="${view.aliasAttr}">
       <header class="workspace-card-head">
@@ -95,7 +92,7 @@ function workspaceCard(view, showAutomaticValidation) {
       ${workspaceActivityNotice(view)}
       <section class="workspace-analytics-mini" data-workspace-analytics="${view.aliasAttr}" aria-label="${view.aliasAttr} analytics" hidden></section>
       <footer class="workspace-actions workspace-primary-actions">${workspacePrimaryActions(view)}</footer>
-      ${workspaceDetailsHtml(view, showAutomaticValidation)}
+      ${workspaceDetailsHtml(view)}
     </article>`;
 }
 
@@ -114,10 +111,6 @@ function workspaceCardView(workspace, health) {
     available,
     operational,
     validationCommands: commands,
-    projectInstructions: listValue(workspace.projectInstructions?.sources),
-    protectedBranches: listValue(workspace.protectedBranches),
-    allowedRemotes: listValue(workspace.allowedRemotes),
-    defaultBaseBranch: workspace.defaultBaseBranch || 'main',
     sessionActive: workspace.sessionPolicy?.sessionActive === true,
     taskHint: workspace.sessionPolicy?.taskHint || '',
     cautionCount: Number.isFinite(workspace.caution?.count) ? workspace.caution.count : 0
@@ -146,7 +139,7 @@ function workspaceReadinessHtml(view) {
   const validationReady = view.validationCommands.length > 0;
   const validationValue = validationReady
     ? `${view.validationCommands.length} automatic check${view.validationCommands.length === 1 ? '' : 's'}`
-    : 'Add when ready';
+    : 'No checks detected';
   const accessTitle = view.available ? 'Ready for ChatGPT' : 'Project folder unavailable';
   const accessDescription = view.available
     ? 'Rel.AI can inspect and update this workspace when you approve a tool call.'
@@ -162,7 +155,7 @@ function workspaceReadinessHtml(view) {
     </div>
     <dl class="workspace-readiness-facts">
       ${readinessFact('Repository', repository.label, repository.description, repository.tone)}
-      ${readinessFact('Validation', validationValue, validationReady ? 'Run checks before reviewing changes.' : 'No automatic check is configured.', validationReady ? 'good' : 'warn')}
+      ${readinessFact('Validation', validationValue, validationReady ? 'Run checks before reviewing changes.' : 'This workspace is usable; checks can be added later.', validationReady ? 'good' : 'neutral')}
     </dl>
   </section>`;
 }
@@ -176,7 +169,7 @@ function readinessFact(label, value, description, tone) {
 
 function repositorySummary(operational) {
   if (operational.exists === false) return { label: 'Path unavailable', description: 'The configured folder cannot be found.', tone: 'bad' };
-  if (!operational.isGit) return { label: 'Folder only', description: 'No Git repository was detected at this path.', tone: 'warn' };
+  if (!operational.isGit) return { label: 'Git not initialized', description: 'Git-only actions are unavailable; file tools still work.', tone: 'neutral' };
   const branch = branchSummary(operational);
   const changes = operational.dirty ? `${Number(operational.changedFileCount || 0)} changed file${Number(operational.changedFileCount || 0) === 1 ? '' : 's'}` : 'Clean worktree';
   return { label: branch, description: changes, tone: operational.dirty ? 'warn' : 'good' };
