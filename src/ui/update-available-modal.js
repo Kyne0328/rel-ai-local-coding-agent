@@ -87,6 +87,14 @@ function initUpdateAvailableModal(options = {}) {
     latestStatus = status || latestStatus;
     const policyView = supportPolicyModalView(latestStatus?.supportPolicy);
     if (policyView) {
+      if (updateActionInProgress(latestStatus)) {
+        if (activePolicyKey) {
+          activePolicyKey = '';
+          policyContent = null;
+          closeModal();
+        }
+        return;
+      }
       const acknowledged = shownPolicyKeys.has(policyView.key);
       if (policyView.blocking || !acknowledged || activePolicyKey === policyView.key) {
         if (!policyView.blocking) shownPolicyKeys.add(policyView.key);
@@ -185,6 +193,7 @@ function initUpdateAvailableModal(options = {}) {
     if (!method || typeof bridge?.[method] !== 'function') return;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
+    closeModal();
     try {
       const result = await bridge[method]();
       if (result?.ok === false) throw new Error(result.error || 'The update action failed.');
@@ -192,8 +201,6 @@ function initUpdateAvailableModal(options = {}) {
       consider(latestStatus);
     } catch (error) {
       toast(messageOf(error), { variant: 'error' });
-      button.disabled = false;
-      button.removeAttribute('aria-busy');
     }
   }
 
@@ -207,26 +214,19 @@ function initUpdateAvailableModal(options = {}) {
       ? `Release date: ${status.releaseDate}`
       : 'You can download now, postpone until the next launch, or ignore only this version.';
 
+    content.append(description, detail);
+    appendReleaseNotes(content, status, version);
+
     const actions = document.createElement('div');
     actions.className = 'connection-actions';
     const download = actionButton(`Download v${version}`, 'primary');
     const later = actionButton('Later', 'secondary');
     const ignore = actionButton('Ignore this version', 'secondary');
     actions.append(download, later, ignore);
-    content.append(description, detail, actions);
+    content.appendChild(actions);
 
-    download.addEventListener('click', async () => {
-      download.disabled = true;
-      download.setAttribute('aria-busy', 'true');
-      try {
-        const result = await bridge.downloadUpdate();
-        if (result?.ok === false) throw new Error(result.error || 'The update could not be downloaded.');
-        closeModal();
-      } catch (error) {
-        toast(messageOf(error), { variant: 'error' });
-        download.disabled = false;
-        download.removeAttribute('aria-busy');
-      }
+    download.addEventListener('click', () => {
+      void downloadUpdateFromModal(bridge);
     });
     later.addEventListener('click', closeModal);
     ignore.addEventListener('click', async () => {
@@ -255,6 +255,55 @@ function initUpdateAvailableModal(options = {}) {
     removeUpdateListener?.();
     document.removeEventListener('relai:notification-preferences-change', onPreferenceChange);
   };
+}
+
+async function downloadUpdateFromModal(bridge, options = {}) {
+  const close = options.close || closeModal;
+  const notify = options.notify || (message => toast(message, { variant: 'error' }));
+  close();
+  try {
+    const result = await bridge.downloadUpdate();
+    if (result?.ok === false) throw new Error(result.error || 'The update could not be downloaded.');
+    return result;
+  } catch (error) {
+    notify(messageOf(error));
+    return { ok: false, error: messageOf(error) };
+  }
+}
+
+function appendReleaseNotes(content, status, version) {
+  const notes = Array.isArray(status?.releaseNotes) ? status.releaseNotes : [];
+  if (!notes.length) return;
+  const details = document.createElement('details');
+  details.className = 'application-update-release-notes';
+  details.open = true;
+  const summary = document.createElement('summary');
+  summary.textContent = `What's new in v${version}`;
+  const body = document.createElement('div');
+  body.className = 'application-update-release-notes-body';
+  for (const entry of notes) {
+    const note = String(entry?.note || '').trim();
+    if (!note) continue;
+    const item = document.createElement('div');
+    item.className = 'application-update-release-note';
+    const noteVersion = cleanVersion(entry?.version);
+    if (noteVersion && noteVersion !== version) {
+      const heading = document.createElement('strong');
+      heading.textContent = `v${noteVersion}`;
+      item.appendChild(heading);
+    }
+    const copy = document.createElement('p');
+    copy.textContent = note;
+    item.appendChild(copy);
+    body.appendChild(item);
+  }
+  if (!body.childElementCount) return;
+  details.append(summary, body);
+  content.appendChild(details);
+}
+
+function updateActionInProgress(status = {}) {
+  return ['checking', 'downloading', 'installing'].includes(String(status?.state || ''));
 }
 
 function supportUpdateAction(status = {}) {
@@ -295,4 +344,4 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Application update action failed.');
 }
 
-export { initUpdateAvailableModal, shouldShowUpdateModal, supportPolicyModalView };
+export { downloadUpdateFromModal, initUpdateAvailableModal, shouldShowUpdateModal, supportPolicyModalView };

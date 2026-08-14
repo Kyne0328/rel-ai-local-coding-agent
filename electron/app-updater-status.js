@@ -1,13 +1,15 @@
 function normalizeStatus(value) {
   const state = String(value.state || 'idle');
   const supported = value.supported === true;
+  const availableVersion = cleanVersion(value.availableVersion);
   return {
     state,
     supported,
     supportReason: cleanText(value.supportReason, 300),
     currentVersion: cleanVersion(value.currentVersion),
-    availableVersion: cleanVersion(value.availableVersion),
+    availableVersion,
     releaseDate: cleanText(value.releaseDate, 80),
+    releaseNotes: normalizeReleaseNotes(value.releaseNotes, availableVersion),
     checkedAt: cleanText(value.checkedAt, 80),
     downloadedAt: cleanText(value.downloadedAt, 80),
     progress: value.progress ? progressPayload(value.progress) : null,
@@ -88,6 +90,28 @@ function nonNegativeNumber(value) {
 
 function cleanVersion(value) {
   return cleanText(value, 80).replace(/^v/i, '');
+}
+
+function normalizeReleaseNotes(value, fallbackVersion = '') {
+  const entries = Array.isArray(value) ? value : value ? [{ version: fallbackVersion, note: value }] : [];
+  return entries.slice(0, 12).map(entry => {
+    if (typeof entry === 'string') return { version: cleanVersion(fallbackVersion), note: cleanReleaseNoteText(entry, 6000) };
+    return {
+      version: cleanVersion(entry?.version || fallbackVersion),
+      note: cleanReleaseNoteText(entry?.note, 6000)
+    };
+  }).filter(entry => entry.note);
+}
+
+function cleanReleaseNoteText(value, limit) {
+  const text = String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/[\t\f\v]+/g, ' ').replace(/ +/g, ' ').trimEnd())
+    .join('\n')
+    .trim();
+  if (!limit || text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
 function cleanText(value, limit) {

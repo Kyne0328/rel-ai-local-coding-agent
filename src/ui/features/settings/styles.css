@@ -95,6 +95,14 @@
 .application-update-summary strong { @apply text-lg; }
 .application-update-copy { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
 .application-update-actions { @apply mt-1 flex flex-wrap gap-2; }
+.application-update-release-notes { @apply max-w-3xl overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); background: var(--ui-surface-secondary); }
+.application-update-release-notes > summary { @apply cursor-pointer px-3 py-2.5 text-[12px] font-semibold; }
+.application-update-release-notes[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
+.application-update-release-notes-body { @apply grid gap-3 px-3 py-3; }
+.application-update-release-note { @apply grid gap-1; }
+.application-update-release-note strong { @apply text-[11px] font-bold; color: var(--ui-text-tertiary); }
+.application-update-release-note p, .application-update-release-headline { @apply m-0 whitespace-pre-wrap text-[12px] leading-5; color: var(--ui-text-secondary); }
+.application-update-release-notes ul { @apply ml-5 grid gap-1.5 pl-0 text-[12px] leading-5; color: var(--ui-text-secondary); }
 .application-update-progress { @apply grid gap-1.5; }
 .application-update-progress progress { @apply h-2.5 w-full max-w-2xl; accent-color: var(--ui-action-primary); }
 .application-update-progress span { @apply text-[11px]; color: var(--ui-text-secondary); }
