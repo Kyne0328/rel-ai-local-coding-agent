@@ -83,6 +83,19 @@ assert.equal(reasoningDisplayName('extra_high'), 'Extra High');
 {
   const page = new FakePage();
   page.showLocator('#prompt-textarea');
+  page.showRole('button', /log in|sign in|sign up/i);
+  assert.equal(await adapter.isAuthenticated(page), false, 'a guest composer must not be treated as an authenticated account session');
+}
+
+{
+  const page = new FakePage();
+  page.showRole('textbox');
+  assert.equal(await adapter.isAuthenticated(page), false, 'an unrelated or login textbox must not count as the ChatGPT composer');
+}
+
+{
+  const page = new FakePage();
+  page.showLocator('#prompt-textarea');
   const temporary = page.showRole('switch', /temporary chat/i, { 'aria-checked': 'false' });
   page.on(temporary, () => page.attributes.set(`${temporary}:aria-checked`, 'true'));
   const picker = page.showRole('button', /model|reasoning|thinking/i, {}, 'Instant');
@@ -125,6 +138,20 @@ assert.equal(reasoningDisplayName('extra_high'), 'Extra High');
 {
   const page = new FakePage();
   page.showLocator('#prompt-textarea');
+  page.showRole('switch', /temporary chat/i, { 'aria-checked': 'true' });
+  const picker = page.showRole('button', /model|reasoning|thinking/i, {}, 'Medium');
+  const high = page.key('role', 'menuitem', '^High$');
+  page.visible.add(high);
+  page.on(high, () => page.labels.set(picker, 'Unverified selection'));
+  await assert.rejects(
+    () => adapter.selectReasoning(page, 'high'),
+    error => error?.code === 'CHATGPT_REASONING_SELECTION_FAILED'
+  );
+}
+
+{
+  const page = new FakePage();
+  page.showLocator('#prompt-textarea');
   await assert.rejects(
     () => adapter.enableTemporaryChat(page),
     error => error?.code === 'CHATGPT_TEMPORARY_MODE_REQUIRED'
@@ -142,4 +169,4 @@ assert.equal(reasoningDisplayName('extra_high'), 'Extra High');
   assert.equal(typeof adapter.readResponse, 'undefined');
 }
 
-console.log('ChatGPT page adapter auth, Temporary Chat, reasoning discovery/selection, prompt submission, and fail-closed tests passed.');
+console.log('ChatGPT page adapter guest-auth rejection, Temporary Chat, verified reasoning selection, prompt submission, and fail-closed tests passed.');

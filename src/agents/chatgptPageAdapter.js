@@ -12,15 +12,12 @@ const REASONING_LABELS = Object.freeze({
 
 class ChatGptPageAdapter {
   async isAuthenticated(page) {
+    const login = await findLoginControl(page);
+    if (login) return false;
     const composer = await findComposer(page);
     if (composer) return true;
-    const login = await firstVisible([
-      role(page, 'button', /log in|sign in/i),
-      role(page, 'link', /log in|sign in/i),
-      text(page, LOGIN_TEXT)
-    ]);
-    if (login) return false;
-    return waitForComposer(page, 5_000);
+    if (!await waitForComposer(page, 5_000)) return false;
+    return !(await findLoginControl(page));
   }
 
   async prepareSession(page, options = {}) {
@@ -119,8 +116,8 @@ class ChatGptPageAdapter {
     await shortWait(page);
     const refreshedPicker = await findPicker(page);
     const actual = refreshedPicker ? reasoningFromText(await locatorLabel(refreshedPicker)) : '';
-    if (actual && actual !== reasoning) {
-      throw adapterError('CHATGPT_REASONING_SELECTION_FAILED', `ChatGPT did not switch to ${reasoningDisplayName(reasoning)}.`);
+    if (actual !== reasoning) {
+      throw adapterError('CHATGPT_REASONING_SELECTION_FAILED', `Could not verify that ChatGPT switched to ${reasoningDisplayName(reasoning)}.`);
     }
     return reasoning;
   }
@@ -145,8 +142,15 @@ async function findComposer(page) {
   return firstVisible([
     locator(page, '#prompt-textarea'),
     locator(page, 'textarea[placeholder*="Message" i]'),
-    role(page, 'textbox', /message|prompt|ask/i),
-    role(page, 'textbox')
+    role(page, 'textbox', /message|prompt|ask/i)
+  ]);
+}
+
+async function findLoginControl(page) {
+  return firstVisible([
+    role(page, 'button', /log in|sign in|sign up/i),
+    role(page, 'link', /log in|sign in|sign up/i),
+    text(page, LOGIN_TEXT)
   ]);
 }
 
