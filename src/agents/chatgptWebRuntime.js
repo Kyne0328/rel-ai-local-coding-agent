@@ -52,7 +52,8 @@ class ChatGptWebRuntime extends AgentRuntime {
     return {
       runtime: this.name,
       status: this.authContext ? 'authentication_open' : saved?.authenticatedAt ? 'authentication_saved' : 'not_authenticated',
-      authenticatedAt: saved?.authenticatedAt || null
+      authenticatedAt: saved?.authenticatedAt || null,
+      reasoning: this.authContext || !Array.isArray(saved?.reasoning) ? [] : normalizeReasoning(saved.reasoning)
     };
   }
 

@@ -104,6 +104,17 @@
 .desktop-lifecycle-facts span { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
 .desktop-lifecycle-facts strong { @apply break-words text-[12px]; }
 .desktop-lifecycle-notice p { @apply mt-1; }
+.subagent-auth-panel .settings-panel-body { @apply gap-4; }
+.subagent-auth-summary { @apply flex items-start justify-between gap-4; }
+.subagent-auth-copy { @apply grid min-w-0 gap-1; }
+.subagent-auth-copy strong { @apply text-lg; }
+.subagent-auth-copy p { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
+.subagent-reasoning { @apply grid gap-2; }
+.subagent-reasoning > strong { @apply text-[12px]; }
+.subagent-reasoning-list { @apply flex flex-wrap items-center gap-2; }
+.subagent-reasoning-chip { @apply rounded-full px-2.5 py-1 text-[11px] font-semibold; background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 30%, transparent); }
+.subagent-auth-actions { @apply items-center; }
+.subagent-auth-action-hint { @apply text-[12px] leading-5; }
 
 .approval-token-settings { @apply gap-4; }
 .approval-token-intro { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
@@ -129,7 +140,7 @@
 @media (max-width: 520px) {
   .appearance-preview, .settings-fact-grid, .desktop-lifecycle-facts { grid-template-columns: 1fr; }
   .settings-fact-grid > div, .desktop-lifecycle-facts > div { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
-  .settings-validation-row, .application-update-summary { @apply flex-col items-start; }
+  .settings-validation-row, .application-update-summary, .subagent-auth-summary { @apply flex-col items-start; }
   .about-detail-value { @apply w-full text-left; }
   .settings-save-row { @apply flex-col items-stretch; }
   .settings-save-actions { @apply justify-end; }

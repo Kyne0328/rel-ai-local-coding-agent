@@ -8,6 +8,7 @@ class AgentService {
     if (!config || typeof config !== 'object') throw new Error('Agent service config is required.');
     if (!runtime) throw new Error('Agent service runtime is required.');
     this.config = config;
+    this.runtime = runtime;
     this.orchestrator = new AgentOrchestrator({ config, runtime, connectorName });
   }
   async create(args = {}, context = {}) {
@@ -32,6 +33,20 @@ class AgentService {
   }
   cancel(args = {}, context = {}) {
     return this.orchestrator.cancel(args.agent_id, context, args.reason);
+  }
+  async authenticationStatus() {
+    const auth = typeof this.runtime.authenticationStatus === 'function'
+      ? this.runtime.authenticationStatus()
+      : { runtime: String(this.runtime.name || 'agent-runtime'), status: 'unsupported', authenticatedAt: null };
+    return { ...auth, reasoning: Array.isArray(auth?.reasoning) ? [...auth.reasoning] : [] };
+  }
+  async beginAuthentication() {
+    if (typeof this.runtime.beginAuthentication !== 'function') throw unsupportedAuthentication();
+    return this.runtime.beginAuthentication();
+  }
+  async finishAuthentication() {
+    if (typeof this.runtime.finishAuthentication !== 'function') throw unsupportedAuthentication();
+    return this.runtime.finishAuthentication();
   }
   dispose() {
     return this.orchestrator.dispose();
@@ -67,5 +82,10 @@ async function disposeAgentServices(config) {
 }
 function serviceKey(config) {
   return path.resolve(getStateDir(config));
+}
+function unsupportedAuthentication() {
+  const error = new Error('This agent runtime does not support interactive authentication.');
+  error.code = 'AGENT_AUTH_UNSUPPORTED';
+  return error;
 }
 export { AgentService, disposeAgentServices, getAgentService };

@@ -24,7 +24,7 @@ assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'works
 assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'activity')?.label, 'Tool Activity');
 assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.href, '#connection');
 assert.equal(normalizeRouteKey('system'), 'connection');
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.id), ['preferences', 'application', 'advanced', 'about']);
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.id), ['preferences', 'application', 'subagents', 'advanced', 'about']);
 assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS/);
 assert.match(shellChrome, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
 assert.doesNotMatch(shell, /const PRIMARY_NAV_ITEMS|const SECONDARY_NAV_ITEMS/);
@@ -34,6 +34,7 @@ assert.match(dashboard, /features\/system\/index\.js/);
 assert.match(dashboard, /mountSettings\(element, settingsSubPage\(\)\)/);
 assert.doesNotMatch(dashboard, /settings\/connection|settings\/diagnostics/);
 assert.match(settings, /mountApplication/);
+assert.match(settings, /mountSubagents/);
 assert.match(settingsShared, /<h2>\$\{esc\(title\)\}<\/h2>/, 'Settings pages must continue the shell H1 with an H2');
 assert.match(settingsAbout, /document\.createElement\('h4'\)/, 'About product identity must remain below the panel H3');
 assert.match(home, /class="buttonlike secondary compact-button" href="\$\{routeMetadata\('workspaces'\)\.href\}">Add your first repository<\/a>/, 'Inline empty-state navigation must have a non-color link affordance');

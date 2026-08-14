@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getTaskHistoryDir, writeSession } from '../src/taskHistoryStorage.js';
+import { SETTINGS_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-filter-browser-'));
@@ -94,7 +95,7 @@ try {
   assert.equal(result.tools.capabilityRemoved, true);
   assert.equal(result.tools.searchCleared, true);
   assert.equal(result.tools.emptyState, true);
-  assert.deepEqual(result.settings.order, ['Preferences', 'Application', 'Advanced', 'About']);
+  assert.deepEqual(result.settings.order, SETTINGS_NAV_ITEMS.map(item => item.label));
   assert.deepEqual(result.settings.themes.map(item => item.preference), ['dark', 'light', 'system']);
   assert.equal(result.settings.compact, 'compact');
   assert.equal(result.settings.comfortable, 'comfortable');

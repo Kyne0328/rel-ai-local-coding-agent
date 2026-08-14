@@ -9,6 +9,7 @@ assert.equal(canonicalPathFor('settings/desktop'), 'settings/application');
 assert.equal(canonicalPathFor('missing'), 'home');
 assert.equal(canonicalPathFor('tools'), 'tools');
 assert.equal(canonicalPathFor('settings/advanced'), 'settings/advanced');
+assert.equal(canonicalPathFor('settings/subagents'), 'settings/subagents');
 assert.equal(canonicalPathFor('settings/about'), 'settings/about');
 assert.equal(canonicalPathFor('processes'), 'processes');
 assert.equal(canonicalPathFor('usage'), 'usage');

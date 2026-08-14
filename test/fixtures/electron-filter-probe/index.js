@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { app, BrowserWindow } from 'electron';
+import { SETTINGS_NAV_ITEMS } from '../../../src/ui/navigation-catalog.js';
 
 const targetUrl = process.env.RELAI_PROBE_TARGET_URL;
 const outputPath = process.env.RELAI_PROBE_OUTPUT_PATH;
@@ -185,7 +186,7 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#settings'`);
-    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 4 && document.querySelector('.appearance-preview')`);
+    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === ${SETTINGS_NAV_ITEMS.length} && document.querySelector('.appearance-preview')`);
     const settings = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const order = [...document.querySelectorAll('.settings-nav-button')].map(button => button.textContent.trim());

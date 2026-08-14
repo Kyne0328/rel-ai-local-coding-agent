@@ -95,6 +95,7 @@ try {
   assert.equal(events.some(event => event[0] === 'listReasoningLevels'), true);
   assert.equal(launches[0].context.closed, true);
   assert.equal(runtime.authenticationStatus().status, 'authentication_saved');
+  assert.deepEqual(runtime.authenticationStatus().reasoning, ['instant', 'medium', 'high']);
 
   const metadata = JSON.parse(fs.readFileSync(path.join(root, 'agents', 'chatgpt-web.json'), 'utf8'));
   assert.deepEqual(Object.keys(metadata).sort(), ['authenticatedAt', 'reasoning', 'schemaVersion']);
