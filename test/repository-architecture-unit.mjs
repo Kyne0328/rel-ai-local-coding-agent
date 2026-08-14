@@ -6,7 +6,7 @@ import path from 'node:path';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { TOOL_SURFACE_VERSION, getCatalogAction, getCatalogToolDefinition } from '../src/tools/actionCatalog.js';
 
-assert.equal(TOOL_SURFACE_VERSION, 36);
+assert.equal(TOOL_SURFACE_VERSION, 40);
 const inspectDefinition = getCatalogToolDefinition('relai_inspect');
 assert.ok(inspectDefinition.inputSchema.properties.action.enum.includes('architecture'));
 const architectureAction = getCatalogAction('relai_inspect', { action: 'architecture' });

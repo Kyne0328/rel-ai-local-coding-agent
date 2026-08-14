@@ -44,6 +44,16 @@ const FIELD_SCHEMAS = Object.freeze({
   writeGuidance: OBJECT,
   operationJournal: { type: ['object', 'array'], additionalProperties: true, items: OBJECT },
   work_id: STRING,
+  parent_work_id: STRING,
+  child_work_id: STRING_NULL,
+  agent_id: STRING,
+  connectorName: STRING,
+  role: STRING,
+  reasoning: STRING,
+  updatedAt: STRING,
+  attachedAt: STRING_NULL,
+  completedAt: STRING_NULL,
+  agentResult: { type: ['object', 'null'], additionalProperties: true },
   taskId: STRING,
   status: STRING,
   staged: BOOLEAN,
@@ -331,7 +341,18 @@ const FIELD_SCHEMAS = Object.freeze({
   workflow: OBJECT
 });
 
+const AGENT_TOOL_FIELDS = Object.freeze([
+  'ok', 'agent_id', 'parent_work_id', 'child_work_id', 'workspace', 'role', 'reasoning', 'connectorName',
+  'objective', 'status', 'createdAt', 'updatedAt', 'attachedAt', 'completedAt', 'agentResult', 'error'
+]);
+
 const TOOL_FIELDS = Object.freeze({
+  relai_agent_create: AGENT_TOOL_FIELDS,
+  relai_agent_attach: AGENT_TOOL_FIELDS,
+  relai_agent_status: AGENT_TOOL_FIELDS,
+  relai_agent_complete: AGENT_TOOL_FIELDS,
+  relai_agent_fail: AGENT_TOOL_FIELDS,
+  relai_agent_cancel: AGENT_TOOL_FIELDS,
   relai_begin_work: ['ok', 'workspace', 'work_id', 'status', 'identity', 'title', 'objective', 'workspaceBinding', 'bootstrap', 'nextAction'],
   relai_repo_snapshot: ['ok', 'workspace', 'work_id', 'root', 'toolMode', 'trustedLocalAgent', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles', 'next'],
   relai_read: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'truncated'],
@@ -366,6 +387,12 @@ const TOOL_FIELDS = Object.freeze({
 });
 
 const SUCCESS_REQUIRED_FIELDS = Object.freeze({
+  relai_agent_create: ['agent_id', 'status'],
+  relai_agent_attach: ['agent_id', 'status'],
+  relai_agent_status: ['agent_id', 'status'],
+  relai_agent_complete: ['agent_id', 'status'],
+  relai_agent_fail: ['agent_id', 'status'],
+  relai_agent_cancel: ['agent_id', 'status'],
   relai_exec: ['workspace', 'work_id', 'exitCode', 'durationMs'],
   relai_diagnostics_run: ['workspace', 'work_id', 'diagnostics', 'diagnosticCount'],
   relai_run_checks: ['workspace', 'work_id', 'results', 'validationStatus'],

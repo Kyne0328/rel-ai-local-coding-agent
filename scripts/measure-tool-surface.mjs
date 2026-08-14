@@ -56,7 +56,7 @@ const report = {
   }
 };
 
-if (surface.publicTools !== 13) throw new Error(`Unified surface exposes ${surface.publicTools} tools; expected exactly 13.`);
+if (surface.publicTools !== 14) throw new Error(`Unified surface exposes ${surface.publicTools} tools; expected exactly 14.`);
 if (surface.discoverySchemaBytes >= 29_000) throw new Error(`Unified discovery is ${surface.discoverySchemaBytes} bytes; limit is 28999.`);
 if (surface.globalInstructionBytes >= 512) throw new Error('Global connector instructions exceed 511 bytes.');
 if (report.change.discoveryReductionPercent < 5) throw new Error(`Discovery reduction is ${report.change.discoveryReductionPercent}%; expected a reduction from the expanded direct-surface baseline.`);

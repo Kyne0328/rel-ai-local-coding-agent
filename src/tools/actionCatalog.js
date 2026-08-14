@@ -8,13 +8,21 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 39;
+const TOOL_SURFACE_VERSION = 40;
 const ACTION_OPERATIONS = Object.freeze({
   relai_work: Object.freeze({
     begin: operation('relai_begin_work'),
     status: operation('relai_status'),
     finish: operation('relai_finish_work'),
     cancel: operation('relai_cancel_work')
+  }),
+  relai_agent: Object.freeze({
+    create: operation('relai_agent_create'),
+    attach: operation('relai_agent_attach'),
+    status: operation('relai_agent_status'),
+    complete: operation('relai_agent_complete'),
+    fail: operation('relai_agent_fail'),
+    cancel: operation('relai_agent_cancel')
   }),
   relai_snapshot: Object.freeze({ default: operation('relai_repo_snapshot') }),
   relai_read: Object.freeze({ default: operation('relai_read') }),
@@ -93,6 +101,12 @@ const OPERATION_CAPABILITIES = Object.freeze({
   relai_git_draft_pr: 'repository:read',
   relai_cancel_work: 'repository:read',
   relai_finish_work: 'repository:read',
+  relai_agent_create: 'repository:read',
+  relai_agent_attach: 'repository:read',
+  relai_agent_status: 'repository:read',
+  relai_agent_complete: 'repository:read',
+  relai_agent_fail: 'repository:read',
+  relai_agent_cancel: 'repository:read',
   relai_edit: 'repository:write',
   relai_restore_paths: 'repository:write',
   relai_reset_workspace: 'repository:write',

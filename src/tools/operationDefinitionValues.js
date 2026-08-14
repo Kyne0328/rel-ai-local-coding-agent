@@ -8,6 +8,60 @@ import { MAX_BATCH_EDITS } from '../editLimits.js';
 /** @type {ToolDefinitionInput[]} */
 const OPERATION_DEFINITION_VALUES = [
   {
+    name: "relai_agent_create",
+    title: "Create Delegated Agent",
+    description: "Create a principal-bound delegated agent record under a parent work session.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"role":{"type":"string","enum":["investigator","reviewer","planner","verifier","implementer"]},"reasoning":{"type":"string","enum":["instant","medium","high","extra_high","pro"]},"objective":{"type":"string","minLength":1,"maxLength":20000},"connectorName":{"type":"string","minLength":1,"maxLength":200}},"required":["workspace","objective"],"additionalProperties":false},
+    handlerName: 'agentCreate',
+    behavior: {"taskScope":"required"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
+    name: "relai_agent_attach",
+    title: "Attach Delegated Agent",
+    description: "Attach the current authenticated principal to a pending delegated agent.",
+    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"}},"required":["agent_id"],"additionalProperties":false},
+    handlerName: 'agentAttach',
+    behavior: {"taskScope":"required"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
+    name: "relai_agent_status",
+    title: "Delegated Agent Status",
+    description: "Read the current state and structured result of a delegated agent owned by the current principal.",
+    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"}},"required":["agent_id"],"additionalProperties":false},
+    handlerName: 'agentStatus',
+    behavior: {"taskScope":"none"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
+    name: "relai_agent_complete",
+    title: "Complete Delegated Agent",
+    description: "Submit the structured final result for a delegated agent through MCP.",
+    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"},"child_work_id":{"type":"string","minLength":1,"maxLength":200},"result":{"type":"object","additionalProperties":true}},"required":["agent_id","child_work_id","result"],"additionalProperties":false},
+    handlerName: 'agentComplete',
+    behavior: {"taskScope":"none"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
+    name: "relai_agent_fail",
+    title: "Fail Delegated Agent",
+    description: "Record a delegated agent failure through MCP.",
+    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"},"child_work_id":{"type":"string","minLength":1,"maxLength":200},"error":{"type":"string","minLength":1,"maxLength":12000}},"required":["agent_id","child_work_id","error"],"additionalProperties":false},
+    handlerName: 'agentFail',
+    behavior: {"taskScope":"none"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
+    name: "relai_agent_cancel",
+    title: "Cancel Delegated Agent",
+    description: "Cancel an active delegated agent owned by the current principal.",
+    inputSchema: {"type":"object","properties":{"agent_id":{"type":"string","pattern":"^agent_[A-Za-z0-9_-]{32,160}$"},"reason":{"type":"string","maxLength":2000}},"required":["agent_id"],"additionalProperties":false},
+    handlerName: 'agentCancel',
+    behavior: {"taskScope":"none"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
     name: "relai_begin_work",
     title: "Start Logical Task",
     description: "Create an independent workspace-bound Rel.AI task and return its opaque work_id plus compact repository bootstrap context. Call this once for each unrelated ChatGPT task. Subsequent task-scoped tools require work_id and resolve the bound workspace automatically; workspace may be supplied only as an ownership assertion.",

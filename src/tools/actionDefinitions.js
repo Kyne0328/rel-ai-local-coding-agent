@@ -13,7 +13,8 @@ import { OPERATION_DEFINITION_VALUES } from './operationDefinitionValues.js';
 const READ_ONLY_TOOLS = new Set([
   'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
   'relai_process_read', 'relai_process_list', 'relai_worktree_list',
-  'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
+  'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr',
+  'relai_agent_status'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
@@ -24,7 +25,7 @@ const DESTRUCTIVE_TOOLS = new Set([
 const IDEMPOTENT_TOOLS = new Set([
   ...READ_ONLY_TOOLS,
   'relai_process_stop', 'relai_restore_paths', 'relai_reset_workspace',
-  'relai_cancel_work', 'relai_finish_work'
+  'relai_cancel_work', 'relai_finish_work', 'relai_agent_attach', 'relai_agent_status', 'relai_agent_complete', 'relai_agent_fail', 'relai_agent_cancel'
 ]);
 const OPEN_WORLD_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write',
@@ -38,7 +39,8 @@ const PERSISTENT_PROCESS_TOOLS = new Set([
 ]);
 const ALWAYS_IMMEDIATE_TOOLS = new Set([
   'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search',
-  'relai_status', 'relai_cancel_work', 'relai_finish_work'
+  'relai_status', 'relai_cancel_work', 'relai_finish_work',
+  'relai_agent_create', 'relai_agent_attach', 'relai_agent_status', 'relai_agent_complete', 'relai_agent_fail', 'relai_agent_cancel'
 ]);
 
 function annotationsFor(name) {
@@ -112,6 +114,40 @@ const RESULT_SCHEMA = Object.freeze({
 
 
 const PUBLIC_DEFINITION_VALUES = [
+  define({
+    name: 'relai_agent',
+    title: 'Manage Delegated Agent',
+    description: 'Create and manage a delegated Rel.AI subagent. Child chats attach and return structured results through this MCP tool instead of requiring response scraping.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: ACTION(['create', 'attach', 'status', 'complete', 'fail', 'cancel']),
+        workspace: WORKSPACE,
+        agent_id: { type: 'string', pattern: '^agent_[A-Za-z0-9_-]{32,160}$' },
+        child_work_id: { type: 'string', minLength: 1, maxLength: 200 },
+        role: { type: 'string', enum: ['investigator', 'reviewer', 'planner', 'verifier', 'implementer'] },
+        reasoning: { type: 'string', enum: ['instant', 'medium', 'high', 'extra_high', 'pro'] },
+        objective: { type: 'string', minLength: 1, maxLength: 20000 },
+        connectorName: { type: 'string', minLength: 1, maxLength: 200 },
+        result: { type: 'object', additionalProperties: true },
+        error: { type: 'string', minLength: 1, maxLength: 12000 },
+        reason: { type: 'string', maxLength: 2000 }
+      },
+      required: ['action'],
+      oneOf: [
+        branch('create', ['workspace', 'objective', 'work_id'], ['agent_id', 'child_work_id', 'result', 'error', 'reason']),
+        branch('attach', ['agent_id', 'work_id'], ['workspace', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'reason']),
+        branch('status', ['agent_id'], ['workspace', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'reason', 'work_id']),
+        branch('complete', ['agent_id', 'child_work_id', 'result'], ['workspace', 'role', 'reasoning', 'objective', 'connectorName', 'error', 'reason', 'work_id']),
+        branch('fail', ['agent_id', 'child_work_id', 'error'], ['workspace', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'reason', 'work_id']),
+        branch('cancel', ['agent_id'], ['workspace', 'child_work_id', 'role', 'reasoning', 'objective', 'connectorName', 'result', 'error', 'work_id'])
+      ],
+      additionalProperties: false
+    },
+    annotations: annotations(false, false, false, false),
+    behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
+    dashboard: { category: 'Workflow', capabilities: ['workflow'] }
+  }),
   define({
     name: 'relai_work',
     title: 'Manage Repository Work',

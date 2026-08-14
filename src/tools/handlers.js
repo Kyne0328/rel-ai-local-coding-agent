@@ -20,6 +20,7 @@ import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
+import { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, getAgentStatus } from '../agents/manager.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
@@ -81,7 +82,13 @@ const HANDLERS = Object.freeze({
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
   cancelTask,
-  completeTask
+  completeTask,
+  agentCreate: createAgent,
+  agentAttach: attachAgent,
+  agentStatus: getAgentStatus,
+  agentComplete: completeAgent,
+  agentFail: failAgent,
+  agentCancel: cancelAgent
 });
 
 function withWorkflowTaskContext(config, workspace, args, context = {}) {

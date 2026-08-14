@@ -9,8 +9,8 @@ import * as nativeToolTasks from '../src/mcp/nativeToolTasks.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
-assert.equal(getCatalogTools().length, 12);
-assert.equal(getToolActionCatalog().length, 35);
+assert.equal(getCatalogTools().length, 15);
+assert.equal(getToolActionCatalog().length, 52);
 assert.equal(Number.isInteger(TOOL_SURFACE_VERSION), true);
 
 const sourceFiles = collectJavaScript(path.join(root, 'src'));
@@ -22,7 +22,9 @@ assert.equal(fs.existsSync(actionDefinitionsPath), true, 'immutable tool definit
 const actionCatalogSource = read('src/tools/actionCatalog.js');
 const actionDefinitionsSource = read('src/tools/actionDefinitions.js');
 assert.equal(actionCatalogSource.split(/\r?\n/).length <= 400, true, 'action catalog resolution must remain bounded');
-assert.match(actionDefinitionsSource, /const OPERATION_DEFINITION_VALUES\s*=/);
+const operationDefinitionValuesSource = read('src/tools/operationDefinitionValues.js');
+assert.match(actionDefinitionsSource, /from '.\/operationDefinitionValues\.js'/);
+assert.match(operationDefinitionValuesSource, /const OPERATION_DEFINITION_VALUES\s*=/);
 assert.match(actionDefinitionsSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
 assert.doesNotMatch(actionCatalogSource, /const OPERATION_DEFINITION_VALUES\s*=/);
 assert.doesNotMatch(actionCatalogSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
