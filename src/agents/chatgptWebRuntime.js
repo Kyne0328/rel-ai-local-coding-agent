@@ -6,6 +6,7 @@ import { chromium } from 'playwright-core';
 import { resolveChromiumRuntime } from '../chromiumRuntime.js';
 import { readJsonFile, writeJsonAtomic } from '../durableState.js';
 import { getStateDir } from '../statePaths.js';
+import { ChatGptPageAdapter } from './chatgptPageAdapter.js';
 import { normalizeAgentTaskInput, normalizeReasoningLevel, resolveReasoningLevel } from './contracts.js';
 import { AgentRuntime } from './runtime.js';
 
@@ -17,15 +18,16 @@ class ChatGptWebRuntime extends AgentRuntime {
   constructor(options = {}) {
     super('chatgpt-web');
     if (!options.config || typeof options.config !== 'object') throw new Error('ChatGPT web runtime config is required.');
-    assertPageAdapter(options.pageAdapter);
     this.config = options.config;
-    this.pageAdapter = options.pageAdapter;
+    this.pageAdapter = options.pageAdapter || new ChatGptPageAdapter();
+    assertPageAdapter(this.pageAdapter);
     this.browserFactory = options.browserFactory || defaultBrowserFactory();
     this.runtimeResolver = options.runtimeResolver || defaultRuntimeResolver;
     this.chatgptUrl = normalizeChatGptUrl(options.chatgptUrl || DEFAULT_CHATGPT_URL);
-    this.availableReasoning = normalizeReasoning(options.availableReasoning || DEFAULT_REASONING);
     this.profilePath = path.resolve(options.profilePath || path.join(getStateDir(this.config), 'agents', 'chatgpt-web-profile'));
     this.metadataPath = path.join(getStateDir(this.config), 'agents', 'chatgpt-web.json');
+    const saved = readRuntimeMetadata(this.metadataPath);
+    this.availableReasoning = normalizeReasoning(options.availableReasoning || saved?.reasoning || DEFAULT_REASONING);
     this.authContext = null;
     this.authPage = null;
     this.executionContext = null;
@@ -46,7 +48,7 @@ class ChatGptWebRuntime extends AgentRuntime {
   }
 
   authenticationStatus() {
-    const saved = readJsonFile(this.metadataPath, { fallback: null });
+    const saved = readRuntimeMetadata(this.metadataPath);
     return {
       runtime: this.name,
       status: this.authContext ? 'authentication_open' : saved?.authenticatedAt ? 'authentication_saved' : 'not_authenticated',
@@ -85,10 +87,13 @@ class ChatGptWebRuntime extends AgentRuntime {
     }
     const authenticated = await this.pageAdapter.isAuthenticated(this.authPage);
     if (!authenticated) throw runtimeError('CHATGPT_LOGIN_REQUIRED', 'ChatGPT login is not complete yet.');
+    const discovered = await discoverReasoning(this.pageAdapter, this.authPage);
+    if (discovered.length) this.availableReasoning = normalizeReasoning(discovered);
     const authenticatedAt = new Date().toISOString();
+    const reasoning = [...this.availableReasoning];
     await this.closeAuthenticationContext();
-    writeJsonAtomic(this.metadataPath, { schemaVersion: 1, authenticatedAt }, { mode: 0o600 });
-    return { runtime: this.name, status: 'authenticated', authenticatedAt };
+    writeJsonAtomic(this.metadataPath, { schemaVersion: 1, authenticatedAt, reasoning }, { mode: 0o600 });
+    return { runtime: this.name, status: 'authenticated', authenticatedAt, reasoning };
   }
 
   async spawn(input, context = {}) {
@@ -218,6 +223,20 @@ function normalizeReasoning(values) {
   const levels = [...new Set((values || []).map(normalizeReasoningLevel))];
   if (!levels.length) throw new Error('ChatGPT web runtime requires at least one reasoning level.');
   return levels;
+}
+
+function readRuntimeMetadata(file) {
+  try { return readJsonFile(file, { fallback: null }); } catch { return null; }
+}
+
+async function discoverReasoning(adapter, page) {
+  if (typeof adapter?.listReasoningLevels !== 'function') return [];
+  try {
+    const levels = await adapter.listReasoningLevels(page);
+    return Array.isArray(levels) ? levels : [];
+  } catch {
+    return [];
+  }
 }
 
 function normalizeChatGptUrl(value) {

@@ -41,6 +41,10 @@ const adapter = {
     events.push(['isAuthenticated']);
     return authenticated;
   },
+  async listReasoningLevels() {
+    events.push(['listReasoningLevels']);
+    return ['instant', 'medium', 'high'];
+  },
   async prepareSession(_page, options) {
     events.push(['prepareSession', options]);
   },
@@ -87,11 +91,14 @@ try {
   authenticated = true;
   const finished = await runtime.finishAuthentication();
   assert.equal(finished.status, 'authenticated');
+  assert.deepEqual(finished.reasoning, ['instant', 'medium', 'high']);
+  assert.equal(events.some(event => event[0] === 'listReasoningLevels'), true);
   assert.equal(launches[0].context.closed, true);
   assert.equal(runtime.authenticationStatus().status, 'authentication_saved');
 
   const metadata = JSON.parse(fs.readFileSync(path.join(root, 'agents', 'chatgpt-web.json'), 'utf8'));
-  assert.deepEqual(Object.keys(metadata).sort(), ['authenticatedAt', 'schemaVersion']);
+  assert.deepEqual(Object.keys(metadata).sort(), ['authenticatedAt', 'reasoning', 'schemaVersion']);
+  assert.deepEqual(metadata.reasoning, ['instant', 'medium', 'high']);
   assert.equal(JSON.stringify(metadata).includes('cookie'), false);
   assert.equal(JSON.stringify(metadata).includes(profilePath), false);
 
