@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, getAgentStatus } from '../src/agents/manager.js';
+import { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, failAgentLaunch, getAgentStatus } from '../src/agents/manager.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-agent-manager-'));
 const config = { stateDir: root };
@@ -63,6 +63,13 @@ try {
   const failing = createAgent(config, { work_id: 'work_parent', workspace: 'repo', objective: 'Fail.' }, parent);
   attachAgent(config, { agent_id: failing.agent_id, work_id: 'work_child_fail', workspace: 'repo' }, sameUser);
   assert.equal(failAgent(config, { agent_id: failing.agent_id, child_work_id: 'work_child_fail', error: 'runtime failed' }, sameUser).status, 'failed');
+
+  const launchFailing = createAgent(config, { work_id: 'work_parent', workspace: 'repo', objective: 'Fail before attach.' }, parent);
+  const launchFailure = failAgentLaunch(config, { agent_id: launchFailing.agent_id, error: 'safe launch failure' }, sameUser);
+  assert.equal(launchFailure.status, 'failed');
+  assert.equal(launchFailure.child_work_id, null);
+  assert.equal(launchFailure.error, 'safe launch failure');
+  assert.throws(() => failAgentLaunch(config, { agent_id: launchFailing.agent_id, error: 'ignored' }, otherUser), error => error?.code === 'AGENT_NOT_FOUND');
 
   const cancelling = createAgent(config, { work_id: 'work_parent', workspace: 'repo', objective: 'Cancel.' }, parent);
   assert.equal(cancelAgent(config, { agent_id: cancelling.agent_id, reason: 'parent cancelled' }, sameUser).status, 'cancelled');

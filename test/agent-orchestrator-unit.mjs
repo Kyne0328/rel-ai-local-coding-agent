@@ -65,22 +65,46 @@ try {
   assert.equal((await orchestrator.cancel(cancellable.agent.agent_id, principal)).status, 'cancelled');
   assert.equal(orchestrator.getLaunch(cancellable.agent.agent_id), null);
 
-  class FailingRuntime extends AgentRuntime {
-    constructor() { super('failing'); }
-    async getCapabilities() { return { runtime: 'failing', reasoning: ['medium'] }; }
-    async spawn() { throw new Error('browser unavailable'); }
+  class KnownFailingRuntime extends AgentRuntime {
+    constructor() { super('known-failing'); }
+    async getCapabilities() { return { runtime: this.name, reasoning: ['medium'] }; }
+    async spawn() { const error = new Error('spoofed secret path C:/Users/test/.chatgpt/session-token'); error.code = 'CHATGPT_LOGIN_REQUIRED'; throw error; }
     async cancel() { return { cancelled: false }; }
   }
-  const failing = new AgentOrchestrator({ config, runtime: new FailingRuntime() });
-  let failedAgentId = '';
-  await assert.rejects(
-    async () => failing.spawn({ work_id: 'work_parent_3', workspace: 'repo', objective: 'Fail launch.' }, principal),
-    error => {
-      failedAgentId = error?.agentId || '';
-      return error?.code === 'AGENT_RUNTIME_START_FAILED';
-    }
-  );
-  assert.equal(getAgentStatus(config, { agent_id: failedAgentId }, principal).status, 'cancelled');
+  const knownFailing = new AgentOrchestrator({ config, runtime: new KnownFailingRuntime() });
+  let knownFailedAgentId = '';
+  await assert.rejects(async () => knownFailing.spawn({ work_id: 'work_parent_3', workspace: 'repo', objective: 'Fail known launch.' }, principal), error => {
+    knownFailedAgentId = error?.agentId || '';
+    assert.equal(error?.code, 'CHATGPT_LOGIN_REQUIRED');
+    assert.equal(error?.message, 'ChatGPT session is not authenticated. Open Settings > ChatGPT Subagents and sign in.');
+    assert.equal(error?.operation, 'agent_launch');
+    assert.match(error?.allowedAlternatives?.[0] || '', /Settings > ChatGPT Subagents/);
+    assert.doesNotMatch(error?.message || '', /session-token|C:\/Users/);
+    return true;
+  });
+  const knownFailureRecord = getAgentStatus(config, { agent_id: knownFailedAgentId }, principal);
+  assert.equal(knownFailureRecord.status, 'failed');
+  assert.equal(knownFailureRecord.error, 'ChatGPT session is not authenticated. Open Settings > ChatGPT Subagents and sign in.');
+
+  class UnknownFailingRuntime extends AgentRuntime {
+    constructor() { super('unknown-failing'); }
+    async getCapabilities() { return { runtime: this.name, reasoning: ['medium'] }; }
+    async spawn() { throw new Error('Playwright failed at C:/Users/test/private-profile with token=abc123'); }
+    async cancel() { return { cancelled: false }; }
+  }
+  const unknownFailing = new AgentOrchestrator({ config, runtime: new UnknownFailingRuntime() });
+  let unknownFailedAgentId = '';
+  await assert.rejects(async () => unknownFailing.spawn({ work_id: 'work_parent_4', workspace: 'repo', objective: 'Fail unknown launch.' }, principal), error => {
+    unknownFailedAgentId = error?.agentId || '';
+    assert.equal(error?.code, 'AGENT_RUNTIME_START_FAILED');
+    assert.equal(error?.message, 'Agent runtime failed to start delegated agent.');
+    assert.doesNotMatch(error?.message || '', /private-profile|abc123/);
+    return true;
+  });
+  const unknownFailureRecord = getAgentStatus(config, { agent_id: unknownFailedAgentId }, principal);
+  assert.equal(unknownFailureRecord.status, 'failed');
+  assert.equal(unknownFailureRecord.error, 'Agent runtime failed to start delegated agent.');
+  assert.doesNotMatch(unknownFailureRecord.error, /private-profile|abc123/);
 
   const boundedPrompt = buildDelegatedAgentPrompt({
     agentId: `agent_${'x'.repeat(43)}`,
@@ -93,7 +117,8 @@ try {
   assert.match(boundedPrompt, /"truncated": true/);
 
   await orchestrator.dispose();
-  await failing.dispose();
+  await knownFailing.dispose();
+  await unknownFailing.dispose();
   console.log('Subagent prompt protocol, runtime negotiation, MCP-authoritative completion, cancellation, and launch-failure tests passed.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

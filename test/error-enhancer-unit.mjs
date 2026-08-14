@@ -55,4 +55,18 @@ for (const message of ['error: corrupt patch at line 24', 'Patch did not contain
   assert.deepEqual(payload.errorDetails.allowedAlternatives, ['Use .env.example.']);
 }
 
+{
+  const launch = new Error('ChatGPT session is not authenticated.', { cause: new Error('hidden token=super-secret C:/private/profile') });
+  launch.code = 'CHATGPT_LOGIN_REQUIRED';
+  launch.source = 'rel-ai-mcp';
+  launch.operation = 'agent_launch';
+  launch.agentId = `agent_${'x'.repeat(43)}`;
+  launch.allowedAlternatives = ['Open Settings > ChatGPT Subagents.'];
+  const payload = serializeToolError('relai_agent', launch);
+  assert.equal(payload.errorDetails.operation, 'agent_launch');
+  assert.equal(payload.errorDetails.agentId, launch.agentId);
+  assert.deepEqual(payload.errorDetails.allowedAlternatives, ['Open Settings > ChatGPT Subagents.']);
+  assert.doesNotMatch(JSON.stringify(payload), /super-secret|private\/profile/);
+}
+
 console.log('Error enhancer unit tests passed for active tools.');

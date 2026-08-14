@@ -1,4 +1,4 @@
-import { cancelAgent, createAgent, getAgentStatus } from './manager.js';
+import { cancelAgent, createAgent, failAgentLaunch, getAgentStatus } from './manager.js';
 import { capabilitiesForRole, normalizeAgentRole, resolveReasoningLevel } from './contracts.js';
 import { buildDelegatedAgentPrompt } from './prompt.js';
 
@@ -63,14 +63,9 @@ class AgentOrchestrator {
       this.launches.set(agent.agent_id, launchRecord);
       return { agent, launch: { ...launchRecord } };
     } catch (error) {
-      cancelAgent(this.config, {
-        agent_id: agent.agent_id,
-        reason: `Agent runtime failed to start: ${errorMessage(error)}`
-      }, requestContext);
-      const wrapped = new Error('Agent runtime failed to start delegated agent.', { cause: error });
-      wrapped.code = 'AGENT_RUNTIME_START_FAILED';
-      wrapped.agentId = agent.agent_id;
-      throw wrapped;
+      const publicError = publicLaunchError(error, agent.agent_id);
+      failAgentLaunch(this.config, { agent_id: agent.agent_id, error: publicError.message }, requestContext);
+      throw publicError;
     }
   }
 
@@ -108,8 +103,31 @@ function suppressDetachedPromise(value) {
   if (value && typeof value.catch === 'function') value.catch(() => {});
 }
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error || 'unknown runtime error');
+const SAFE_LAUNCH_ERRORS = Object.freeze({
+  CHATGPT_LOGIN_REQUIRED: Object.freeze({ message: 'ChatGPT session is not authenticated. Open Settings > ChatGPT Subagents and sign in.', alternatives: ['Open Settings > ChatGPT Subagents and sign in, then retry relai_agent create.'] }),
+  CHATGPT_AUTH_IN_PROGRESS: Object.freeze({ message: 'ChatGPT sign-in is still in progress.', alternatives: ['Finish or close the ChatGPT sign-in window, then retry relai_agent create.'] }),
+  CHATGPT_AGENTS_ACTIVE: Object.freeze({ message: 'Active ChatGPT subagents must finish or be cancelled before authentication can change.', alternatives: ['Finish or cancel active delegated agents before changing ChatGPT authentication.'] }),
+  CHATGPT_RUNTIME_UNAVAILABLE: Object.freeze({ message: 'No supported Chromium runtime is available for ChatGPT subagents.', alternatives: ['Install or configure a supported Chromium runtime, then retry relai_agent create.'] }),
+  CHATGPT_TEMPORARY_MODE_REQUIRED: Object.freeze({ message: 'Rel.AI could not verify Temporary Chat, so the delegated prompt was not sent.', alternatives: ['Re-authenticate in Settings > ChatGPT Subagents and retry. If ChatGPT changed its Temporary Chat UI, update Rel.AI before retrying.'] }),
+  CHATGPT_REASONING_PICKER_UNAVAILABLE: Object.freeze({ message: 'Rel.AI could not find the ChatGPT reasoning picker.', alternatives: ['Re-authenticate in Settings > ChatGPT Subagents and retry. If ChatGPT changed its reasoning picker, update Rel.AI before retrying.'] }),
+  CHATGPT_REASONING_UNAVAILABLE: Object.freeze({ message: 'The requested ChatGPT reasoning level is not available for this account.', alternatives: ['Request a reasoning level currently shown in Settings > ChatGPT Subagents.'] }),
+  CHATGPT_REASONING_SELECTION_FAILED: Object.freeze({ message: 'ChatGPT did not switch to the requested reasoning level.', alternatives: ['Request a reasoning level currently shown in Settings > ChatGPT Subagents, then retry.'] }),
+  CHATGPT_COMPOSER_UNAVAILABLE: Object.freeze({ message: 'Rel.AI could not find the authenticated ChatGPT message composer.', alternatives: ['Re-authenticate in Settings > ChatGPT Subagents and retry. If ChatGPT changed its composer UI, update Rel.AI before retrying.'] }),
+  CHATGPT_PROMPT_REQUIRED: Object.freeze({ message: 'The delegated ChatGPT prompt is empty.', alternatives: ['Retry relai_agent create with a non-empty delegated objective.'] })
+});
+
+function publicLaunchError(error, agentId) {
+  const code = String(error?.code || '');
+  const safe = SAFE_LAUNCH_ERRORS[code];
+  const wrapped = new Error(safe ? safe.message : 'Agent runtime failed to start delegated agent.', error instanceof Error ? { cause: error } : undefined);
+  wrapped.code = safe ? code : 'AGENT_RUNTIME_START_FAILED';
+  wrapped.source = 'rel-ai-mcp';
+  wrapped.operation = 'agent_launch';
+  wrapped.agentId = String(agentId || '');
+  wrapped.retryable = false;
+  wrapped.requiresUserConfirmation = false;
+  wrapped.allowedAlternatives = safe ? [...safe.alternatives] : ['Check Settings > ChatGPT Subagents for authentication/runtime status, then retry once the issue is resolved.'];
+  return wrapped;
 }
 
 export { AgentOrchestrator };

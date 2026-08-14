@@ -72,6 +72,19 @@ function completeAgent(config, args = {}, context = {}) {
   return publicRecord(record);
 }
 
+function failAgentLaunch(config, args = {}, context = {}) {
+  const record = requireOwnedAgent(config, args.agent_id, context);
+  if (record.status === 'failed') return publicRecord(record);
+  assertActive(record);
+  record.result = null;
+  record.error = boundedText(args.error || 'Agent runtime failed to start delegated agent.', 12_000);
+  record.status = 'failed';
+  record.completedAt = new Date().toISOString();
+  touch(record);
+  persist(config, record);
+  return publicRecord(record);
+}
+
 function failAgent(config, args = {}, context = {}) {
   const record = requireOwnedAgent(config, args.agent_id, context);
   if (record.status === 'failed') return publicRecord(record);
@@ -213,4 +226,4 @@ function agentError(code, message) {
   return error;
 }
 
-export { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, getAgentStatus, reconcileOrphanedAgents };
+export { attachAgent, cancelAgent, completeAgent, createAgent, failAgent, failAgentLaunch, getAgentStatus, reconcileOrphanedAgents };

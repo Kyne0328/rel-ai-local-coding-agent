@@ -63,6 +63,7 @@ function serializeToolError(toolName, error) {
       ...(error.path ? { path: String(error.path) } : {}),
       ...(error.fileClass ? { fileClass: String(error.fileClass) } : {}),
       ...(error.taskId ? { taskId: String(error.taskId) } : {}),
+      ...(error.agentId ? { agentId: String(error.agentId) } : {}),
       ...(Number.isFinite(error.candidateCount) ? { candidateCount: Number(error.candidateCount) } : {}),
       ...(error.workspaceInput != null ? { workspaceInput: String(error.workspaceInput) } : {}),
       ...(error.workspaceInputSource ? { workspaceInputSource: String(error.workspaceInputSource) } : {}),
