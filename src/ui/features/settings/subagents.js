@@ -7,7 +7,7 @@ const STATUS_URL = '/api/agents/chatgpt';
 const AUTH_OPEN_URL = '/api/agents/chatgpt/auth/open';
 const AUTH_FINISH_URL = '/api/agents/chatgpt/auth/finish';
 export function mountSubagents(container) {
-  container.innerHTML = '<div class="settings-loading">Loading ChatGPT subagent statusÎ“Ã‡Âª</div>';
+  container.innerHTML = '<div class="settings-loading">Loading ChatGPT subagent status…</div>';
   return loadAndRender(container);
 }
 async function loadAndRender(container) {
@@ -29,6 +29,7 @@ function authPanel(container, status = {}) {
     return auth;
   }
   const view = chatGptAuthView(status.status);
+  const browser = chatGptBrowserView(status.browser);
   const reasoning = normalizeReasoning(status.reasoning);
   auth.body.innerHTML = `
     <div class="subagent-auth-summary">
@@ -40,6 +41,7 @@ function authPanel(container, status = {}) {
       ${pillHtml(view.label, view.tone)}
     </div>
     <div class="settings-fact-grid subagent-auth-facts">
+      <div><span>Browser runtime</span><strong>${escapeHtml(browser.label)}</strong><small>${escapeHtml(browser.description)}</small></div>
       <div><span>Browser profile</span><strong>Isolated</strong><small>Cookies and credentials are not exposed through Rel.AI APIs.</small></div>
       <div><span>Last signed in</span><strong>${escapeHtml(formatAuthenticatedAt(status.authenticatedAt))}</strong><small>Recorded only after Rel.AI verifies the ChatGPT composer.</small></div>
       <div><span>Reasoning options</span><strong>${reasoning.length}</strong><small>Detected from the options visible to this ChatGPT account.</small></div>
@@ -52,6 +54,10 @@ function authPanel(container, status = {}) {
           : '<span class="muted">Sign in to detect the reasoning options available to this account.</span>'}
       </div>
     </div>
+    ${browser.available ? '' : `<div class="settings-panel-intro">
+      <strong>Local Chromium browser required</strong>
+      <span>Install Chrome, Edge, or Chromium. Rel.AI uses an existing local browser and does not bundle another browser.</span>
+    </div>`}
     <div class="settings-panel-intro">
       <strong>Temporary chats are mandatory</strong>
       <span>Rel.AI verifies Temporary Chat before sending a delegated prompt. If ChatGPT cannot confirm that mode or the requested reasoning option, the subagent is not started.</span>
@@ -63,6 +69,15 @@ function actionRow(container, status = {}) {
   const row = document.createElement('div');
   row.className = 'connection-actions subagent-auth-actions';
   const state = String(status.status || 'not_authenticated');
+  const browser = chatGptBrowserView(status.browser);
+  if (!browser.available) {
+    row.appendChild(actionButton('Check browser again', 'secondary', () => loadAndRender(container)));
+    const hint = document.createElement('span');
+    hint.className = 'muted subagent-auth-action-hint';
+    hint.textContent = 'Install Chrome, Edge, or Chromium first.';
+    row.appendChild(hint);
+    return row;
+  }
   if (state === 'authentication_open') {
     row.appendChild(actionButton('Check sign-in', 'primary', () => finishAuthentication(container)));
     const hint = document.createElement('span');
@@ -124,6 +139,22 @@ export function chatGptAuthView(status) {
       return { label: 'Not signed in', tone: 'warn', title: 'Sign in before using ChatGPT subagents', description: 'Open the isolated ChatGPT window and sign in with the account you want delegated agents to use.' };
   }
 }
+export function chatGptBrowserView(browser = {}) {
+  if (browser?.available === true) {
+    const product = String(browser.product || '').trim() || 'Chromium';
+    return {
+      available: true,
+      label: product,
+      description: `Rel.AI will use ${product} for isolated ChatGPT subagent sessions.`
+    };
+  }
+  return {
+    available: false,
+    label: 'Unavailable',
+    description: 'Install Chrome, Edge, or Chromium. Rel.AI uses an existing local browser and does not bundle another browser.'
+  };
+}
+
 export function formatReasoningLabel(value) {
   const labels = { instant: 'Instant', medium: 'Medium', high: 'High', extra_high: 'Extra High', pro: 'Pro' };
   return labels[String(value || '').trim().toLowerCase()] || String(value || '').trim();

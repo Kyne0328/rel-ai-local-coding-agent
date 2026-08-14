@@ -53,8 +53,26 @@ class ChatGptWebRuntime extends AgentRuntime {
       runtime: this.name,
       status: this.authContext ? 'authentication_open' : saved?.authenticatedAt ? 'authentication_saved' : 'not_authenticated',
       authenticatedAt: saved?.authenticatedAt || null,
-      reasoning: this.authContext || !Array.isArray(saved?.reasoning) ? [] : normalizeReasoning(saved.reasoning)
+      reasoning: this.authContext || !Array.isArray(saved?.reasoning) ? [] : normalizeReasoning(saved.reasoning),
+      browser: this.browserStatus()
     };
+  }
+
+  browserStatus() {
+    try {
+      const runtime = this.resolveRuntime();
+      return {
+        available: true,
+        product: String(runtime.product || 'Chromium'),
+        errorCode: null
+      };
+    } catch {
+      return {
+        available: false,
+        product: null,
+        errorCode: 'CHATGPT_RUNTIME_UNAVAILABLE'
+      };
+    }
   }
 
   async beginAuthentication() {

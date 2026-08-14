@@ -107,6 +107,9 @@ function verifyPackageContracts() {
   assert.equal(electronPackage.devDependencies.electron, '43.2.0');
   assert.equal(electronPackage.devDependencies['electron-builder'], '26.15.3');
   assert.equal(electronPackage.devDependencies['@electron/fuses'], '2.1.3');
+  assert.equal(typeof rootPackage.dependencies['playwright-core'], 'string', 'ChatGPT subagents and web automation require playwright-core at runtime');
+  const packagedNodeModules = electronPackage.build.extraResources.find(resource => resource.to === 'node_modules')?.filter || [];
+  assert.equal(packagedNodeModules.includes('playwright-core/**'), true, 'Electron releases must package playwright-core for ChatGPT subagents and web automation');
 
   assert.equal(rootPackage.scripts['electron:build'], 'node scripts/electron-package.mjs --mode unpacked --platform win32');
   assert.equal(rootPackage.scripts['electron:build:linux'], 'node scripts/electron-package.mjs --mode unpacked --platform linux');

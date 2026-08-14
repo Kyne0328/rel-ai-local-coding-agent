@@ -8,7 +8,13 @@ const calls = [];
 const fakeService = {
   async authenticationStatus() {
     calls.push('status');
-    return { runtime: 'chatgpt-web', status: 'authentication_saved', authenticatedAt: '2026-08-14T10:00:00.000Z', reasoning: ['medium', 'high'] };
+    return {
+      runtime: 'chatgpt-web',
+      status: 'authentication_saved',
+      authenticatedAt: '2026-08-14T10:00:00.000Z',
+      reasoning: ['medium', 'high'],
+      browser: { available: true, product: 'Test Chrome', errorCode: null }
+    };
   },
   async beginAuthentication() {
     calls.push('open');
@@ -36,6 +42,10 @@ for (const [name, expected] of [
   assert.equal(calls.at(-1), expected);
   assert.equal(JSON.stringify(payload).includes('cookie'), false);
   assert.equal(JSON.stringify(payload).includes('profilePath'), false);
+  assert.equal(JSON.stringify(payload).includes('executablePath'), false);
+  if (expected === 'status') {
+    assert.deepEqual(payload.browser, { available: true, product: 'Test Chrome', errorCode: null });
+  }
 }
 const failing = createChatGptAgentHandlers({
   readConfigFn: () => ({}),

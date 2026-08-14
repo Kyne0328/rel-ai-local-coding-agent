@@ -109,6 +109,7 @@
 .subagent-auth-copy { @apply grid min-w-0 gap-1; }
 .subagent-auth-copy strong { @apply text-lg; }
 .subagent-auth-copy p { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
+.subagent-auth-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .subagent-reasoning { @apply grid gap-2; }
 .subagent-reasoning > strong { @apply text-[12px]; }
 .subagent-reasoning-list { @apply flex flex-wrap items-center gap-2; }

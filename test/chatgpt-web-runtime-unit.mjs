@@ -77,6 +77,11 @@ try {
   assert.equal(capabilities.outputTransport, 'mcp');
   assert.equal(capabilities.requiresAuthentication, true);
   assert.deepEqual(capabilities.reasoning, ['instant', 'medium', 'high']);
+  assert.deepEqual(runtime.authenticationStatus().browser, {
+    available: true,
+    product: 'Test Chrome',
+    errorCode: null
+  });
 
   const opened = await runtime.beginAuthentication();
   assert.equal(opened.status, 'authentication_open');
@@ -142,7 +147,24 @@ try {
     /isAuthenticated/
   );
 
-  console.log('ChatGPT web runtime profile isolation, manual auth, hidden execution, MCP-only output, and cleanup tests passed.');
+  const unavailableRuntime = new ChatGptWebRuntime({
+    config: { stateDir: path.join(root, 'unavailable') },
+    pageAdapter: adapter,
+    browserFactory,
+    runtimeResolver() {
+      throw new Error('secret executable path C:/Users/test/private/chrome.exe token=abc123');
+    }
+  });
+  const unavailableStatus = unavailableRuntime.authenticationStatus();
+  assert.deepEqual(unavailableStatus.browser, {
+    available: false,
+    product: null,
+    errorCode: 'CHATGPT_RUNTIME_UNAVAILABLE'
+  });
+  assert.doesNotMatch(JSON.stringify(unavailableStatus), /private|chrome\.exe|abc123/);
+  await unavailableRuntime.dispose();
+
+  console.log('ChatGPT web runtime profile isolation, browser availability, manual auth, hidden execution, MCP-only output, and cleanup tests passed.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
