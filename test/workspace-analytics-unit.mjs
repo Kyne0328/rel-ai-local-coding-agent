@@ -4,7 +4,7 @@ import { hydrateWorkspaceAnalytics, workspaceAnalyticsHtml } from '../src/ui/fea
 const scope = { toolCalls: 9, completed: 8, successRate: 87.5, averageDuration: 125, points: [{ toolCalls: 1 }, { toolCalls: 4 }, { toolCalls: 2 }, { toolCalls: 2 }] };
 const html = workspaceAnalyticsHtml(scope);
 assert.match(html, /Last 24 hours/);
-assert.match(html, /Local analytics/);
+assert.doesNotMatch(html, /Local analytics/);
 assert.match(html, /Tool calls/);
 assert.match(html, />9</);
 assert.match(html, /87\.5%/);

@@ -19,7 +19,7 @@ const usageData = read('src/ui/features/usage/data.js');
 const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageData}`;
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Analytics['"]/);
-assert.match(navigationCatalog, /stored on this device/i);
+assert.match(navigationCatalog, /local activity, tool usage, and workspace trends/i);
 assert.match(dashboard, /usage: element => mountSystemRoute\(element, ['"]usage['"]\)/);
 assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.doesNotMatch(preload, /getGatewayUsage|desktop:gateway:usage/);
@@ -29,7 +29,7 @@ assert.doesNotMatch(ipc, /gateway/i);
 assert.match(usageData, /desktop\.getLocalUsage/);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
-assert.match(usageSource, /Privacy-safe aggregate MCP activity recorded only on this device/i);
+assert.match(usageSource, /Local activity only\. Prompts, paths, command output, and tool results are not stored/i);
 assert.match(usageSource, /import \{ esc as escapeHtml \} from '\.\.\/\.\.\/utils\.js'/);
 assert.doesNotMatch(usageSource, /function escapeHtml\(/);
 assert.match(usageRender, /import \{ esc \} from '\.\.\/\.\.\/utils\.js'/);
@@ -52,7 +52,8 @@ assert.match(usageSource, /Analytics unavailable/);
 assert.match(usageSource, /Retry/);
 assert.match(usageSource, /Refresh/);
 assert.match(usageCombined, /Failure categories/);
-assert.match(usageCombined, /Raw error codes and messages are not stored in analytics/);
+assert.match(usageCombined, /Raw error messages are not stored/);
+assert.doesNotMatch(usageRender, /Trend starts now|Completed outcomes|Workspace position|usage-fact-strip|<h3>Outcomes<\/h3>/);
 
 const snapshot = buildUsageModel({
   ok: true,

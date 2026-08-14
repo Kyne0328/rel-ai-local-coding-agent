@@ -5,10 +5,6 @@
 .usage-month-control input { min-width: 154px; }
 .usage-content, .usage-overview { @apply grid gap-3; }
 .usage-loading { @apply rounded-xl border p-5 text-[12px]; color: var(--ui-text-secondary); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
-.usage-month-summary { @apply flex items-start justify-between gap-5 rounded-xl border p-4; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
-.usage-month-summary > div { @apply grid min-w-0 gap-1; }
-.usage-month-summary strong { @apply text-[17px]; }
-.usage-month-summary p { @apply m-0 max-w-[560px] text-[12px] leading-5; color: var(--ui-text-secondary); }
 .usage-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); overflow: hidden; background: var(--ui-surface-primary); }
 .usage-metric { @apply grid min-w-0 gap-1 p-4; border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
 .usage-metric:nth-child(6n) { border-right: 0; }
@@ -32,7 +28,6 @@
   .usage-toolbar-controls { @apply w-full items-stretch; }
   .usage-month-control { @apply min-w-0 flex-1; }
   .usage-month-control input { min-width: 0; width: 100%; }
-  .usage-month-summary { @apply flex-col; }
   .usage-table { min-width: 620px; }
 }
 @media (max-width: 420px) {
@@ -42,34 +37,12 @@
 
 .usage-workspace-control { @apply grid min-w-[190px] gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .usage-workspace-control select { width: 100%; min-width: 190px; }
-.usage-month-summary small { @apply text-[11px]; color: var(--ui-text-tertiary); }
 .usage-metric { position: relative; }
 .usage-metric small { @apply text-[11px]; overflow-wrap: anywhere; color: var(--ui-text-tertiary); }
 .usage-metric > i { position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; border-radius: 999px; background: var(--ui-action-primary); opacity: .45; }
 .usage-metric.good > i { background: var(--ui-status-success-foreground); }
 .usage-metric.bad > i { background: var(--ui-status-danger-foreground); opacity: .8; }
-.usage-fact-strip { @apply grid overflow-hidden rounded-xl border; grid-template-columns: repeat(3,minmax(0,1fr)); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
-.usage-fact-strip > div { @apply grid min-w-0 gap-1 border-r px-4 py-3 last:border-r-0; border-color: var(--ui-border-default); }
-.usage-fact-strip span { @apply text-[11px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
-.usage-fact-strip strong { @apply text-[13px]; overflow-wrap: anywhere; }
-.usage-fact-strip small { @apply text-[11px]; overflow-wrap: anywhere; color: var(--ui-text-tertiary); }
-.usage-visual-grid { @apply grid gap-3; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); }
-.usage-visual-card { min-width: 0; }
-.usage-visual-value { @apply text-[20px] font-extrabold; }
-.usage-outcomes { @apply grid gap-4; }
-.usage-outcome-progress, .usage-bar-row progress { width: 100%; accent-color: var(--ui-action-primary); }
-.usage-outcome-progress { height: 8px; }
-.usage-outcome-legend { @apply grid gap-2; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.usage-outcome-legend > div { @apply flex items-center justify-between gap-3 rounded-lg border px-3 py-2; border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
-.usage-outcome-legend span { @apply flex min-w-0 items-center gap-2 text-[12px]; color: var(--ui-text-secondary); }
-.usage-outcome-legend i { @apply size-2 shrink-0 rounded-full; background: var(--ui-text-tertiary); }
-.usage-outcome-legend .good i { background: var(--ui-status-success-foreground); }
-.usage-outcome-legend .bad i { background: var(--ui-status-danger-foreground); }
-.usage-workspace-summary { @apply grid gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.usage-workspace-summary > div { @apply grid min-w-0 gap-1 rounded-lg border p-3; border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
-.usage-workspace-summary span { @apply text-[11px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
-.usage-workspace-summary strong { @apply text-[18px] font-extrabold; }
-.usage-workspace-summary small { @apply text-[11px]; color: var(--ui-text-tertiary); }
+.usage-bar-row progress { width: 100%; accent-color: var(--ui-action-primary); }
 .usage-bar-list { @apply grid gap-2; }
 .usage-bar-row { @apply grid min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-[12px]; grid-template-columns: minmax(100px,180px) minmax(100px,1fr) auto; color: var(--ui-text-secondary); }
 .usage-bar-row:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
@@ -81,12 +54,8 @@
 @media (max-width: 760px) {
   .usage-workspace-control { @apply min-w-0 flex-1; }
   .usage-workspace-control select { min-width: 0; }
-  .usage-fact-strip, .usage-visual-grid { grid-template-columns: minmax(0,1fr); }
-  .usage-fact-strip > div { border-right: 0; border-bottom: 1px solid var(--ui-border-default); }
-  .usage-fact-strip > div:last-child { border-bottom: 0; }
 }
 @media (max-width: 520px) {
-  .usage-outcome-legend, .usage-workspace-summary { grid-template-columns: minmax(0,1fr); }
   .usage-bar-row { grid-template-columns: minmax(88px,1fr) minmax(72px,1.3fr) auto; gap: 8px; }
 }
 
@@ -114,7 +83,6 @@
 .usage-sparkline-empty { display: block; height: 28px; }
 .usage-timeline-card { min-width: 0; }
 .usage-timeline-head { @apply items-start gap-4; }
-.usage-timeline-head p { @apply m-0 mt-1 text-[12px]; color: var(--ui-text-secondary); }
 .usage-chart-switch { @apply flex flex-wrap justify-end gap-1; }
 .usage-chart-switch button { min-height: 44px; }
 .usage-chart-switch button.active { border-color: var(--ui-action-primary); color: var(--ui-action-primary); background: var(--ui-action-secondary); }

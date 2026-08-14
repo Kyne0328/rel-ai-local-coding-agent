@@ -27,12 +27,12 @@ assert.match(html, /88\.9%/);
 assert.match(html, /240 ms/);
 assert.match(html, /Active workspaces/);
 assert.match(html, />2</);
-assert.match(html, /Activity pulse/);
+assert.match(html, /Hourly activity/);
 assert.match(html, /home-analytics-area/);
 assert.match(html, /Latest hour 10 calls/);
 assert.match(html, /Overall trend increasing/);
 assert.match(html, /may include recovered work/);
-assert.match(html, /Prompts, paths, and result bodies are not stored/);
+assert.doesNotMatch(html, /Privacy/);
 
 const target = {
   innerHTML: '',
@@ -60,7 +60,7 @@ assert.equal(await hydrateHomeAnalytics(root, {
   desktop: { getLocalUsage: async () => snapshot },
   now: new Date('2026-08-08T12:00:00.000Z')
 }), true);
-assert.match(target.innerHTML, /Activity pulse/);
+assert.match(target.innerHTML, /Hourly activity/);
 assert.match(target.innerHTML, /100\.0%/);
 
 console.log('Dashboard analytics summary passed.');

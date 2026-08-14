@@ -304,7 +304,7 @@ function homeAnalyticsShell(taskBoundary = '') {
   card.setAttribute('aria-busy', 'true');
   card.innerHTML = `
     <div class="card-head home-analytics-head">
-      <div><h3>Activity</h3><p>Loading the last 24 hours of private, device-local analytics…</p></div>
+      <div><h3>Activity</h3><p>Loading activity…</p></div>
       <a class="buttonlike secondary compact-button" href="${routeHref('usage')}">View analytics</a>
     </div>
     <div class="home-analytics-loading" aria-hidden="true"><span></span><span></span><span></span><span></span></div>`;
@@ -337,13 +337,13 @@ export function homeAnalyticsHtml(scope = {}) {
   const workspaceScoped = scope.kind === 'workspace';
   const activeWorkspaces = (Array.isArray(scope.workspaces) ? scope.workspaces : []).filter(item => Number(item.toolCalls || 0) > 0).length;
   const metricFour = workspaceScoped
-    ? homeAnalyticsMetric('Execution time', completed ? formatAnalyticsDuration(scope.executionMs) : '—', 'completed calls')
-    : homeAnalyticsMetric('Active workspaces', formatInteger(activeWorkspaces), activeWorkspaces === 1 ? 'workspace with activity' : 'workspaces with activity');
+    ? homeAnalyticsMetric('Execution time', completed ? formatAnalyticsDuration(scope.executionMs) : '—')
+    : homeAnalyticsMetric('Active workspaces', formatInteger(activeWorkspaces));
   const heading = workspaceScoped ? `${scope.label} activity` : 'Activity';
   const href = routeHref('usage', workspaceScoped ? { workspace: scope.workspace } : {});
   const failureSummary = failures
-    ? `${formatInteger(failures)} failed ${pluralLabel(failures, 'call')} recorded · may include recovered work`
-    : 'No failed calls recorded in this window';
+    ? `${formatInteger(failures)} failed ${pluralLabel(failures, 'call')} · may include recovered work`
+    : 'No failed calls';
   const contextSummary = analyticsContextSummary(scope);
   return `
     <div class="card-head home-analytics-head">
@@ -354,34 +354,35 @@ export function homeAnalyticsHtml(scope = {}) {
     </div>
     <div class="home-analytics-body">
       <div class="home-analytics-metrics">
-        ${homeAnalyticsMetric('Tool calls', formatInteger(toolCalls), 'exact local invocations')}
-        ${homeAnalyticsMetric('Success rate', completed ? formatPercent(scope.successRate) : '—', completed ? `${formatInteger(completed)} completed outcomes` : 'no completed outcomes', completed ? 'good' : '')}
-        ${homeAnalyticsMetric('Avg tool time', completed ? formatAnalyticsDuration(scope.averageDuration) : '—', 'per completed call')}
+        ${homeAnalyticsMetric('Tool calls', formatInteger(toolCalls))}
+        ${homeAnalyticsMetric('Success rate', completed ? formatPercent(scope.successRate) : '—', '', completed ? 'good' : '')}
+        ${homeAnalyticsMetric('Avg tool time', completed ? formatAnalyticsDuration(scope.averageDuration) : '—', completed ? 'Per completed call' : '')}
         ${metricFour}
       </div>
       <div class="home-analytics-pulse">
-        <div class="home-analytics-pulse-head"><div><span>Activity pulse</span><strong>${esc(contextSummary)}</strong></div><small>UTC · hourly buckets</small></div>
+        <div class="home-analytics-pulse-head"><div><span>Hourly activity</span><strong>${esc(contextSummary)}</strong></div><small>UTC</small></div>
         ${homeAnalyticsPulse(scope.points)}
       </div>
-      <div class="home-analytics-foot"><span>${esc(failureSummary)}</span><details class="home-analytics-privacy"><summary>Privacy</summary><p>Prompts, paths, and result bodies are not stored.</p></details></div>
+      <div class="home-analytics-foot"><span>${esc(failureSummary)}</span></div>
     </div>`;
 }
 
 function homeAnalyticsUnavailableHtml(workspace = '') {
   return `
     <div class="card-head home-analytics-head">
-      <div><h3>Activity</h3><p>Local analytics could not be loaded on the dashboard.</p></div>
+      <div><h3>Activity</h3><p>Activity could not be loaded.</p></div>
       <a class="buttonlike secondary compact-button" href="${routeHref('usage', workspace ? { workspace } : {})}">Open analytics</a>
     </div>`;
 }
 
-function homeAnalyticsMetric(label, value, detail, tone = '') {
-  return `<div class="home-analytics-metric ${esc(tone)}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></div>`;
+function homeAnalyticsMetric(label, value, detail = '', tone = '') {
+  const detailHtml = detail ? `<small>${esc(detail)}</small>` : '';
+  return `<div class="home-analytics-metric ${esc(tone)}"><span>${esc(label)}</span><strong>${esc(value)}</strong>${detailHtml}</div>`;
 }
 
 function homeAnalyticsPulse(points = []) {
   const values = (Array.isArray(points) ? points : []).map(point => Number(point?.toolCalls || 0)).map(value => Number.isFinite(value) && value >= 0 ? value : 0);
-  if (!values.length || values.every(value => value === 0)) return '<div class="home-analytics-pulse-empty">No bucketed activity yet.</div>';
+  if (!values.length || values.every(value => value === 0)) return '<div class="home-analytics-pulse-empty">No activity yet.</div>';
   const width = 720;
   const height = 112;
   const baseline = height - 10;
@@ -401,11 +402,11 @@ function homeAnalyticsPulse(points = []) {
 function analyticsContextSummary(scope = {}) {
   const topTool = Array.isArray(scope.tools) ? scope.tools[0] : null;
   const topWorkspace = Array.isArray(scope.workspaces) ? scope.workspaces[0] : null;
-  if (!Number(scope.toolCalls || 0)) return 'No activity recorded';
-  if (scope.kind === 'workspace' && topTool?.tool) return `${topTool.tool} was most used`;
-  if (topWorkspace?.workspace) return `${topWorkspace.workspace} led workspace activity`;
-  if (topTool?.tool) return `${topTool.tool} was most used`;
-  return `${formatInteger(scope.toolCalls)} observed tool calls`;
+  if (!Number(scope.toolCalls || 0)) return 'No activity';
+  if (scope.kind === 'workspace' && topTool?.tool) return `Top tool: ${topTool.tool}`;
+  if (topWorkspace?.workspace) return `Top workspace: ${topWorkspace.workspace}`;
+  if (topTool?.tool) return `Top tool: ${topTool.tool}`;
+  return `${formatInteger(scope.toolCalls)} tool calls`;
 }
 
 function refreshHomeAnalyticsAfterTaskBoundary(root, data = {}) {
