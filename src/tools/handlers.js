@@ -89,7 +89,7 @@ const HANDLERS = Object.freeze({
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
   status: relaiStatus,
-  gitCommit: inWorkspace((workspace, config, args) => relaiGitCommit(workspace, config, args)),
+  gitCommit: inWorkspace((workspace, config, args, context) => relaiGitCommit(workspace, config, withTaskOwnedCommitContext(config, workspace, args, context))),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
@@ -131,6 +131,16 @@ function withWorkflowTaskContext(config, workspace, args, context = {}) {
 }
 
 function withTaskOwnedReviewContext(config, workspace, args, context = {}) {
+  const taskId = String(context.taskId || args.work_id || '').trim();
+  if (!taskId) return args;
+  const requestState = requestTaskState(context, taskId);
+  const owned = Array.isArray(requestState?.integrity?.taskOwnedChangedFiles)
+    ? [...requestState.integrity.taskOwnedChangedFiles]
+    : taskOwnedChangedFiles(config, taskId, workspace.alias);
+  return { ...args, _taskOwnedPaths: owned };
+}
+
+function withTaskOwnedCommitContext(config, workspace, args, context = {}) {
   const taskId = String(context.taskId || args.work_id || '').trim();
   if (!taskId) return args;
   const requestState = requestTaskState(context, taskId);

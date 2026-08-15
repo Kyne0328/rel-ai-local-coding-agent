@@ -338,13 +338,15 @@ async function relaiGitCommit(workspace, config, args = {}) {
   if (!message) throw new Error('relai_publish action "commit" requires a non-empty commit message.');
   const dryRun = Boolean(args.dryRun);
   const authorization = normalizeSensitiveAuthorization(workspace, args);
-  const paths = Array.isArray(args.paths)
-    ? args.paths.map((item) => resolveSafePath(workspace.path, item, {
-        operation: "commit",
-        allowSensitive: authorization.authorizedPaths.has(normalizeGitPath(item))
-      }).relativePath)
-    : [];
-  const addAll = paths.length === 0 && args.addAll !== false;
+  const hasTaskOwnedScope = Array.isArray(args._taskOwnedPaths);
+  const requestedPaths = Array.isArray(args.paths) && args.paths.length > 0
+    ? args.paths
+    : hasTaskOwnedScope && args.addAll !== true ? args._taskOwnedPaths : [];
+  const paths = [...new Set(requestedPaths.map((item) => resolveSafePath(workspace.path, item, {
+    operation: "commit",
+    allowSensitive: authorization.authorizedPaths.has(normalizeGitPath(item))
+  }).relativePath))];
+  const addAll = args.addAll === true || (!hasTaskOwnedScope && paths.length === 0 && args.addAll !== false);
   const statusRead = workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
   statusRead.catch(() => {});
   await repoProbe;
@@ -359,6 +361,19 @@ async function relaiGitCommit(workspace, config, args = {}) {
       paths,
       ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
       statusBefore
+    };
+  }
+  if (!addAll && paths.length === 0) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      message,
+      addAll,
+      paths,
+      statusBefore,
+      error: hasTaskOwnedScope
+        ? 'No task-owned changed paths are available to commit. Rel.AI will not fall back to committing unrelated workspace changes.'
+        : 'No commit paths were selected.'
     };
   }
   const indexTree = await runProcess("git", ["write-tree"], { cwd: workspace.path, timeout: 60000 }, config);
@@ -387,6 +402,22 @@ async function relaiGitCommit(workspace, config, args = {}) {
       timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000)
     }, config);
     if (commit.exitCode !== 0) await restoreIndex();
+    if (commit.exitCode === 0) {
+      const normalizeIndex = await runProcess("git", ["reset", "--quiet", "HEAD", "--", ...paths], {
+        cwd: workspace.path,
+        timeout: 60000
+      }, config);
+      if (normalizeIndex.exitCode !== 0) {
+        throw new Error(`Commit succeeded but the visible Git index could not be reconciled for the committed paths: ${normalizeIndex.stderr || normalizeIndex.stdout || normalizeIndex.exitCode}`);
+      }
+      const stagedSelected = await runProcess("git", ["diff", "--cached", "--name-only", "--", ...paths], {
+        cwd: workspace.path,
+        timeout: 60000
+      }, config);
+      if (stagedSelected.exitCode !== 0 || String(stagedSelected.stdout || "").trim()) {
+        throw new Error('Commit succeeded but committed task-owned paths still differ in the visible Git index. Refusing to report a clean task commit.');
+      }
+    }
     const statusAfter = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
     return {
       ok: commit.exitCode === 0,
@@ -438,6 +469,28 @@ async function relaiGitCommit(workspace, config, args = {}) {
     statusBefore,
     statusAfter
   };
+}
+
+async function workspaceDirtyPaths(workspace, config, paths = []) {
+  await ensureGitRepo(workspace, config);
+  const normalized = [...new Set((Array.isArray(paths) ? paths : [])
+    .map(item => normalizeGitPath(item))
+    .filter(Boolean))];
+  if (!normalized.length) return [];
+  const dirty = new Set();
+  for (let index = 0; index < normalized.length; index += 100) {
+    const chunk = normalized.slice(index, index + 100);
+    const status = await runProcess("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...chunk], {
+      cwd: workspace.path,
+      timeout: 60000,
+      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+    }, config);
+    if (status.exitCode !== 0 || status.stdoutTruncated) {
+      throw new Error(`Could not inspect task-owned residual workspace state: ${status.stderr || status.stdout || status.exitCode}`);
+    }
+    for (const entry of parseGitStatus(status.stdout || "").entries) dirty.add(entry.path);
+  }
+  return [...dirty].sort();
 }
 
 function normalizeSensitiveAuthorization(workspace, args = {}) {
@@ -533,4 +586,4 @@ async function relaiGitDraftPr(workspace, config, args = {}) {
   };
 }
 
-export { workspaceGitStatus, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership, assertPatchUpdateSafe, ensureGitRepo, inspectPatchPaths };
+export { workspaceGitStatus, workspaceDirtyPaths, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership, assertPatchUpdateSafe, ensureGitRepo, inspectPatchPaths };

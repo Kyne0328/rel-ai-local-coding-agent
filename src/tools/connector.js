@@ -43,10 +43,7 @@ function compactForConnector(name, value, args = {}) {
       const workspace = value.workspace && typeof value.workspace === 'object'
         ? pruneEmpty({
             alias: value.workspace.alias,
-            commandKeys: value.workspace.commandKeys,
-            testCommandKeys: value.workspace.testCommandKeys,
-            staleCommandKeys: value.workspace.staleCommandKeys,
-            staleTestCommandKeys: value.workspace.staleTestCommandKeys,
+            discoveredCommandKeys: value.workspace.discoveredCommandKeys,
             repository: compactRepositoryState(value.workspace.repository, { includeWorkspace: false }),
             error: value.workspace.error
           })
@@ -100,6 +97,8 @@ function compactForConnector(name, value, args = {}) {
         planSelection: value.planSelection,
         planCreatedAt: value.planCreatedAt,
         changedFiles: value.completionKnown === true ? value.changedFiles : undefined,
+        residualChangedFiles: value.completionKnown === true ? value.residualChangedFiles : undefined,
+        residualState: value.completionKnown === true ? value.residualState : undefined,
         message: value.message,
         nextAction: value.nextAction,
         fullOutput: value.fullOutput
