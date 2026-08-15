@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { allWorkspaceAliases, readConfig, resolveWorkspace } from '../src/config.js';
-import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry, reconcileInactiveTaskSandboxes } from '../src/parallelTaskSandbox.js';
+import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
+import { readTaskHistorySession } from '../src/taskHistoryStore.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
 
@@ -77,6 +78,15 @@ try {
   assert.equal(readOnlyExec.ok, true);
   assert.equal(sandboxEntries(config).length, 0, 'clearly read-only Git exec calls must not create private worktrees');
 
+  const sideEffectingDiff = await rawCallTool('relai_exec', {
+    workspace: 'app', work_id: second.work_id, executable: 'git', argv: ['diff', '--output=read-only-side-effect.txt']
+  }, context);
+  assert.equal(sideEffectingDiff.ok, true);
+  assert.equal(sideEffectingDiff.mutationTracking, 'sandbox-baseline', 'Git commands with output side effects must stay isolated');
+  assert.deepEqual(sideEffectingDiff.changedFiles, ['read-only-side-effect.txt']);
+  assert.equal(fs.existsSync(path.join(workspacePath, 'read-only-side-effect.txt')), true, 'safe sandbox output should still be promoted visibly');
+  assert.equal(sandboxEntries(config).length, 0);
+
   await assert.rejects(
     () => rawCallTool('relai_edit', {
       workspace: 'app', work_id: second.work_id, path: 'beta.txt', oldText: 'missing beta\n', newText: 'never written\n'
@@ -103,15 +113,19 @@ try {
   assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
   assert.equal(sandboxEntries(config).length, 0, 'successful concurrent exec mutations must not leave code in a hidden worktree');
 
-  const staleEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
+  const staleTaskId = 'stale-inactive-task';
+  const staleEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, staleTaskId);
   fs.writeFileSync(path.join(staleEntry.path, 'inactive-recovery.txt'), 'recovered from inactive task\n');
-  const recovery = await reconcileInactiveTaskSandboxes(resolveWorkspace(config, 'app'), config, [
-    { taskId: first.work_id, workspace: 'app', status: 'running', startedAt: 1 }
-  ], first.work_id);
-  assert.deepEqual(recovery.preserved, []);
-  assert.deepEqual(recovery.reconciled.map(item => item.taskId), [second.work_id]);
+  await rawCallTool('relai_read', {
+    workspace: 'app', work_id: first.work_id, paths: ['alpha.txt']
+  }, context);
+  assert.equal(fs.existsSync(path.join(workspacePath, 'inactive-recovery.txt')), false, 'ordinary reads must never promote another inactive task');
+  assert.equal(sandboxEntries(config).some(entry => entry.taskId === staleTaskId), true);
+  await rawCallTool('relai_edit', {
+    workspace: 'app', work_id: first.work_id, path: 'alpha.txt', oldText: 'alpha from first\n', newText: 'alpha after recovery boundary\n'
+  }, context);
   assert.equal(readText(path.join(workspacePath, 'inactive-recovery.txt')), 'recovered from inactive task\n');
-  assert.equal(sandboxEntries(config).length, 0, 'inactive task bytes must be reconciled into the visible tree and the worktree retired');
+  assert.equal(sandboxEntries(config).some(entry => entry.taskId === staleTaskId), false, 'writer boundaries should reconcile inactive task bytes');
 
   await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
   const entries = sandboxEntries(config);
@@ -207,6 +221,15 @@ try {
   assert.equal(sandboxEntries(config).length, 1, 'conflicting private work should remain available until task cancellation or reconciliation');
   assert.equal(sandboxEntries(config)[0].unresolved?.code, 'TASK_SANDBOX_PROMOTION_CONFLICT');
   assert.deepEqual(sandboxEntries(config)[0].unresolved?.changedFiles, ['shared.txt']);
+  const blockedSession = readTaskHistorySession(config, second.work_id);
+  assert.equal(blockedSession?.status, 'blocked');
+  assert.equal(blockedSession?.repairable, true);
+  assert.deepEqual(blockedSession?.sandboxRecovery?.changedFiles, ['shared.txt']);
+  const statusWithConflict = await rawCallTool('relai_work', {
+    action: 'status', workspace: 'app', work_id: second.work_id
+  }, context);
+  assert.equal(statusWithConflict.task?.status, 'blocked', 'work status must remain readable while a sandbox conflict is unresolved');
+  assert.deepEqual(statusWithConflict.task?.sandboxRecovery?.changedFiles, ['shared.txt']);
 
   const cancelled = await rawCallTool('relai_work', {
     action: 'cancel', workspace: 'app', work_id: second.work_id, reason: 'Conflict coverage complete.'
@@ -214,6 +237,7 @@ try {
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(sandboxEntries(config).length, 0, 'cancelling a parallel task must remove its private sandbox');
   assert.equal(fs.existsSync(entries[0].path), false);
+  assert.equal(readTaskHistorySession(config, second.work_id)?.sandboxRecovery, undefined, 'cancellation must clear discarded conflict recovery metadata');
 
   await rawCallTool('relai_work', {
     action: 'cancel', workspace: 'app', work_id: first.work_id, reason: 'Test cleanup.'

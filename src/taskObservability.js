@@ -544,6 +544,7 @@ function sanitizeTaskRecord(record) {
   if (Array.isArray(value.events)) value.events = value.events.map(sanitizeActivityEventRecord).filter(Boolean);
   if (Array.isArray(value.currentOperations)) value.currentOperations = value.currentOperations.map(item => sanitizeStructuredValue(item, 0)).filter(Boolean);
   if (value.correlation && typeof value.correlation === 'object') value.correlation = sanitizeStructuredValue(value.correlation, 0);
+  if (value.sandboxRecovery && typeof value.sandboxRecovery === 'object') value.sandboxRecovery = sanitizeStructuredValue(value.sandboxRecovery, 0);
   return value;
 }
 

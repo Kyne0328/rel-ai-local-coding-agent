@@ -1,6 +1,6 @@
 
 import { DEFAULT_TASK_IDLE_MS } from './toolActivity.js';
-import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeTaskRecord, sanitizeTaskRecordForProjection } from './taskObservability.js';
+import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord, sanitizeTaskRecordForProjection } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
 import { canonicalTaskSnapshot, mergeTaskLifecycleSnapshots, reduceTaskLifecycleAuditEvent } from './taskLifecycle.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isCurrentTaskEvent, timestampMs } from './taskEvents.js';
@@ -111,6 +111,77 @@ function readRecentWorkflowEvidence(config, taskId, limit = 50) {
     return [];
   }
 }
+
+function recordTaskRecoveryState(config, taskId, recovery = null) {
+  const id = cleanTaskId(taskId);
+  if (!id) return null;
+  ensureCurrentHistory(config);
+  const directory = getTaskHistoryDir(config);
+  const session = readWorkingSession(directory, id);
+  if (!session) return null;
+
+  if (!recovery) {
+    if (!session.sandboxRecovery) return publicSession(session);
+    const previousMessage = String(session.sandboxRecovery?.message || '');
+    const next = { ...session };
+    delete next.sandboxRecovery;
+    if (String(next.errorSummary || '') === previousMessage) next.errorSummary = '';
+    if (!isTerminalTaskStatus(next.status) && next.status === 'blocked' && next.resumeStatus === 'blocked') {
+      next.status = 'planning';
+      next.resumeStatus = 'planning';
+      next.currentStage = 'Planning';
+      next.currentActivity = 'Private task conflict resolved.';
+    }
+    persistSession(directory, canonicalTaskSnapshot(next));
+    return publicSession(next);
+  }
+
+  const at = Number.isFinite(Date.parse(String(recovery.at || '')))
+    ? new Date(Date.parse(String(recovery.at))).toISOString()
+    : new Date().toISOString();
+  const changedFiles = [...new Set([
+    ...(Array.isArray(session.changedFiles) ? session.changedFiles : []),
+    ...(Array.isArray(recovery.changedFiles) ? recovery.changedFiles : [])
+  ].map(value => String(value || '').trim().replaceAll('\\', '/')).filter(Boolean))].slice(0, 200);
+  const message = sanitizeDisplayText(
+    recovery.message || 'Private task changes conflict with newer visible workspace changes.',
+    500
+  );
+  const sandboxRecovery = {
+    state: 'conflict',
+    code: sanitizeDisplayText(recovery.code || 'TASK_SANDBOX_PROMOTION_CONFLICT', 120),
+    message,
+    changedFiles: changedFiles.slice(0, 100),
+    at
+  };
+  const terminal = isTerminalTaskStatus(session.status);
+  const next = canonicalTaskSnapshot({
+    ...session,
+    ...(terminal ? {} : {
+      status: 'blocked',
+      state: 'waiting',
+      resumeStatus: 'blocked',
+      currentStage: 'Conflict resolution required',
+      currentActivity: message,
+      activeCalls: 0,
+      currentOperations: [],
+      inactiveAt: null,
+      endedAt: null,
+      completedAt: null,
+      cancelledAt: null
+    }),
+    repairable: true,
+    errorSummary: message,
+    sandboxRecovery,
+    changedFiles,
+    changedFileCount: changedFiles.length,
+    updatedAt: at,
+    lastActivityAt: at
+  });
+  persistSession(directory, next);
+  return publicSession(next);
+}
+
 function readTaskHistorySession(config, taskId) {
   const session = readTaskHistorySessionRecord(config, taskId);
   return session ? publicSession(session) : null;
@@ -290,8 +361,10 @@ function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
   const { version, principalFingerprint, ...value } = sanitizeTaskRecordForProjection(session);
   const terminal = isTerminalTaskStatus(value.status);
+  const publicStatus = !terminal && value.sandboxRecovery?.state === 'conflict' ? 'blocked' : value.status;
   return {
     ...value,
+    status: publicStatus,
     taskId: value.taskId || value.id,
     sessionId: value.sessionId || value.id,
     title: value.title || historicalTitle(value),
@@ -299,8 +372,8 @@ function publicSession(session) {
     toolCallCount: Number(value.toolCallCount ?? value.calls ?? 0),
     successfulToolCallCount: Number(value.successfulToolCallCount ?? Math.max(0, Number(value.calls || 0) - Number(value.failures || 0))),
     failedToolCallCount: Number(value.failedToolCallCount ?? value.failures ?? 0),
-    activeCalls: terminal || value.status === 'inactive' ? 0 : Number(value.activeCalls || 0),
-    currentOperations: terminal || value.status === 'inactive' ? [] : Array.isArray(value.currentOperations) ? value.currentOperations : [],
+    activeCalls: terminal || publicStatus === 'inactive' || publicStatus === 'blocked' ? 0 : Number(value.activeCalls || 0),
+    currentOperations: terminal || publicStatus === 'inactive' || publicStatus === 'blocked' ? [] : Array.isArray(value.currentOperations) ? value.currentOperations : [],
     currentStage: value.currentStage || '',
     currentActivity: value.currentActivity || value.operation || ''
   };
@@ -470,4 +543,4 @@ function isStoredSessionNoise(session, activeIds) {
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowSnapshot, recordWorkflowState };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordWorkflowEvidence, recordWorkflowSnapshot, recordWorkflowState };
