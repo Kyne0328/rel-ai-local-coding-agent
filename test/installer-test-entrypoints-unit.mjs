@@ -10,6 +10,7 @@ const ci = read('.github/workflows/ci.yml');
 const release = read('.github/workflows/release.yml');
 const testRunner = read('test/run-tests.mjs');
 const electronPackage = JSON.parse(read('electron/package.json'));
+const electronPackageLock = JSON.parse(read('electron/package-lock.json'));
 const nsisUninstallerTemplate = read('electron/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh');
 
 for (const [name, command] of Object.entries(packageJson.scripts || {})) {
@@ -86,7 +87,9 @@ assert.equal(fs.existsSync(path.join(root, 'scripts', 'installed-app-smoke.mjs')
 
 assert.equal(electronPackage.scripts?.postinstall, 'node node_modules/electron/install.js',
   'clean Electron installs must always provision the pinned runtime binary');
-assert.equal(electronPackage.devDependencies.electron, '43.2.0',
+assert.match(electronPackage.devDependencies.electron, /^\d+\.\d+\.\d+$/,
+  'Electron runtime provisioning must use an exact package version');
+assert.equal(electronPackageLock.packages?.['']?.devDependencies?.electron, electronPackage.devDependencies.electron,
   'Electron runtime provisioning must remain pinned to the package version under test');
 assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
 assert.deepEqual(electronPackage.build.mac.target, ['dmg']);

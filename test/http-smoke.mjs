@@ -4,13 +4,14 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = 39876;
+const port = await reservePort();
 const token = 'http-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-smoke-'));
 const profile = path.join(stateDir, 'connection.json');
@@ -224,3 +225,16 @@ try {
 }
 
 console.log('HTTP MCP 2026-07-28 discovery, stateless tools, resources, dashboard, and POST-only lifecycle smoke test passed.');
+
+function reservePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const selectedPort = typeof address === 'object' && address ? address.port : 0;
+      server.close(error => error ? reject(error) : resolve(selectedPort));
+    });
+  });
+}

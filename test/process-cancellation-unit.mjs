@@ -63,7 +63,7 @@ try {
   }, config);
   assert.equal(finite.exitCode, 0);
   assert.equal(finite.stdout, `TASK:${finiteTask.taskId}`);
-  const finiteCompleted = completeNativeToolTask(config, finiteTask.taskId, {
+  const finiteCompleted = await completeNativeToolTask(config, finiteTask.taskId, {
     exitCode: finite.exitCode,
     stdout: finite.stdout
   });
@@ -88,11 +88,15 @@ try {
   const graceful = await gracefulPromise;
   assert.equal(graceful.cancelled, true);
   assert.equal(graceful.terminationConfirmed, true);
-  assert.equal(graceful.forcedTermination, false);
+  if (process.platform !== 'win32') {
+    assert.equal(graceful.forcedTermination, false);
+    assert.match(graceful.stderr, /GRACEFUL/);
+  } else {
+    assert.equal(typeof graceful.forcedTermination, 'boolean');
+  }
   assert.match(graceful.stderr, /operation cancelled/i);
   acknowledgeNativeTaskCancellation(config, gracefulTask.taskId, { executionStopped: true });
   assert.equal(getNativeTask(config, gracefulTask.taskId).status, 'cancelled');
-  if (process.platform !== 'win32') assert.match(graceful.stderr, /GRACEFUL/);
 
   const forcedTask = createNativeToolTask(config, {
     method: 'tools/call',

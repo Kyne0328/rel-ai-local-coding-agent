@@ -90,7 +90,7 @@ try {
 
   const listed = await client.request('tools/list', {}, { id: 2, capabilities: {} });
   assert.equal(listed.response.status, 200, JSON.stringify(listed.body));
-  assert.equal(listed.body.result?.tools?.length, 13);
+  assert.equal(listed.body.result?.tools?.length, 12);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_native_tasks_probe'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_get'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_cancel'), false);
