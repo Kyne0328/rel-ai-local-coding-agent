@@ -33,15 +33,15 @@ function createSecureTunnelRuntime({
     const apiKey = normalizeRequiredSecret(config.apiKey, 'OpenAI tunnel runtime API key');
     const localToken = normalizeRequiredSecret(config.localToken, 'Rel.AI local bearer token');
     const port = normalizePort(config.port);
-    const executable = resolveExecutable();
+    const executable = await resolveExecutable();
     if (!executable) throw new Error('Bundled OpenAI tunnel-client is missing. Fetch and verify vendor/tunnel-client before starting Rel.AI.');
-    ensureExecutable(executable);
+    await ensureExecutable(executable);
 
     const runGeneration = ++generation;
     stopping = false;
     const healthUrlFile = path.join(path.resolve(stateDir), `tunnel-health-${process.pid}.url`);
-    fs.mkdirSync(path.dirname(healthUrlFile), { recursive: true, mode: 0o700 });
-    fs.rmSync(healthUrlFile, { force: true });
+    await fs.promises.mkdir(path.dirname(healthUrlFile), { recursive: true, mode: 0o700 });
+    await fs.promises.rm(healthUrlFile, { force: true });
     update({ state: 'connecting', tunnelId, healthUrl: '', error: '' });
 
     const args = [
@@ -84,7 +84,7 @@ function createSecureTunnelRuntime({
     ownedChild.once('exit', (code, signal) => {
       if (runGeneration !== generation || child !== ownedChild) return;
       child = null;
-      fs.rmSync(healthUrlFile, { force: true });
+      void fs.promises.rm(healthUrlFile, { force: true }).catch(() => {});
       if (stopping) {
         update({ state: 'stopped', tunnelId: '', healthUrl: '', error: '' });
         return;
@@ -107,7 +107,7 @@ function createSecureTunnelRuntime({
         child = null;
         generation += 1;
         await stopProcess(ownedChild, { graceMs: 1000, forceWaitMs: 2000 }).catch(() => {});
-        fs.rmSync(healthUrlFile, { force: true });
+        await fs.promises.rm(healthUrlFile, { force: true }).catch(() => {});
         update({ state: 'failed', tunnelId, healthUrl: '', error: messageOf(error) });
       }
       throw error;
@@ -146,8 +146,9 @@ async function waitForReady({ ownedChild, healthUrlFile, fetchImpl, timeoutMs })
   let lastError = '';
   while (Date.now() < deadline) {
     if (ownedChild.exitCode !== null) throw new Error(`OpenAI tunnel-client exited before becoming ready (code=${ownedChild.exitCode}).`);
-    if (!healthUrl && fs.existsSync(healthUrlFile)) {
-      healthUrl = normalizeHealthUrl(fs.readFileSync(healthUrlFile, 'utf8'));
+    if (!healthUrl) {
+      try { healthUrl = normalizeHealthUrl(await fs.promises.readFile(healthUrlFile, 'utf8')); }
+      catch (error) { if (!['ENOENT', 'ENOTDIR'].includes(error?.code)) throw error; }
     }
     if (healthUrl) {
       try {
@@ -163,14 +164,17 @@ async function waitForReady({ ownedChild, healthUrlFile, fetchImpl, timeoutMs })
   throw new Error(`OpenAI Secure MCP Tunnel did not become ready within ${Math.round(timeoutMs / 1000)} seconds${lastError ? `: ${lastError}` : '.'}`);
 }
 
-function bundledTunnelClientPath() {
+async function bundledTunnelClientPath() {
   const platform = process.platform;
   const fileName = platform === 'win32' ? 'tunnel-client.exe' : 'tunnel-client';
   const candidates = [
     resolveResourcePath(path.join('bin', 'tunnel-client', platform, fileName)),
     resolveResourcePath(path.join('vendor', 'tunnel-client', platform, fileName))
   ];
-  return candidates.find(candidate => fs.existsSync(candidate)) || '';
+  for (const candidate of candidates) {
+    try { await fs.promises.access(candidate); return candidate; } catch {}
+  }
+  return '';
 }
 
 function normalizeTunnelId(value) {
@@ -200,9 +204,9 @@ function normalizeHealthUrl(value) {
   return url.origin;
 }
 
-function ensureExecutable(file) {
+async function ensureExecutable(file) {
   if (process.platform === 'win32') return;
-  try { fs.chmodSync(file, 0o700); } catch {}
+  try { await fs.promises.chmod(file, 0o700); } catch {}
 }
 
 function pipeLogs(stream, onLog) {

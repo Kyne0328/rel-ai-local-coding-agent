@@ -1,25 +1,13 @@
-// Consolidated fetch layer — replaces 4 divergent fetchJson helpers across client files
-const TOKEN_KEY = 'relai_dashboard_token';
+// Consolidated fetch layer — replaces divergent fetchJson helpers across client files.
+// Dashboard requests authenticate only with the HttpOnly session cookie established
+// by the one-time /dashboard bootstrap. The MCP bearer token never enters renderer JS.
 
 // Single source of truth for the aggregate dashboard payload URL. Used by the
 // bootstrap, manual/live refresh, workspace mutations, and settings cache
 // invalidation — keep them in sync via this constant, not copied literals.
-export const DASHBOARD_DATA_URL = '/api/dashboard/v10?limit=100&requireHttpToken=0';
-let _token = '';
+export const DASHBOARD_DATA_URL = '/api/dashboard/v10?limit=100';
 const _cache = new Map();
 
-export function setToken(t) {
-  _token = String(t || '');
-  if (_token) sessionStorage.setItem(TOKEN_KEY, _token);
-}
-
-export function getToken() {
-  return _token || sessionStorage.getItem(TOKEN_KEY) || '';
-}
-
-// Full-page fallback reload that preserves the dashboard token and hash. Normal
-// dashboard mutations should prefer requestDashboardRefresh() so the page updates
-// in place without breaking live context.
 
 export function requestDashboardRefresh(options = {}) {
   invalidateCache();
@@ -46,9 +34,8 @@ function timeoutFor(timeout) {
   return Number.isFinite(timeout) ? timeout : 8000;
 }
 
-function authHeaders(fetchOpts, token) {
+function requestHeaders(fetchOpts) {
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = 'Bearer ' + token;
   if (fetchOpts.headers) Object.assign(headers, fetchOpts.headers);
   return headers;
 }
@@ -100,12 +87,11 @@ export async function fetchJson(url, opts = {}) {
   const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
 
   try {
-    const token = getToken();
-    const urlWithToken = token ? _addToken(url, token) : url;
-    const res = await fetch(urlWithToken, {
+    const res = await fetch(url, {
       ...fetchOpts,
+      credentials: 'same-origin',
       signal: ctrl.signal,
-      headers: authHeaders(fetchOpts, token),
+      headers: requestHeaders(fetchOpts)
     });
     const data = normalizeResponseData(res, await parseJsonResponse(res));
     if (cacheKey && res.ok) _cache.set(cacheKey, { ts: Date.now(), val: data });
@@ -124,17 +110,4 @@ export async function postJson(url, body, opts = {}) {
 export function invalidateCache(url) {
   if (url) _cache.delete(url);
   else _cache.clear();
-}
-
-function _addToken(url, token) {
-  try {
-    const u = new URL(url, location.origin);
-    if (u.origin === location.origin && !u.searchParams.has('token')) {
-      u.searchParams.set('token', token);
-    }
-    return u.pathname + u.search + u.hash;
-  } catch (error) {
-    if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
-    return url;
-  }
 }

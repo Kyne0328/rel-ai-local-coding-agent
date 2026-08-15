@@ -9,7 +9,7 @@ import { createSetupWindowManager } from './setup-window.js';
 import { fitWindowToContent, WINDOW_SIZE_LIMITS } from './window-size.js';
 import { installLocalProtocol, localRendererUrl, registerLocalScheme } from './local-protocol.js';
 import { registerIpcHandlers } from './ipc-handlers.js';
-import { createTaskActivityRuntime } from './tool-sleep-blocker.js';
+import { createTaskActivityRuntime, taskActivityBlockReason } from './tool-sleep-blocker.js';
 import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
 import { createDesktopTray } from './desktop-tray.js';
@@ -160,8 +160,8 @@ const shutdownCoordinator = createShutdownCoordinator({
   stopService: () => stopServer({ silent: true }),
   stopUpdater: () => { appUpdater?.stop(); updateSupportPolicy?.stop(); },
   stopActivity: () => toolActivityRuntime.stop(),
-  closeWindows() {
-    dashboardWindowManager.close();
+  async closeWindows() {
+    await dashboardWindowManager.close();
     recoveryWindowManager.close();
     setupWindowManager.close({ returnToFallback: false });
   },
@@ -199,14 +199,18 @@ if (!gotLock) {
         source: 'tunnel-credentials'
       });
     }
-    writeControllerRuntimeMarker(app);
     installLocalProtocol(protocol, RENDERER_ROOT);
-    const lifecycleStatus = desktopLifecycle.start();
+    const [, lifecycleStatus] = await Promise.all([
+      writeControllerRuntimeMarker(app),
+      desktopLifecycle.start()
+    ]);
     desktopTray.setup();
-    appUpdater.start();
-    updateSupportPolicy.start();
     if (hasExistingConfig()) void launchConfiguredDesktop({ background: lifecycleStatus.openedAtLogin });
     else setupWindowManager.create();
+    setImmediate(() => {
+      appUpdater.start();
+      updateSupportPolicy.start();
+    });
   });
 }
 
@@ -229,7 +233,11 @@ function currentDesktopSettings() {
 function updateDesktopSettings(settings) {
   return saveDesktopSettings(settings, {
     setNotificationsEnabled: desktopNotifications.setEnabled,
+    getNotificationsEnabled: () => desktopNotifications.getPreferences().enabled,
     setTunnelApiKey: tunnelCredentials.setApiKey,
+    getTunnelApiKey: tunnelCredentials.getApiKey,
+    clearTunnelApiKey: tunnelCredentials.clear,
+    canRestart: action => taskActivityBlockReason(toolActivityRuntime.getStatus(), action),
     restartDesktop: () => launchConfiguredDesktop({ restart: true })
   });
 }
@@ -353,7 +361,10 @@ async function showDashboardWindow(routeHash = '') {
 }
 
 async function openDashboardWindow(routeHash = '') {
-  if (!serviceRuntime.isListening()) await waitForLocalService(startServer());
+  if (!serviceRuntime.isListening()) {
+    void startServer();
+    await serviceRuntime.waitUntilListening();
+  }
   if (!serviceRuntime.isListening()) {
     recoveryWindowManager.show();
     throw new Error(currentStatus.error || 'Rel.AI connection is not running.');
@@ -372,10 +383,14 @@ async function openDashboardSettings() { return openDashboardWindow('#settings')
 async function openDashboardDiagnostics() { return openDashboardWindow('#diagnostics'); }
 
 async function launchConfiguredDesktop(options = {}) {
+  if (options.restart) {
+    const restartBlock = taskActivityBlockReason(toolActivityRuntime.getStatus(), 'restarting the connection');
+    if (restartBlock) throw new Error(restartBlock);
+  }
   try {
     if (options.restart) await stopServer({ silent: true, preserveDashboard: true });
     const pendingStart = startServer();
-    const status = options.background ? await pendingStart : await waitForLocalService(pendingStart);
+    const status = options.background ? await pendingStart : await serviceRuntime.waitUntilListening();
     if (!serviceRuntime.isListening()) {
       recoveryWindowManager.show();
       return status;
@@ -389,26 +404,6 @@ async function launchConfiguredDesktop(options = {}) {
     }
     recoveryWindowManager.show();
     return currentStatus;
-  }
-}
-
-async function waitForLocalService(pendingStart, timeoutMs = 10_000) {
-  let pollTimer = null;
-  const localReady = new Promise(resolve => {
-    const startedAt = Date.now();
-    const poll = () => {
-      if (serviceRuntime.isListening() || Date.now() - startedAt >= timeoutMs) {
-        resolve(currentStatus);
-        return;
-      }
-      pollTimer = setTimeout(poll, 20);
-    };
-    poll();
-  });
-  try {
-    return await Promise.race([Promise.resolve(pendingStart), localReady]);
-  } finally {
-    if (pollTimer) clearTimeout(pollTimer);
   }
 }
 

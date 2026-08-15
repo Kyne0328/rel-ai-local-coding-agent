@@ -15,6 +15,8 @@ const buffer = createRuntimeLogBuffer({
 });
 
 try {
+  const changes = [];
+  const unsubscribe = buffer.onChange(change => changes.push(change));
   buffer.append('first');
   buffer.append('Authorization: Bearer secret-token', { source: 'openai-tunnel', code: 'public_endpoint_failed' });
   buffer.append('{"token":"secret-token"}', { level: 'error' });
@@ -23,6 +25,10 @@ try {
 
   const bounded = buffer.snapshot();
   assert.equal(bounded.count, 3);
+  assert.equal(bounded.revision, 4);
+  assert.equal(changes.length, 4);
+  assert.equal(changes.at(-1).type, 'append');
+  assert.equal(changes.at(-1).entry.message, 'fourth');
   assert.equal(bounded.persistent, true);
   assert.equal(bounded.entries.length, 3);
   assert.equal(bounded.entries.at(-1).message, 'fourth');
@@ -54,6 +60,9 @@ try {
   await buffer.flush();
   assert.equal(cleared.ok, true);
   assert.equal(cleared.removed, 3);
+  assert.equal(changes.at(-1).type, 'reset');
+  assert.equal(changes.at(-1).revision, 5);
+  unsubscribe();
   assert.equal(buffer.snapshot().count, 0);
   assert.equal(fs.readFileSync(logPath, 'utf8'), '');
 } finally {

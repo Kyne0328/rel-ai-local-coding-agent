@@ -9,10 +9,10 @@ import { confirmAction } from '../../components/confirm-dialog.js';
 import { esc, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter } from '../../router.js';
 
-const LIVE_TAIL_INTERVAL_MS = 2000;
+const LIVE_TAIL_REFRESH_DELAY_MS = 160;
 let currentReport = null;
 let currentContainer = null;
-let liveTailTimer = 0;
+let liveTailRefreshTimer = 0;
 let liveTailLoading = false;
 let liveTailEnabled = false;
 const filters = { search: '', scope: 'all', severity: 'all', source: 'all' };
@@ -36,6 +36,7 @@ export function mountDiagnostics(container) {
         </div>
       </div>
       <div id="diagnosticFilterHost"></div>
+      <div class="sr-only" data-diagnostic-live-status role="status" aria-live="polite" aria-atomic="true"></div>
       <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading troubleshooting info…</div></div>
     </div>`;
   bindHeaderActions(container);
@@ -320,29 +321,82 @@ function startLiveTail(container) {
   stopLiveTail();
   liveTailEnabled = true;
   currentContainer = container;
-  void refreshLiveTail();
-  liveTailTimer = window.setInterval(refreshLiveTail, LIVE_TAIL_INTERVAL_MS);
+  window.addEventListener('relai:diagnostics-live', handleLiveTailEvent);
 }
 
 function stopLiveTail() {
   liveTailEnabled = false;
-  if (liveTailTimer) window.clearInterval(liveTailTimer);
-  liveTailTimer = 0;
+  window.removeEventListener('relai:diagnostics-live', handleLiveTailEvent);
+  if (liveTailRefreshTimer) window.clearTimeout(liveTailRefreshTimer);
+  liveTailRefreshTimer = 0;
   liveTailLoading = false;
 }
 
-async function refreshLiveTail() {
-  if (liveTailLoading || document.visibilityState === 'hidden') return;
+function handleLiveTailEvent(event) {
+  if (!liveTailEnabled) return;
   if (!currentContainer || !document.contains(currentContainer) || !location.hash.startsWith('#diagnostics')) {
     stopLiveTail();
     return;
   }
+  const detail = event.detail || {};
+  const change = detail.type === 'diagnostics.updated' ? detail.data?.change : null;
+  if (change?.type === 'append' && change.entry && currentReport?.logs?.runtime) {
+    applyRuntimeLogDelta(change);
+    return;
+  }
+  scheduleLiveTailRefresh();
+}
+
+function scheduleLiveTailRefresh() {
+  if (document.visibilityState === 'hidden' || liveTailRefreshTimer) return;
+  liveTailRefreshTimer = window.setTimeout(() => {
+    liveTailRefreshTimer = 0;
+    void refreshLiveTail();
+  }, LIVE_TAIL_REFRESH_DELAY_MS);
+}
+
+async function refreshLiveTail() {
+  if (liveTailLoading || document.visibilityState === 'hidden') return;
   liveTailLoading = true;
   try {
     await loadDiagnostics(currentContainer, { silent: true });
   } finally {
     liveTailLoading = false;
   }
+}
+
+function applyRuntimeLogDelta(change) {
+  const runtime = currentReport.logs.runtime;
+  const entries = Array.isArray(runtime.entries) ? runtime.entries : [];
+  runtime.entries = [...entries, change.entry].slice(-100);
+  runtime.count = Math.max(Number(runtime.count || 0) + 1, runtime.entries.length);
+  runtime.revision = Number(change.revision || runtime.revision || 0);
+  updateSourceOptions(currentReport);
+  renderDiagnosticLogs(currentContainer);
+  if (['warning', 'error'].includes(change.entry.level)) announceDiagnosticUpdate(change.entry);
+}
+
+function renderDiagnosticLogs(container) {
+  const root = container?.querySelector('#diagnosticSummary');
+  const currentLogs = root?.querySelector('[data-diagnostic-region="logs"]');
+  if (!root || !currentLogs || !currentReport) return;
+  const scrollState = captureLogScrollState(currentLogs);
+  const view = filteredDiagnosticView(currentReport);
+  const detached = document.createElement('div');
+  detached.innerHTML = logsHtml(currentReport.logs || {}, view);
+  const nextLogs = detached.firstElementChild;
+  if (!nextLogs) return;
+  currentLogs.replaceWith(nextLogs);
+  restoreLogScrollState(nextLogs, scrollState);
+  const summary = container.querySelector('#diagnosticFilterHost .filter-summary');
+  if (summary) summary.textContent = filterSummary(view);
+}
+
+function announceDiagnosticUpdate(entry) {
+  const status = currentContainer?.querySelector('[data-diagnostic-live-status]');
+  if (!status) return;
+  const level = entry.level === 'error' ? 'error' : 'warning';
+  status.textContent = `New app log ${level} from ${entry.source || 'Rel.AI'}.`;
 }
 
 function updateLiveTailButton(container) {
@@ -553,7 +607,7 @@ function logPanel(title, entries, emptyText, available, subtitle) {
     : `<div class="diagnostic-log-empty">${esc(emptyText)}</div>`;
   return `<section class="card diagnostic-log-card">
     <div class="card-head"><div><h3>${esc(title)}</h3>${subtitle ? `<p>${esc(subtitle)}</p>` : ''}</div><span class="section-action">${available ? `${entries.length} shown` : 'Unavailable'}</span></div>
-    <div class="card-body diagnostic-log-list" role="log" aria-live="polite">${rows}</div>
+    <div class="card-body diagnostic-log-list" role="log" aria-label="${esc(title)}">${rows}</div>
   </section>`;
 }
 

@@ -19,7 +19,7 @@ function createShutdownCoordinator(options = {}) {
       const errors = [];
       runStep(stopUpdater, 'updater', errors);
       runStep(stopActivity, 'activity runtime', errors);
-      runStep(closeWindows, 'windows', errors);
+      await runStepAsync(closeWindows, 'windows', errors);
 
       let serviceResult = null;
       try {
@@ -32,11 +32,11 @@ function createShutdownCoordinator(options = {}) {
       } catch (error) {
         errors.push(stepError('telemetry', error));
       }
-      runStep(removeRuntimeMarker, 'runtime marker', errors);
+      await runStepAsync(removeRuntimeMarker, 'runtime marker', errors);
 
       const serviceClean = serviceResult?.cleanup?.clean !== false;
       const clean = errors.length === 0 && serviceClean;
-      if (clean) runStep(markCleanShutdown, 'lifecycle marker', errors);
+      if (clean) await runStepAsync(markCleanShutdown, 'lifecycle marker', errors);
       prepared = true;
 
       for (const item of errors) {
@@ -97,6 +97,14 @@ function closeHttpServer(server, options = {}) {
 function runStep(action, step, errors) {
   try {
     action();
+  } catch (error) {
+    errors.push(stepError(step, error));
+  }
+}
+
+async function runStepAsync(action, step, errors) {
+  try {
+    await action();
   } catch (error) {
     errors.push(stepError(step, error));
   }

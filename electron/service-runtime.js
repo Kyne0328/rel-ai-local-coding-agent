@@ -11,6 +11,7 @@ function createDesktopServiceRuntime(deps) {
   } = deps;
   let httpServer = null;
   let startPromise = null;
+  let localReadyPromise = null;
   let lifecycleToken = 0;
 
   function isListening() { return Boolean(httpServer?.listening); }
@@ -19,14 +20,16 @@ function createDesktopServiceRuntime(deps) {
     if (isListening() && secureTunnelRuntime.snapshot().state === 'running') { pushStatus(); return getCurrentStatus(); }
     if (startPromise) return startPromise;
     const runToken = ++lifecycleToken;
-    const pendingStart = start(runToken);
+    const localReady = deferred();
+    localReadyPromise = localReady.promise;
+    const pendingStart = start(runToken, localReady.resolve);
     startPromise = pendingStart;
-    void pendingStart.then(clearPending, clearPending);
+    void pendingStart.then(status => localReady.resolve(status), () => localReady.resolve(getCurrentStatus())).finally(clearPending);
     return pendingStart;
     function clearPending() { if (startPromise === pendingStart) startPromise = null; }
   }
 
-  async function start(runToken) {
+  async function start(runToken, markLocalReady) {
     let guiConfig;
     let apiKey;
     try {
@@ -55,7 +58,8 @@ function createDesktopServiceRuntime(deps) {
         host: '127.0.0.1', port: guiConfig.port, token: guiConfig.token, publicUrl: '', exitOnError: false,
         pickFolder: () => dashboardWindowManager.pickFolder(), openFolder: folderPath => dashboardWindowManager.openFolder(folderPath),
         getTaskActivity: toolActivityRuntime.getStatus, getDesktopStatus: getCurrentStatus, getRuntimeAccess,
-        resetTaskActivity: toolActivityRuntime.resetHistory, getRuntimeLogs: runtimeLogs.snapshot, clearRuntimeLogs: runtimeLogs.clear
+        resetTaskActivity: toolActivityRuntime.resetHistory, getRuntimeLogs: runtimeLogs.snapshot, clearRuntimeLogs: runtimeLogs.clear,
+        onRuntimeLogChange: runtimeLogs.onChange
       });
       actualPort = await waitForListening(httpServer);
     } catch (error) {
@@ -75,6 +79,7 @@ function createDesktopServiceRuntime(deps) {
       authenticationRequired: false,
       error: '', errorCode: '', localUrl
     });
+    markLocalReady(getCurrentStatus());
 
     let result;
     try {
@@ -105,18 +110,34 @@ function createDesktopServiceRuntime(deps) {
     return getCurrentStatus();
   }
 
+  async function waitUntilListening(timeoutMs = 10_000) {
+    if (isListening()) return getCurrentStatus();
+    const pending = localReadyPromise || startPromise;
+    if (!pending) return getCurrentStatus();
+    let timer = null;
+    try {
+      return await Promise.race([
+        pending,
+        new Promise(resolve => { timer = setTimeout(() => resolve(getCurrentStatus()), Math.max(1, Number(timeoutMs || 10_000))); })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   async function stopServer(options = {}) {
     lifecycleToken += 1;
     const runtimeConfig = configModule.readConfig();
     const ownedServer = httpServer;
     httpServer = null;
     startPromise = null;
+    localReadyPromise = null;
     const [managedProcesses, secureTunnel, localService] = await Promise.all([
       stopAllManagedProcesses(runtimeConfig).catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: formatError(error) })),
       secureTunnelRuntime.stop().catch(error => ({ stopped: false, exited: false, error: formatError(error) })),
       closeHttpServer(ownedServer)
     ]);
-    if (!options.preserveDashboard) dashboardWindowManager.close();
+    if (!options.preserveDashboard) await dashboardWindowManager.close();
     dashboardSessions.clearDashboardSessions();
     const nextStatus = initialDesktopStatus(app.getVersion());
     replaceCurrentStatus(nextStatus, { silent: options.silent === true });
@@ -141,7 +162,21 @@ function createDesktopServiceRuntime(deps) {
     };
   }
 
-  return { startServer, stopServer, isListening, buildDashboardConnection };
+  return { startServer, stopServer, isListening, waitUntilListening, buildDashboardConnection };
+}
+
+function deferred() {
+  let settled = false;
+  let resolvePromise;
+  const promise = new Promise(resolve => { resolvePromise = resolve; });
+  return {
+    promise,
+    resolve(value) {
+      if (settled) return;
+      settled = true;
+      resolvePromise(value);
+    }
+  };
 }
 
 function waitForListening(server) {

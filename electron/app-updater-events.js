@@ -12,7 +12,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, h
   bind('checking-for-update', () => emit({ state: 'checking', error: '', errorCode: '', integrityVerified: false }));
   bind('update-available', info => {
     const availableVersion = String(info?.version || '').trim();
-    store.writeLastCheck(now());
+    void store.writeLastCheck(now());
     if (!isStableVersion(availableVersion)) return handleError(new Error('Update metadata contains an invalid stable version.'));
     if (!isStableVersion(status().currentVersion)) {
       return handleError(new Error('The installed application version is invalid, so the update cannot be trusted.'));
@@ -35,7 +35,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, h
     });
   });
   bind('update-not-available', () => {
-    store.writeLastCheck(now());
+    void store.writeLastCheck(now());
     log('Rel.AI MCP is up to date.');
     emit({
       state: 'up_to_date', availableVersion: '', releaseDate: '', releaseNotes: [],

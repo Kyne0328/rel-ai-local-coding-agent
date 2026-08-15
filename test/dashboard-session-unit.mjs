@@ -33,6 +33,23 @@ try {
   const cookie = setCookie.split(';')[0];
   assert.match(cookie, /^relai_dashboard_session=/);
 
+  const bearerResponse = responseRecorder();
+  const bearerOnly = dashboardRequest('http://127.0.0.1:3333/api/pick-folder');
+  bearerOnly.req.headers.authorization = `Bearer ${token}`;
+  assert.equal(isDashboardAuthorized(bearerOnly.req, bearerOnly.parsed, bearerOnly.options, bearerResponse), false, 'dashboard APIs must not accept the MCP bearer token from renderer requests');
+  const queryTokenResponse = responseRecorder();
+  const queryTokenOnly = dashboardRequest(`http://127.0.0.1:3333/api/pick-folder?token=${encodeURIComponent(token)}`);
+  assert.equal(isDashboardAuthorized(queryTokenOnly.req, queryTokenOnly.parsed, queryTokenOnly.options, queryTokenResponse), false, 'dashboard APIs must not accept bearer credentials in URLs');
+
+  const browserLaunchResponse = responseRecorder();
+  const browserLaunch = dashboardRequest(`http://127.0.0.1:3333/dashboard?token=${encodeURIComponent(token)}`);
+  assert.equal(isDashboardAuthorized(browserLaunch.req, browserLaunch.parsed, browserLaunch.options, browserLaunchResponse), true, 'standalone dashboard may exchange its launch token for a session cookie only on /dashboard');
+  const browserCookie = String(browserLaunchResponse.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(browserCookie, /relai_dashboard_session=/);
+  const browserApiResponse = responseRecorder();
+  const browserApi = dashboardRequest('http://127.0.0.1:3333/api/dashboard/v10', browserCookie);
+  assert.equal(isDashboardAuthorized(browserApi.req, browserApi.parsed, browserApi.options, browserApiResponse), true, 'standalone dashboard APIs must use the exchanged session cookie');
+
   const renewalResponse = responseRecorder();
   const protectedRequest = dashboardRequest('http://127.0.0.1:3333/api/pick-folder', cookie);
   assert.equal(isDashboardAuthorized(protectedRequest.req, protectedRequest.parsed, protectedRequest.options, renewalResponse), true);

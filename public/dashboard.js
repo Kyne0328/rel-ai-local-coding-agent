@@ -1,4 +1,4 @@
-import { setToken, getToken, fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
+import { fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore, applyLiveEvent } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getRouteParams, replaceRouteParams, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
@@ -12,12 +12,12 @@ import { initWindowChrome } from './ui/window-chrome.js';
 import { createDashboardClock } from './ui/clock.js';
 import { initUpdateAvailableModal } from './ui/update-available-modal.js';
 import { initSidebar } from './ui/sidebar.js';
+import { recordRecentWorkspace } from './ui/features/workspaces/recents.js';
 
 initUiPreferences();
 initSidebar();
 
 const launchParams = new URLSearchParams(location.search);
-const urlToken = launchParams.get('token') || '';
 const surface = launchParams.get('surface') === 'desktop' ? 'desktop' : 'browser';
 const requestedChrome = surface === 'desktop' && launchParams.get('chrome') === 'custom' ? 'custom' : 'native';
 const requestedPlatform = ['win32', 'darwin', 'linux', 'other'].includes(launchParams.get('platform')) ? launchParams.get('platform') : 'other';
@@ -25,8 +25,6 @@ document.documentElement.dataset.surface = surface;
 document.documentElement.dataset.windowChrome = requestedChrome;
 document.documentElement.dataset.platform = requestedPlatform;
 if (surface === 'desktop') initUpdateAvailableModal();
-const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
-if (token) setToken(token);
 cleanLaunchQuery();
 restoreRoute();
 
@@ -129,7 +127,7 @@ async function boot() {
   }, true);
   window.addEventListener('relai:dropdown-closed', flushDeferredViewRender);
   initEvents(liveOnEvent, liveStateChange);
-  startSSE(getToken);
+  startSSE();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void doRefresh({ source: 'visibility-resume' });
   });
@@ -242,6 +240,8 @@ function renderDashboardState(kind, title, description) {
 
 async function liveOnEvent(event) {
   if (!event?.type || !event.data || event.data.ok === false) return;
+  window.dispatchEvent(new CustomEvent('relai:diagnostics-live', { detail: event }));
+  if (event.type === 'diagnostics.updated') return;
   const applied = applyLiveEvent(event.type, event.data);
   if (!applied.accepted) return;
   const hydrated = withConnectionState(applied.state, _liveState);

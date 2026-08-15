@@ -9,7 +9,7 @@ function controllerRuntimeMarkerPath() {
   return path.join(path.resolve(stateDir), MARKER_FILE);
 }
 
-function writeControllerRuntimeMarker(app) {
+async function writeControllerRuntimeMarker(app) {
   const markerPath = controllerRuntimeMarkerPath();
   const marker = {
     schemaVersion: 1,
@@ -22,23 +22,24 @@ function writeControllerRuntimeMarker(app) {
     cwd: process.cwd(),
     startedAt: new Date().toISOString()
   };
-  fs.mkdirSync(path.dirname(markerPath), { recursive: true, mode: 0o700 });
+  await fs.promises.mkdir(path.dirname(markerPath), { recursive: true, mode: 0o700 });
   const temporary = `${markerPath}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(temporary, markerPath);
+  await fs.promises.writeFile(temporary, `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o600 });
+  await fs.promises.rm(markerPath, { force: true });
+  await fs.promises.rename(temporary, markerPath);
   return marker;
 }
 
-function removeControllerRuntimeMarker() {
+async function removeControllerRuntimeMarker() {
   const markerPath = controllerRuntimeMarkerPath();
   try {
-    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    const marker = JSON.parse(await fs.promises.readFile(markerPath, 'utf8'));
     if (Number(marker.pid || 0) !== process.pid) return false;
-    fs.rmSync(markerPath, { force: true });
+    await fs.promises.rm(markerPath, { force: true });
     return true;
   } catch {
     return false;
   }
 }
 
-export {   removeControllerRuntimeMarker, writeControllerRuntimeMarker };
+export { removeControllerRuntimeMarker, writeControllerRuntimeMarker };
