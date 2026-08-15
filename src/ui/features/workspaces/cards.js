@@ -188,11 +188,16 @@ function workspacePrimaryActions(view) {
     ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>`
     : '';
   return `
-    <button type="button" data-edit-workspace="${view.aliasAttr}">Edit project</button>
     <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run checks</button>
-    <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Project details</button>
-    <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>
-    ${openFolder}`;
+    ${openFolder}
+    <details class="workspace-action-menu">
+      <summary class="buttonlike secondary">More</summary>
+      <div class="workspace-action-menu-items">
+        <button type="button" data-edit-workspace="${view.aliasAttr}">Edit project</button>
+        <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Project details</button>
+        <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>
+      </div>
+    </details>`;
 }
 
 function healthFindingsCard(findings) {

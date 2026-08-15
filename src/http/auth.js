@@ -1,18 +1,13 @@
-import { isAuthorized, timingSafeEqual } from './io.js';
 import * as dashboardSessions from './dashboardSessions.js';
 
-function hasDashboardQueryToken(parsed, options) {
-  if (!options.token) return false;
-  const supplied = parsed.searchParams.get('token');
-  return supplied != null && timingSafeEqual(String(supplied).trim(), String(options.token).trim());
-}
-
 function isDashboardAuthorized(req, parsed, options, res) {
-  if (isAuthorized(req, options) || hasDashboardQueryToken(parsed, options)) return true;
   if (dashboardSessions.validateDashboardSession(req, options.token, res)) return true;
+  if (parsed.pathname !== '/dashboard') return false;
   const bootstrap = parsed.searchParams.get('bootstrap');
-  if (!bootstrap) return false;
-  const sessionId = dashboardSessions.consumeDashboardBootstrap(bootstrap, options.token);
+  const queryToken = parsed.searchParams.get('token');
+  const sessionId = bootstrap
+    ? dashboardSessions.consumeDashboardBootstrap(bootstrap, options.token)
+    : dashboardSessions.createDashboardSession(queryToken, options.token);
   if (!sessionId) return false;
   dashboardSessions.setDashboardSessionCookie(res, sessionId);
   return true;

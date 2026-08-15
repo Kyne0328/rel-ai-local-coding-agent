@@ -5,6 +5,7 @@ import { importResourceModule } from './resource-path.js';
 
 const { runtimeMetadata } = await importResourceModule('src/runtimeCompatibility.js');
 import { bindUpdaterEvents } from "./app-updater-events.js";
+import { taskActivityBlockReason } from './tool-sleep-blocker.js';
 import { compareVersions, isStableVersion, parseStableVersion } from "./update-version.js";
 
 const UPDATE_RETRY_DELAYS_MS = Object.freeze([500, 1500]);
@@ -81,7 +82,7 @@ function createAppUpdater(options = {}) {
       log,
       currentCompatibility: installedCompatibility
     });
-    scheduleAutomaticCheck();
+    void scheduleAutomaticCheck();
     emit({ state: 'idle' });
     return snapshot();
   }
@@ -100,12 +101,12 @@ function createAppUpdater(options = {}) {
     log('Checking for application updates.');
     try {
       await runWithRetries('Update check', () => autoUpdater.checkForUpdates());
-      store.writeLastCheck(now());
-      scheduleAutomaticCheck();
+      await store.writeLastCheck(now());
+      void scheduleAutomaticCheck();
       return { ok: true, status: snapshot() };
     } catch (error) {
-      store.writeLastCheck(now());
-      scheduleAutomaticCheck();
+      await store.writeLastCheck(now());
+      void scheduleAutomaticCheck();
       return handleError(error);
     }
   }
@@ -129,14 +130,8 @@ function createAppUpdater(options = {}) {
     if (status.state !== 'downloaded' || status.integrityVerified !== true) {
       return failure(codes.busy, 'Download and verify the update before restarting to install it.', false);
     }
-    const activeCalls = Number(getTaskActivity()?.activeCalls || 0);
-    if (activeCalls > 0) {
-      return failure(
-        codes.blocked,
-        `Wait for ${activeCalls} active Rel.AI tool call${activeCalls === 1 ? '' : 's'} to finish before installing the update.`,
-        true
-      );
-    }
+    const taskBlock = taskActivityBlockReason(getTaskActivity(), 'restarting to install the update');
+    if (taskBlock) return failure(codes.blocked, taskBlock, true);
     emit({ state: 'installing', error: '', errorCode: '' });
     log(`Restarting to install Rel.AI MCP ${status.availableVersion || 'update'}.`);
     let preparation;
@@ -153,10 +148,11 @@ function createAppUpdater(options = {}) {
     return { ok: true, installing: true, status: snapshot() };
   }
 
-  function scheduleAutomaticCheck() {
+  async function scheduleAutomaticCheck() {
     if (!support.supported || !started) return;
     if (autoCheckTimer) clearTimer(autoCheckTimer);
-    const lastCheck = store.readLastCheck();
+    const lastCheck = await store.readLastCheck();
+    if (!support.supported || !started) return;
     const elapsed = lastCheck > 0 ? Math.max(0, now() - lastCheck) : 0;
     const delay = lastCheck > 0 && elapsed < AUTO_CHECK_INTERVAL_MS
       ? AUTO_CHECK_INTERVAL_MS - elapsed

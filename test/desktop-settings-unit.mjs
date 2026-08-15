@@ -15,7 +15,7 @@ const { readDesktopSettings, saveDesktopSettings } = await import('../electron/d
 
 let notificationsEnabled = true;
 let restarts = 0;
-let storedApiKey = '';
+let storedApiKey = 'sk-runtime-original-123456';
 
 try {
   saveLauncherConfig({ port: 3333, token: 'preserved-token', tunnelId: 'tunnel_example123456' });
@@ -30,7 +30,11 @@ try {
 
   const runtimeActions = {
     setNotificationsEnabled(value) { notificationsEnabled = value; },
+    getNotificationsEnabled() { return notificationsEnabled; },
     setTunnelApiKey(value) { storedApiKey = value; },
+    getTunnelApiKey() { return storedApiKey; },
+    clearTunnelApiKey() { storedApiKey = ''; },
+    canRestart() { return ''; },
     async restartDesktop() { restarts += 1; return { serverRunning: true }; }
   };
 
@@ -46,9 +50,30 @@ try {
   assert.equal(notificationsEnabled, false);
   assert.equal(restarts, 1);
 
+  let failingRestarts = 0;
   await assert.rejects(
-    () => saveDesktopSettings({}, { setTunnelApiKey() {}, restartDesktop: async () => ({ serverRunning: false, error: 'restart failed' }) }),
-    /restart failed/
+    () => saveDesktopSettings({ port: 5555, tunnelId: 'tunnel_failed12345', tunnelApiKey: 'sk-runtime-failed-123456', notificationsEnabled: true }, {
+      setNotificationsEnabled(value) { notificationsEnabled = value; },
+      getNotificationsEnabled() { return notificationsEnabled; },
+      setTunnelApiKey(value) { storedApiKey = value; },
+      getTunnelApiKey() { return storedApiKey; },
+      clearTunnelApiKey() { storedApiKey = ''; },
+      canRestart() { return ''; },
+      restartDesktop: async () => {
+        failingRestarts += 1;
+        return failingRestarts === 1 ? { serverRunning: false, error: 'restart failed' } : { serverRunning: true };
+      }
+    }),
+    /restart failed.*restored/i
+  );
+  assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123' }, 'failed reconnect must restore launcher config');
+  assert.equal(storedApiKey, 'sk-runtime-replacement-123456', 'failed reconnect must restore the previous encrypted key');
+  assert.equal(notificationsEnabled, false, 'failed reconnect must restore notification preferences');
+  assert.equal(failingRestarts, 2, 'rollback must restart the restored configuration');
+
+  await assert.rejects(
+    () => saveDesktopSettings({}, { setTunnelApiKey() {}, canRestart: () => 'Finish or cancel the active Rel.AI task before saving connection settings.', restartDesktop: async () => ({ serverRunning: true }) }),
+    /active Rel\.AI task/
   );
   await assert.rejects(() => saveDesktopSettings({}, { setTunnelApiKey() {} }), /restartDesktop is required/);
 } finally {

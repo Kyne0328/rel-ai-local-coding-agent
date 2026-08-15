@@ -35,7 +35,7 @@ function syncHomeRegion(current, nextNode, selector, beforeSelector = '') {
   const currentNode = current.querySelector(selector);
   if (currentNode && nextNode) {
     syncHomeClockText(currentNode, nextNode);
-    if (!currentNode.isEqualNode(nextNode)) currentNode.replaceWith(nextNode);
+    if (!currentNode.isEqualNode(nextNode)) patchHomeNode(currentNode, nextNode);
     return;
   }
   if (currentNode) {
@@ -45,6 +45,29 @@ function syncHomeRegion(current, nextNode, selector, beforeSelector = '') {
   if (!nextNode) return;
   const before = beforeSelector ? current.querySelector(beforeSelector) : null;
   current.insertBefore(nextNode, before);
+}
+
+function patchHomeNode(currentNode, nextNode) {
+  if (currentNode.nodeType !== nextNode.nodeType || currentNode.nodeName !== nextNode.nodeName) {
+    currentNode.replaceWith(nextNode);
+    return;
+  }
+  if (currentNode.nodeType === Node.TEXT_NODE) {
+    if (currentNode.nodeValue !== nextNode.nodeValue) currentNode.nodeValue = nextNode.nodeValue;
+    return;
+  }
+  const currentAttributes = new Map([...currentNode.attributes].map(attribute => [attribute.name, attribute.value]));
+  for (const attribute of nextNode.attributes) {
+    if (currentAttributes.get(attribute.name) !== attribute.value) currentNode.setAttribute(attribute.name, attribute.value);
+    currentAttributes.delete(attribute.name);
+  }
+  for (const name of currentAttributes.keys()) currentNode.removeAttribute(name);
+  const currentChildren = [...currentNode.childNodes];
+  const nextChildren = [...nextNode.childNodes];
+  const shared = Math.min(currentChildren.length, nextChildren.length);
+  for (let index = 0; index < shared; index += 1) patchHomeNode(currentChildren[index], nextChildren[index]);
+  for (let index = shared; index < nextChildren.length; index += 1) currentNode.appendChild(nextChildren[index].cloneNode(true));
+  while (currentNode.childNodes.length > nextChildren.length) currentNode.lastChild?.remove();
 }
 
 function syncHomeClockText(currentNode, nextNode) {
@@ -264,12 +287,8 @@ function taskAction(tool) {
   return 'Looking through the project';
 }
 
-export function buildAttention(workspaces, findings, _endpoint) {
+export function buildAttention(_workspaces, findings, _endpoint) {
   const items = [];
-  const missingValidation = workspaces.filter(workspace => !hasValidation(workspace));
-  if (missingValidation.length) {
-    items.push({ priority: 2, tone: 'warn', title: 'Checks are not set up', copy: `${missingValidation.length} project${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: routeMetadata('workspaces').href, cta: 'Review checks' });
-  }
   if (findings.length) {
     items.push({ priority: 0, tone: 'bad', title: 'Problems need attention', copy: `${findings.length} problem${findings.length === 1 ? '' : 's'} may affect project access or reliability.`, href: routeMetadata('diagnostics').href, cta: 'Troubleshoot' });
   }
@@ -483,7 +502,8 @@ function recentTaskStatus(status) {
   if (status === 'running' || status === 'working') return pillHtml('running');
   if (status === 'validating') return pillHtml('validating');
   if (status === 'validation_failed') return pillHtml('validation failed');
-  if (status === 'expired' || status === 'inactive') return pillHtml('expired');
+  if (status === 'expired') return pillHtml('expired');
+  if (status === 'inactive') return pillHtml('inactive');
   if (status === 'cancelled') return pillHtml('cancelled');
   if (['queued', 'planning', 'waiting_for_approval', 'waiting', 'settling'].includes(status)) return pillHtml('open');
   return pillHtml('unknown');

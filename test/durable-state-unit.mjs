@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { DurableStateError, readJsonFile, writeJsonAtomic, writeJsonAtomicAsync } from '../src/durableState.js';
+import { DurableStateError, readJsonFile, readJsonFileAsync, writeJsonAtomic, writeJsonAtomicAsync } from '../src/durableState.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-durable-state-'));
 const file = path.join(root, 'state.json');
@@ -28,6 +28,7 @@ try {
 
   await writeJsonAtomicAsync(file, { revision: 3, value: 'async' }, { backup: true, durable: false });
   assert.deepEqual(readJsonFile(file), { revision: 3, value: 'async' });
+  assert.deepEqual(await readJsonFileAsync(file), { revision: 3, value: 'async' });
   assert.deepEqual(readJsonFile(`${file}.bak`), recovered, 'async atomic writes must preserve the previous record when backup is requested');
 
   fs.writeFileSync(file, '{}', 'utf8');

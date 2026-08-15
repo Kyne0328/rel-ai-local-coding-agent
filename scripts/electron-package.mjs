@@ -216,6 +216,9 @@ async function packageMacRelease(electronBuilder, builderArgs, spec) {
   const stagingOutputArg = `--config.directories.output=${stagingRoot}`;
   const prepackaged = path.join(stagingRoot, spec.unpackedDirectory);
   const artifactOutput = path.join(stagingRoot, '.artifact-targets', 'mac-output');
+  // macOS releases are intentionally unsigned until Rel.AI has Apple Developer Program
+  // Developer ID and notarization credentials. Keep electron/package.json mac.identity=null
+  // and disable auto-discovery here so unsigned packaging is explicit, not accidental drift.
   const environment = {
     ...process.env,
     REL_AI_TARGET_PLATFORM: spec.platform,

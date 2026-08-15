@@ -6,8 +6,10 @@ import { sanitizeText } from "../src/diagnostics.js";
 
 function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISOString(), filePath = '' } = {}) {
   const entries = [];
+  const listeners = new Set();
   let hydratedPath = '';
   let writeQueue = Promise.resolve();
+  let revision = 0;
 
   function append(message, options = {}) {
     hydrate();
@@ -23,6 +25,8 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     const overflow = entries.length > maxEntries;
     if (overflow) entries.splice(0, entries.length - maxEntries);
     persist(entry, overflow);
+    revision += 1;
+    emit({ type: 'append', revision, entry: { ...entry } });
     return { ...entry };
   }
 
@@ -31,6 +35,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     const limit = Math.min(Math.max(Number(options.limit || maxEntries), 1), maxEntries);
     return {
       available: true,
+      revision,
       count: entries.length,
       persistent: Boolean(resolveFilePath()),
       entries: entries.slice(-limit).map(entry => ({ ...entry }))
@@ -42,6 +47,8 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     const removed = entries.length;
     entries.length = 0;
     rewriteFile();
+    revision += 1;
+    emit({ type: 'reset', revision, removed });
     return { ok: true, removed };
   }
 
@@ -103,6 +110,18 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     await writeQueue;
   }
 
+  function onChange(listener) {
+    if (typeof listener !== 'function') return () => {};
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  function emit(event) {
+    for (const listener of [...listeners]) {
+      try { listener(event); } catch {}
+    }
+  }
+
   function resolveFilePath() {
     try {
       return String(typeof filePath === 'function' ? filePath() : filePath || '').trim();
@@ -111,7 +130,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     }
   }
 
-  return { append, snapshot, clear, recordStatusTransition, flush };
+  return { append, snapshot, clear, recordStatusTransition, flush, onChange };
 }
 
 function normalizeEntry(value = {}) {

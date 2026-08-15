@@ -304,7 +304,8 @@ function openDashboardEvents(res, req, options) {
           task: Number(taskActivity?.revision || 0),
           connection: Number(connectionSnapshot.revision || 0),
           workspace: Number(workspaceStateRevision() || 0),
-          process: Number(managedProcessStateRevision() || 0)
+          process: Number(managedProcessStateRevision() || 0),
+          diagnostics: Number(typeof options.getRuntimeLogs === 'function' ? options.getRuntimeLogs({ limit: 1 })?.revision || 0 : 0)
         }
       }
     });
@@ -333,6 +334,9 @@ function openDashboardEvents(res, req, options) {
       });
     } catch (error) { sendDashboardStreamError(res, error); }
   });
+  const unsubscribeDiagnostics = typeof options.onRuntimeLogChange === 'function'
+    ? options.onRuntimeLogChange(change => sendDomain('diagnostics.updated', 'diagnostics', change.revision, { change }))
+    : () => {};
   const heartbeat = setInterval(() => {
     if (!res.destroyed) res.write(`: keepalive ${Date.now()}\n\n`);
   }, 15000);
@@ -342,6 +346,7 @@ function openDashboardEvents(res, req, options) {
     unsubscribeConnection();
     unsubscribeWorkspace();
     unsubscribeProcess();
+    unsubscribeDiagnostics();
     taskEvents.close();
     clearInterval(heartbeat);
   });

@@ -89,8 +89,19 @@ assert.doesNotMatch(wizard, /ngrok|Cloud gateway|Direct connection|approval toke
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-validation.js')), false);
 assert.match(workspaceMenuHtml([], ''), /aria-label="Project filter: All projects"/);
 const diagnosticsSource = read('src/ui/features/settings/diagnostics.js');
+const statusRendererSource = read('electron/renderer/status.js');
+assert.doesNotMatch(statusRendererSource, /setInterval\(renderTemporalText/, 'fallback status clock must not run a permanent one-second interval');
+assert.match(statusRendererSource, /addEventListener\('visibilitychange', ensureClock\)/, 'fallback status clock must pause while hidden');
+assert.match(statusRendererSource, /lastWindowFit/, 'fallback status window fitting must cache the last requested dimensions');
+const homeSource = read('src/ui/features/home/index.js');
+assert.match(homeSource, /patchHomeNode/, 'Overview live updates should patch stable DOM instead of replacing whole regions');
+assert.match(homeSource, /data-home-analytics/, 'Overview analytics preview must remain available');
 assert.match(diagnosticsSource, /value: 'all', label: 'Everything'/);
 assert.match(diagnosticsSource, /document\.visibilityState === 'hidden'/, 'hidden diagnostics tabs must pause live-tail requests');
+assert.match(diagnosticsSource, /relai:diagnostics-live/, 'diagnostics live tail must use the shared SSE event stream');
+assert.doesNotMatch(diagnosticsSource, /setInterval\(refreshLiveTail|LIVE_TAIL_INTERVAL_MS/, 'diagnostics must not poll the full report on a fixed interval');
+assert.match(diagnosticsSource, /role="status" aria-live="polite"/, 'diagnostics should use a narrow status announcer for significant live updates');
+assert.doesNotMatch(diagnosticsSource, /role="log" aria-live=/, 'the entire changing log must not be an aria-live region');
 assert.match(diagnosticsSource, /captureLogScrollState/, 'diagnostic refreshes must preserve users reading older logs');
 assert.match(diagnosticsSource, /previous\.follow/, 'diagnostic logs should auto-follow only when the user was already near the tail');
 const toolsSource = read('src/ui/features/tools/index.js');
@@ -121,8 +132,10 @@ for (const featureStyle of [
 
 const workspaceCards = read('src/ui/features/workspaces/cards.js');
 const workspaceActions = read('src/ui/features/workspaces/actions.js');
-assert.match(workspaceCards, /data-repository-details=/, 'project cards must expose Project details as a visible action');
-assert.match(workspaceCards, />Project details</, 'Project details must be named directly instead of hidden behind generic wording');
+assert.match(workspaceCards, /data-repository-details=/, 'project cards must keep Project details available');
+assert.match(workspaceCards, />Project details</, 'Project details must keep its plain product label');
+assert.match(workspaceCards, /workspace-action-menu/, 'lower-frequency project actions should be grouped behind More');
+assert.match(workspaceCards, /data-run-validation=/, 'Run checks must remain directly available on project cards');
 assert.match(workspaceActions, /\[data-repository-details\]/, 'the visible Project details action must remain wired');
 assert.match(workspaceActions, /openModal/, 'Project details must open in the shared modal surface');
 assert.match(workspaceActions, /Project details/, 'Project details modal must keep the plain product label');

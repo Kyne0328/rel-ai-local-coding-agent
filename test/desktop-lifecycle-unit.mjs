@@ -31,7 +31,7 @@ assert.match(detectStartupSupport({ app: { ...app, isPackaged: false }, platform
 assert.match(detectStartupSupport({ app, platform: 'win32', env: { PORTABLE_EXECUTABLE_DIR: 'C:\\RelAI' } }).reason, /Portable builds/);
 
 const first = createDesktopLifecycleManager({ app, platform: 'win32', env: {}, now, onLog: (message, options) => logs.push({ message, options }) });
-const firstStatus = first.start();
+const firstStatus = await first.start();
 assert.equal(firstStatus.firstLaunch, true);
 assert.equal(firstStatus.updated, false);
 assert.equal(firstStatus.recoveredAfterUncleanShutdown, false);
@@ -47,40 +47,40 @@ assert.deepEqual(loginSettings, {
   path: process.execPath,
   args: ['--background']
 });
-const cleanStatus = first.markCleanShutdown();
-assert.equal(first.markCleanShutdown().lastCleanExitAt, cleanStatus.lastCleanExitAt);
+const cleanStatus = await first.markCleanShutdown();
+assert.equal((await first.markCleanShutdown()).lastCleanExitAt, cleanStatus.lastCleanExitAt);
 
 const second = createDesktopLifecycleManager({ app, platform: 'win32', env: {}, now, onLog: (message, options) => logs.push({ message, options }) });
-const secondStatus = second.start();
+const secondStatus = await second.start();
 assert.equal(secondStatus.firstLaunch, false);
 assert.equal(secondStatus.updated, false);
 assert.equal(secondStatus.recoveredAfterUncleanShutdown, false);
 assert.equal(secondStatus.launchCount, 2);
-second.markCleanShutdown();
+await second.markCleanShutdown();
 
 const statePath = path.join(stateDir, 'desktop-lifecycle.json');
 const previousState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
 fs.writeFileSync(statePath, `${JSON.stringify({ ...previousState, version: '0.20.7', running: false }, null, 2)}\n`);
 const updated = createDesktopLifecycleManager({ app, platform: 'win32', env: {}, now, onLog: (message, options) => logs.push({ message, options }) });
-const updatedStatus = updated.start();
+const updatedStatus = await updated.start();
 assert.equal(updatedStatus.updated, true);
 assert.equal(updatedStatus.previousVersion, '0.20.7');
-updated.markCleanShutdown();
+await updated.markCleanShutdown();
 
 const interruptedState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
 fs.writeFileSync(statePath, `${JSON.stringify({ ...interruptedState, running: true }, null, 2)}\n`);
 const recovered = createDesktopLifecycleManager({ app, platform: 'win32', env: {}, now, onLog: (message, options) => logs.push({ message, options }) });
-assert.equal(recovered.start().recoveredAfterUncleanShutdown, true);
+assert.equal((await recovered.start()).recoveredAfterUncleanShutdown, true);
 assert.ok(logs.some(entry => entry.options.code === 'unclean_shutdown_detected'));
 
 const background = createDesktopLifecycleManager({ app, platform: 'win32', env: {}, argv: ['RelAI.exe', '--background'], now });
-assert.equal(background.start().openedAtLogin, true);
-background.markCleanShutdown();
+assert.equal((await background.start()).openedAtLogin, true);
+await background.markCleanShutdown();
 
 const portable = createDesktopLifecycleManager({ app, platform: 'win32', env: { PORTABLE_EXECUTABLE_FILE: 'RelAI.exe' }, now });
-assert.equal(portable.start().launchAtLogin.supported, false);
+assert.equal((await portable.start()).launchAtLogin.supported, false);
 assert.equal(portable.setLaunchAtLogin(true).errorCode, 'startup_setting_not_supported');
 
-recovered.markCleanShutdown();
+await recovered.markCleanShutdown();
 fs.rmSync(stateDir, { recursive: true, force: true });
 console.log('Desktop lifecycle unit tests passed.');

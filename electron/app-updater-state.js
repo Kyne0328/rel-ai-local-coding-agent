@@ -1,33 +1,41 @@
 
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { importResourceModule } from './resource-path.js';
 import { assessUpdateSynchronization, cleanText, cleanVersion, normalizeStatus, progressPayload, updateCompatibilityMetadata } from './app-updater-status.js';
 
-const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durableState.js');
+const { readJsonFileAsync, writeJsonAtomicAsync } = await importResourceModule('src/durableState.js');
 
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AUTO_CHECK_DELAY_MS = 15 * 1000;
 
 function createUpdateStateStore({ app, onLog = () => {} }) {
   const statePath = path.join(safeUserDataPath(app), 'update-state.json');
+  let lastCheckAt = 0;
+  const hydrated = readJsonFileAsync(statePath, { backup: true, fallback: {} })
+    .then(value => { lastCheckAt = Number(value.lastCheckAt || 0); })
+    .catch(error => logStateError('read', error));
 
-  function readLastCheck() {
-    const value = readJsonFile(statePath, { backup: true, fallback: {} });
-    return Number(value.lastCheckAt || 0);
+  async function readLastCheck() {
+    await hydrated;
+    return lastCheckAt;
   }
 
-  function writeLastCheck(timestamp) {
+  async function writeLastCheck(timestamp) {
+    await hydrated;
+    lastCheckAt = Number(timestamp || 0);
     try {
-      fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
-      writeJsonAtomic(statePath, { lastCheckAt: Number(timestamp || 0) }, { mode: 0o600, backup: true });
+      await writeJsonAtomicAsync(statePath, { lastCheckAt }, { mode: 0o600, backup: true });
     } catch (error) {
-      onLog(`Could not save update-check time: ${cleanText(error?.message || error, 200)}`, {
-        source: 'updater',
-        level: 'warning'
-      });
+      logStateError('save', error);
     }
+  }
+
+  function logStateError(action, error) {
+    onLog(`Could not ${action} update-check time: ${cleanText(error?.message || error, 200)}`, {
+      source: 'updater',
+      level: 'warning'
+    });
   }
 
   return { readLastCheck, writeLastCheck };

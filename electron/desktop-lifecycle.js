@@ -1,11 +1,10 @@
 
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { importResourceModule } from './resource-path.js';
 
-const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durableState.js');
+const { readJsonFileAsync, writeJsonAtomicAsync } = await importResourceModule('src/durableState.js');
 
 function createDesktopLifecycleManager(options = {}) {
   const {
@@ -30,8 +29,8 @@ function createDesktopLifecycleManager(options = {}) {
   let launchId = '';
   let status = baseStatus(app, startupSupport);
 
-  function start() {
-    const previous = readState();
+  async function start() {
+    const previous = await readState();
     const currentVersion = cleanVersion(app.getVersion());
     const launchAtLogin = readLaunchAtLogin();
     launchId = crypto.randomUUID();
@@ -48,7 +47,7 @@ function createDesktopLifecycleManager(options = {}) {
       launchAtLogin,
       openedAtLogin: argv.includes('--background') || launchAtLogin.openedAtLogin === true
     };
-    writeState({
+    await writeState({
       version: currentVersion,
       running: true,
       launchId,
@@ -60,10 +59,10 @@ function createDesktopLifecycleManager(options = {}) {
     return snapshot();
   }
 
-  function markCleanShutdown() {
+  async function markCleanShutdown() {
     if (!launchId) return snapshot();
     const cleanExitAt = now();
-    writeState({
+    await writeState({
       version: status.currentVersion,
       running: false,
       launchId,
@@ -125,13 +124,12 @@ function createDesktopLifecycleManager(options = {}) {
   }
 
   function readState() {
-    return readJsonFile(statePath, { backup: true, fallback: {} });
+    return readJsonFileAsync(statePath, { backup: true, fallback: {} });
   }
 
-  function writeState(value) {
+  async function writeState(value) {
     try {
-      fs.mkdirSync(path.dirname(statePath), { recursive: true });
-      writeJsonAtomic(statePath, value, { mode: 0o600, backup: true });
+      await writeJsonAtomicAsync(statePath, value, { mode: 0o600, backup: true });
     } catch (error) {
       onLog(`Desktop lifecycle state could not be saved: ${cleanText(error?.message || error, 240)}`, {
         source: 'desktop-lifecycle',
