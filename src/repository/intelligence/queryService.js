@@ -43,7 +43,7 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
       if (!query) throw new Error('relai_code_inspect related requires query or symbol.');
       const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 10);
       const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
-      const fallback = zoekt.available && zoekt.current ? [] : searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit);
+      const fallback = zoekt.available && zoekt.current ? [] : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
       return { ...base, query, ...relatedFiles(workspace, db, query, maxResults, args._workflowContext, {}, [...zoekt.results, ...fallback]) };
     }
 
@@ -87,7 +87,7 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
   try {
     const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 20);
     const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
-    const fallback = zoekt.available && zoekt.current ? [] : searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit);
+    const fallback = zoekt.available && zoekt.current ? [] : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
     const filters = {
       pathPrefix: String(args.pathPrefix || '').replaceAll('\\', '/').replace(/^\.\//, ''),
       language: String(args.language || '').toLowerCase()

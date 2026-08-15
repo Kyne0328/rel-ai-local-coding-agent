@@ -1,28 +1,22 @@
-import { spawnSync } from 'node:child_process';
-
-import { resolveGitExecutable } from '../../gitExecutable.js';
-import { makeProcessEnvironment } from '../../processEnvironment.js';
+import { runProcess } from '../../process.js';
 import { isSecretPath } from '../../safety.js';
 import { isTestPath, languageForPath } from './languages.js';
 
 const SEARCH_TIMEOUT_MS = 10000;
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
-function searchGitCandidates(workspace, terms, maxResults = 1000) {
+async function searchGitCandidates(workspace, terms, maxResults = 1000, options = {}) {
   const cleanTerms = [...new Set((terms || []).map(String).map(term => term.trim()).filter(Boolean))].slice(0, 20);
   if (!cleanTerms.length) return [];
-  const executable = resolveGitExecutable() || 'git';
   const args = ['grep', '-l', '-I', '--untracked', '--no-color', '-i', '-F'];
   for (const term of cleanTerms) args.push('-e', term);
-  const result = spawnSync(executable, args, {
+  const result = await runProcess('git', args, {
     cwd: workspace.path,
-    env: makeProcessEnvironment(),
-    encoding: 'utf8',
     timeout: SEARCH_TIMEOUT_MS,
-    maxBuffer: MAX_OUTPUT_BYTES,
-    windowsHide: true
+    maxOutputBytes: MAX_OUTPUT_BYTES,
+    signal: options.signal
   });
-  if (result.error || (result.status !== 0 && result.status !== 1)) return [];
+  if (result.spawnError || result.timedOut || (result.exitCode !== 0 && result.exitCode !== 1)) return [];
   const results = [];
   for (const raw of String(result.stdout || '').split(/\r?\n/)) {
     const relativePath = raw.trim().replaceAll('\\', '/');
