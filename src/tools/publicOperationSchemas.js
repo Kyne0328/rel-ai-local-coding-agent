@@ -18,6 +18,21 @@ function publicExecInputSchema(inputSchema) {
   };
 }
 
+function publicProcessInputSchema(inputSchema) {
+  const properties = inputSchema.properties || {};
+  const describe = (name, description) => ({ ...properties[name], description });
+  return {
+    ...inputSchema,
+    properties: {
+      ...properties,
+      command: describe('command', 'Shell command string for start. Use only when shell syntax is deliberately required.'),
+      executable: describe('executable', 'Executable to launch directly with shell:false. Preferred for persistent process startup.'),
+      argv: describe('argv', 'Literal arguments passed directly to executable without shell parsing.'),
+      input: describe('input', 'For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream. For write, UTF-8 input sent to the running process.')
+    }
+  };
+}
+
 function publicEditInputSchema(inputSchema, maxBatchEdits) {
   const properties = inputSchema.properties || {};
   const describe = (name, description) => ({ ...properties[name], description });
@@ -50,4 +65,4 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
   };
 }
 
-export { publicEditInputSchema, publicExecInputSchema };
+export { publicEditInputSchema, publicExecInputSchema, publicProcessInputSchema };

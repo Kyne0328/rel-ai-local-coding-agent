@@ -124,11 +124,6 @@ export interface ToolDefinitionMetadata {
   behavior: ToolBehavior;
   dashboard: ToolDashboardMetadata;
   lifecycle?: ToolLifecycleMetadata;
-  actionContracts?: readonly Array<{
-    action: string;
-    required: readonly string[];
-    fields: readonly string[];
-  }>;
 }
 
 

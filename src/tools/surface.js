@@ -1,5 +1,4 @@
 import { TOOL_SURFACE_VERSION, getCatalogTools } from './actionCatalog.js';
-import { schemaFromDefinition } from './schemaBuilder.js';
 
 const tools = getCatalogTools();
 
@@ -18,7 +17,7 @@ function getToolMetadata() {
       capabilities: [...(definition.dashboard?.capabilities || ['inspect'])],
       state: 'active',
       replacements: [],
-      parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
+      parameters: Object.keys(definition.inputSchema?.properties || {}),
       outputFields: Object.keys(definition.outputSchema?.properties || {}),
       longRunning: definition.behavior?.longRunning === true,
       taskScope: definition.behavior?.taskScope || 'required',

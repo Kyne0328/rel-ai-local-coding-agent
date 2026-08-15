@@ -1,6 +1,7 @@
 // @ts-check
 
-import { publicEditInputSchema, publicExecInputSchema } from './publicOperationSchemas.js';
+import { publicEditInputSchema, publicExecInputSchema, publicProcessInputSchema } from './publicOperationSchemas.js';
+import { ACTION_REGISTRY } from './actionRegistry.js';
 import { MAX_BATCH_EDITS } from '../editLimits.js';
 import { outputSchemaFor } from './outputSchemas.js';
 import { OPERATION_DEFINITION_VALUES } from './operationDefinitionValues.js';
@@ -8,31 +9,25 @@ import { OPERATION_DEFINITION_VALUES } from './operationDefinitionValues.js';
 /** @typedef {import('../../types/boundaries.d.ts').ToolDefinitionMetadata} ToolDefinitionMetadata */
 /** @typedef {Omit<ToolDefinitionMetadata, 'annotations' | 'connectorStrip' | 'groups' | 'behavior' | 'dashboard' | 'outputSchema'> & { annotations?: Partial<ToolDefinitionMetadata['annotations']>, connectorStrip?: string[], groups?: import('../../types/boundaries.d.ts').ToolGroup[], behavior?: Partial<ToolDefinitionMetadata['behavior']>, dashboard?: Partial<ToolDefinitionMetadata['dashboard']>, outputSchema?: import('../../types/boundaries.d.ts').JsonSchema }} ToolDefinitionInput */
 
-
-
 const READ_ONLY_TOOLS = new Set([
   'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
-  'relai_process_read', 'relai_process_list',
-  'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
+  'relai_process_read', 'relai_process_list', 'relai_tidy_plan', 'relai_http_probe', 'relai_diff',
+  'relai_status', 'relai_git_draft_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
-  'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
-  'relai_ui',
-  'relai_diagnostics_run', 'relai_tidy_run', 'relai_run_checks',
-  'relai_restore_paths', 'relai_reset_workspace', 'relai_edit'
+  'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop', 'relai_ui',
+  'relai_diagnostics_run', 'relai_tidy_run', 'relai_run_checks', 'relai_restore_paths',
+  'relai_reset_workspace', 'relai_edit'
 ]);
 const IDEMPOTENT_TOOLS = new Set([
-  ...READ_ONLY_TOOLS,
-  'relai_process_stop', 'relai_restore_paths', 'relai_reset_workspace',
+  ...READ_ONLY_TOOLS, 'relai_process_stop', 'relai_restore_paths', 'relai_reset_workspace',
   'relai_cancel_work', 'relai_finish_work'
 ]);
 const OPEN_WORLD_TOOLS = new Set([
-  'relai_exec', 'relai_process_start', 'relai_process_write',
-  'relai_ui',
+  'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_ui',
   'relai_diagnostics_run', 'relai_run_checks', 'relai_git_push'
 ]);
 const NATIVE_TASK_ELIGIBLE_TOOLS = new Set();
-
 const PERSISTENT_PROCESS_TOOLS = new Set([
   'relai_process_start', 'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list'
 ]);
@@ -40,6 +35,17 @@ const ALWAYS_IMMEDIATE_TOOLS = new Set([
   'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search',
   'relai_status', 'relai_cancel_work', 'relai_finish_work'
 ]);
+
+const DEFAULT_BEHAVIOR = Object.freeze({
+  audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false,
+  summary: '', longRunning: false, taskScope: 'required', concurrencyScope: 'task', executionClass: 'bounded_synchronous'
+});
+const DEFAULT_DASHBOARD = Object.freeze({
+  category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false
+});
+const RESULT_SCHEMA = Object.freeze({
+  type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: true
+});
 
 function annotationsFor(name) {
   return {
@@ -56,14 +62,6 @@ function executionClassFor(name) {
   if (ALWAYS_IMMEDIATE_TOOLS.has(name)) return 'always_immediate';
   return 'bounded_synchronous';
 }
-
-const DEFAULT_BEHAVIOR = Object.freeze({
-  audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false, summary: '', longRunning: false,
-  taskScope: 'required', concurrencyScope: 'task', executionClass: 'bounded_synchronous'
-});
-const DEFAULT_DASHBOARD = Object.freeze({
-  category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false
-});
 
 /** @param {ToolDefinitionInput} definition @returns {ToolDefinitionMetadata} */
 function defineTool(definition) {
@@ -87,483 +85,214 @@ function defineTool(definition) {
 
 /** @type {readonly ToolDefinitionMetadata[]} */
 const OPERATION_DEFINITIONS = Object.freeze(OPERATION_DEFINITION_VALUES.map(defineTool));
-const OPERATION_DEFINITION_BY_NAME = new Map(OPERATION_DEFINITIONS.map((definition) => [definition.name, definition]));
+const OPERATION_DEFINITION_BY_NAME = new Map(OPERATION_DEFINITIONS.map(definition => [definition.name, definition]));
 
-/** @param {string} name @returns {ToolDefinitionMetadata | null} */
 function getOperationDefinition(name) {
   return OPERATION_DEFINITION_BY_NAME.get(String(name || '')) || null;
 }
 
-/** @returns {readonly ToolDefinitionMetadata[]} */
 function getOperationDefinitions() {
   return OPERATION_DEFINITIONS;
 }
 
-
-const STRING = Object.freeze({ type: 'string' });
-const WORKSPACE = Object.freeze({ type: 'string' });
-const ACTION = values => ({ type: 'string', enum: values });
-const RESULT_SCHEMA = Object.freeze({
-  type: 'object',
-  properties: { ok: { type: 'boolean' } },
-  required: ['ok'],
-  additionalProperties: true
-});
-
-
-const PUBLIC_DEFINITION_VALUES = [
-  define({
+/** @type {Array<Record<string, any>>} */
+const PUBLIC_TOOL_VALUES = [
+  {
     name: 'relai_work',
     title: 'Manage Repository Work',
     description: 'Use when starting, inspecting, finishing, or cancelling one logical repository task. Do not use for file inspection or mutation itself.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        action: ACTION(['begin', 'status', 'finish', 'cancel']),
-        workspace: WORKSPACE,
-        title: { type: 'string', minLength: 1, maxLength: 100 },
-        objective: { type: 'string', minLength: 1, maxLength: 500 },
-        bootstrap: { type: 'string', enum: ['compact', 'full', 'none'] },
-        instructionPath: { type: 'string', maxLength: 1000 },
-        maxBytes: { type: 'number', minimum: 1000, maximum: 5242880 },
-        summary: { type: 'string', minLength: 1, maxLength: 2000 },
-        reason: { type: 'string', maxLength: 500 }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('begin', ['workspace'], ['work_id', 'summary', 'reason', 'maxBytes']),
-        branch('status', [], ['title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason']),
-        branch('finish', ['work_id', 'summary'], ['title', 'objective', 'bootstrap', 'instructionPath', 'maxBytes', 'reason']),
-        branch('cancel', ['work_id'], ['title', 'objective', 'bootstrap', 'instructionPath', 'maxBytes', 'summary'])
-      ],
-      additionalProperties: false
-    },
     annotations: annotations(false, false, false, false),
     behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
     dashboard: { category: 'Workflow', capabilities: ['workflow'] }
-  }),
-  cloneOperation('relai_repo_snapshot', 'relai_snapshot', 'Repository Snapshot', 'Use when a compact repository or bootstrap overview is needed. Do not use for targeted file reads or searches.'),
-  cloneOperation('relai_read', 'relai_read', 'Read Repository', 'Use when exact file content, ranges, or directories are known and needed. Do not use for discovery across unknown locations.'),
-  define({
-    name: 'relai_search',
-    title: 'Search Repository',
+  },
+  {
+    name: 'relai_snapshot', title: 'Repository Snapshot',
+    description: 'Use when a compact repository or bootstrap overview is needed. Do not use for targeted file reads or searches.'
+  },
+  {
+    name: 'relai_read', title: 'Read Repository',
+    description: 'Use when exact file content, ranges, or directories are known and needed. Do not use for discovery across unknown locations.'
+  },
+  {
+    name: 'relai_search', title: 'Search Repository',
     description: 'Use for lexical or semantic discovery across repository content. Do not use when the exact file and range are already known.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['text', 'semantic']),
-        pattern: { type: 'string', minLength: 1, maxLength: 1000 },
-        glob: { type: 'string', maxLength: 256 },
-        fixed: { type: 'boolean' },
-        ignoreCase: { type: 'boolean' },
-        mode: { type: 'string', enum: ['auto', 'compact', 'context'] },
-        contextBefore: { type: 'number', minimum: 0, maximum: 100 },
-        contextAfter: { type: 'number', minimum: 0, maximum: 100 },
-        groupByFile: { type: 'boolean' },
-        mergeOverlaps: { type: 'boolean' },
-        maxFiles: { type: 'number', minimum: 1, maximum: 20000 },
-        maxRangesPerFile: { type: 'number', minimum: 1, maximum: 100 },
-        maxRangeLines: { type: 'number', minimum: 1, maximum: 1000 },
-        maxBytes: { type: 'number', minimum: 1000, maximum: 393216 },
-        maxResults: { type: 'number', minimum: 1, maximum: 1000 },
-        query: { type: 'string', minLength: 1, maxLength: 2000 },
-        pathPrefix: { type: 'string', maxLength: 500 },
-        language: { type: 'string', maxLength: 80 }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('text', ['pattern'], ['query', 'pathPrefix', 'language'], { maxFiles: { type: 'number', minimum: 1, maximum: 200 } }),
-        branch('semantic', ['query'], ['pattern', 'glob', 'fixed', 'ignoreCase', 'mode', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxRangesPerFile', 'maxRangeLines'], { maxResults: { type: 'number', minimum: 1, maximum: 100 } })
-      ],
-      additionalProperties: false
-    },
     annotations: annotations(true, false, true, false)
-  }),
-  define({
-    name: 'relai_inspect',
-    title: 'Inspect Code Relationships',
+  },
+  {
+    name: 'relai_inspect', title: 'Inspect Code Relationships',
     description: 'Use for symbol, reference, impact, trace, diagnostic, or architecture analysis. Do not use for plain text lookup.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture']),
-        symbol: { type: 'string', minLength: 1, maxLength: 256 },
-        query: { type: 'string', minLength: 1, maxLength: 1000 },
-        paths: { type: 'array', items: STRING, minItems: 1, maxItems: 100 },
-        maxResults: { type: 'number', minimum: 1, maximum: 1000 },
-        maxDepth: { type: 'number', minimum: 1, maximum: 8 },
-        maxFiles: { type: 'number', minimum: 1, maximum: 20000 }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('symbol', ['symbol'], ['query', 'paths', 'maxDepth']),
-        branch('references', ['symbol'], ['query', 'paths', 'maxDepth']),
-        branch('related', [], ['paths', 'maxDepth'], {}, {
-          anyOf: [{ required: ['query'] }, { required: ['symbol'] }]
-        }),
-        branch('impact', [], ['query'], {}, {
-          anyOf: [{ required: ['symbol'] }, { required: ['paths'] }]
-        }),
-        branch('trace', ['symbol'], ['query', 'paths']),
-        branch('diagnostics', [], ['symbol', 'query', 'paths', 'maxResults', 'maxDepth']),
-        branch('architecture', [], ['symbol', 'query', 'paths', 'maxDepth'])
-      ],
-      additionalProperties: false
-    },
-    annotations: annotations(true, false, true, false),
-    groups: ['audit']
-  }),
-  clonePublicEditOperation(),
-  clonePublicExecOperation(),
-  define({
-    name: 'relai_process',
-    title: 'Manage Process',
-    description: 'Use for persistent services, watchers, or interactive programs. Do not use for one-shot work; use relai_exec or relai_validate for one-shot work and prefer executable + argv.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['start', 'read', 'write', 'stop', 'list']),
-        command: { type: 'string', minLength: 1, maxLength: 20000, description: 'Shell command string for start. Use only when shell syntax is deliberately required.' },
-        executable: { type: 'string', minLength: 1, maxLength: 1000, description: 'Executable to launch directly with shell:false. Preferred for persistent process startup.' },
-        argv: { type: 'array', items: { type: 'string', maxLength: 20000 }, maxItems: 100, description: 'Literal arguments passed directly to executable without shell parsing.' },
-        cwd: STRING,
-        env: { type: 'object', additionalProperties: STRING },
-        label: { type: 'string', maxLength: 120 },
-        kind: { type: 'string', enum: ['service', 'watcher', 'interactive'] },
-        purpose: { type: 'string', minLength: 1, maxLength: 300 },
-        reuseExisting: { type: 'boolean' },
-        startupWaitMs: { type: 'number', minimum: 0, maximum: 30000 },
-        maxLogBytes: { type: 'number', minimum: 65536, maximum: 268435456 },
-        processId: { type: 'string', minLength: 1, maxLength: 200 },
-        stdoutOffset: { type: 'number', minimum: 0 },
-        stderrOffset: { type: 'number', minimum: 0 },
-        maxBytes: { type: 'number', minimum: 1000, maximum: 1048576 },
-        includeMetadata: { type: 'boolean' },
-        metadataRevision: { type: 'string', minLength: 1, maxLength: 100 },
-        input: { type: 'string', maxLength: 1048576, description: 'For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream. For write, UTF-8 input sent to the running process.' },
-        graceMs: { type: 'number', minimum: 0, maximum: 30000 },
-        status: { type: 'string', enum: ['starting', 'running', 'stopping', 'exited', 'failed', 'stopped', 'orphaned'] },
-        activeOnly: { type: 'boolean' },
-        includeTerminal: { type: 'boolean' },
-        limit: { type: 'number', minimum: 1, maximum: 500 }
-      },
-      required: ['action'],
-      oneOf: [
-        branch(
-          'start',
-          ['kind', 'purpose'],
-          ['processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit'],
-          {},
-          {
-            oneOf: [
-              { required: ['command'], not: { anyOf: [{ required: ['executable'] }, { required: ['argv'] }, { required: ['input'] }] } },
-              { required: ['executable'], not: { required: ['command'] } }
-            ]
-          }
-        ),
-        branch('read', ['processId'], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('write', ['processId', 'input'], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('stop', ['processId'], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('list', [], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs'])
-      ],
-      additionalProperties: false
-    },
-    annotations: annotations(false, true, false, true),
-    dashboard: { capabilities: ['execute'] },
-    behavior: { executionClass: 'persistent_process' }
-  }),
-  define({
-    name: 'relai_ui',
-    title: 'Test Local UI',
-    description: 'Use for local UI runtime evidence and interaction in a workspace-scoped session. Do not use when source inspection alone answers the question.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['start', 'navigate', 'snapshot', 'interact', 'screenshot', 'console', 'network', 'viewport', 'reload', 'stop']),
-        sessionId: { type: 'string', pattern: '^ui_[A-Za-z0-9_-]{20,160}$' },
-        port: { type: 'number', minimum: 1, maximum: 65535 },
-        host: { type: 'string', enum: ['localhost', '127.0.0.1', '::1', '[::1]'] },
-        protocol: { type: 'string', enum: ['http', 'https'] },
-        route: { type: 'string', minLength: 1, maxLength: 4000 },
-        allowedPorts: { type: 'array', items: { type: 'number', minimum: 1, maximum: 65535 }, maxItems: 10 },
-        headless: { type: 'boolean' },
-        width: { type: 'number', minimum: 320, maximum: 3840 },
-        height: { type: 'number', minimum: 240, maximum: 2160 },
-        timeoutMs: { type: 'number', minimum: 100, maximum: 30000 },
-        interaction: { type: 'string', enum: ['click', 'fill', 'press', 'select', 'hover', 'wait'] },
-        target: {
-          type: 'object',
-          properties: {
-            by: { type: 'string', enum: ['role', 'text', 'label', 'placeholder', 'testid', 'css'] },
-            value: { type: 'string', minLength: 1, maxLength: 4000 },
-            name: { type: 'string', maxLength: 1000 },
-            exact: { type: 'boolean' },
-            index: { type: 'number', minimum: 0, maximum: 1000 }
-          },
-          required: ['by', 'value'],
-          additionalProperties: false
-        },
-        input: { type: 'string', maxLength: 1048576 },
-        key: { type: 'string', maxLength: 100 },
-        selectValue: { type: 'string', maxLength: 10000 },
-        state: { type: 'string', enum: ['visible', 'hidden', 'attached', 'detached'] },
-        fullPage: { type: 'boolean' },
-        maxEntries: { type: 'number', minimum: 1, maximum: 200 },
-        clear: { type: 'boolean' }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('start', ['port'], ['sessionId', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear']),
-        branch('navigate', ['sessionId', 'route'], ['port', 'host', 'protocol', 'allowedPorts', 'headless', 'width', 'height', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear']),
-        branch('snapshot', ['sessionId'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear']),
-        branch('interact', ['sessionId', 'interaction', 'target'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'fullPage', 'maxEntries', 'clear']),
-        branch('screenshot', ['sessionId'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'maxEntries', 'clear']),
-        branch('console', ['sessionId'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage']),
-        branch('network', ['sessionId'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage']),
-        branch('viewport', ['sessionId', 'width', 'height'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear']),
-        branch('reload', ['sessionId'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear']),
-        branch('stop', ['sessionId'], ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'timeoutMs', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear'])
-      ],
-      additionalProperties: false
-    },
-    annotations: annotations(false, true, false, true),
+    annotations: annotations(true, false, true, false), groups: ['audit']
+  },
+  {
+    name: 'relai_edit', title: 'Edit Repository',
+    description: 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Edit with oldText/newText, content for full-file replacement, batches, or patch text; stage generated content above about 12 KiB before sending the whole payload, and keep large patches in one logical updateText operation.',
+    dashboard: { capabilities: ['edit'] }
+  },
+  {
+    name: 'relai_exec', title: 'Run Command',
+    description: 'Use for bounded one-shot workspace commands. Do not use for persistent services or watchers; prefer executable + argv and use command only when command-line syntax is required.',
     dashboard: { capabilities: ['execute'] }
-  }),
-  define({
-    name: 'relai_validate',
-    title: 'Validate Repository',
-    description: 'Use for explicit checks, diagnostics, or HTTP validation. Do not rerun unchanged authoritative checks without a new mutation or reason.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['checks', 'diagnostics', 'http']),
-        level: { type: 'string', enum: ['quick', 'standard', 'release'] },
-        check: { type: 'string', minLength: 1, maxLength: 20000 },
-        checks: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 20000 }, minItems: 1, maxItems: 50 },
-        checksText: { type: 'string', minLength: 1, maxLength: 100000 },
-        command: { type: 'string', minLength: 1, maxLength: 20000 },
-        commands: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 20000 }, minItems: 1, maxItems: 50 },
-        timeoutMs: { type: 'number', minimum: 1000, maximum: 86400000 },
-        stopOnFailure: { type: 'boolean' },
-        fullOutput: { type: 'boolean' },
-        complete: { type: 'boolean' },
-        summary: { type: 'string', minLength: 1, maxLength: 2000 },
-        maxResults: { type: 'number', minimum: 1, maximum: 5000 },
-        route: { type: 'string', minLength: 1 }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('checks', [], ['command', 'commands', 'maxResults', 'route']),
-        branch('diagnostics', [], ['check', 'checks', 'checksText', 'fullOutput', 'complete', 'summary', 'route']),
-        branch('http', ['route'], ['level', 'check', 'checks', 'checksText', 'command', 'commands', 'stopOnFailure', 'fullOutput', 'complete', 'summary', 'maxResults'], { timeoutMs: { type: 'number', minimum: 1000, maximum: 600000 } })
-      ],
-      additionalProperties: false
-    },
+  },
+  {
+    name: 'relai_process', title: 'Manage Process',
+    description: 'Use for persistent services, watchers, or interactive programs. Do not use for one-shot work; use relai_exec or relai_validate for one-shot work and prefer executable + argv.',
     annotations: annotations(false, true, false, true),
-    behavior: { longRunning: true },
+    dashboard: { capabilities: ['execute'] }, behavior: { executionClass: 'persistent_process' }
+  },
+  {
+    name: 'relai_ui', title: 'Test Local UI',
+    description: 'Use for local UI runtime evidence and interaction in a workspace-scoped session. Do not use when source inspection alone answers the question.',
+    annotations: annotations(false, true, false, true), dashboard: { capabilities: ['execute'] }
+  },
+  {
+    name: 'relai_validate', title: 'Validate Repository',
+    description: 'Use for explicit checks, diagnostics, or HTTP validation. Do not rerun unchanged authoritative checks without a new mutation or reason.',
+    annotations: annotations(false, true, false, true), behavior: { longRunning: true },
     dashboard: { capabilities: ['validate'] }
-  }),
-  define({
-    name: 'relai_changes',
-    title: 'Review or Restore Changes',
+  },
+  {
+    name: 'relai_changes', title: 'Review or Restore Changes',
     description: 'Use to review, restore, reset, or tidy workspace changes. Do not use to create new source edits.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['diff', 'restore', 'reset', 'tidy_plan', 'tidy_run']),
-        staged: { type: 'boolean' },
-        path: STRING,
-        redactSensitive: { type: 'boolean' },
-        scope: { type: 'string', enum: ['task', 'workspace'] },
-        maxBytes: { type: 'number', minimum: 1000, maximum: 5242880 },
-        paths: { type: 'array', items: STRING, minItems: 1, maxItems: 100 },
-        confirmation: { type: 'string', enum: ['RESET', 'RESET_AND_CLEAN'] },
-        removeUntracked: { type: 'boolean' },
-        mode: { type: 'string', enum: ['session_untracked'] },
-        maxCandidates: { type: 'number', minimum: 1, maximum: 100 },
-        planId: { type: 'string', minLength: 20, maxLength: 120, pattern: '^tidy_[A-Za-z0-9_-]+$' }
-      },
-      required: ['action'],
-      oneOf: [
-        branch('diff', [], ['paths', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates', 'planId']),
-        branch('restore', ['paths'], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates', 'planId']),
-        branch('reset', ['confirmation'], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'paths', 'mode', 'maxCandidates', 'planId']),
-        branch('tidy_plan', [], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'paths', 'confirmation', 'removeUntracked', 'planId']),
-        branch('tidy_run', ['planId'], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'paths', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates'])
-      ],
-      additionalProperties: false
-    },
-    annotations: annotations(false, true, false, false),
-    dashboard: { capabilities: ['review', 'recover'] },
+    annotations: annotations(false, true, false, false), dashboard: { capabilities: ['review', 'recover'] },
     groups: ['audit', 'cleanup']
-  }),
-  define({
-    name: 'relai_publish',
-    title: 'Publish Repository Work',
+  },
+  {
+    name: 'relai_publish', title: 'Publish Repository Work',
     description: 'Use to commit, push, or draft PR text after task changes are reviewed and ready. Do not use before the publish boundary is satisfied.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        workspace: WORKSPACE,
-        action: ACTION(['commit', 'push', 'draft_pr']),
-        message: { type: 'string', minLength: 1, maxLength: 4000 },
-        dryRun: { type: 'boolean' },
-        addAll: { type: 'boolean' },
-        sensitiveAuthorization: {
-          type: 'object',
-          properties: {
-            operation: { type: 'string', enum: ['commit'] },
-            paths: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 1000 }, minItems: 1, maxItems: 200 },
-            reason: { type: 'string', minLength: 1, maxLength: 500 }
-          },
-          required: ['operation', 'paths', 'reason'],
-          additionalProperties: false
-        },
-        paths: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 1000 }, minItems: 1, maxItems: 200 },
-        maxBytes: { type: 'number', minimum: 1000, maximum: 5242880 },
-        timeoutMs: { type: 'number', minimum: 1000, maximum: 86400000 },
-        remote: { type: 'string', minLength: 1, maxLength: 200 },
-        branch: { type: 'string', minLength: 1, maxLength: 500 },
-        setUpstream: { type: 'boolean' },
-        base: STRING,
-        head: STRING,
-        title: STRING,
-        body: STRING
-      },
-      required: ['action'],
-      oneOf: [
-        branch('commit', ['message'], ['remote', 'branch', 'setUpstream', 'base', 'head', 'title', 'body']),
-        branch('push', [], ['message', 'addAll', 'sensitiveAuthorization', 'paths', 'maxBytes', 'base', 'head', 'title', 'body']),
-        branch('draft_pr', [], ['message', 'dryRun', 'addAll', 'sensitiveAuthorization', 'paths', 'maxBytes', 'timeoutMs', 'remote', 'branch', 'setUpstream'])
-      ],
-      additionalProperties: false
-    },
-    annotations: annotations(false, false, false, true),
-    dashboard: { capabilities: ['git'] },
-    groups: ['git']
-  })
+    annotations: annotations(false, false, false, true), dashboard: { capabilities: ['git'] }, groups: ['git']
+  }
 ];
 
-const PUBLIC_TOOL_DEFINITIONS = Object.freeze(PUBLIC_DEFINITION_VALUES);
+const PUBLIC_TOOL_DEFINITIONS = Object.freeze(PUBLIC_TOOL_VALUES.map(definePublicTool));
 const PUBLIC_TOOL_BY_NAME = new Map(PUBLIC_TOOL_DEFINITIONS.map(definition => [definition.name, definition]));
 
-function branch(action, required = [], irrelevant = [], properties = {}, extra = {}) {
-  return {
-    properties: { action: { const: action }, ...properties },
-    required: ['action', ...required],
-    ...(irrelevant.length ? { xIrrelevant: irrelevant } : {}),
-    ...extra
-  };
-}
+/** @param {Record<string, any>} value */
+function definePublicTool(value) {
+  const mappings = ACTION_REGISTRY[value.name];
+  if (!mappings) throw new Error(`Missing action registry for public tool '${value.name}'.`);
+  const defaultMapping = mappings.default;
+  const source = defaultMapping ? getOperationDefinition(defaultMapping.operationName) : null;
+  if (defaultMapping && !source) throw new Error(`Missing internal operation '${defaultMapping.operationName}'.`);
 
-function constrainActionProperties(inputSchema) {
-  if (!Array.isArray(inputSchema?.oneOf)) return { inputSchema, actionContracts: [] };
-  const actionBranches = inputSchema.oneOf.every(item => item?.properties?.action?.const);
-  if (!actionBranches) return { inputSchema, actionContracts: [] };
-  const candidateFields = new Set(Object.keys(inputSchema.properties || {}));
-  candidateFields.add('work_id');
-  const actionContracts = inputSchema.oneOf.map(item => {
-    const irrelevant = item.xIrrelevant || [];
-    return Object.freeze({
-      action: String(item.properties.action.const),
-      required: Object.freeze([...(item.required || []).filter(field => field !== 'action')]),
-      fields: Object.freeze([...candidateFields].filter(field => field !== 'action' && !irrelevant.includes(field)).sort())
-    });
-  });
-  return {
-    inputSchema: {
-      ...inputSchema,
-      oneOf: inputSchema.oneOf.map(({ xIrrelevant: _xIrrelevant, ...item }) => item)
-    },
-    actionContracts
-  };
-}
+  let inputSchema = source
+    ? source.inputSchema
+    : actionInputSchema(value, mappings);
+  if (value.name === 'relai_edit') inputSchema = publicEditInputSchema(inputSchema, MAX_BATCH_EDITS);
+  if (value.name === 'relai_exec') inputSchema = publicExecInputSchema(inputSchema);
+  if (value.name === 'relai_process') inputSchema = publicProcessInputSchema(inputSchema);
 
-function cloneOperation(sourceName, name, title, description, overrides = {}) {
-  const source = getOperationDefinition(sourceName);
-  if (!source) throw new Error(`Missing internal operation definition: ${sourceName}`);
-  return define({
-    ...source,
-    ...overrides,
-    name,
-    title,
-    description,
+  const baseBehavior = source?.behavior || DEFAULT_BEHAVIOR;
+  const baseDashboard = source?.dashboard || DEFAULT_DASHBOARD;
+  const baseCapabilities = source?.dashboard?.capabilities || ['inspect'];
+  const dashboardMetadata = {
+    ...DEFAULT_DASHBOARD,
+    ...baseDashboard,
+    ...(value.dashboard || {}),
+    capabilities: [...(value.dashboard?.capabilities || baseCapabilities)]
+  };
+  return Object.freeze({
+    ...(source || {}),
+    name: value.name,
+    title: value.title,
+    description: value.description,
+    handlerName: 'compactDispatch',
+    inputSchema: Object.freeze(inputSchema),
     outputSchema: RESULT_SCHEMA,
-    handlerName: 'compactDispatch'
+    connectorStrip: Object.freeze([...(source?.connectorStrip || value.connectorStrip || [])]),
+    groups: Object.freeze([...(value.groups || source?.groups || [])]),
+    annotations: Object.freeze(value.annotations || source?.annotations || annotations(false, false, false, false)),
+    behavior: Object.freeze({ ...DEFAULT_BEHAVIOR, ...baseBehavior, ...(value.behavior || {}) }),
+    dashboard: Object.freeze({ ...dashboardMetadata, capabilities: Object.freeze(dashboardMetadata.capabilities) })
   });
 }
 
-function clonePublicExecOperation() {
-  const source = getOperationDefinition('relai_exec');
-  if (!source) throw new Error('Missing internal operation definition: relai_exec');
-  return cloneOperation(
-    'relai_exec',
-    'relai_exec',
-    'Run Command',
-    'Use for bounded one-shot workspace commands. Do not use for persistent services or watchers; prefer executable + argv and use command only when command-line syntax is required.',
-    {
-      inputSchema: publicExecInputSchema(source.inputSchema),
-      dashboard: { capabilities: ['execute'] }
+function actionInputSchema(value, mappings) {
+  const branches = Object.entries(mappings).map(([action, mapping]) => actionBranch(action, mapping));
+  const properties = { action: { type: 'string', enum: Object.keys(mappings) } };
+  for (const branch of branches) {
+    for (const [name, fieldSchema] of Object.entries(branch.properties || {})) {
+      if (name === 'action') continue;
+      properties[name] = properties[name] ? mergePropertySchema(properties[name], fieldSchema) : fieldSchema;
     }
-  );
+  }
+  return { type: 'object', properties, required: ['action'], oneOf: branches, additionalProperties: false };
 }
 
-function clonePublicEditOperation() {
-  const source = getOperationDefinition('relai_edit');
-  if (!source) throw new Error('Missing internal operation definition: relai_edit');
-  return cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Edit with oldText/newText, content for full-file replacement, batches, or patch text; stage generated content above about 12 KiB before sending the whole payload, and keep large patches in one logical updateText operation.', {
-    inputSchema: publicEditInputSchema(source.inputSchema, MAX_BATCH_EDITS),
-    dashboard: { capabilities: ['edit'] }
-  });
+function actionBranch(action, mapping) {
+  const operation = getOperationDefinition(mapping.operationName);
+  if (!operation) throw new Error(`Missing internal operation '${mapping.operationName}'.`);
+  const schema = operation.inputSchema;
+  const properties = { ...(schema.properties || {}) };
+  if (!mapping.keepAction) delete properties.action;
+  properties.action = { type: 'string', const: action };
+
+  const publicContract = mapping.publicContract || {};
+  for (const field of publicContract.omit || []) delete properties[field];
+  const taskScoped = operation.behavior?.taskScope === 'required';
+  const required = new Set((schema.required || [])
+    .filter(field => field !== 'action' && !(taskScoped && field === 'workspace') && Object.hasOwn(properties, field)));
+  for (const field of publicContract.required || []) {
+    if (Object.hasOwn(properties, field)) required.add(field);
+  }
+  required.add('action');
+
+  const constraints = Object.fromEntries(Object.entries(schema)
+    .filter(([key]) => !['type', 'properties', 'required', 'additionalProperties'].includes(key)));
+  return {
+    type: 'object',
+    properties,
+    required: [...required],
+    ...constraints,
+    ...(publicContract.extra || {}),
+    additionalProperties: false
+  };
+}
+
+function mergePropertySchema(left, right) {
+  if (JSON.stringify(left) === JSON.stringify(right)) return left;
+  const variants = [];
+  for (const candidate of [left, right]) {
+    if (Array.isArray(candidate?.anyOf) && Object.keys(candidate).length === 1) variants.push(...candidate.anyOf);
+    else variants.push(candidate);
+  }
+  const unique = [];
+  const seen = new Set();
+  for (const variant of variants) {
+    const key = JSON.stringify(variant);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(variant);
+  }
+  return { anyOf: unique };
+}
+
+function getPublicActionContract(definition, action) {
+  if (action === 'default') {
+    const taskScope = definition.behavior?.taskScope || 'required';
+    const fields = Object.keys(definition.inputSchema?.properties || {}).filter(field => field !== 'action');
+    if (taskScope !== 'none' && !fields.includes('work_id')) fields.push('work_id');
+    const required = [...(definition.inputSchema?.required || [])].filter(field => field !== 'action');
+    if (taskScope === 'required') {
+      const workspaceIndex = required.indexOf('workspace');
+      if (workspaceIndex >= 0) required.splice(workspaceIndex, 1);
+      if (!required.includes('work_id')) required.push('work_id');
+    }
+    return Object.freeze({ fields: Object.freeze(fields.sort()), required: Object.freeze(required.sort()) });
+  }
+  const branch = definition.inputSchema?.oneOf?.find(item => item?.properties?.action?.const === action);
+  if (!branch) throw new Error(`Public action ${definition.name}:${action} has no schema branch.`);
+  const mapping = ACTION_REGISTRY[definition.name]?.[action];
+  const operation = mapping ? getOperationDefinition(mapping.operationName) : null;
+  const taskScope = operation?.behavior?.taskScope || 'required';
+  const fields = Object.keys(branch.properties || {}).filter(field => field !== 'action');
+  if (taskScope !== 'none' && !fields.includes('work_id')) fields.push('work_id');
+  const required = [...(branch.required || [])].filter(field => field !== 'action');
+  if (taskScope === 'required' && !required.includes('work_id')) required.push('work_id');
+  return Object.freeze({ fields: Object.freeze(fields.sort()), required: Object.freeze(required.sort()) });
 }
 
 function annotations(readOnlyHint, destructiveHint, idempotentHint, openWorldHint) {
   return Object.freeze({ readOnlyHint, destructiveHint, idempotentHint, openWorldHint });
-}
-
-function define(value) {
-  const {
-    behavior,
-    dashboard,
-    connectorStrip = [],
-    groups = [],
-    annotations: toolAnnotations,
-    outputSchema = RESULT_SCHEMA,
-    ...definition
-  } = value;
-  const constrained = constrainActionProperties(definition.inputSchema);
-  const dashboardMetadata = {
-    category: 'Workspace tools',
-    requiredProfile: 'workspace',
-    requiresApproval: false,
-    capabilities: ['inspect'],
-    ...(dashboard || {})
-  };
-  return Object.freeze({
-    handlerName: 'compactDispatch',
-    ...definition,
-    inputSchema: Object.freeze(constrained.inputSchema),
-    actionContracts: Object.freeze(constrained.actionContracts),
-    behavior: Object.freeze({
-      audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false,
-      summary: '', longRunning: false, taskScope: 'required', concurrencyScope: 'task', executionClass: 'bounded_synchronous',
-      ...(behavior || {})
-    }),
-    dashboard: Object.freeze({
-      ...dashboardMetadata,
-      capabilities: Object.freeze([...dashboardMetadata.capabilities])
-    }),
-    connectorStrip: Object.freeze([...connectorStrip]),
-    groups: Object.freeze([...groups]),
-    annotations: Object.freeze(toolAnnotations || annotations(false, false, false, false)),
-    outputSchema: Object.freeze(outputSchema)
-  });
 }
 
 function getCatalogToolDefinition(name) {
@@ -578,5 +307,6 @@ export {
   getCatalogToolDefinition,
   getCatalogToolDefinitions,
   getOperationDefinition,
-  getOperationDefinitions
+  getOperationDefinitions,
+  getPublicActionContract
 };
