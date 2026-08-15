@@ -180,7 +180,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: OP.WORK_STATUS,
     title: "Workspace and Repository Status",
-    description: "Read-only. Return configured workspace aliases and tool-surface status. When workspace is provided, also return command configuration, session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state under workspace.repository.",
+    description: "Read-only. Return configured workspace aliases and tool-surface status. When workspace is provided, also return command configuration, session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state under workspace.repository. When work_id is provided, also return the status and result of any long operation that continued after its connector request ended.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":[],"additionalProperties":false},
     handlerName: 'status',
     behavior: {"taskScope":"optional"},
