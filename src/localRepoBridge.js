@@ -310,13 +310,14 @@ function handleWriteStart(workspace, config, args) {
   if (typeof args.content !== "string") throw new Error("Staged content start requires a content chunk string.");
   const safe = resolveSafePath(workspace.path, relativePath, { operation: "write" });
   const writeId = makeOperationId();
-  writeStagedPayload(config, workspace, writeId, {
+  createStagedPayload(config, workspace, writeId, {
     id: writeId, workspace: workspace.alias, root: workspace.path,
-    path: safe.relativePath, chunks: [args.content],
+    path: safe.relativePath,
     expectedSha256: String(args.expectedSha256 || "").trim(),
     bytes: Buffer.byteLength(args.content, "utf8"),
+    chunkCount: 1,
     createdAt: new Date().toISOString()
-  });
+  }, args.content);
   return {
     ok: true, workspace: workspace.alias, path: safe.relativePath,
     operation: "stagedFullFileWrite:start", writeId, chunks: 1,
@@ -330,14 +331,15 @@ function handleWriteAppend(workspace, config, args) {
   if (typeof args.content !== "string") throw new Error("Staged content append requires writeId and a content chunk string.");
   const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
   const payload = readStagedPayload(config, workspace, writeId);
-  payload.chunks.push(args.content);
+  appendStagedPayload(config, workspace, writeId, args.content);
   payload.bytes += Buffer.byteLength(args.content, "utf8");
+  payload.chunkCount += 1;
   payload.updatedAt = new Date().toISOString();
-  writeStagedPayload(config, workspace, writeId, payload);
+  writeStagedMetadata(config, workspace, writeId, payload);
   return {
     ok: true, workspace: workspace.alias, path: payload.path,
     operation: "stagedFullFileWrite:append", writeId,
-    chunks: payload.chunks.length, bytes: payload.bytes,
+    chunks: payload.chunkCount, bytes: payload.bytes,
     next: "Append more chunks or call relai_edit with { work_id, stage: 'commit', writeId }."
   };
 }
@@ -345,7 +347,10 @@ function handleWriteAppend(workspace, config, args) {
 function handleWriteCommit(workspace, config, args) {
   const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
   const payload = readStagedPayload(config, workspace, writeId);
-  const content = payload.chunks.join("");
+  const content = readStagedContent(config, workspace, writeId);
+  if (Buffer.byteLength(content, "utf8") !== payload.bytes) {
+    throw new Error(`Staged edit payload size mismatch for writeId ${writeId}. Abort it and start again.`);
+  }
   const result = performFullFileWrite(workspace, config, payload.path, content, {
     dryRun: Boolean(args.dryRun),
     staged: true,
@@ -354,7 +359,7 @@ function handleWriteCommit(workspace, config, args) {
     expectedSha256: payload.expectedSha256 || ""
   });
   if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
-  return { ...result, operation: "stagedFullFileWrite:commit", writeId, staged: true, chunks: payload.chunks.length, bytes: Buffer.byteLength(content, "utf8") };
+  return { ...result, operation: "stagedFullFileWrite:commit", writeId, staged: true, chunks: payload.chunkCount, bytes: payload.bytes };
 }
 
 function handleWriteAbort(workspace, config, args) {
@@ -535,8 +540,12 @@ function stagedDir(config, workspace) {
   return path.join(getStateDir(config), "write-staging", safeAlias);
 }
 
-function stagedPath(config, workspace, writeId) {
+function stagedMetadataPath(config, workspace, writeId) {
   return path.join(stagedDir(config, workspace), `${validateWriteId(writeId)}.json`);
+}
+
+function stagedPayloadPath(config, workspace, writeId) {
+  return path.join(stagedDir(config, workspace), `${validateWriteId(writeId)}.payload`);
 }
 
 function validateWriteId(writeId) {
@@ -565,7 +574,7 @@ const STAGED_PRUNE_TTL_MS = 24 * 60 * 60 * 1000;
 //   4. Otherwise refuse and list the candidates so the caller passes id/path.
 function resolveStagedWriteId(config, workspace, rawWriteId, targetPath) {
   const text = String(rawWriteId || "").trim();
-  if (text && /^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text) && fs.existsSync(stagedPath(config, workspace, text))) {
+  if (text && /^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text) && fs.existsSync(stagedMetadataPath(config, workspace, text))) {
     return text;
   }
   const fresh = listStagedPayloads(config, workspace)
@@ -624,6 +633,7 @@ function readStagedFile(dir, name, now) {
   try { mtime = fs.statSync(file).mtimeMs; } catch { return null; }
   if (mtime && (now - mtime) > STAGED_PRUNE_TTL_MS) {
     try { fs.rmSync(file, { force: true }); } catch {}
+    try { fs.rmSync(path.join(dir, `${id}.payload`), { force: true }); } catch {}
     return null;
   }
   let payload;
@@ -631,24 +641,53 @@ function readStagedFile(dir, name, now) {
   return { id, path: payload.path || null, mtime, ageMs: mtime ? now - mtime : null };
 }
 
-function writeStagedPayload(config, workspace, writeId, payload) {
-  const file = stagedPath(config, workspace, writeId);
+function createStagedPayload(config, workspace, writeId, metadata, content) {
+  const metadataFile = stagedMetadataPath(config, workspace, writeId);
+  const payloadFile = stagedPayloadPath(config, workspace, writeId);
+  fs.mkdirSync(path.dirname(metadataFile), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(payloadFile, content, { mode: 0o600, flag: "wx" });
+  try {
+    writeStagedMetadata(config, workspace, writeId, metadata);
+  } catch (error) {
+    fs.rmSync(payloadFile, { force: true });
+    throw error;
+  }
+}
+
+function writeStagedMetadata(config, workspace, writeId, payload) {
+  const file = stagedMetadataPath(config, workspace, writeId);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   fs.writeFileSync(file, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
 }
 
-function readStagedPayload(config, workspace, writeId) {
-  const file = stagedPath(config, workspace, writeId);
+function appendStagedPayload(config, workspace, writeId, content) {
+  const file = stagedPayloadPath(config, workspace, writeId);
   if (!fs.existsSync(file)) throw new Error(`No staged edit payload found for writeId ${writeId}. Start again with relai_edit stage='start'.`);
-  const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+  fs.appendFileSync(file, content, { encoding: "utf8" });
+}
+
+function readStagedPayload(config, workspace, writeId) {
+  const metadataFile = stagedMetadataPath(config, workspace, writeId);
+  const payloadFile = stagedPayloadPath(config, workspace, writeId);
+  if (!fs.existsSync(metadataFile) || !fs.existsSync(payloadFile)) throw new Error(`No staged edit payload found for writeId ${writeId}. Start again with relai_edit stage='start'.`);
+  const payload = JSON.parse(fs.readFileSync(metadataFile, "utf8"));
   if (payload.workspace !== workspace.alias || payload.root !== workspace.path) throw new Error("Staged edit payload belongs to a different workspace.");
+  if (!Number.isInteger(payload.chunkCount) || payload.chunkCount < 1 || !Number.isInteger(payload.bytes) || payload.bytes < 0) {
+    throw new Error(`Staged edit payload metadata is invalid for writeId ${writeId}. Abort it and start again.`);
+  }
   return payload;
 }
 
+function readStagedContent(config, workspace, writeId) {
+  return fs.readFileSync(stagedPayloadPath(config, workspace, writeId), "utf8");
+}
+
 function clearStagedPayload(config, workspace, writeId) {
-  const file = stagedPath(config, workspace, writeId);
-  const existed = fs.existsSync(file);
-  if (existed) fs.rmSync(file, { force: true });
+  const metadataFile = stagedMetadataPath(config, workspace, writeId);
+  const payloadFile = stagedPayloadPath(config, workspace, writeId);
+  const existed = fs.existsSync(metadataFile) || fs.existsSync(payloadFile);
+  fs.rmSync(metadataFile, { force: true });
+  fs.rmSync(payloadFile, { force: true });
   return existed;
 }
 
@@ -757,4 +796,4 @@ function sha256Text(text) {
   return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
-export { repoSnapshot, relaiRead, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, writeStagedPayload, readStagedPayload, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };
+export { repoSnapshot, relaiRead, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, createStagedPayload, appendStagedPayload, writeStagedMetadata, readStagedPayload, readStagedContent, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };

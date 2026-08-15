@@ -15,16 +15,30 @@ try {
   const start = workspaceWrite(workspace, config, { stage: 'start', path: 'big.txt', content: 'chunk1\n' });
   assert.equal(start.ok, true, 'start should succeed');
   assert.match(start.writeId, /^op_[a-z0-9]+_[a-f0-9]{12}$/, 'start returns a writeId');
+  const stagingDir = path.join(config.stateDir, 'write-staging', workspace.alias);
+  const metadataPath = path.join(stagingDir, `${start.writeId}.json`);
+  const payloadPath = path.join(stagingDir, `${start.writeId}.payload`);
+  const startMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  assert.equal(startMetadata.chunkCount, 1, 'metadata tracks chunk count without storing chunk content');
+  assert.equal(Object.hasOwn(startMetadata, 'chunks'), false, 'legacy JSON chunks array must not survive the hard cutover');
+  assert.equal(fs.readFileSync(payloadPath, 'utf8'), 'chunk1\n', 'staged content is stored in the append-only payload file');
 
   // append WITHOUT writeId → falls back to the single staged write
   const append = workspaceWrite(workspace, config, { stage: 'append', content: 'chunk2\n' });
   assert.equal(append.ok, true, 'append without writeId should fall back to the single staged write');
   assert.equal(append.chunks, 2, 'append should accumulate to 2 chunks');
+  const appendMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  assert.equal(appendMetadata.chunkCount, 2);
+  assert.equal(appendMetadata.bytes, Buffer.byteLength('chunk1\nchunk2\n', 'utf8'));
+  assert.equal(Object.hasOwn(appendMetadata, 'chunks'), false);
+  assert.equal(fs.readFileSync(payloadPath, 'utf8'), 'chunk1\nchunk2\n', 'append extends only the payload file');
 
   // commit WITH a wrong-but-valid-format writeId → falls back to the single staged write
   const commit = workspaceWrite(workspace, config, { stage: 'commit', writeId: 'op_zzzzzzzz_000000000000' });
   assert.equal(commit.ok, true, 'commit with unknown writeId should fall back to the single staged write');
   assert.equal(fs.readFileSync(path.join(wsRoot, 'big.txt'), 'utf8'), 'chunk1\nchunk2\n', 'committed file has both chunks');
+  assert.equal(fs.existsSync(metadataPath), false, 'commit clears staged metadata');
+  assert.equal(fs.existsSync(payloadPath), false, 'commit clears staged payload content');
 
   // staged payload cleared after commit → a commit with no staged write left throws
   assert.throws(
