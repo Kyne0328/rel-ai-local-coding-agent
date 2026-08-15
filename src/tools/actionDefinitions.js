@@ -27,7 +27,17 @@ const OPEN_WORLD_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_ui',
   'relai_diagnostics_run', 'relai_run_checks', 'relai_git_push'
 ]);
-const NATIVE_TASK_ELIGIBLE_TOOLS = new Set();
+// INTENTIONAL FORWARD-COMPATIBILITY: these operations can run as Native MCP Tasks,
+// but only when the request uses the modern protocol and explicitly advertises the
+// Tasks capability. The legacy ChatGPT compatibility route does not advertise Tasks,
+// so these remain ordinary synchronous tool calls there. Keep this eligibility list
+// even while current ChatGPT traffic uses the legacy route; removing it would prevent
+// automatic activation when a future client negotiates Native Tasks support.
+const NATIVE_TASK_ELIGIBLE_TOOLS = new Set([
+  'relai_exec',
+  'relai_diagnostics_run',
+  'relai_run_checks'
+]);
 const PERSISTENT_PROCESS_TOOLS = new Set([
   'relai_process_start', 'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list'
 ]);

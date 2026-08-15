@@ -23,8 +23,16 @@ Compatibility is protected by the HTTP/ChatGPT smoke tests, while stdio tests ve
 - No `MCP-Session-Id` or HTTP transport-session persistence.
 - Host/Origin validation for the private local HTTP service.
 - One principal-bound Rel.AI `work_id` per independent repository objective.
-- Native MCP Tasks advertisement/routing through `io.modelcontextprotocol/tasks`.
+- Native MCP Tasks advertisement/routing through `io.modelcontextprotocol/tasks` on the modern protocol route only.
 - Direct completion for clearly bounded operations, native tasks for long/indeterminate eligible work, and bounded synchronous fallback when Tasks are not advertised.
+
+### Forward-compatible Native Tasks policy
+
+Rel.AI intentionally keeps its Native MCP Tasks implementation active in source even when the connected ChatGPT client uses the legacy `2025-11-25` compatibility route. That legacy route does not advertise the Tasks extension, so eligible operations continue to return ordinary synchronous tool results. There is no user-facing “enable Tasks” switch and no client-name heuristic.
+
+On a modern request, Native Tasks activate only when the request explicitly advertises the supported `io.modelcontextprotocol/tasks` capability. The eligible-operation metadata therefore describes what Rel.AI *can* run as a task, not what every current client will receive. This separation is deliberate forward compatibility: when ChatGPT begins negotiating the capability, an existing compatible Rel.AI build can use Native Tasks automatically without a feature-toggle release.
+
+Do not remove `nativeTaskService`, `nativeToolTasks`, `transportTasks`, task eligibility metadata, or their protocol tests as stale solely because current ChatGPT sessions fall back to synchronous execution. Remove them only if Rel.AI intentionally drops Native MCP Tasks support.
 
 Transport connections deliver requests but do not retain work-session identity. They never select, merge, replay, or complete repository work.
 

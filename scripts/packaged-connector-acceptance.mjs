@@ -118,8 +118,8 @@ try {
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);
   const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
-  assert.equal(surfaceByName.get('relai_exec').executionClass, 'bounded_synchronous');
-  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'forbidden');
+  assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
+  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
   assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
   assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
   assert.deepEqual(surface.compatibilityAliases, {});

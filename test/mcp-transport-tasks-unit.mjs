@@ -129,11 +129,22 @@ try {
       maxOutputBytes: 60_000
     }
   }, tasksCapabilities);
-  assert.equal(isTransportTaskRequestCandidate(config, execTaskCandidate), false, 'relai_exec must not advertise automatic host-managed task execution');
-  assert.equal(await handleTransportTaskRequest(config, execTaskCandidate, {
+  assert.equal(isTransportTaskRequestCandidate(config, execTaskCandidate), true, 'task-eligible relai_exec calls must reach capability negotiation');
+  const synchronousFallback = await handleTransportTaskRequest(config, request(100, 'tools/call', {
+    name: 'relai_exec',
+    arguments: {
+      work_id: 'work-session',
+      command: 'echo ordinary execution',
+      timeoutMs: 90_000,
+      maxOutputBytes: 60_000
+    }
+  }, {}), {
     principal: owner,
-    transportType: 'streamable-http'
-  }), null, 'ordinary tools/call must delegate to the normal SDK tool path');
+    transportType: 'streamable-http',
+    executeToolResult: async () => ({ isError: false, structuredContent: { ok: true, exitCode: 0 } })
+  });
+  assert.equal(synchronousFallback.body.result?.resultType, undefined, 'clients without Tasks capability must keep the synchronous result path');
+  assert.equal(synchronousFallback.body.result?.structuredContent?.exitCode, 0);
   const req = new EventEmitter();
   const socket = new EventEmitter();
   req.socket = socket;

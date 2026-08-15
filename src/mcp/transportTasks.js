@@ -118,6 +118,9 @@ async function handleTransportTaskRequest(config, message, options = {}) {
 }
 
 function shouldInterceptTool(definition, args = {}) {
+  // Eligibility is intentionally broader than current client support. Interception
+  // still falls back to normal synchronous execution when the request does not
+  // advertise Native Tasks, so dormant forward-compatible code is not dead code.
   return definition?.behavior?.executionClass === 'native_task_eligible'
     && definition?.behavior?.longRunning === true
     && !catalogApprovalRequirement(definition.name, args || {});

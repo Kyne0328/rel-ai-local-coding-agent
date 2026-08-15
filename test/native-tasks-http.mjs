@@ -134,11 +134,23 @@ try {
 
   const taskCapableExec = await invokeEligible(client, 5, logicalTaskId, 1000);
   assert.equal(taskCapableExec.response.status, 200, JSON.stringify(taskCapableExec.body));
-  assert.notEqual(taskCapableExec.body.result?.resultType, 'task', 'task-capable clients must still receive the final tool result');
-  assert.equal(taskCapableExec.body.result?.taskId, undefined, 'ordinary relai_exec calls must not require polling');
-  assert.equal(taskCapableExec.body.result?.isError, false, JSON.stringify(taskCapableExec.body));
-  assert.equal(taskCapableExec.body.result?.structuredContent?.exitCode, 0);
-  assert.equal(taskCapableExec.body.result?.structuredContent?.work_id, logicalTaskId);
+  assert.equal(taskCapableExec.body.result?.resultType, 'task', 'a capable modern client must receive a task handle for long eligible work');
+  assert.ok(taskCapableExec.body.result?.taskId);
+  let completedTask = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const polled = await taskRequest(client, 500 + attempt, 'tasks/get', taskCapableExec.body.result.taskId);
+    assert.equal(polled.response.status, 200, JSON.stringify(polled.body));
+    if (['completed', 'failed', 'cancelled'].includes(polled.body.result?.status)) {
+      completedTask = polled.body.result;
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.ok(completedTask, 'native task must reach a terminal state');
+  assert.equal(completedTask.status, 'completed', JSON.stringify(completedTask));
+  assert.equal(completedTask.result?.isError, false, JSON.stringify(completedTask));
+  assert.equal(completedTask.result?.structuredContent?.exitCode, 0);
+  assert.equal(completedTask.result?.structuredContent?.work_id, logicalTaskId);
   const invalid = await taskRequest(client, 250, 'tasks/get', 'task_invalid');
   assert.equal(invalid.body.error?.code, -32602);
   assert.match(invalid.body.error?.message || '', /not available to this client/);
