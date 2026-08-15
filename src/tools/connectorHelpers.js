@@ -32,11 +32,7 @@ function compactRepositoryState(value, { includeWorkspace = true } = {}) {
     untrackedSessionFiles: value.untrackedSessionFiles,
     untrackedBaselineFiles: value.untrackedBaselineFiles,
     baselineSource: value.baselineSource,
-    stderr: value.stderr,
-    deprecated: value.deprecated,
-    deprecatedTool: value.deprecatedTool,
-    replacementTool: value.replacementTool,
-    migration: value.migration
+    stderr: value.stderr
   });
 }
 

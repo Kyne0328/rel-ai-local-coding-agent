@@ -14,10 +14,6 @@ function sessionsDir(config) {
   return path.join(stateDir, 'sessions');
 }
 
-function legacySessionFilePath(config, alias) {
-  return path.join(sessionsDir(config), `${alias}-policy.json`);
-}
-
 function taskSessionFilePath(config, alias, taskId) {
   return path.join(sessionsDir(config), `${encodeURIComponent(alias)}--${encodeURIComponent(taskId)}-policy.json`);
 }
@@ -90,8 +86,6 @@ function policyFileRevision(filePath) {
 function readSessionPolicies(config, alias) {
   const directory = sessionsDir(config);
   const policies = [];
-  const legacy = readPolicyFile(legacySessionFilePath(config, alias), alias);
-  if (legacy) policies.push(legacy);
   try {
     if (!fs.existsSync(directory)) return policies;
     const prefix = `${encodeURIComponent(alias)}--`;
@@ -105,20 +99,15 @@ function readSessionPolicies(config, alias) {
   }
   const byTask = new Map();
   for (const policy of policies) {
-    const key = String(policy.taskId || `legacy:${policy.createdAt || ''}`);
-    byTask.set(key, policy);
+    const key = String(policy.taskId || '').trim();
+    if (key) byTask.set(key, policy);
   }
   return [...byTask.values()];
 }
 
 function readSessionPolicy(config, alias, taskId = '') {
   const resolved = resolvedTaskId(taskId);
-  if (resolved) {
-    const taskPolicy = readPolicyFile(taskSessionFilePath(config, alias, resolved), alias, resolved);
-    if (taskPolicy) return taskPolicy;
-    const legacy = readPolicyFile(legacySessionFilePath(config, alias), alias);
-    return legacy && String(legacy.taskId || '') === resolved ? legacy : null;
-  }
+  if (resolved) return readPolicyFile(taskSessionFilePath(config, alias, resolved), alias, resolved);
   const policies = readSessionPolicies(config, alias);
   return policies.length === 1 ? policies[0] : null;
 }
@@ -149,10 +138,9 @@ async function captureBaselineDirty(workspaceRoot) {
 }
 
 async function writeSessionPolicy(config, alias, { taskHint, workspaceRoot, taskId } = {}) {
-  const resolved = String(taskId || '').trim();
-  const filePath = resolved
-    ? taskSessionFilePath(config, alias, resolved)
-    : legacySessionFilePath(config, alias);
+  const resolved = String(taskId || currentTaskId() || '').trim();
+  if (!resolved) throw new Error('Session policy requires a taskId.');
+  const filePath = taskSessionFilePath(config, alias, resolved);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const baseline = await captureBaselineState(workspaceRoot);
   const now = new Date().toISOString();
@@ -163,7 +151,7 @@ async function writeSessionPolicy(config, alias, { taskHint, workspaceRoot, task
     baselineCaptured: baseline.ok,
     baselineDirty: baseline.files,
     ...(baseline.error ? { baselineCaptureError: baseline.error } : {}),
-    ...(resolved ? { taskId: resolved } : {}),
+    taskId: resolved,
     ...(taskHint ? { taskHint } : {}),
   };
   persistPolicy(filePath, data);
@@ -172,21 +160,20 @@ async function writeSessionPolicy(config, alias, { taskHint, workspaceRoot, task
 
 function touchSessionPolicy(config, alias, taskId = '') {
   const resolved = resolvedTaskId(taskId);
-  const candidates = resolved
-    ? [taskSessionFilePath(config, alias, resolved), legacySessionFilePath(config, alias)]
-    : [legacySessionFilePath(config, alias)];
-  for (const filePath of candidates) {
+  if (!resolved) return false;
+  const filePath = taskSessionFilePath(config, alias, resolved);
+  for (const candidate of [filePath]) {
     try {
-      const parsed = readPolicyFile(filePath, alias, resolved);
+      const parsed = readPolicyFile(candidate, alias, resolved);
       if (!parsed) continue;
       const now = Date.now();
       parsed.updatedAt = new Date(now).toISOString();
-      const cached = policyCache.get(filePath);
+      const cached = policyCache.get(candidate);
       const lastPersistedAt = cached?.lastPersistedAt || 0;
-      cachePolicy(filePath, parsed, lastPersistedAt, cached?.fileRevision || policyFileRevision(filePath));
+      cachePolicy(candidate, parsed, lastPersistedAt, cached?.fileRevision || policyFileRevision(candidate));
       if (now - lastPersistedAt >= SESSION_TOUCH_PERSIST_INTERVAL_MS) {
-        persistPolicy(filePath, parsed);
-        cachePolicy(filePath, parsed, now);
+        persistPolicy(candidate, parsed);
+        cachePolicy(candidate, parsed, now);
       }
       return true;
     } catch (error) {
@@ -204,6 +191,7 @@ function persistPolicy(filePath, policy) {
 async function ensureSessionStarted(config, alias, workspaceRoot, options = {}) {
   if (!alias) return false;
   const taskId = String(options.taskId || currentTaskId() || '').trim();
+  if (!taskId) throw new Error('Session start requires a taskId.');
   const existing = readSessionPolicy(config, alias, taskId);
   if (existing) {
     touchSessionPolicy(config, alias, taskId);
@@ -215,25 +203,17 @@ async function ensureSessionStarted(config, alias, workspaceRoot, options = {}) 
 
 function clearSessionPolicy(config, alias, taskId = '') {
   const resolved = resolvedTaskId(taskId);
-  const candidates = resolved
-    ? [taskSessionFilePath(config, alias, resolved), legacySessionFilePath(config, alias)]
-    : [legacySessionFilePath(config, alias)];
-  let cleared = false;
-  for (const filePath of candidates) {
-    try {
-      if (!fs.existsSync(filePath)) continue;
-      if (resolved && filePath === legacySessionFilePath(config, alias)) {
-        const parsed = readPolicyFile(filePath, alias);
-        if (!parsed || String(parsed.taskId || '') !== resolved) continue;
-      }
-      fs.unlinkSync(filePath);
-      policyCache.delete(filePath);
-      cleared = true;
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy clear:', error);
-    }
+  if (!resolved) return { cleared: false };
+  const filePath = taskSessionFilePath(config, alias, resolved);
+  try {
+    if (!fs.existsSync(filePath)) return { cleared: false };
+    fs.unlinkSync(filePath);
+    policyCache.delete(filePath);
+    return { cleared: true };
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy clear:', error);
+    return { cleared: false };
   }
-  return { cleared };
 }
 
 function resolvePolicy(workspace, config) {
@@ -252,7 +232,7 @@ function resolvePolicy(workspace, config) {
       baselineDirty: Array.isArray(session.baselineDirty) ? session.baselineDirty : [],
       baselineCaptured: session.baselineCaptured === true,
       baselineCaptureError: session.baselineCaptureError || null,
-      source: session.taskId ? 'task_session_file' : 'legacy_session_file'
+      source: 'task_session_file'
     };
   }
   const activePolicies = taskId ? [] : readSessionPolicies(config, alias);

@@ -13,8 +13,7 @@ function gitStatusArgs(options = {}) {
 }
 
 function parseGitStatus(output) {
-  const text = String(output || '');
-  return text.includes('\0') ? parsePorcelainV1Z(text) : parseLegacyStatus(text);
+  return parsePorcelainV1Z(String(output || ''));
 }
 
 function parsePorcelainV1Z(text) {
@@ -56,41 +55,6 @@ function parsePorcelainV1Z(text) {
     });
   }
 
-  return { branchRaw, branch, aheadBehind, unborn, entries };
-}
-
-function parseLegacyStatus(text) {
-  const entries = [];
-  let branchRaw = '';
-  let branch = null;
-  let aheadBehind = null;
-  let unborn = false;
-  for (const line of String(text || '').split(/\r?\n/).filter(Boolean)) {
-    if (line.startsWith('## ')) {
-      branchRaw = line;
-      const parsed = parseStatusBranchLine(line);
-      branch = parsed.branch;
-      aheadBehind = parsed.aheadBehind;
-      unborn = parsed.unborn;
-      continue;
-    }
-    if (line.length < 3) continue;
-    const indexStatus = line[0];
-    const worktreeStatus = line[1];
-    const rawPath = line.slice(3).trim();
-    const arrow = rawPath.indexOf(' -> ');
-    const originalPath = arrow >= 0 ? rawPath.slice(0, arrow).trim() : '';
-    const path = arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
-    if (!path) continue;
-    entries.push({
-      path,
-      ...(originalPath ? { originalPath } : {}),
-      indexStatus,
-      worktreeStatus,
-      untracked: indexStatus === '?' && worktreeStatus === '?',
-      raw: line
-    });
-  }
   return { branchRaw, branch, aheadBehind, unborn, entries };
 }
 
