@@ -1,5 +1,6 @@
 import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
+import { finalizeTaskSandbox, findTaskSandbox, resolveTaskSandboxWorkspace } from '../parallelTaskSandbox.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { readTaskIntegrity, readWorkspaceIntegrity } from '../taskIntegrity.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
@@ -84,7 +85,9 @@ async function completeTask(config, args = {}) {
     }
     const validatedFingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
     if (validatedFingerprint) {
-      const currentFingerprint = await createValidationFingerprint(workspace, config);
+      const sandbox = findTaskSandbox(config, workspace.alias, requestedTaskId);
+      const validationWorkspace = sandbox ? resolveTaskSandboxWorkspace(config, sandbox.alias) : workspace;
+      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config);
       if (currentFingerprint.fingerprint !== validatedFingerprint) {
         throw taskError(
           'TASK_REVALIDATION_REQUIRED',
@@ -99,6 +102,10 @@ async function completeTask(config, args = {}) {
         );
       }
     }
+  }
+
+  if (findTaskSandbox(config, workspace.alias, requestedTaskId)) {
+    await finalizeTaskSandbox(workspace, config, requestedTaskId);
   }
 
   return finalizeValidatedTask(config, workspace, {

@@ -1,10 +1,11 @@
 'use strict';
 
+import { discardTaskSandbox } from '../parallelTaskSandbox.js';
 import { requestCurrentTaskCancellation, taskError } from '../toolActivity.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 
-function cancelTask(config, args = {}) {
+async function cancelTask(config, args = {}) {
   const taskId = String(args.work_id || '').trim();
   if (!taskId) throw taskError('TASK_ID_REQUIRED', 'work_id is required to cancel a work session.');
 
@@ -21,6 +22,10 @@ function cancelTask(config, args = {}) {
       cancelledAt: session.cancelledAt || session.endedAt || null,
       progress: session.progress
     };
+  }
+
+  if (session?.workspace) {
+    await discardTaskSandbox(session.workspace, config, taskId);
   }
 
   const cancellation = requestCurrentTaskCancellation({

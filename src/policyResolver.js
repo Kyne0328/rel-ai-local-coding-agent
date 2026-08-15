@@ -194,7 +194,9 @@ function clearSessionPolicy(config, alias, taskId = '') {
 }
 
 function resolvePolicy(workspace, config) {
-  const alias = workspace?.alias ?? String(workspace || '');
+  const alias = workspace?.taskSandbox === true && workspace?.sourceAlias
+    ? workspace.sourceAlias
+    : (workspace?.alias ?? String(workspace || ''));
   const taskId = currentTaskId();
   const session = readSessionPolicy(config, alias, taskId);
   if (session) {
