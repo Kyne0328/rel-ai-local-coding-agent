@@ -7,6 +7,10 @@ import { execFileSync } from 'node:child_process';
 import { createValidationPlan, readValidationPlan } from "../src/bridge/validationPlan.js";
 import { relaiVerify } from '../src/bridge/validation.js';
 
+const validationPlanSource = fs.readFileSync(new URL('../src/bridge/validationPlan.js', import.meta.url), 'utf8');
+assert.doesNotMatch(validationPlanSource, /execFileSync/, 'validation fingerprint Git probes must not block the MCP event loop');
+assert.match(validationPlanSource, /await runProcess\('git'/, 'validation fingerprint Git probes must use the asynchronous process runner');
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-plan-'));
 const stateDir = path.join(root, 'state');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
