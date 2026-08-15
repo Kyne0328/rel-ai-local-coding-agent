@@ -115,7 +115,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_work',
     title: 'Manage Repository Work',
-    description: 'Manage work sessions.',
+    description: 'Use when starting, inspecting, finishing, or cancelling one logical repository task. Do not use for file inspection or mutation itself.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -142,12 +142,12 @@ const PUBLIC_DEFINITION_VALUES = [
     behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
     dashboard: { category: 'Workflow', capabilities: ['workflow'] }
   }),
-  cloneOperation('relai_repo_snapshot', 'relai_snapshot', 'Repository Snapshot', 'Map repository context.'),
-  cloneOperation('relai_read', 'relai_read', 'Read Repository', 'Read files, ranges, or directories.'),
+  cloneOperation('relai_repo_snapshot', 'relai_snapshot', 'Repository Snapshot', 'Use when a compact repository or bootstrap overview is needed. Do not use for targeted file reads or searches.'),
+  cloneOperation('relai_read', 'relai_read', 'Read Repository', 'Use when exact file content, ranges, or directories are known and needed. Do not use for discovery across unknown locations.'),
   define({
     name: 'relai_search',
     title: 'Search Repository',
-    description: 'Search text or rank code semantically.',
+    description: 'Use for lexical or semantic discovery across repository content. Do not use when the exact file and range are already known.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -183,7 +183,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_inspect',
     title: 'Inspect Code Relationships',
-    description: 'Inspect code relationships and impact.',
+    description: 'Use for symbol, reference, impact, trace, diagnostic, or architecture analysis. Do not use for plain text lookup.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -220,7 +220,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_process',
     title: 'Manage Process',
-    description: 'Manage persistent services, watchers, and interactive programs. Prefer executable + argv; use relai_exec or relai_validate for one-shot work.',
+    description: 'Use for persistent services, watchers, or interactive programs. Do not use for one-shot commands; prefer executable + argv and use relai_exec or relai_validate instead.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -278,7 +278,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_ui',
     title: 'Test Local UI',
-    description: 'Inspect and interact with a workspace-scoped local UI test session.',
+    description: 'Use for browser/UI runtime evidence and interaction in a workspace-scoped local session. Do not use when source inspection alone answers the question.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -336,7 +336,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_validate',
     title: 'Validate Repository',
-    description: 'Run checks, diagnostics, or HTTP probes.',
+    description: 'Use for explicit checks, diagnostics, or HTTP validation. Do not rerun unchanged authoritative checks without a new mutation or reason.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -371,7 +371,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_changes',
     title: 'Review or Restore Changes',
-    description: 'Review, restore, reset, or tidy changes.',
+    description: 'Use to review, restore, reset, or tidy workspace changes. Do not use to create new source edits.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -406,7 +406,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_publish',
     title: 'Publish Repository Work',
-    description: 'Commit, push, or draft PR text.',
+    description: 'Use to commit, push, or draft PR text after task changes are reviewed and ready. Do not use before the publish boundary is satisfied.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -506,7 +506,7 @@ function clonePublicExecOperation() {
     'relai_exec',
     'relai_exec',
     'Run Command',
-    'Run one-shot workspace commands. Prefer executable + argv for direct invocation; use command only when command-line syntax is required.',
+    'Use for bounded one-shot workspace commands. Do not use for persistent services or watchers; prefer executable + argv and use command only when shell syntax is required.',
     {
       inputSchema: publicExecInputSchema(source.inputSchema),
       dashboard: { capabilities: ['execute'] }
@@ -517,7 +517,7 @@ function clonePublicExecOperation() {
 function clonePublicEditOperation() {
   const source = getOperationDefinition('relai_edit');
   if (!source) throw new Error('Missing internal operation definition: relai_edit');
-  return cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', 'Edit with oldText/newText, content for full-file replacement, batches, or patch text. Keep large repository-wide changes in one logical updateText patch.', {
+  return cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Edit with oldText/newText, content for full-file replacement, batches, or patch text; stage generated content above about 12 KiB before sending the whole payload, and keep large patches in one logical updateText operation.', {
     inputSchema: publicEditInputSchema(source.inputSchema, MAX_BATCH_EDITS),
     dashboard: { capabilities: ['edit'] }
   });
