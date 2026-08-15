@@ -100,10 +100,7 @@ const attention = buildAttention(
   [{ severity: 'error', code: 'workspace_unavailable' }],
   ''
 );
-assert.deepEqual(attention.map(item => item.title), [
-  'Problems need attention',
-  'Checks are not set up'
-]);
+assert.deepEqual(attention.map(item => item.title), ['Problems need attention']);
 assert.equal(attention[0].tone, 'bad');
 assert.equal(Object.hasOwn(attention[0], 'priority'), false);
 

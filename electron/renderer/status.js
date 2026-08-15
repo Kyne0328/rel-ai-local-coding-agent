@@ -11,16 +11,23 @@ let currentStatus = {
 let previousAnnouncementKey = '';
 let notificationsEnabled = localStorage.getItem('relai_activity_notifications') !== 'off';
 let clockTimer = null;
+let windowFitFrame = 0;
+let lastWindowFit = { width: 0, height: 0 };
 const serviceLogs = [];
 
 function requestWindowFit() {
-  window.requestAnimationFrame(() => {
+  if (windowFitFrame) return;
+  windowFitFrame = window.requestAnimationFrame(() => {
+    windowFitFrame = 0;
     const shell = document.querySelector('.status-shell');
     if (!shell || typeof window.electronAPI?.fitWindowToContent !== 'function') return;
-    window.electronAPI.fitWindowToContent({
+    const next = {
       width: Math.ceil(shell.getBoundingClientRect().width),
       height: Math.ceil(document.documentElement.scrollHeight)
-    });
+    };
+    if (next.width === lastWindowFit.width && next.height === lastWindowFit.height) return;
+    lastWindowFit = next;
+    window.electronAPI.fitWindowToContent(next);
   });
 }
 
@@ -255,12 +262,25 @@ function renderControls() {
 }
 
 function ensureClock() {
-  const shouldRun = currentStatus.taskActivity?.state !== 'idle' || currentStatus.taskActivity?.lastTask;
-  if (shouldRun && !clockTimer) clockTimer = window.setInterval(renderTemporalText, 1000);
-  if (!shouldRun && clockTimer) {
-    window.clearInterval(clockTimer);
+  if (clockTimer) window.clearTimeout(clockTimer);
+  clockTimer = null;
+  if (document.visibilityState === 'hidden') return;
+  const activity = currentStatus.taskActivity || {};
+  const active = ['working', 'waiting', 'settling'].includes(String(activity.state || ''));
+  const lastTask = activity.lastTask;
+  if (!active && !lastTask) return;
+  renderTemporalText();
+  const delay = active ? 1000 : nextRelativeClockDelay(lastTask?.endedAt || lastTask?.completedAt);
+  clockTimer = window.setTimeout(() => {
     clockTimer = null;
-  }
+    ensureClock();
+  }, delay);
+}
+
+function nextRelativeClockDelay(timestamp) {
+  const age = Math.max(0, Date.now() - (Date.parse(timestamp) || Number(timestamp) || Date.now()));
+  if (age < 60_000) return Math.max(250, 1000 - (age % 1000));
+  return Math.max(1000, 60_000 - (age % 60_000));
 }
 
 function renderTemporalText() {
@@ -481,6 +501,7 @@ function escapeText(value) {
 
 window.electronAPI.onServerStatus(updateUI);
 window.electronAPI.onServerLog(receiveServerLog);
+document.addEventListener('visibilitychange', ensureClock);
 initDisclosures();
 bindEvents();
 updateUI(currentStatus);
