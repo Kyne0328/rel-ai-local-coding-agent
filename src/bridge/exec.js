@@ -24,11 +24,18 @@ let cachedShell = null;
 function resolveCommandCwd(workspace, value) {
   const raw = String(value == null || value === '' ? '.' : value).trim() || '.';
   if (path.isAbsolute(raw)) throw new Error('relai_exec cwd must be relative to the configured workspace.');
-  const root = fs.realpathSync(workspace.path);
+  const root = path.resolve(workspace.path);
   const candidate = path.resolve(root, raw);
   if (!isPathInside(candidate, root)) throw new Error(`relai_exec cwd escapes the workspace: ${raw}`);
-  if (!fs.existsSync(candidate)) throw new Error(`relai_exec cwd does not exist: ${raw}`);
-  const real = fs.realpathSync(candidate);
+  let real;
+  try {
+    real = fs.realpathSync(candidate);
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      throw new Error(`relai_exec cwd does not exist: ${raw}`, { cause: error });
+    }
+    throw error;
+  }
   if (!isPathInside(real, root)) throw new Error(`relai_exec cwd resolves outside the workspace: ${raw}`);
   if (!fs.statSync(real).isDirectory()) throw new Error(`relai_exec cwd is not a directory: ${raw}`);
   const relative = path.relative(root, real).replaceAll(path.sep, '/') || '.';
@@ -240,17 +247,19 @@ function changedStatusFiles(before, after) {
 async function changedFilesSinceCommit(workspace, config, commit) {
   const baseline = String(commit || '').trim();
   if (!/^[0-9a-f]{40,64}$/i.test(baseline)) return null;
-  const tracked = await runProcess('git', ['diff', '--name-status', '-z', '--no-renames', baseline, '--'], {
-    cwd: workspace.path,
-    timeout: 30000,
-    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
-  }, config);
+  const [tracked, untracked] = await Promise.all([
+    runProcess('git', ['diff', '--name-status', '-z', '--no-renames', baseline, '--'], {
+      cwd: workspace.path,
+      timeout: 30000,
+      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+    }, config),
+    runProcess('git', ['ls-files', '-t', '-z', '--others', '--exclude-standard'], {
+      cwd: workspace.path,
+      timeout: 30000,
+      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+    }, config)
+  ]);
   if (tracked.exitCode !== 0 || tracked.stdoutTruncated) return null;
-  const untracked = await runProcess('git', ['ls-files', '-t', '-z', '--others', '--exclude-standard'], {
-    cwd: workspace.path,
-    timeout: 30000,
-    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
-  }, config);
   if (untracked.exitCode !== 0 || untracked.stdoutTruncated) return null;
   return boundedChangedFiles([
     ...parseNameStatusPaths(tracked.stdout),
@@ -307,7 +316,8 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, 2 * 1024 * 1024);
   const sandboxBaseline = workspace.taskSandbox === true ? String(context.mutationBaselineCommit || '').trim() : '';
-  const statusBefore = sandboxBaseline ? null : await readGitStatusMap(workspace, config);
+  const trackMutation = context.mutationTrackingRequired !== false;
+  const statusBefore = !trackMutation || sandboxBaseline ? null : await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
@@ -337,7 +347,10 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   }
   let mutationTracking = 'unavailable';
   let changed;
-  if (sandboxBaseline) {
+  if (!trackMutation) {
+    changed = { files: [], truncated: false };
+    mutationTracking = 'declared-read-only';
+  } else if (sandboxBaseline) {
     changed = await changedFilesSinceCommit(workspace, config, sandboxBaseline);
     if (changed) mutationTracking = 'sandbox-baseline';
     else {

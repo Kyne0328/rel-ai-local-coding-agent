@@ -1,3 +1,5 @@
+import { setTimeout as setNodeTimeout } from 'node:timers';
+
 // @ts-check
 
 
@@ -22,8 +24,10 @@ import { discoverRepositoryTopology, packageForPath } from '../workflow/topology
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
-  scheduleIntelligenceWarmup(workspace, config);
-  if (bootstrapMode === 'none') return task;
+  if (bootstrapMode === 'none') {
+    scheduleIntelligenceWarmup(workspace, config);
+    return task;
+  }
   const snapshot = await repoSnapshot(workspace, config, {
     maxEntries: bootstrapMode === 'full' ? undefined : 64,
     includeFiles: bootstrapMode === 'full',
@@ -35,30 +39,37 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
     try {
       cachedIntelligence = await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
     } catch {}
-    return {
+    const result = {
       ...task,
       bootstrap: cachedIntelligence ? { ...bootstrap, repositoryIntelligence: cachedIntelligence } : bootstrap
     };
+    scheduleIntelligenceWarmup(workspace, config);
+    return result;
   }
-  return { ...task, bootstrap };
+  const result = { ...task, bootstrap };
+  scheduleIntelligenceWarmup(workspace, config);
+  return result;
 });
 
 function scheduleIntelligenceWarmup(workspace, config) {
-  void Promise.resolve()
-    .then(() => repositoryIntelligence.ensure(workspace, config, { watch: false }))
-    .catch(() => {});
+  const timer = setNodeTimeout(() => {
+    void repositoryIntelligence.ensure(workspace, config, { watch: false }).catch(() => {});
+  }, 0);
+  timer.unref();
 }
 
 const HANDLERS = Object.freeze({
   startTask: startTaskHandler,
-  repoSnapshot: inWorkspace((workspace, config, args) => {
+  repoSnapshot: inWorkspace(async (workspace, config, args) => {
+    const result = await repoSnapshot(workspace, config, args);
     scheduleIntelligenceWarmup(workspace, config);
-    return repoSnapshot(workspace, config, args);
+    return result;
   }),
   read: inWorkspace((workspace, config, args, context) => relaiReadAsync(workspace, config, args, context)),
-  search: inWorkspace((workspace, config, args, context) => {
+  search: inWorkspace(async (workspace, config, args, context) => {
+    const result = await relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context);
     scheduleIntelligenceWarmup(workspace, config);
-    return relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context);
+    return result;
   }),
   codeInspect: inWorkspace((workspace, config, args, context) => relaiCodeInspect(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context)),
   exec: inWorkspace((workspace, config, args, context) => relaiExec(workspace, config, args, context)),

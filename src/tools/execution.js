@@ -9,7 +9,8 @@ import {
   prepareTaskExecutionWorkspace,
   promoteTaskSandbox,
   reconcileInactiveTaskSandboxes,
-  resolveTaskSandboxWorkspace
+  resolveTaskSandboxWorkspace,
+  shouldPromoteTaskSandbox
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
 import { getToolActivity, runWithToolActivity, updateCurrentToolActivity } from '../toolActivity.js';
@@ -82,7 +83,8 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
           executionMode: context?.executionMode || '',
           cancel: context?.cancel || null,
           requestTaskContext,
-          mutationBaselineCommit: baselineEntry?.syncCommit || ''
+          mutationBaselineCommit: baselineEntry?.syncCommit || '',
+          mutationTrackingRequired: executionName !== OP.EXEC || !isClearlyReadOnlyExec(args || {})
         });
         if (handled && typeof handled === 'object' && !Array.isArray(handled) && handled.ok === false && handled.error?.code === 'CANCELLED') {
           context?.cancel?.throwIfCancelled?.();
@@ -116,7 +118,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         if (executionWorkspace?.taskSandbox === true
           && !deferSandboxCompletion
           && SANDBOX_CREATE_OPERATIONS.has(executionName)) {
-          await runWorkspaceOperation(sourceWorkspace.alias, () => finalizeTaskSandbox(sourceWorkspace, config, taskId),
+          await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId),
             queueOptions('write', 'workspace', taskId));
         }
         throw error;
@@ -128,9 +130,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
 
       if (executionWorkspace?.taskSandbox === true
         && !deferSandboxCompletion
-        && SANDBOX_CREATE_OPERATIONS.has(executionName)) {
-        await runWorkspaceOperation(sourceWorkspace.alias, () => finalizeTaskSandbox(sourceWorkspace, config, taskId),
-          queueOptions('write', 'workspace', taskId));
+        && shouldPromoteTaskSandbox(executionName, result)) {
+        await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId, {
+          changedFiles: Array.isArray(result?.changedFiles) ? result.changedFiles : []
+        }), queueOptions('write', 'workspace', taskId));
       }
 
       const visibleResult = mapVisibleWorkspace(result, executionWorkspace, sourceWorkspace);
@@ -239,7 +242,6 @@ function isExplicitBranchChange(executionName, args = {}) {
   return /\bgit(?:\.exe)?\b[^\n;&|]*\b(?:switch|checkout)\b/i.test(String(args.command || ''));
 }
 
-
 function queueOptions(mode, scope, taskId) {
   return {
     mode,
@@ -280,4 +282,4 @@ function formatWait(waitMs) {
   return waitMs < 1000 ? `${Math.max(0, Math.round(waitMs))} ms` : `${(waitMs / 1000).toFixed(1)} seconds`;
 }
 
-export { executeToolCall };
+export { executeToolCall, isClearlyReadOnlyExec };

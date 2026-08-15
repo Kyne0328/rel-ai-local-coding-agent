@@ -106,3 +106,6 @@ try {
 }
 
 console.log('Atomic validation resolves one relevant Rel.AI race internally under the source-workspace lock.');
+// Nested raw tool calls can leave Windows piped stdio referenced after app resources close.
+// Teardown above is complete, so exit explicitly to keep this isolated integration test deterministic.
+process.exit(0);

@@ -4,14 +4,20 @@ import * as path from 'node:path';
 
 const MAX_DEPTH = 6;
 const MAX_MANIFESTS = 2000;
+const TOPOLOGY_RECHECK_MS = 250;
 const MANIFEST_NAMES = new Set(['package.json', 'pubspec.yaml', 'go.mod', 'Cargo.toml', 'pyproject.toml', 'requirements.txt', 'Makefile']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.turbo', '.cache', '.relai', '.rel-ai', 'state']);
 const cache = new Map();
 
 function discoverRepositoryTopology(rootPath) {
   const root = path.resolve(String(rootPath || '.'));
+  const now = Date.now();
   const cached = cache.get(root);
+  if (cached && now - cached.checkedAt < TOPOLOGY_RECHECK_MS) {
+    return structuredClone(cached.value);
+  }
   if (cached && probeManifestSignature(cached.manifests) === cached.signature) {
+    cached.checkedAt = now;
     return structuredClone(cached.value);
   }
   const collection = collectManifests(root);
@@ -30,7 +36,7 @@ function discoverRepositoryTopology(rootPath) {
   };
   if (collection.truncated) cache.delete(root);
   else {
-    cache.set(root, { signature, manifests, value });
+    cache.set(root, { signature, manifests, value, checkedAt: now });
     if (cache.size > 32) cache.delete(cache.keys().next().value);
   }
   return structuredClone(value);
@@ -164,4 +170,4 @@ function normalize(value) { return String(value || '').replaceAll('\\', '/').rep
 function object(value) { return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; }
 function clearTopologyCache() { cache.clear(); }
 
-export { clearTopologyCache, discoverRepositoryTopology, invalidateRepositoryTopology, packageForPath };
+export { TOPOLOGY_RECHECK_MS, clearTopologyCache, discoverRepositoryTopology, invalidateRepositoryTopology, packageForPath };

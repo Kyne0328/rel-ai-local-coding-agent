@@ -6,7 +6,7 @@ import { assertAuthorizedToolCall } from '../mcp/authorizationPolicy.js';
 import { clearSessionPolicy } from '../policyResolver.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { activeProcessesForWorkspace } from '../processManager.js';
-import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
+import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
 import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
 import { beginConnectorToolCall, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
 import { serializeConnectorResult } from './connector.js';
@@ -305,7 +305,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
     const session = requestState?.session || readTaskHistorySessionRecord(config, workId) || {};
     if (requestState && !requestState.session) requestState.session = session;
     if (canReuseWorkflowSnapshot(session, integrity, operationName, value)) {
-      recordWorkflowState(config, workId, { receipt, workflow: null }, { defer: true });
+      if (receipt) recordVolatileWorkflowEvidence(workId, receipt);
       return { workflow: session.workflow, unchanged: true, reused: true };
     }
     const recentEvidence = requestState?.recentEvidence

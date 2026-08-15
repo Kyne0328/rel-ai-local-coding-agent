@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import { resolveSafePath, looksBinary } from "../safety.js";
 import { clampNumber } from "./limits.js";
 import { rankMatchGroups } from "./searchPlanner.js";
+import * as sessionCache from "../sessionCache.js";
 
 const DEFAULT_CONTEXT_LINES = 3;
 const DEFAULT_MAX_FILES = 20;
@@ -10,7 +11,7 @@ const DEFAULT_MAX_RANGES_PER_FILE = 20;
 const DEFAULT_MAX_RANGE_LINES = 200;
 const DEFAULT_MAX_CONTEXT_BYTES = 128 * 1024;
 
-function buildContextualSearch(workspace, matches, args = {}, metadata = {}) {
+async function buildContextualSearch(workspace, matches, args = {}, metadata = {}) {
   const options = normalizeContextOptions(args);
   const groupedMatches = groupMatchesByFile(matches);
   const groups = metadata.prioritizeFiles
@@ -33,7 +34,7 @@ function buildContextualSearch(workspace, matches, args = {}, metadata = {}) {
       break;
     }
     const group = selectedGroups[groupIndex];
-    const fileResult = readContextFile(workspace, group, options, remainingBytes, metadata.workflowContext);
+    const fileResult = await readContextFile(workspace, group, options, remainingBytes, metadata.workflowContext);
     if (fileResult.skipped) {
       skipped.push(fileResult.skipped);
       continue;
@@ -105,17 +106,19 @@ function groupMatchesByFile(matches) {
   return [...groups.entries()].map(([path, fileMatches]) => ({ path, matches: fileMatches }));
 }
 
-function readContextFile(workspace, group, options, byteBudget, workflowContext = {}) {
+async function readContextFile(workspace, group, options, byteBudget, workflowContext = {}) {
   try {
     const safe = resolveSafePath(workspace.path, group.path, { operation: "read" });
-    const stat = fs.statSync(safe.absolutePath);
+    const stat = await fs.promises.stat(safe.absolutePath);
     if (!stat.isFile()) return { skipped: { path: group.path, reason: "not a file" } };
-    const data = fs.readFileSync(safe.absolutePath);
-    if (looksBinary(data)) return { skipped: { path: group.path, reason: "binary-looking file" } };
-    const text = data.toString("utf8");
+    const cached = sessionCache.getCachedReadEntry(workspace.alias, safe.absolutePath, stat.mtimeMs);
+    const data = cached ? null : await fs.promises.readFile(safe.absolutePath);
+    if (data && looksBinary(data)) return { skipped: { path: group.path, reason: "binary-looking file" } };
+    const text = cached ? cached.content : data.toString("utf8");
     const lines = splitLines(text);
     const matchLines = uniqueSortedLines(group.matches, lines.length);
-    const sha256 = crypto.createHash("sha256").update(data).digest("hex");
+    const sha256 = cached?.sha256 || crypto.createHash("sha256").update(data || text).digest("hex");
+    if (!cached) sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text, { sha256, bytes: data.length });
     const allRanges = buildRanges(matchLines, lines.length, options).filter(range => !rangeAlreadyRead(group.path, sha256, range, workflowContext));
     const selectedRanges = allRanges.slice(0, options.maxRangesPerFile);
     const ranges = [];

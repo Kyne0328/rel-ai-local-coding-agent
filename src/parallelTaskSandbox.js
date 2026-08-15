@@ -14,6 +14,7 @@ import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const REGISTRY_VERSION = 1;
+const SANDBOX_SYNC_VERSION = 2;
 const CREATE_SANDBOX_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
 const SANDBOX_ROUTED_OPERATIONS = new Set([
   OP.SNAPSHOT,
@@ -140,8 +141,9 @@ async function prepareTaskExecutionWorkspace(workspace, config, taskId, operatio
   const existing = findTaskSandbox(config, workspace.alias, owner);
   if (existing) {
     const sourceRevision = await workspaceRevision(workspace, config);
-    if (!existing.sourceRevision || existing.sourceRevision !== sourceRevision) {
-      await promoteTaskSandbox(workspace, config, owner, { sourceRevision });
+    const forceSourceSync = Number(existing.syncVersion || 0) !== SANDBOX_SYNC_VERSION;
+    if (forceSourceSync || !existing.sourceRevision || existing.sourceRevision !== sourceRevision) {
+      await promoteTaskSandbox(workspace, config, owner, { sourceRevision, forceSourceSync });
     }
     const current = findTaskSandbox(config, workspace.alias, owner);
     return current && SANDBOX_ROUTED_OPERATIONS.has(operation)
@@ -175,6 +177,7 @@ async function createTaskSandbox(workspace, config, taskId) {
   const existing = findTaskSandbox(config, workspace.alias, taskId);
   if (existing) return existing;
 
+  const sourceRevision = await workspaceRevision(workspace, config);
   const baseline = await workspaceSnapshotCommit(workspace, config);
   const nonce = crypto.randomBytes(4).toString('hex');
   const digest = taskDigest(taskId);
@@ -202,7 +205,8 @@ async function createTaskSandbox(workspace, config, taskId) {
     taskId,
     sourceBranch: baseline.branch,
     syncCommit: baseline.commit,
-    sourceRevision: await workspaceRevision(workspace, config),
+    sourceRevision,
+    syncVersion: SANDBOX_SYNC_VERSION,
     createdAt: new Date().toISOString(),
     promotedFiles: []
   };
@@ -344,7 +348,9 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
   }
 
   const sourceRevisionBefore = String(options.sourceRevision || '') || await workspaceRevision(sourceWorkspace, config);
-  const sourceUnchanged = Boolean(entry.sourceRevision && sourceRevisionBefore === entry.sourceRevision);
+  const sourceUnchanged = options.forceSourceSync !== true
+    && Boolean(entry.sourceRevision && sourceRevisionBefore === entry.sourceRevision);
+  let nextSourceRevision = sourceRevisionBefore;
   let alreadyApplied = false;
   if (changedFiles.length) {
     const patchPath = await writeCommitDiff(config, entry.path, entry.syncCommit, sandboxSnapshot.commit);
@@ -374,6 +380,7 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
           throw promotionError('TASK_SANDBOX_PROMOTION_FAILED', 'A private task patch passed preflight but could not be applied to the visible workspace. The sandbox was preserved.');
         }
       }
+      nextSourceRevision = await workspaceRevision(sourceWorkspace, config);
     } finally {
       fs.rmSync(path.dirname(patchPath), { recursive: true, force: true });
     }
@@ -383,6 +390,7 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
   let synchronization = 'incremental';
   if (!sourceUnchanged) {
     synchronization = 'reconciled';
+    nextSourceRevision = await workspaceRevision(sourceWorkspace, config);
     const sourceSnapshot = await workspaceSnapshotCommit(sourceWorkspace, config);
     const synchronized = await synchronizeSandboxToSource(entry, sandboxSnapshot, sourceSnapshot, sourceWorkspace, config);
     if (!synchronized) {
@@ -398,7 +406,8 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
   if (current) {
     const hadUnresolved = Boolean(current.unresolved);
     current.syncCommit = nextSyncCommit;
-    current.sourceRevision = await workspaceRevision(sourceWorkspace, config);
+    current.sourceRevision = nextSourceRevision;
+    current.syncVersion = SANDBOX_SYNC_VERSION;
     current.lastPromotedAt = new Date().toISOString();
     current.promotedFiles = [...new Set([...(current.promotedFiles || []), ...changedFiles])];
     delete current.unresolved;
@@ -668,15 +677,27 @@ function linkReusableDependencies(sourceRoot, targetRoot) {
   for (const relativeRoot of REUSABLE_DEPENDENCY_ROOTS) {
     const sourceModules = path.join(sourceRoot, relativeRoot);
     const targetModules = path.join(targetRoot, relativeRoot);
-    if (!fs.existsSync(sourceModules) || fs.existsSync(targetModules)) continue;
+    if (!fs.existsSync(sourceModules) || !fs.statSync(sourceModules).isDirectory()) continue;
     try {
-      if (!fs.statSync(sourceModules).isDirectory()) continue;
-      fs.mkdirSync(path.dirname(targetModules), { recursive: true });
-      fs.symlinkSync(sourceModules, targetModules, process.platform === 'win32' ? 'junction' : 'dir');
-    } catch {
-      // Dependency reuse is an optimization only. A sandbox remains valid without it.
+      if (!fs.existsSync(targetModules)) {
+        fs.mkdirSync(path.dirname(targetModules), { recursive: true });
+        fs.symlinkSync(sourceModules, targetModules, process.platform === 'win32' ? 'junction' : 'dir');
+      }
+      if (!sameFilesystemPath(fs.realpathSync(sourceModules), fs.realpathSync(targetModules))) {
+        throw new Error('sandbox dependency path resolves somewhere else');
+      }
+    } catch (error) {
+      throw new Error(`Could not reuse '${relativeRoot}' in the parallel task sandbox: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
   }
+}
+
+function sameFilesystemPath(left, right) {
+  const normalize = value => {
+    const resolved = path.resolve(String(value || ''));
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return normalize(left) === normalize(right);
 }
 
 function unlinkReusableDependencies(targetRoot) {
