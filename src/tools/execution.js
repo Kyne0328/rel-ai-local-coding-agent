@@ -19,6 +19,10 @@ import { invalidateSessionCacheForCall, maybeStartSession } from './session.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 const SANDBOX_CREATE_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
+const INACTIVE_RECONCILIATION_OPERATIONS = new Set([OP.WORK_BEGIN, OP.EDIT, OP.EXEC]);
+const UNSAFE_READ_ONLY_GIT_OPTIONS = new Set([
+  '--ext-diff', '--textconv', '--filters', '--open-files-in-pager'
+]);
 
 async function executeToolCall({ config, name, executionName = name, effectiveArgs, context, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
@@ -30,7 +34,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const sourceWorkspace = effectiveArgs?.workspace ? resolveWorkspace(config, effectiveArgs.workspace) : null;
       const branchChange = isExplicitBranchChange(executionName, effectiveArgs);
       const activeTasks = sourceWorkspace ? getToolActivity().tasks : [];
-      if (sourceWorkspace && taskId && hasInactiveTaskSandboxes(config, sourceWorkspace.alias, activeTasks, taskId)) {
+      if (sourceWorkspace
+        && taskId
+        && shouldReconcileInactiveSandboxes(executionName, effectiveArgs)
+        && hasInactiveTaskSandboxes(config, sourceWorkspace.alias, activeTasks, taskId)) {
         await runWorkspaceOperation(sourceWorkspace.alias, () =>
           reconcileInactiveTaskSandboxes(sourceWorkspace, config, getToolActivity().tasks, taskId),
         queueOptions('write', 'workspace', taskId));
@@ -45,7 +52,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             return sourceWorkspace;
           }
           return prepareTaskExecutionWorkspace(sourceWorkspace, config, taskId, executionName, {
-            activeTasks,
+            activeTasks: getToolActivity().tasks,
             forceSource: branchChange
           });
         }, queueOptions('write', 'workspace', taskId));
@@ -147,31 +154,44 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
 }
 
 function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName, args = {}) {
-  if (executionName === OP.WORK_CANCEL) return false;
+  if (executionName === OP.WORK_CANCEL || executionName === OP.WORK_STATUS) return false;
   if (findTaskSandbox(config, workspaceAlias, taskId)) return true;
   if (!SANDBOX_CREATE_OPERATIONS.has(executionName)) return false;
   return executionName !== OP.EXEC || !isClearlyReadOnlyExec(args);
 }
 
+function shouldReconcileInactiveSandboxes(executionName, args = {}) {
+  if (!INACTIVE_RECONCILIATION_OPERATIONS.has(executionName)) return false;
+  return executionName !== OP.EXEC || !isClearlyReadOnlyExec(args);
+}
+
 function isClearlyReadOnlyExec(args = {}) {
   if (String(args.command || '').trim()) return false;
+  if (String(args.input || '').length > 0) return false;
+  if (args.env && typeof args.env === 'object' && Object.keys(args.env).length > 0) return false;
   const executable = path.basename(String(args.executable || '')).toLowerCase();
   if (executable !== 'git' && executable !== 'git.exe') return false;
   const argv = Array.isArray(args.argv) ? args.argv.map(value => String(value || '')) : [];
   if (!argv.length || argv[0].startsWith('-')) return false;
+  const optionTokens = argv.slice(1).map(value => value.toLowerCase());
+  if (optionTokens.some(value => UNSAFE_READ_ONLY_GIT_OPTIONS.has(value)
+    || value === '--output'
+    || value.startsWith('--output='))) return false;
   const command = argv[0].toLowerCase();
   if (new Set([
     'status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'ls-tree',
     'cat-file', 'grep', 'blame', 'shortlog', 'describe', 'merge-base', 'name-rev'
   ]).has(command)) return true;
   if (command === 'branch') {
-    const options = argv.slice(1).map(value => value.toLowerCase());
+    const options = optionTokens;
     return options.length === 0 || options.every(value => ['--show-current', '--list', '-a', '-r'].includes(value));
   }
-  if (command === 'worktree') return argv[1]?.toLowerCase() === 'list';
-  if (command === 'remote') return argv.length === 1 || argv.slice(1).every(value => value === '-v' || value === '--verbose');
+  if (command === 'worktree') return argv.length === 2 && argv[1]?.toLowerCase() === 'list';
+  if (command === 'remote') return argv.length === 1 || optionTokens.every(value => value === '-v' || value === '--verbose');
   if (command === 'config') {
-    return ['--get', '--get-all', '--get-regexp', '--list', '-l'].includes(String(argv[1] || '').toLowerCase());
+    const mode = String(argv[1] || '').toLowerCase();
+    if (!['--get', '--get-all', '--get-regexp', '--list', '-l'].includes(mode)) return false;
+    return argv.slice(2).every(value => !String(value).startsWith('-'));
   }
   return false;
 }

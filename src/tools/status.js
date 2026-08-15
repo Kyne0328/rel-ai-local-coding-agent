@@ -14,6 +14,7 @@ import { workspaceGitStatus } from '../repo/gitOps.js';
 import { runtimeCompatibility } from '../runtimeCompatibility.js';
 import { getToolActivity } from '../toolActivity.js';
 import { fallbackExecutionStatus } from '../mcp/fallbackExecutions.js';
+import { readTaskHistorySession } from '../taskHistoryStore.js';
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
@@ -54,6 +55,7 @@ async function relaiStatus(config, args = {}, context = {}) {
   }
   const { getToolNames, getToolGroups, getToolSurfaceManifest } = toolSchema;
   const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id) : null;
+  const task = args.work_id ? readTaskHistorySession(config, args.work_id) : null;
   const taskActivity = typeof context.getTaskActivity === 'function' ? context.getTaskActivity() : getToolActivity();
   const compatibility = runtimeCompatibility(config, {
     workspace: args.workspace,
@@ -70,6 +72,7 @@ async function relaiStatus(config, args = {}, context = {}) {
     ...(localDiagnostics ? { scripts: sortedKeys(scripts), ci } : {}),
     workspace: selectedWorkspace,
     ...(args.work_id ? { work_id: String(args.work_id) } : {}),
+    ...(task ? { task } : {}),
     ...(backgroundOperation ? { backgroundOperation } : {}),
     workspaceCount: workspaceAliases.length,
     workspaceAliases
