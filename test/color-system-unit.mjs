@@ -30,8 +30,14 @@ function expectContrast(themeName, foregroundRole, backgroundRole, threshold) {
 }
 
 assert.deepEqual(THEME_NAMES, ['dark', 'light']);
+assert.equal(COLOR_THEMES.dark.canvas, '#0a0a0a', 'dark canvas must stay neutral carbon instead of carrying a green tint');
+assert.equal(COLOR_THEMES.dark.surfacePrimary, '#111111', 'dark primary surfaces must stay neutral');
+assert.equal(COLOR_THEMES.dark.surfaceSecondary, '#171717', 'dark secondary surfaces must stay neutral');
+assert.equal(COLOR_THEMES.dark.surfaceRaised, '#1f1f1f', 'dark raised surfaces must stay neutral');
+assert.equal(COLOR_THEMES.dark.selectionBackground, '#242424', 'selection feedback must use a neutral surface so lime remains an accent');
 assert.equal(COLOR_THEMES.dark.actionPrimary, '#d8ff74', 'dark primary action must use the website brand lime');
 assert.equal(COLOR_THEMES.dark.statusInfoForeground, '#5aa6ff', 'informational state must retain the website info blue');
+assert.doesNotMatch(COLOR_THEMES.dark.electronAppGradient, /216,255,116|79,224,154/, 'Electron app background must not restore ambient lime or green glows');
 assert.notEqual(COLOR_THEMES.dark.actionPrimary, COLOR_THEMES.dark.statusInfoForeground, 'brand actions and informational state must remain semantically distinct');
 assert.equal(COLOR_THEMES.light.actionPrimary, '#657f00', 'light primary action must use the accessible brand-relative value');
 assert.notEqual(COLOR_THEMES.dark.selectionBackground, COLOR_THEMES.dark.statusInfoBackground, 'brand selection feedback must not reuse informational blue');

@@ -1,8 +1,8 @@
 @layer components {
-.workspace-focus-label { @apply max-w-48 truncate rounded-lg px-2.5 py-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-selection-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 34%, transparent); }
+.workspace-focus-label { @apply max-w-48 truncate rounded-md px-2.5 py-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-surface-raised); border: 1px solid var(--ui-border-subtle); }
 .workspace-toolbar button[data-add-workspace], .workspace-empty-state button[data-add-workspace] {
-  border-color: color-mix(in srgb, var(--ui-action-primary) 72%, transparent) !important;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-action-primary) 18%, transparent);
+  border-color: var(--ui-border-control) !important;
+  box-shadow: none;
 }
 .workspace-recents { @apply flex items-center gap-3 rounded-xl px-4 py-3; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
 .workspace-recents > span { @apply shrink-0 text-[11px] font-semibold; color: var(--ui-text-secondary); }
@@ -10,7 +10,7 @@
 .workspace-recent-chip { @apply min-h-8 px-2.5; }
 .workspace-grid { @apply grid gap-3; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .workspace-card { @apply flex min-w-0 flex-col; }
-.workspace-card-head { @apply flex items-start justify-between gap-4 border-b px-4 py-4; border-color: var(--ui-border-default); }
+.workspace-card-head { @apply flex items-start justify-between gap-4 border-b px-4 py-3; border-color: var(--ui-border-subtle); }
 .workspace-identity { @apply min-w-0; }
 .workspace-identity strong { @apply block text-[15px]; }
 .workspace-path { @apply mt-1 truncate text-[11px]; color: var(--ui-text-tertiary); }
@@ -35,16 +35,16 @@
 .workspace-readiness-fact dd strong { @apply block text-[12px]; }
 .workspace-readiness-fact dd small { @apply mt-1 block text-[11px] leading-5; color: var(--ui-text-secondary); }
 .workspace-notice { @apply flex flex-wrap gap-2 border-b px-4 py-3 text-[12px]; background: var(--ui-status-warning-background); color: var(--ui-status-warning-foreground); border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 25%, transparent); }
-.workspace-actions { @apply flex flex-wrap items-center gap-2 px-4 py-3; }
+.workspace-actions { @apply flex flex-wrap items-center gap-2 px-3 py-2.5; }
 .workspace-primary-actions { @apply border-b; border-color: var(--ui-border-default); }
 .workspace-operational { @apply grid gap-0; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .workspace-operational > * { @apply border-b border-r p-3; border-color: var(--ui-border-subtle); }
-.workspace-secondary-actions { @apply flex flex-wrap gap-2 border-t p-4; border-color: var(--ui-border-default); }
+.workspace-secondary-actions { @apply flex flex-wrap gap-2 border-t p-3; border-color: var(--ui-border-subtle); }
 .workspace-empty-state { @apply grid min-h-72 place-items-center rounded-xl p-8 text-center; background: var(--ui-surface-primary); border: 1px dashed var(--ui-border-default); }
 .workspace-empty-state > * { @apply max-w-xl; }
 .workspace-empty-state strong { @apply mt-3 block text-lg; }
 .workspace-empty-state p { @apply my-3 text-[12px]; color: var(--ui-text-secondary); }
-.workspace-empty-mark { @apply grid size-12 place-items-center rounded-2xl text-2xl; background: var(--ui-selection-background); color: var(--ui-action-primary); }
+.workspace-empty-mark { @apply grid size-12 place-items-center rounded-xl text-2xl; background: var(--ui-surface-raised); color: var(--ui-action-primary); }
 .workspace-card-focused { outline: 2px solid var(--ui-action-primary); outline-offset: 3px; }
 
 .ws-form-intro { @apply grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }

@@ -48,7 +48,7 @@
 .usage-bar-list { @apply grid gap-2; }
 .usage-bar-row { @apply grid min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-[12px]; grid-template-columns: minmax(100px,180px) minmax(100px,1fr) auto; color: var(--ui-text-secondary); }
 .usage-bar-row:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
-.usage-bar-row.active { background: var(--ui-selection-background); color: var(--ui-text-primary); }
+.usage-bar-row.active { background: var(--ui-surface-raised); color: var(--ui-text-primary); }
 .usage-bar-label { @apply truncate font-semibold; }
 .usage-bar-row progress { height: 7px; }
 .usage-bar-row strong { @apply min-w-8 text-right text-[12px]; color: var(--ui-text-primary); }
@@ -87,9 +87,9 @@
 .usage-timeline-head { @apply items-start gap-4; }
 .usage-chart-switch { @apply flex flex-wrap justify-end gap-1; }
 .usage-chart-switch button { min-height: 44px; }
-.usage-chart-switch button.active { border-color: var(--ui-action-primary); color: var(--ui-action-primary); background: var(--ui-action-secondary); }
+.usage-chart-switch button.active { border-color: var(--ui-border-control); color: var(--ui-action-primary); background: var(--ui-surface-raised); }
 .usage-timeline-body { min-height: 190px; }
-.usage-timeline-plot { @apply overflow-hidden rounded-xl border px-3 pb-2 pt-1; border-color: var(--ui-border-subtle); background: linear-gradient(180deg, color-mix(in srgb, var(--ui-action-primary) 5%, var(--ui-surface-secondary)), var(--ui-surface-primary)); }
+.usage-timeline-plot { @apply overflow-hidden rounded-lg border px-3 pb-2 pt-1; border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
 .usage-timeline-svg { width: 100%; height: 180px; color: var(--ui-action-primary); }
 .usage-chart-line { stroke: currentColor; stroke-width: 2; }
 .usage-chart-area { fill: currentColor; opacity: .08; }

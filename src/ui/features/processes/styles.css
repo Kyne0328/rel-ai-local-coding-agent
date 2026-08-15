@@ -1,7 +1,7 @@
 @layer components {
 /* Managed process runtime */
 .processes-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); }
-.process-row { padding: 1rem 1.1rem; border-top: 1px solid var(--ui-border-subtle); }
+.process-row { padding: .75rem .9rem; border-top: 1px solid var(--ui-border-subtle); }
 .process-row:first-child { border-top: 0; }
 .process-row.active { box-shadow: inset 3px 0 0 var(--ui-action-primary); }
 .process-row-head, .process-title-line, .process-actions, .process-meta { display: flex; align-items: center; gap: .65rem; }
@@ -11,7 +11,7 @@
 .process-identity > code { display: block; margin-top: .35rem; color: var(--ui-text-secondary); font-size: .74rem; }
 .process-actions { flex: 0 0 auto; }
 .process-elapsed { color: var(--ui-text-secondary); font-size: .82rem; }
-.process-meta { flex-wrap: wrap; margin-top: .75rem; color: var(--ui-text-secondary); font-size: .8rem; }
+.process-meta { flex-wrap: wrap; margin-top: .55rem; color: var(--ui-text-secondary); font-size: .76rem; }
 .process-meta span + span::before { content: '·'; margin-right: .65rem; }
 .process-output { margin-top: .8rem; }
 .process-output summary { display: flex; min-height: 44px; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: .82rem; }

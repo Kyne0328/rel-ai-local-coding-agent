@@ -16,7 +16,7 @@
 @layer components {
 .overview-grid { @apply grid gap-3; grid-template-columns: repeat(3, minmax(0,1fr)); }
 .overview-grid-two { grid-template-columns: repeat(2, minmax(0,1fr)); }
-.summary-metrics { @apply gap-0 overflow-hidden rounded-xl; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.summary-metrics { @apply gap-0 overflow-hidden rounded-lg; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-subtle); }
 .summary-metrics .metric { @apply rounded-none border-0 border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
 .metric-label { @apply text-[12px] font-semibold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
 .metric-value { @apply mt-1 text-2xl font-extrabold; }
@@ -27,11 +27,11 @@
 .layout-grid { @apply grid gap-3; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
 
 .overview-hero {
-  @apply relative overflow-hidden rounded-2xl p-7;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--ui-surface-secondary) 88%, var(--ui-action-primary) 12%), var(--ui-surface-primary));
-  border: 1px solid var(--ui-border-default);
+  @apply relative overflow-hidden rounded-lg p-5;
+  background: var(--ui-surface-primary);
+  border: 1px solid var(--ui-border-subtle);
 }
-.overview-hero::after { content: ""; @apply pointer-events-none absolute -right-24 -top-28 size-72 rounded-full; background: color-mix(in srgb, var(--ui-action-primary) 12%, transparent); filter: blur(12px); }
+.overview-hero::after { display: none; }
 .overview-hero.good { border-color: color-mix(in srgb, var(--ui-status-success-foreground) 30%, var(--ui-border-default)); }
 .overview-hero.warn { border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 30%, var(--ui-border-default)); }
 .overview-hero.bad { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 30%, var(--ui-border-default)); }
@@ -75,9 +75,9 @@
 .home-analytics-head > div { @apply min-w-0; }
 .home-analytics-head .compact-button { min-height: 44px; }
 .home-analytics-title-row { @apply flex min-w-0 items-center gap-2; }
-.home-analytics-title-row > span { @apply shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-action-secondary); }
+.home-analytics-title-row > span { @apply shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-surface-raised); }
 .home-analytics-body { @apply grid; }
-.home-analytics-metrics { @apply grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-top: 1px solid var(--ui-border-subtle); border-bottom: 1px solid var(--ui-border-subtle); background: linear-gradient(180deg, color-mix(in srgb, var(--ui-surface-secondary) 56%, transparent), transparent); }
+.home-analytics-metrics { @apply grid; grid-template-columns: repeat(4,minmax(0,1fr)); border-top: 1px solid var(--ui-border-subtle); border-bottom: 1px solid var(--ui-border-subtle); background: var(--ui-surface-secondary); }
 .home-analytics-metric { @apply grid min-w-0 gap-1 border-r px-4 py-4 last:border-r-0; border-color: var(--ui-border-subtle); }
 .home-analytics-metric > span { @apply text-[11px] font-semibold uppercase tracking-[.05em]; color: var(--ui-text-tertiary); }
 .home-analytics-metric > strong { @apply text-[22px] font-extrabold tracking-[-.02em]; overflow-wrap: anywhere; color: var(--ui-text-primary); }
@@ -89,7 +89,7 @@
 .home-analytics-pulse-head span { @apply text-[11px] font-semibold uppercase tracking-[.05em]; color: var(--ui-text-tertiary); }
 .home-analytics-pulse-head strong { @apply text-[12px] font-semibold; overflow-wrap: anywhere; color: var(--ui-text-primary); }
 .home-analytics-pulse-head small { @apply shrink-0 text-[11px]; color: var(--ui-text-tertiary); }
-.home-analytics-chart { @apply overflow-hidden rounded-xl border px-3 pb-2 pt-1; border-color: var(--ui-border-subtle); background: linear-gradient(180deg, color-mix(in srgb, var(--ui-action-primary) 5%, var(--ui-surface-secondary)), var(--ui-surface-primary)); }
+.home-analytics-chart { @apply overflow-hidden rounded-lg border px-3 pb-2 pt-1; border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
 .home-analytics-svg { width: 100%; height: 112px; color: var(--ui-action-primary); }
 .home-analytics-gridline { stroke: var(--ui-border-subtle); stroke-width: 1; stroke-dasharray: 4 6; }
 .home-analytics-area { fill: currentColor; opacity: .08; }
