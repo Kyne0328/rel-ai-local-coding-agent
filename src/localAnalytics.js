@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { statePath } from './stateLayout.js';
 import { writeTextAtomicAsync } from './durableState.js';
 import { failureCategoryFromCode, normalizeFailureCategory } from './analyticsFailureCategory.js';
+import { classifyAnalyticsOutcome, reliabilityCountersForOutcome } from './analyticsOutcome.js';
 
 const SCHEMA_VERSION = 1;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
@@ -25,13 +26,15 @@ function recordLocalToolOutcome(config = {}, event = {}) {
     const success = event.ok === true ? 1 : 0;
     const failure = success ? 0 : 1;
     const category = failure ? failureCategoryFromCode(event.errorCode) : '';
+    const outcome = classifyAnalyticsOutcome(event);
+    const reliability = reliabilityCountersForOutcome(outcome);
     const document = readDocument(config, month);
 
-    incrementTotals(document.totals, success, failure, durationMs);
-    incrementNamed(document.tools, 'tool', tool, success, failure, durationMs);
+    incrementTotals(document.totals, success, failure, durationMs, reliability);
+    incrementNamed(document.tools, 'tool', tool, success, failure, durationMs, reliability);
     if (workspace) {
-      incrementNamed(document.workspaces, 'workspace', workspace, success, failure, durationMs);
-      incrementWorkspaceTool(document.workspaceTools, workspace, tool, success, failure, durationMs);
+      incrementNamed(document.workspaces, 'workspace', workspace, success, failure, durationMs, reliability);
+      incrementWorkspaceTool(document.workspaceTools, workspace, tool, success, failure, durationMs, reliability);
     }
     if (failure) {
       incrementFailureCategory(document.failureCategories, category);
@@ -40,22 +43,18 @@ function recordLocalToolOutcome(config = {}, event = {}) {
 
     const hourly = findOrCreate(document.hours, row => row.hour === hour, () => ({
       hour,
-      requests: 0,
-      toolCalls: 0,
-      successes: 0,
-      failures: 0,
-      executionMs: 0,
+      ...emptyAggregate(true),
       tools: [],
       workspaces: [],
       workspaceTools: [],
       failureCategories: [],
       workspaceFailureCategories: []
     }));
-    incrementTotals(hourly, success, failure, durationMs);
-    incrementNamed(hourly.tools, 'tool', tool, success, failure, durationMs);
+    incrementTotals(hourly, success, failure, durationMs, reliability);
+    incrementNamed(hourly.tools, 'tool', tool, success, failure, durationMs, reliability);
     if (workspace) {
-      incrementNamed(hourly.workspaces, 'workspace', workspace, success, failure, durationMs);
-      incrementWorkspaceTool(hourly.workspaceTools, workspace, tool, success, failure, durationMs);
+      incrementNamed(hourly.workspaces, 'workspace', workspace, success, failure, durationMs, reliability);
+      incrementWorkspaceTool(hourly.workspaceTools, workspace, tool, success, failure, durationMs, reliability);
     }
     if (failure) {
       incrementFailureCategory(hourly.failureCategories, category);
@@ -103,12 +102,9 @@ function readLocalUsageSnapshot(config = {}, requestedMonth = '') {
     series: document.hours.map(row => ({
       hour: row.hour,
       requests: number(row.requests),
-      toolCalls: number(row.toolCalls),
-      successes: number(row.successes),
-      failures: number(row.failures),
+      ...aggregateDto(row),
       requestBytes: 0,
-      resultBytes: 0,
-      executionMs: number(row.executionMs)
+      resultBytes: 0
     })),
     toolSeries: document.hours.flatMap(row => row.tools.map(item => ({ hour: row.hour, tool: item.tool, ...aggregateDto(item) }))),
     workspaceSeries: document.hours.flatMap(row => row.workspaces.map(item => ({
@@ -274,16 +270,58 @@ function sanitizeWorkspaceFailureCategories(rows) {
   return (Array.isArray(rows) ? rows : []).slice(0, 512).map(row => ({ workspace: boundedLabel(row?.workspace, 160), category: normalizeFailureCategory(row?.category), failures: number(row?.failures) })).filter(row => row.workspace && row.failures > 0);
 }
 function sanitizeAggregate(row, includeRequests = false) {
-  return { ...(includeRequests ? { requests: number(row?.requests) } : {}), toolCalls: number(row?.toolCalls), successes: number(row?.successes), failures: number(row?.failures), executionMs: number(row?.executionMs) };
+  const successes = number(row?.successes);
+  const failures = number(row?.failures);
+  const legacyCompleted = successes + failures;
+  const reliabilityCalls = hasNumber(row, 'reliabilityCalls') ? number(row.reliabilityCalls) : legacyCompleted;
+  const reliableCalls = hasNumber(row, 'reliableCalls') ? number(row.reliableCalls) : successes;
+  return {
+    ...(includeRequests ? { requests: number(row?.requests) } : {}),
+    toolCalls: number(row?.toolCalls),
+    successes,
+    failures,
+    reliabilityCalls,
+    reliableCalls,
+    infrastructureFailures: hasNumber(row, 'infrastructureFailures') ? number(row.infrastructureFailures) : Math.max(0, reliabilityCalls - reliableCalls),
+    operationFailures: number(row?.operationFailures),
+    recoverableFailures: number(row?.recoverableFailures),
+    cancellations: number(row?.cancellations),
+    executionMs: number(row?.executionMs)
+  };
 }
-function aggregateDto(row) { return { toolCalls: number(row?.toolCalls), successes: number(row?.successes), failures: number(row?.failures), executionMs: number(row?.executionMs) }; }
-function emptyAggregate(includeRequests = false) { return { ...(includeRequests ? { requests: 0 } : {}), toolCalls: 0, successes: 0, failures: 0, executionMs: 0 }; }
-function incrementTotals(row, success, failure, durationMs) { row.requests = number(row.requests) + 1; row.toolCalls = number(row.toolCalls) + 1; row.successes = number(row.successes) + success; row.failures = number(row.failures) + failure; row.executionMs = number(row.executionMs) + durationMs; }
-function incrementNamed(rows, field, value, success, failure, durationMs) { const row = findOrCreate(rows, item => item[field] === value, () => ({ [field]: value, ...emptyAggregate() })); incrementAggregate(row, success, failure, durationMs); }
-function incrementWorkspaceTool(rows, workspace, tool, success, failure, durationMs) { const row = findOrCreate(rows, item => item.workspace === workspace && item.tool === tool, () => ({ workspace, tool, ...emptyAggregate() })); incrementAggregate(row, success, failure, durationMs); }
+function aggregateDto(row) {
+  return {
+    toolCalls: number(row?.toolCalls), successes: number(row?.successes), failures: number(row?.failures),
+    reliabilityCalls: number(row?.reliabilityCalls), reliableCalls: number(row?.reliableCalls),
+    infrastructureFailures: number(row?.infrastructureFailures), operationFailures: number(row?.operationFailures),
+    recoverableFailures: number(row?.recoverableFailures), cancellations: number(row?.cancellations),
+    executionMs: number(row?.executionMs)
+  };
+}
+function emptyAggregate(includeRequests = false) {
+  return {
+    ...(includeRequests ? { requests: 0 } : {}),
+    toolCalls: 0, successes: 0, failures: 0,
+    reliabilityCalls: 0, reliableCalls: 0, infrastructureFailures: 0,
+    operationFailures: 0, recoverableFailures: 0, cancellations: 0,
+    executionMs: 0
+  };
+}
+function incrementTotals(row, success, failure, durationMs, reliability) { row.requests = number(row.requests) + 1; incrementAggregate(row, success, failure, durationMs, reliability); }
+function incrementNamed(rows, field, value, success, failure, durationMs, reliability) { const row = findOrCreate(rows, item => item[field] === value, () => ({ [field]: value, ...emptyAggregate() })); incrementAggregate(row, success, failure, durationMs, reliability); }
+function incrementWorkspaceTool(rows, workspace, tool, success, failure, durationMs, reliability) { const row = findOrCreate(rows, item => item.workspace === workspace && item.tool === tool, () => ({ workspace, tool, ...emptyAggregate() })); incrementAggregate(row, success, failure, durationMs, reliability); }
 function incrementFailureCategory(rows, category) { const normalized = normalizeFailureCategory(category); const row = findOrCreate(rows, item => item.category === normalized, () => ({ category: normalized, failures: 0 })); row.failures = number(row.failures) + 1; }
 function incrementWorkspaceFailureCategory(rows, workspace, category) { const normalized = normalizeFailureCategory(category); const row = findOrCreate(rows, item => item.workspace === workspace && item.category === normalized, () => ({ workspace, category: normalized, failures: 0 })); row.failures = number(row.failures) + 1; }
-function incrementAggregate(row, success, failure, durationMs) { row.toolCalls = number(row.toolCalls) + 1; row.successes = number(row.successes) + success; row.failures = number(row.failures) + failure; row.executionMs = number(row.executionMs) + durationMs; }
+function incrementAggregate(row, success, failure, durationMs, reliability = {}) {
+  row.toolCalls = number(row.toolCalls) + 1;
+  row.successes = number(row.successes) + success;
+  row.failures = number(row.failures) + failure;
+  for (const key of ['reliabilityCalls', 'reliableCalls', 'infrastructureFailures', 'operationFailures', 'recoverableFailures', 'cancellations']) {
+    row[key] = number(row[key]) + number(reliability[key]);
+  }
+  row.executionMs = number(row.executionMs) + durationMs;
+}
+function hasNumber(row, key) { return row && Object.hasOwn(row, key) && Number.isFinite(Number(row[key])) && Number(row[key]) >= 0; }
 function findOrCreate(rows, predicate, create) { let row = rows.find(predicate); if (!row) { row = create(); rows.push(row); } return row; }
 function boundedDate(value) { const date = value instanceof Date ? value : new Date(value == null ? Date.now() : value); return Number.isFinite(date.getTime()) ? date : new Date(); }
 function boundedDuration(value) { const n = Number(value); return Number.isFinite(n) ? Math.min(MAX_DURATION_MS, Math.max(0, Math.round(n))) : 0; }
