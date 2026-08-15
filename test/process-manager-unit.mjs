@@ -14,6 +14,9 @@ import {
   writeManagedProcess
 } from '../src/processManager.js';
 
+const processSource = fs.readFileSync(new URL('../src/process.js', import.meta.url), 'utf8');
+assert.doesNotMatch(processSource, /spawnSync|PowerShell/, 'managed process liveness and termination must not block the MCP event loop');
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-process-manager-'));
 const stateDir = path.join(root, 'state');
 const workspaceRoot = path.join(root, 'workspace');

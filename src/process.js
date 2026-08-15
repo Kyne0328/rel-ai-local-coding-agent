@@ -1,10 +1,9 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { resolveGitExecutable } from './gitExecutable.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
 import { traceContextEnvironment } from './telemetry.js';
 
 const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
-const WINDOWS_POWERSHELL_EXE = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`;
 const DEFAULT_TERMINATION_GRACE_MS = 1000;
 const DEFAULT_FORCE_WAIT_MS = 2000;
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -49,7 +48,7 @@ function isProcessGroupAlive(pidValue) {
 function isProcessTreeAlive(target) {
   const rootPid = processPid(target);
   if (!rootPid) return false;
-  if (process.platform === 'win32') return windowsProcessTreePids(rootPid).some(isPidAlive);
+  if (process.platform === 'win32') return isPidAlive(rootPid);
   return isProcessGroupAlive(rootPid);
 }
 
@@ -62,8 +61,10 @@ function signalProcessTree(target, options = {}) {
   if (process.platform === 'win32') {
     try {
       const args = [...(force ? ['/f'] : []), '/t', '/pid', String(pid)];
-      const result = spawnSync(TASKKILL_EXE, args, { stdio: 'ignore', windowsHide: true });
-      if (result.status === 0) return true;
+      const killer = spawn(TASKKILL_EXE, args, { stdio: 'ignore', windowsHide: true });
+      killer.once('error', error => debugKill('[rel-ai-mcp] taskkill:', error));
+      killer.unref?.();
+      return true;
     } catch (error) {
       debugKill('[rel-ai-mcp] taskkill:', error);
     }
@@ -94,9 +95,9 @@ async function terminateProcessTree(target, options = {}) {
   const graceMs = clampMilliseconds(options.graceMs, 0, 30000, DEFAULT_TERMINATION_GRACE_MS);
   const forceWaitMs = clampMilliseconds(options.forceWaitMs, 0, 30000, DEFAULT_FORCE_WAIT_MS);
   const rootPid = processPid(target);
-  const trackedPids = process.platform === 'win32' ? windowsProcessTreePids(rootPid) : [];
+  const trackedPids = process.platform === 'win32' ? [rootPid] : [];
   const treeAlive = process.platform === 'win32'
-    ? trackedPids.some(isPidAlive)
+    ? isPidAlive(rootPid)
     : isProcessGroupAlive(rootPid);
   if (!treeAlive) {
     return { exited: true, forced: false, gracefulSignalSent: false, forceSignalSent: false };
@@ -119,53 +120,18 @@ async function terminateProcessTree(target, options = {}) {
   return { exited, forced: true, gracefulSignalSent, forceSignalSent };
 }
 
-function windowsProcessTreePids(rootPid) {
-  if (!Number.isSafeInteger(rootPid) || rootPid <= 0) return [];
-  const script = [
-    `$rootPid = ${rootPid}`,
-    '$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId',
-    '$ids = @([int]$rootPid)',
-    'for ($i = 0; $i -lt $ids.Count; $i++) {',
-    '  $parent = $ids[$i]',
-    '  $ids += @($all | Where-Object { $_.ParentProcessId -eq $parent } | ForEach-Object { [int]$_.ProcessId })',
-    '}',
-    '[Console]::Out.Write(($ids | Select-Object -Unique) -join ",")'
-  ].join('; ');
-  try {
-    const result = spawnSync(WINDOWS_POWERSHELL_EXE, [
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-Command',
-      script
-    ], {
-      encoding: 'utf8',
-      timeout: 5000,
-      windowsHide: true
-    });
-    const pids = String(result.stdout || '')
-      .split(',')
-      .map(value => Number(value.trim()))
-      .filter(value => Number.isSafeInteger(value) && value > 0);
-    return pids.length ? [...new Set(pids)] : [rootPid];
-  } catch (error) {
-    debugKill('[rel-ai-mcp] enumerate Windows process tree:', error);
-    return [rootPid];
-  }
-}
-
 function forceWindowsProcessTree(pids) {
   let signalSent = false;
   for (const pid of [...new Set(pids)].reverse()) {
     if (!isPidAlive(pid)) continue;
     try {
-      const result = spawnSync(TASKKILL_EXE, ['/f', '/t', '/pid', String(pid)], {
+      const killer = spawn(TASKKILL_EXE, ['/f', '/t', '/pid', String(pid)], {
         stdio: 'ignore',
         windowsHide: true
       });
-      signalSent = result.status === 0 || signalSent;
+      killer.once('error', error => debugKill('[rel-ai-mcp] force Windows process tree:', error));
+      killer.unref?.();
+      signalSent = true;
     } catch (error) {
       debugKill('[rel-ai-mcp] force Windows process tree:', error);
     }
