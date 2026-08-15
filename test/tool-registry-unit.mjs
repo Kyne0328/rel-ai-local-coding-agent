@@ -46,7 +46,7 @@ assert.doesNotMatch(connectorInstructions(config), /Inspect relevant files|Valid
 
 const manifest = getToolSurfaceManifest(config);
 assert.equal(manifest.schemaVersion, 7);
-assert.equal(manifest.toolSurfaceVersion, 42);
+assert.equal(manifest.toolSurfaceVersion, 43);
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
 assert.equal(manifest.toolCount, expectedTools.length);
 assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
