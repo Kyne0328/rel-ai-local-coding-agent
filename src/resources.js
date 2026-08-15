@@ -8,28 +8,37 @@ import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
 
 const MIME_JSON = 'application/json';
 const MIME_MARKDOWN = 'text/markdown';
+let resourceCatalogKey = '';
+let resourceCatalog = null;
 
-function listResources() {
-  const config = readConfig();
+function listResources(config = readConfig()) {
+  const aliases = allWorkspaceAliases(config);
+  const surface = getToolSurfaceManifest(config);
+  const cacheKey = `${pkg.version}\0${surface.toolSurfaceVersion}\0${aliases.join('\0')}`;
+  if (resourceCatalog && cacheKey === resourceCatalogKey) return resourceCatalog;
   const resources = [
     resource('relai://server/help', 'Rel.AI MCP Help', 'How ChatGPT should use this Rel.AI MCP server.', MIME_MARKDOWN),
     resource('relai://server/config', 'Rel.AI MCP Config Summary', 'Safe connector configuration summary without secrets.', MIME_JSON),
     resource('relai://server/tool-surface', 'Rel.AI MCP Tool Surface', 'Machine-readable current tool surface and output contracts.', MIME_JSON),
     resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON)
   ];
-  for (const alias of allWorkspaceAliases(config)) {
+  for (const alias of aliases) {
     resources.push(
       resource(`relai://workspace/${encodeURIComponent(alias)}/inspect`, `Workspace ${alias} Inspect`, 'Combined workspace profile and filtered project structure.', MIME_JSON),
       resource(`relai://workspace/${encodeURIComponent(alias)}/profile`, `Workspace ${alias} Profile`, 'Detected stack, manifests, checks, and test surface.', MIME_JSON),
       resource(`relai://workspace/${encodeURIComponent(alias)}/tree`, `Workspace ${alias} Tree`, 'Safe filtered file tree for the workspace.', MIME_JSON)
     );
   }
-  return {
-    resources,
+  resourceCatalogKey = cacheKey;
+  resourceCatalog = Object.freeze({
+    resources: Object.freeze(resources),
     ttlMs: 15000,
     cacheScope: 'private',
-    revision: resourceRevision(config, 'relai://server/resources')
-  };
+    // Resource-list revision depends only on the list itself. Content revisions are
+    // calculated lazily by readResource(), where workspace/config state matters.
+    revision: resourceCatalogRevision(surface, resources)
+  });
+  return resourceCatalog;
 }
 
 async function readResource(uri) {
@@ -75,6 +84,13 @@ function resourceCacheHint(uri) {
   if (text === 'relai://server/config' || text === 'relai://server/workspaces') return { ttlMs: 15000, cacheScope: 'private' };
   if (text.startsWith('relai://workspace/')) return { ttlMs: 5000, cacheScope: 'private' };
   return { ttlMs: 0, cacheScope: 'private' };
+}
+
+function resourceCatalogRevision(surface, resources) {
+  return crypto.createHash('sha256')
+    .update(pkg.version).update('\0').update(String(surface.toolSurfaceVersion))
+    .update('\0').update(stableJson(resources.map(({ uri, name, description, mimeType }) => ({ uri, name, description, mimeType }))))
+    .digest('base64url').slice(0, 24);
 }
 
 function resourceRevision(config, uri) {

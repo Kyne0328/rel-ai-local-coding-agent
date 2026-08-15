@@ -18,7 +18,7 @@ import { describeToolOperation } from './operation.js';
 import { resolveExecutableToolCall, validateExecutableOperationInput } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
-import { assertKnownTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
+import { assertKnownTask, assertTaskWorkspaceOwnership, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
 import { deterministicActionId } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
@@ -71,7 +71,10 @@ async function callTool(name, args = {}, context = {}) {
       workspace: workspaceResolution?.alias || effectiveArgs?.workspace || knownTask?.workspace || ''
     });
     if (knownTask) {
-      assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, operationName, effectivePrincipal);
+      // The task record/principal/state was already validated above. Workspace
+      // resolution cannot change that record, so validate ownership against the
+      // resolved alias without re-reading task history a second time.
+      assertTaskWorkspaceOwnership(knownTask, effectiveArgs?.workspace);
       if (!readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace)) {
         throw taskError(
           'TASK_INTEGRITY_STATE_MISSING',

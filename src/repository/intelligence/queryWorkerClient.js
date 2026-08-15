@@ -5,6 +5,7 @@ import { repositoryIndexStatus } from './indexer.js';
 
 const QUERY_WORKER_IDLE_EVICT_MS = 60_000;
 const QUERY_WORKER_CANCEL_GRACE_MS = 250;
+const QUERY_WORKER_COUNT = 2;
 const clients = new Map();
 
 function runRepositoryQuery(kind, workspace, config = {}, payload = {}, options = {}) {
@@ -24,17 +25,15 @@ function queryWorkerClient(key) {
   const existing = clients.get(key);
   if (existing && !existing.closed) return existing;
 
-  const worker = new Worker(new URL('./queryWorker.js', import.meta.url));
-  worker.unref();
   const queue = [];
-  let active = null;
+  const slots = [];
   let nextJobId = 1;
   let idleTimer = null;
 
   const client = {
     closed: false,
     run(job, signal) {
-      if (client.closed) return Promise.reject(new Error('Repository Intelligence query worker is closed.'));
+      if (client.closed) return Promise.reject(new Error('Repository Intelligence query worker pool is closed.'));
       if (signal?.aborted) return Promise.reject(queryAbortError(signal.reason));
       return new Promise((resolve, reject) => {
         const entry = {
@@ -43,6 +42,7 @@ function queryWorkerClient(key) {
           signal,
           resolve,
           reject,
+          slot: null,
           cancelTimer: null,
           onAbort: null
         };
@@ -52,44 +52,88 @@ function queryWorkerClient(key) {
         pump();
       });
     },
-    terminate(reason = new Error('Repository Intelligence query worker terminated.')) {
+    terminate(reason = new Error('Repository Intelligence query worker pool terminated.')) {
       if (client.closed) return;
       client.closed = true;
       clearIdleTimer();
       if (clients.get(key) === client) clients.delete(key);
-      const pending = [...(active ? [active] : []), ...queue.splice(0)];
-      active = null;
+      const pending = queue.splice(0);
+      for (const slot of slots) {
+        if (slot.active) pending.push(slot.active);
+        slot.active = null;
+        disposeWorker(slot.worker);
+        slot.worker = null;
+      }
       for (const entry of pending) settle(entry, 'reject', reason);
-      worker.removeAllListeners();
-      void worker.terminate().catch(() => {});
     }
   };
 
-  function pump() {
-    if (client.closed || active || queue.length === 0) {
-      if (!active && queue.length === 0) scheduleIdleTimer();
-      return;
-    }
-    clearIdleTimer();
-    active = queue.shift();
-    worker.ref();
-    try {
-      worker.postMessage({ type: 'run', jobId: active.jobId, job: active.job });
-    } catch (error) {
-      const failed = active;
-      active = null;
-      settle(failed, 'reject', error);
-      if (queue.length === 0) worker.unref();
+  function createWorker(slot) {
+    const worker = new Worker(new URL('./queryWorker.js', import.meta.url));
+    worker.unref();
+    worker.on('message', message => {
+      if (slot.worker !== worker || message?.type !== 'result' || !slot.active || message.jobId !== slot.active.jobId) return;
+      const completed = slot.active;
+      slot.active = null;
+      completed.slot = null;
+      if (message.ok) settle(completed, 'resolve', message.result);
+      else settle(completed, 'reject', workerError(message.error));
+      worker.unref();
       pump();
+    });
+    worker.on('error', error => replaceWorker(slot, worker, error));
+    worker.on('exit', code => {
+      if (!client.closed && slot.worker === worker) {
+        replaceWorker(slot, worker, new Error(`Repository Intelligence query worker exited with code ${code}.`));
+      }
+    });
+    return worker;
+  }
+
+  function replaceWorker(slot, worker, reason) {
+    if (slot.worker !== worker) return;
+    const active = slot.active;
+    slot.active = null;
+    if (active) {
+      active.slot = null;
+      settle(active, 'reject', reason);
     }
+    slot.worker = null;
+    disposeWorker(worker);
+    if (!client.closed) slot.worker = createWorker(slot);
+    pump();
+  }
+
+  function pump() {
+    if (client.closed) return;
+    clearIdleTimer();
+    while (queue.length) {
+      const slot = slots.find(item => !item.active);
+      if (!slot) break;
+      const entry = queue.shift();
+      if (entry.signal?.aborted) {
+        settle(entry, 'reject', queryAbortError(entry.signal.reason));
+        continue;
+      }
+      slot.active = entry;
+      entry.slot = slot;
+      slot.worker.ref();
+      try {
+        slot.worker.postMessage({ type: 'run', jobId: entry.jobId, job: entry.job });
+      } catch (error) {
+        replaceWorker(slot, slot.worker, error);
+      }
+    }
+    if (!queue.length && slots.every(slot => !slot.active)) scheduleIdleTimer();
   }
 
   function cancelEntry(entry, reason) {
     const error = queryAbortError(reason);
-    if (active === entry) {
-      try { worker.postMessage({ type: 'abort', jobId: entry.jobId, reason: error.message }); } catch {}
+    const slot = entry.slot;
+    if (slot?.active === entry) {
+      try { slot.worker?.postMessage({ type: 'abort', jobId: entry.jobId, reason: error.message }); } catch {}
       entry.cancelTimer = setTimeout(() => {
-        if (active === entry) client.terminate(error);
+        if (slot.active === entry && slot.worker) replaceWorker(slot, slot.worker, error);
       }, QUERY_WORKER_CANCEL_GRACE_MS);
       entry.cancelTimer.unref?.();
       return;
@@ -97,6 +141,7 @@ function queryWorkerClient(key) {
     const index = queue.indexOf(entry);
     if (index >= 0) queue.splice(index, 1);
     settle(entry, 'reject', error);
+    pump();
   }
 
   function settle(entry, mode, value) {
@@ -115,27 +160,30 @@ function queryWorkerClient(key) {
 
   function scheduleIdleTimer() {
     clearIdleTimer();
-    if (client.closed || active || queue.length) return;
-    idleTimer = setTimeout(() => client.terminate(new Error('Repository Intelligence query worker idle timeout reached.')), QUERY_WORKER_IDLE_EVICT_MS);
+    if (client.closed || queue.length || slots.some(slot => slot.active)) return;
+    for (const slot of slots) slot.worker?.unref();
+    idleTimer = setTimeout(
+      () => client.terminate(new Error('Repository Intelligence query worker pool idle timeout reached.')),
+      QUERY_WORKER_IDLE_EVICT_MS
+    );
     idleTimer.unref?.();
   }
 
-  worker.on('message', message => {
-    if (message?.type !== 'result' || !active || message.jobId !== active.jobId) return;
-    const completed = active;
-    active = null;
-    if (message.ok) settle(completed, 'resolve', message.result);
-    else settle(completed, 'reject', workerError(message.error));
-    if (queue.length === 0) worker.unref();
-    pump();
-  });
-  worker.on('error', error => client.terminate(error));
-  worker.on('exit', code => {
-    if (!client.closed) client.terminate(new Error(`Repository Intelligence query worker exited with code ${code}.`));
-  });
+  for (let index = 0; index < QUERY_WORKER_COUNT; index += 1) {
+    const slot = { index, worker: null, active: null };
+    slot.worker = createWorker(slot);
+    slots.push(slot);
+  }
 
   clients.set(key, client);
+  scheduleIdleTimer();
   return client;
+}
+
+function disposeWorker(worker) {
+  if (!worker) return;
+  worker.removeAllListeners();
+  void worker.terminate().catch(() => {});
 }
 
 function repositoryStatusSnapshot(workspace, config) {
@@ -205,4 +253,4 @@ function shutdownRepositoryQueryWorkers() {
   clients.clear();
 }
 
-export { QUERY_WORKER_IDLE_EVICT_MS, runRepositoryQuery, shutdownRepositoryQueryWorkers };
+export { QUERY_WORKER_COUNT, QUERY_WORKER_IDLE_EVICT_MS, runRepositoryQuery, shutdownRepositoryQueryWorkers };

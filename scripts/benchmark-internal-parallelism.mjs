@@ -100,8 +100,8 @@ try {
     maxResults: 6,
     maxBytes: 12000
   }, { watch: false }));
-  assert.equal(semanticBatch.value.execution.maxConcurrentSteps, 1,
-    'semantic batch metrics must match the single repository query worker');
+  assert.equal(semanticBatch.value.execution.maxConcurrentSteps, 2,
+    'semantic batch metrics must match the bounded repository query read pool');
 
   const catalog = buildCheckCatalog(discoverRepositoryTopology(root));
   const lint = catalog.find(item => item.id.endsWith(':lint'));
@@ -146,7 +146,7 @@ try {
         batchWallMs: semanticBatch.wallMs,
         wallDeltaMs: round(semanticSerial.wallMs - semanticBatch.wallMs),
         execution: semanticBatch.value.execution,
-        workerModel: 'serial-per-repository'
+        workerModel: 'two-reader-pool-per-repository'
       },
       validation: {
         serialWallMs: validationSerial.wallMs,
