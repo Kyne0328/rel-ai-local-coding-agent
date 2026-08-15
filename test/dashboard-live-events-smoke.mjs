@@ -13,7 +13,7 @@ const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.
 const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');
 
 assert.match(dashboardSource, /: keepalive/, 'dashboard SSE must include a heartbeat');
-for (const eventName of ['dashboard.bootstrap', 'task.updated', 'connection.updated', 'workspace.updated', 'process.updated']) {
+for (const eventName of ['dashboard.bootstrap', 'task.updated', 'connection.updated', 'workspace.updated', 'process.updated', 'diagnostics.updated']) {
   assert.match(dashboardSource, new RegExp(eventName.replace('.', '\\.')), `server must emit ${eventName}`);
   assert.match(eventClientSource, new RegExp(eventName.replace('.', '\\.')), `client must subscribe to ${eventName}`);
 }
@@ -89,7 +89,7 @@ try {
   const bootstrap = JSON.parse(bootstrapEvent.data);
   assert.equal(bootstrap.ok, true);
   assert.ok(bootstrap.streamId);
-  assert.deepEqual(Object.keys(bootstrap.live.revisions).sort(), ['connection', 'process', 'task', 'workspace']);
+  assert.deepEqual(Object.keys(bootstrap.live.revisions).sort(), ['connection', 'diagnostics', 'process', 'task', 'workspace']);
   assert.ok(Array.isArray(bootstrap.tasks));
   assert.ok(Array.isArray(bootstrap.managedProcesses));
 
