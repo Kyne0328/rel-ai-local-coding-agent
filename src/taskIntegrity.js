@@ -8,9 +8,6 @@ import { getStateDir } from './statePaths.js';
 
 const STORE_VERSION = 1;
 const LOCK_STALE_MS = 30_000;
-const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_WAIT_MS = 10;
-const lockSleeper = new Int32Array(new SharedArrayBuffer(4));
 const integrityCache = new Map();
 const CODE_MUTATING_TOOLS = new Set([
   'relai_edit',
@@ -307,21 +304,23 @@ function lockFile(config) {
 function withIntegrityLock(config, callback) {
   fs.mkdirSync(integrityDir(config), { recursive: true, mode: 0o700 });
   const file = lockFile(config);
-  const started = Date.now();
   let descriptor;
-  while (descriptor == null) {
+  try {
+    descriptor = fs.openSync(file, 'wx', 0o600);
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    let stale = false;
+    try { stale = Date.now() - fs.statSync(file).mtimeMs > LOCK_STALE_MS; } catch (statError) {
+      if (statError?.code === 'ENOENT') stale = true;
+      else throw statError;
+    }
+    if (!stale) throw new Error('Task integrity state is busy. Retry the operation.', { cause: error });
+    try { fs.rmSync(file, { force: true }); } catch {}
     try {
       descriptor = fs.openSync(file, 'wx', 0o600);
-    } catch (error) {
-      if (error?.code !== 'EEXIST') throw error;
-      try {
-        if (Date.now() - fs.statSync(file).mtimeMs > LOCK_STALE_MS) {
-          fs.rmSync(file, { force: true });
-          continue;
-        }
-      } catch {}
-      if (Date.now() - started >= LOCK_TIMEOUT_MS) throw new Error('Task integrity state is busy. Retry the operation.', { cause: error });
-      Atomics.wait(lockSleeper, 0, 0, LOCK_WAIT_MS);
+    } catch (retryError) {
+      if (retryError?.code === 'EEXIST') throw new Error('Task integrity state is busy. Retry the operation.', { cause: retryError });
+      throw retryError;
     }
   }
   try {

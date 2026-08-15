@@ -11,6 +11,7 @@ import {
   acknowledgeNativeTaskCancellation,
   cancelNativeTask,
   getNativeTask,
+  retryNativeTaskOperation,
   updateNativeTaskInputs
 } from './nativeTaskService.js';
 import {
@@ -180,7 +181,7 @@ function synchronousEstimate(name, args, capabilities, bounds, options = {}) {
   };
 }
 
-function handleTaskProtocolRequest(config, message, principal, capabilities) {
+async function handleTaskProtocolRequest(config, message, principal, capabilities) {
   const capability = negotiateTasksCapability(capabilities);
   if (!capability.valid) {
     const error = createInvalidTasksCapabilityError(capability);
@@ -193,23 +194,24 @@ function handleTaskProtocolRequest(config, message, principal, capabilities) {
   try {
     const taskId = String(message.params?.taskId || '');
     if (message.method === 'tasks/get') {
-      return successResponse(message.id, { resultType: 'complete', ...getNativeTask(config, taskId, { principal }) });
+      const task = await retryNativeTaskOperation(() => getNativeTask(config, taskId, { principal }));
+      return successResponse(message.id, { resultType: 'complete', ...task });
     }
     if (message.method === 'tasks/update') {
-      updateNativeTaskInputs(config, taskId, message.params?.inputResponses, { principal });
+      await retryNativeTaskOperation(() => updateNativeTaskInputs(config, taskId, message.params?.inputResponses, { principal }));
       return successResponse(message.id, { resultType: 'complete' });
     }
-    cancelNativeTask(config, taskId, {
+    await retryNativeTaskOperation(() => cancelNativeTask(config, taskId, {
       principal,
       statusMessage: 'Native MCP task cancellation requested by the client.'
-    });
+    }));
     return successResponse(message.id, { resultType: 'complete' });
   } catch (error) {
     return nativeTaskErrorResponse(message.id, error);
   }
 }
 
-function startNativeToolExecution(config, message, args, options) {
+async function startNativeToolExecution(config, message, args, options) {
   const name = String(message.params?.name || '');
   const operation = createNativeToolTask(config, {
     principal: options.principal,
@@ -230,31 +232,36 @@ function startNativeToolExecution(config, message, args, options) {
       signal,
       requestId: message.id,
       nativeTaskId: taskId
-    }).then(result => {
+    }).then(async result => {
       if (signal?.aborted) {
-        acknowledgeNativeTaskCancellation(config, taskId, {
+        await retryNativeTaskOperation(() => acknowledgeNativeTaskCancellation(config, taskId, {
           principal: options.principal,
           executionStopped: true,
           statusMessage: 'Native MCP task cancelled.'
-        });
+        }));
         return;
       }
-      completeNativeToolTask(config, taskId, result);
-    }).catch(error => {
-      if (signal?.aborted) {
-        acknowledgeNativeTaskCancellation(config, taskId, {
-          principal: options.principal,
-          executionStopped: true,
-          statusMessage: 'Native MCP task cancelled.'
-        });
-        return;
+      await completeNativeToolTask(config, taskId, result);
+    }).catch(async error => {
+      try {
+        if (signal?.aborted) {
+          await retryNativeTaskOperation(() => acknowledgeNativeTaskCancellation(config, taskId, {
+            principal: options.principal,
+            executionStopped: true,
+            statusMessage: 'Native MCP task cancelled.'
+          }));
+          return;
+        }
+        await failNativeToolTask(config, taskId, error);
+      } catch (settlementError) {
+        if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] native task settlement failure:', settlementError);
       }
-      failNativeToolTask(config, taskId, error);
     });
   });
+  const task = await retryNativeTaskOperation(() => getNativeTask(config, taskId, { principal: options.principal }));
   return successResponse(message.id, {
     resultType: 'task',
-    ...getNativeTask(config, taskId, { principal: options.principal })
+    ...task
   });
 }
 
