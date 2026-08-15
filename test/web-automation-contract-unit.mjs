@@ -35,6 +35,7 @@ const png = Buffer.from('not-a-real-png-for-contract-only').toString('base64');
 const screenshotArgs = {
   workspace: 'repo',
   action: 'screenshot',
+  work_id: 'work_contract',
   sessionId: 'ui_contract_contract_contract'
 };
 const connectorScreenshot = serializeConnectorResult({
