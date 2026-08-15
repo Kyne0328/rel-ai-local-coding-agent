@@ -2,33 +2,35 @@ export const THEME_NAMES = Object.freeze(['dark', 'light']);
 
 export const COLOR_THEMES = Object.freeze({
   dark: Object.freeze({
-    canvas: '#070b13', surfacePrimary: '#0d1626', surfaceSecondary: '#131f34', surfaceRaised: '#1c2a45', surfaceInput: '#0a111d',
-    textPrimary: '#edf3fc', textSecondary: '#a7b4c9', textTertiary: '#8390a6', textDisabled: '#8c99ae',
-    borderSubtle: '#26334a', borderDefault: '#3a4860', borderControl: '#6a7890',
-    actionPrimary: '#5aa6ff', actionPrimaryHover: '#74b5ff', actionPrimaryActive: '#3d92f2', actionPrimaryForeground: '#07111f',
-    focusRing: '#5aa6ff', selectionBackground: '#142c48',
+    canvas: '#0b100d', surfacePrimary: '#111713', surfaceSecondary: '#171e19', surfaceRaised: '#202822', surfaceInput: '#0e1410',
+    textPrimary: '#f1f5f0', textSecondary: '#aab4ac', textTertiary: '#7e8981', textDisabled: '#8b958d',
+    borderSubtle: '#273129', borderDefault: '#3a463d', borderControl: '#68756c',
+    brandMarkSurface: '#111713', brandMarkBorder: 'rgba(216,255,116,.14)', brandMarkShadow: '0 .375rem 1rem rgba(0,0,0,.18)',
+    actionPrimary: '#d8ff74', actionPrimaryHover: '#e2ff94', actionPrimaryActive: '#c5eb5f', actionPrimaryForeground: '#101612',
+    focusRing: '#d8ff74', selectionBackground: '#273516',
     statusInfoForeground: '#5aa6ff', statusInfoBackground: '#142c48', statusInfoBorder: '#4f86bd',
     statusSuccessForeground: '#4fe09a', statusSuccessBackground: '#163236', statusSuccessBorder: '#3b9a6d',
     statusWarningForeground: '#ffc24b', statusWarningBackground: '#2f2e2b', statusWarningBorder: '#b38631',
     statusDangerForeground: '#ff6f88', statusDangerBackground: '#2f2234', statusDangerBorder: '#b94f67',
-    statusNeutralForeground: '#a7b4c9', statusNeutralBackground: '#1c2a45', statusNeutralBorder: '#6a7890',
-    disabledBackground: '#1c2a45', disabledBorder: '#3a4860',
-    overlayModal: 'rgba(3,7,14,.55)', overlayDrawer: 'rgba(3,7,14,.32)',
-    windowCloseForeground: '#ffffff', windowCloseBackground: '#c42b1c', switchThumb: '#ffffff', codeAccent: '#cfe0ff',
-    scrollbarTrack: 'rgba(7,11,19,.28)', scrollbarThumb: 'rgba(167,180,201,.42)', scrollbarThumbHover: 'rgba(167,180,201,.62)', scrollbarThumbActive: 'rgba(167,180,201,.78)', scrollbarCorner: '#070b13',
+    statusNeutralForeground: '#aab4ac', statusNeutralBackground: '#202822', statusNeutralBorder: '#68756c',
+    disabledBackground: '#202822', disabledBorder: '#3a463d',
+    overlayModal: 'rgba(3,8,5,.55)', overlayDrawer: 'rgba(3,8,5,.32)',
+    windowCloseForeground: '#ffffff', windowCloseBackground: '#c42b1c', switchThumb: '#ffffff', codeAccent: '#dce7d8',
+    scrollbarTrack: 'rgba(11,16,13,.28)', scrollbarThumb: 'rgba(170,180,172,.42)', scrollbarThumbHover: 'rgba(170,180,172,.62)', scrollbarThumbActive: 'rgba(170,180,172,.78)', scrollbarCorner: '#0b100d',
     shadowTitlebar: '0 1px 12px rgba(0,0,0,.12)', shadowSidebar: '10px 0 40px rgba(0,0,0,.08)', shadowTopbar: '0 12px 36px rgba(0,0,0,.12)', shadowWindow: '0 18px 54px rgba(0,0,0,.28)', shadowPopover: '0 20px 60px rgba(0,0,0,.42)',
     electronSurfaceGradient: 'linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.008))',
-    electronAppGradient: 'radial-gradient(900px 460px at 90% -10%, rgba(90,166,255,.11), transparent 60%), radial-gradient(700px 420px at -10% 110%, rgba(79,224,154,.06), transparent 58%)',
+    electronAppGradient: 'radial-gradient(900px 460px at 90% -10%, rgba(216,255,116,.10), transparent 60%), radial-gradient(700px 420px at -10% 110%, rgba(79,224,154,.035), transparent 58%)',
     electronElevation1: '0 1px 2px rgba(0,0,0,.45)', electronElevation2: '0 18px 44px -28px rgba(0,0,0,.95), 0 1px 2px rgba(0,0,0,.42)',
-    electronGlowAccent: '0 0 0 1px rgba(90,166,255,.32), 0 0 24px -8px rgba(90,166,255,.55)', electronGlowSuccess: '0 0 14px -3px rgba(79,224,154,.72)',
-    heroAccentSoft: 'rgba(90,166,255,.09)', heroAccentStrong: 'rgba(90,166,255,.24)', pulseRing: 'rgba(90,166,255,.28)'
+    electronGlowAccent: '0 0 0 1px rgba(216,255,116,.30), 0 0 24px -8px rgba(216,255,116,.44)', electronGlowSuccess: '0 0 14px -3px rgba(79,224,154,.72)',
+    heroAccentSoft: 'rgba(216,255,116,.08)', heroAccentStrong: 'rgba(216,255,116,.22)', pulseRing: 'rgba(216,255,116,.26)'
   }),
   light: Object.freeze({
     canvas: '#edf2f8', surfacePrimary: '#ffffff', surfaceSecondary: '#f5f8fc', surfaceRaised: '#e8eef6', surfaceInput: '#f7f9fd',
     textPrimary: '#172033', textSecondary: '#526078', textTertiary: '#647187', textDisabled: '#5b697f',
     borderSubtle: '#dce3ec', borderDefault: '#c6d0dd', borderControl: '#7e8da2',
-    actionPrimary: '#1769c2', actionPrimaryHover: '#145ca8', actionPrimaryActive: '#104c8c', actionPrimaryForeground: '#ffffff',
-    focusRing: '#1769c2', selectionBackground: '#e5f0fb',
+    brandMarkSurface: '#111713', brandMarkBorder: 'rgba(216,255,116,.14)', brandMarkShadow: '0 .375rem 1rem rgba(0,0,0,.18)',
+    actionPrimary: '#657f00', actionPrimaryHover: '#5f7800', actionPrimaryActive: '#597200', actionPrimaryForeground: '#ffffff',
+    focusRing: '#657f00', selectionBackground: '#eef5dc',
     statusInfoForeground: '#1769c2', statusInfoBackground: '#e5f0fb', statusInfoBorder: '#6a94bd',
     statusSuccessForeground: '#137a4c', statusSuccessBackground: '#e5f0eb', statusSuccessBorder: '#5c9276',
     statusWarningForeground: '#7a4b00', statusWarningBackground: '#fff3d6', statusWarningBorder: '#aa7925',
@@ -40,10 +42,10 @@ export const COLOR_THEMES = Object.freeze({
     scrollbarTrack: 'rgba(23,32,51,.06)', scrollbarThumb: 'rgba(82,96,120,.38)', scrollbarThumbHover: 'rgba(82,96,120,.58)', scrollbarThumbActive: 'rgba(82,96,120,.72)', scrollbarCorner: '#edf2f8',
     shadowTitlebar: '0 1px 12px rgba(38,52,76,.10)', shadowSidebar: '10px 0 40px rgba(38,52,76,.08)', shadowTopbar: '0 12px 36px rgba(38,52,76,.10)', shadowWindow: '0 18px 54px rgba(38,52,76,.14)', shadowPopover: '0 20px 60px rgba(38,52,76,.20)',
     electronSurfaceGradient: 'linear-gradient(180deg, rgba(255,255,255,.98), rgba(247,249,253,.98))',
-    electronAppGradient: 'radial-gradient(900px 460px at 90% -10%, rgba(23,105,194,.09), transparent 60%), radial-gradient(700px 420px at -10% 110%, rgba(19,122,76,.05), transparent 58%)',
+    electronAppGradient: 'radial-gradient(900px 460px at 90% -10%, rgba(101,127,0,.08), transparent 60%), radial-gradient(700px 420px at -10% 110%, rgba(23,105,194,.04), transparent 58%)',
     electronElevation1: '0 1px 2px rgba(29,43,68,.10)', electronElevation2: '0 18px 44px -30px rgba(29,43,68,.34), 0 1px 2px rgba(29,43,68,.10)',
-    electronGlowAccent: '0 0 0 1px rgba(23,105,194,.18), 0 0 22px -10px rgba(23,105,194,.25)', electronGlowSuccess: '0 0 14px -5px rgba(19,122,76,.35)',
-    heroAccentSoft: 'rgba(23,105,194,.08)', heroAccentStrong: 'rgba(23,105,194,.18)', pulseRing: 'rgba(23,105,194,.24)'
+    electronGlowAccent: '0 0 0 1px rgba(101,127,0,.18), 0 0 22px -10px rgba(101,127,0,.24)', electronGlowSuccess: '0 0 14px -5px rgba(19,122,76,.35)',
+    heroAccentSoft: 'rgba(101,127,0,.07)', heroAccentStrong: 'rgba(101,127,0,.16)', pulseRing: 'rgba(101,127,0,.22)'
   })
 });
 

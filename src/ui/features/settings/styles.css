@@ -1,7 +1,7 @@
 .settings-shell { min-width: 0; }
 .settings-rail { align-content: start; }
 .settings-nav-button { text-align: left; }
-.settings-nav-button.active { color: var(--ui-action-primary); background: var(--ui-status-info-background); }
+.settings-nav-button.active { color: var(--ui-action-primary); background: var(--ui-selection-background); }
 .settings-loading { padding: 24px; color: var(--ui-text-secondary); }
 .workspace-validation-preference-row {
   display: flex;
@@ -20,7 +20,7 @@
 @layer components {
 .settings-rail { @apply flex flex-col gap-1 rounded-xl p-2; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
 .settings-nav-button { @apply min-w-[118px] justify-start border-transparent bg-transparent; color: var(--ui-text-secondary); }
-.settings-nav-button.active { background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 36%, transparent); color: var(--ui-text-primary); }
+.settings-nav-button.active { background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 36%, transparent); color: var(--ui-text-primary); }
 .settings-content { @apply flex min-w-0 flex-col gap-3; }
 .settings-panel-intro { @apply rounded-xl border-l-2 px-4 py-3; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); border-left-color: var(--ui-action-primary); }
 .settings-panel-intro h2 { @apply text-lg; }
@@ -34,7 +34,7 @@
 .setting-row-copy span { @apply mt-1 block text-[12px]; color: var(--ui-text-secondary); }
 .toggle { @apply relative h-6 w-11 shrink-0 cursor-pointer rounded-full; background: var(--ui-surface-raised); border: 1px solid var(--ui-border-default); }
 .toggle::after { content: ""; @apply absolute left-1 top-1 size-4 rounded-full transition-transform; background: var(--ui-text-secondary); }
-.toggle[aria-checked="true"] { background: var(--ui-status-info-background); border-color: var(--ui-action-primary); }
+.toggle[aria-checked="true"] { background: var(--ui-selection-background); border-color: var(--ui-action-primary); }
 .toggle[aria-checked="true"]::after { transform: translateX(20px); background: var(--ui-action-primary); }
 
 .settings-shell, .settings-layout { @apply grid min-w-0 items-start gap-4; grid-template-columns: 220px minmax(0,1fr); }
@@ -46,7 +46,7 @@
 .settings-header p { @apply max-w-4xl text-[12px] leading-5; color: var(--ui-text-secondary); }
 .settings-panel-body { @apply grid gap-4; }
 .about-product { @apply flex min-w-0 items-center gap-4 rounded-xl p-4; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
-.about-product img { @apply size-12 shrink-0 object-contain; }
+.about-product img { @apply size-14 shrink-0 object-contain; padding: 8px; border: 1px solid var(--ui-brand-mark-border); border-radius: 12px; background: var(--ui-brand-mark-surface); box-shadow: var(--ui-brand-mark-shadow); }
 .about-product div { @apply min-w-0; }
 .about-product h4 { @apply text-[16px] font-bold; }
 .about-product p { @apply mt-1 text-[12px]; color: var(--ui-text-secondary); }

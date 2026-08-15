@@ -30,6 +30,11 @@ function expectContrast(themeName, foregroundRole, backgroundRole, threshold) {
 }
 
 assert.deepEqual(THEME_NAMES, ['dark', 'light']);
+assert.equal(COLOR_THEMES.dark.actionPrimary, '#d8ff74', 'dark primary action must use the website brand lime');
+assert.equal(COLOR_THEMES.dark.statusInfoForeground, '#5aa6ff', 'informational state must retain the website info blue');
+assert.notEqual(COLOR_THEMES.dark.actionPrimary, COLOR_THEMES.dark.statusInfoForeground, 'brand actions and informational state must remain semantically distinct');
+assert.equal(COLOR_THEMES.light.actionPrimary, '#657f00', 'light primary action must use the accessible brand-relative value');
+assert.notEqual(COLOR_THEMES.dark.selectionBackground, COLOR_THEMES.dark.statusInfoBackground, 'brand selection feedback must not reuse informational blue');
 assert.deepEqual(
   Object.keys(COLOR_THEMES.dark).sort(),
   Object.keys(COLOR_THEMES.light).sort(),

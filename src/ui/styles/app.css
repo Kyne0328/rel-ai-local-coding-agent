@@ -28,13 +28,13 @@
   --font-16: 16px;
   --font-20: 20px;
   --font-24: 24px;
-  --weight-medium: 600;
-  --weight-bold: 700;
-  --weight-display: 800;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --weight-display: 700;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 13px;
   --dur-fast: 120ms;
   --dur: 200ms;
   --ease: cubic-bezier(.4, 0, .2, 1);
@@ -53,7 +53,7 @@
     @apply m-0 min-h-screen overflow-x-hidden antialiased;
     background: var(--ui-canvas);
     color: var(--ui-text-primary);
-    font-family: "Segoe UI Variable", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+    font-family: "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
     font-size: 14px;
     line-height: 1.45;
   }
@@ -76,7 +76,7 @@
   }
   a { color: inherit; text-decoration: none; }
   h1, h2, h3, h4, p { @apply m-0; }
-  h1, h2, h3, h4 { @apply font-semibold tracking-[-0.015em]; }
+  h1, h2, h3, h4 { @apply font-semibold tracking-[-0.015em]; font-family: "Segoe UI Variable Display", "Aptos Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif; }
   code, pre, .mono { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
   ::selection { background: var(--ui-selection-background); color: var(--ui-text-primary); }
   :focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
@@ -140,7 +140,7 @@
     pointer-events: none;
   }
   :root[data-platform="darwin"] .window-titlebar-identity { padding-left: 82px; }
-  .window-titlebar-identity img { width: 20px; height: 20px; object-fit: contain; }
+  .window-titlebar-identity img { width: 28px; height: 28px; padding: 4px; border: 1px solid var(--ui-brand-mark-border); border-radius: 7px; background: var(--ui-brand-mark-surface); object-fit: contain; box-shadow: var(--ui-brand-mark-shadow); }
   .window-titlebar-identity strong { flex: 0 0 auto; color: var(--ui-text-primary); font-size: 12px; letter-spacing: -.01em; }
   .window-titlebar-identity span {
     min-width: 0;
@@ -217,7 +217,7 @@
   .brand { @apply mb-5 flex items-center justify-between gap-2 border-b pb-4; border-color: var(--ui-border-default); }
   .brand-identity { @apply flex min-w-0 items-center gap-3; }
   .brand-copy { @apply min-w-0; }
-  .brand .logo { @apply grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl; background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 38%, transparent); }
+  .brand .logo { @apply grid size-11 shrink-0 place-items-center overflow-hidden; background: var(--ui-brand-mark-surface); border: 1px solid var(--ui-brand-mark-border); border-radius: 10px; box-shadow: var(--ui-brand-mark-shadow); }
   .brand img { @apply size-8 object-contain; }
   .brand strong { @apply block truncate text-[15px] font-bold; }
   .brand span { @apply mt-0.5 block truncate text-[11px]; color: var(--ui-text-tertiary); }
@@ -234,7 +234,7 @@
     border: 1px solid transparent;
   }
   .nav a:hover, .secondary-nav a:hover, .mobile-nav a:hover, .sidebar-accordion > summary:hover { color: var(--ui-text-primary); background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); }
-  .nav a.active, .secondary-nav a.active, .mobile-nav a.active, .sidebar-accordion > summary.active { color: var(--ui-text-primary); background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 48%, transparent); }
+  .nav a.active, .secondary-nav a.active, .mobile-nav a.active, .sidebar-accordion > summary.active { color: var(--ui-text-primary); background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 48%, transparent); }
   .nav-icon { @apply size-4 shrink-0 fill-none stroke-current; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .sidebar-accordion { @apply min-w-0; }
   .sidebar-accordion > summary { @apply cursor-pointer list-none; }
@@ -269,7 +269,7 @@
   .workspace-menu-trigger > svg { @apply size-4 shrink-0 fill-none stroke-current; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .workspace-menu-trigger > span { @apply min-w-0 flex-1 truncate text-left; }
   .workspace-menu-trigger .workspace-menu-chevron { @apply size-3; color: var(--ui-text-tertiary); }
-  .workspace-menu.open .workspace-menu-trigger { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-status-info-background); }
+  .workspace-menu.open .workspace-menu-trigger { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-selection-background); }
   .workspace-menu-popover {
     @apply absolute right-0 top-[calc(100%+6px)] z-50 grid max-h-72 w-full min-w-[240px] overflow-y-auto rounded-xl p-1.5;
     background: var(--ui-surface-primary);
@@ -281,7 +281,7 @@
     color: var(--ui-text-secondary);
   }
   .workspace-menu-option:hover, .workspace-menu-option:focus-visible { background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); color: var(--ui-text-primary); }
-  .workspace-menu-option.selected { background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 38%, transparent); color: var(--ui-text-primary); }
+  .workspace-menu-option.selected { background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 38%, transparent); color: var(--ui-text-primary); }
   .workspace-menu-option > span:first-child { @apply min-w-0 flex-1 truncate; }
   .workspace-menu-option > span:last-child { @apply shrink-0; color: var(--ui-status-success-foreground); }
 
@@ -358,7 +358,7 @@
     border: 1px solid var(--ui-border-control);
   }
   input:hover, select:hover, textarea:hover { border-color: var(--ui-action-primary); }
-  input:focus, select:focus, textarea:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-status-info-background); }
+  input:focus, select:focus, textarea:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-selection-background); }
   input::placeholder, textarea::placeholder { color: var(--ui-text-tertiary); }
   textarea { @apply min-h-24 resize-y py-2.5; }
   .select-control { @apply relative flex w-full min-w-0; }
@@ -424,7 +424,7 @@
   .command-panel { @apply w-[min(680px,calc(100vw-32px))]; }
   .command-palette { @apply flex flex-col gap-2; }
   .command-search-wrap { @apply relative flex items-center rounded-xl; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
-  .command-search-wrap:focus-within { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-status-info-background); }
+  .command-search-wrap:focus-within { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-selection-background); }
   .command-search-wrap > svg { @apply ml-3 size-4 fill-none stroke-current; color: var(--ui-text-secondary); stroke-width: 1.8; }
   .command-search { @apply min-h-12 border-0 bg-transparent pl-3 pr-14 shadow-none; }
   .command-search:focus { box-shadow: none; }
@@ -432,7 +432,7 @@
   .command-help { @apply px-1 text-[10px]; color: var(--ui-text-tertiary); }
   .command-list { @apply max-h-[52vh] overflow-y-auto rounded-xl; border: 1px solid var(--ui-border-subtle); }
   .command-option { @apply flex cursor-pointer items-center justify-between gap-4 border-b px-3 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
-  .command-option.active { background: var(--ui-status-info-background); }
+  .command-option.active { background: var(--ui-selection-background); }
   .command-option-copy { @apply min-w-0; }
   .command-option-copy strong { @apply block text-[12px]; }
   .command-option-copy small { @apply mt-1 block truncate text-[10px]; color: var(--ui-text-secondary); }
@@ -460,7 +460,7 @@
   .section-head p { @apply mt-1 text-[12px] leading-5; color: var(--ui-text-secondary); }
   .card-head-actions { @apply flex flex-wrap items-center gap-3; }
 
-  .badge { @apply inline-flex min-h-6 items-center rounded-full px-2 text-[10px] font-semibold; background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 28%, transparent); color: var(--ui-action-primary); }
+  .badge { @apply inline-flex min-h-6 items-center rounded-full px-2 text-[10px] font-semibold; background: var(--ui-selection-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 28%, transparent); color: var(--ui-action-primary); }
   .badge.good { background: var(--ui-status-success-background); border-color: color-mix(in srgb, var(--ui-status-success-foreground) 28%, transparent); color: var(--ui-status-success-foreground); }
   .badge.warn { background: var(--ui-status-warning-background); border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 28%, transparent); color: var(--ui-status-warning-foreground); }
   .badge.bad { background: var(--ui-status-danger-background); border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 28%, transparent); color: var(--ui-status-danger-foreground); }
@@ -482,8 +482,8 @@
   }
   .toggle-input::after { content: ""; @apply absolute left-1 top-1 size-4 rounded-full transition-transform; background: var(--ui-text-secondary); }
   .toggle-input:hover { border-color: color-mix(in srgb, var(--ui-action-primary) 48%, var(--ui-border-default)); }
-  .toggle-input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-status-info-background); }
-  .toggle-input:checked { background: var(--ui-status-info-background); border-color: var(--ui-action-primary); }
+  .toggle-input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-selection-background); }
+  .toggle-input:checked { background: var(--ui-selection-background); border-color: var(--ui-action-primary); }
   .toggle-input:checked::after { transform: translateX(20px); background: var(--ui-action-primary); }
   .toggle-input:disabled { @apply cursor-not-allowed; background: var(--ui-disabled-background); border-color: var(--ui-disabled-border); opacity: 1; }
   .toggle-label { @apply min-w-0 text-[12px]; color: var(--ui-text-primary); }
@@ -513,7 +513,7 @@
   .modal-title { @apply mb-4; }
   .drawer-panel { @apply flex flex-col; }
   .toast-region { @apply fixed right-4 top-4 z-[80] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2; }
-  .toast-info { border-color: color-mix(in srgb, var(--ui-action-primary) 36%, transparent); }
+  .toast-info { border-color: var(--ui-status-info-border); }
   .toast-success { border-color: color-mix(in srgb, var(--ui-status-success-foreground) 40%, transparent); }
   .toast-warn { border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 40%, transparent); }
   .toast-error { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 40%, transparent); }

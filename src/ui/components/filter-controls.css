@@ -10,10 +10,10 @@
 .filter-bar-controls { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .filter-search-control { min-width: 180px; flex: 1; }
 .filter-search-input { min-width: 0; width: 100%; }
-.filter-open-button.active { color: var(--ui-action-primary); background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 42%, transparent); }
+.filter-open-button.active { color: var(--ui-action-primary); background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 42%, transparent); }
 .filter-bar-action { display: flex; margin-left: auto; }
 .filter-chip-list { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
-.filter-chip { min-height: 44px; padding: 6px 12px; font-size: 12px; color: var(--ui-action-primary); background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 35%, transparent); }
+.filter-chip { min-height: 44px; padding: 6px 12px; font-size: 12px; color: var(--ui-action-primary); background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 35%, transparent); }
 .filter-bar-footer { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; }
 .filter-summary { min-width: 0; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.5; }
 .filter-clear-button { min-height: 44px; flex: 0 0 auto; padding: 6px 12px; font-size: 12px; }
