@@ -14,6 +14,7 @@ import { createValidationFingerprint, createValidationPlan, readValidationPlan }
 import { runSpan } from '../telemetry.js';
 import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { parallel, runPlan, sequence, step } from '../executionPlan.js';
+import { createExecutionPlanObserver, recordExecutionPlanMetrics } from '../executionObservability.js';
 import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
 import { noChecksValidationResult } from './validationNoChecks.js';
@@ -186,7 +187,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
           index,
           kind: executionPolicy.kind,
           parallelSafe: executionPolicy.parallelSafe,
-          resourceKey: executionPolicy.resourceKey
+          resourceKey: executionPolicy.resourceKey,
+          displayName: sanitizeDisplayText(unit.command, 120)
         }
       }
     ));
@@ -194,7 +196,16 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
       ? parallel(nodes, { maxConcurrency: 3, stopOnFailure })
       : sequence(nodes, { stopOnFailure });
   });
-  const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
+  const execution = await runPlan(sequence(planStages, { stopOnFailure }), {
+    signal,
+    onEvent: createExecutionPlanObserver({
+      source: 'validation',
+      title: 'Running repository validation',
+      noun: 'checks',
+      category: 'validation'
+    })
+  });
+  recordExecutionPlanMetrics('validation', execution.metrics);
   const results = visibleResults();
   const reusedChecks = reusedCheckIds.filter(Boolean);
 

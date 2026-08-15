@@ -55,6 +55,7 @@ async function runPlan(plan, options = {}) {
       parallelTimeSavedMs: round(Math.max(0, state.stepDurationMs - wallTimeMs)),
       maxParallelism: state.maxActive,
       stepCount: state.total,
+      parallelGroupCount: countGroups(plan, 'parallel'),
       completedStepCount: state.completed,
       failedStepCount: state.failedSteps
     }
@@ -83,6 +84,7 @@ async function executeStep(node, state) {
     state.completed += 1;
     if (!ok) state.failedSteps += 1;
     const result = { type: 'step', name: node.name, ok, value, durationMs: round(durationMs), metadata: node.metadata };
+    state.active = Math.max(0, state.active - 1);
     emit(state, { type: 'step_completed', ...result });
     return result;
   } catch (error) {
@@ -91,10 +93,9 @@ async function executeStep(node, state) {
     state.completed += 1;
     state.failedSteps += 1;
     const result = { type: 'step', name: node.name, ok: false, error, durationMs: round(durationMs), metadata: node.metadata };
+    state.active = Math.max(0, state.active - 1);
     emit(state, { type: 'step_completed', ...result });
     return result;
-  } finally {
-    state.active = Math.max(0, state.active - 1);
   }
 }
 
@@ -171,6 +172,13 @@ function countSteps(node) {
   if (node?.type === 'step') return 1;
   if (Array.isArray(node?.children)) return node.children.reduce((sum, child) => sum + countSteps(child), 0);
   return 0;
+}
+
+function countGroups(node, type) {
+  if (!node || typeof node !== 'object') return 0;
+  const own = node.type === type ? 1 : 0;
+  if (!Array.isArray(node.children)) return own;
+  return own + node.children.reduce((sum, child) => sum + countGroups(child, type), 0);
 }
 
 function clampConcurrency(value) {

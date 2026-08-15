@@ -29,7 +29,7 @@ async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
     config,
     { ...args, query, queries: undefined, maxResults, maxBytes },
     { signal: context.signal, watch: context.watch }
-  ), { signal: context.signal });
+  ), { signal: context.signal, kind: 'search-semantic' });
   const results = batch.results;
   return {
     ok: true,
