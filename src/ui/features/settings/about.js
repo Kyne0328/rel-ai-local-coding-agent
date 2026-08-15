@@ -6,7 +6,7 @@ export function mountAbout(container) {
   container.innerHTML = '';
   container.appendChild(header(
     'About Rel.AI',
-    'View application version, developer, repository, and license information.'
+    'Rel.AI turns ChatGPT web into a repository-capable coding agent using controlled local development tools.'
   ));
 
   const information = panel('Application information');

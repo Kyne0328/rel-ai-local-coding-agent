@@ -1,6 +1,6 @@
 # Connecting Rel.AI MCP to ChatGPT
 
-Rel.AI exposes one canonical 12-tool MCP surface through **OpenAI Secure MCP Tunnel**. Repository files, Git operations, commands, validation, builds, and managed processes execute on the computer running Rel.AI.
+Rel.AI turns ChatGPT web into a repository-capable coding agent by exposing one canonical 12-tool MCP surface through **OpenAI Secure MCP Tunnel**. ChatGPT provides the conversation and reasoning; repository files, Git operations, commands, validation, builds, and managed processes execute on the computer running Rel.AI.
 
 ## Configure the tunnel
 
@@ -22,6 +22,17 @@ Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain
 ```
 
 Each independent repository objective receives its own principal-bound `work_id`. Tunnel connectivity, ChatGPT conversation identity, and repository name do not replace that work-session boundary.
+
+## ChatGPT models and usage
+
+Rel.AI uses ChatGPT's app/tool path, not Codex. OpenAI currently documents that:
+
+- [Apps follow the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in). Rel.AI adds no separate per-tool usage quota.
+- [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits). Rel.AI app calls therefore do not draw from the Codex agentic allowance.
+- [GPT-5.6 Sol powers Medium, High, and Extra High reasoning on eligible plans](https://help.openai.com/en/articles/20001354-gpt-5-6-in-chatgpt).
+- ChatGPT Apps are available with all models except Pro models. That means GPT-5.6 Sol High can be used when available to the plan, and Extra High can be used where the plan exposes it, but GPT-5.6 Sol Pro cannot be used with the Rel.AI app.
+
+Model availability and plan limits are controlled by ChatGPT and may change independently of Rel.AI.
 
 ## Authentication boundary
 

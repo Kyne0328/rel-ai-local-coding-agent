@@ -130,8 +130,8 @@ function resolveBridgeState({ findings, connectionState }) {
   return {
     tone: 'good',
     kicker: 'Connection ready',
-    title: 'Rel.AI is available to ChatGPT.',
-    description: 'The secure MCP endpoint is authenticated and reachable.'
+    title: 'ChatGPT can work on your repositories.',
+    description: 'Rel.AI local coding tools are authenticated and reachable from ChatGPT web.'
   };
 }
 
