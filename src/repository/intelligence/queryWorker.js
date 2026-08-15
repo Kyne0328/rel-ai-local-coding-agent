@@ -1,6 +1,6 @@
 import { parentPort } from 'node:worker_threads';
 
-import { cachedRepositoryContext, cachedSearchGraphContext } from './contextPlanner.js';
+import { cachedRepositoryContext, cachedRepositorySummary, cachedSearchGraphContext } from './contextPlanner.js';
 import { executeCodeInspectQuery, executeSemanticSearchQuery } from './queryService.js';
 
 let activeJob = null;
@@ -41,6 +41,8 @@ async function runJob(jobId, job) {
       result = await executeSemanticSearchQuery(job.workspace, job.config, job.args, job.index, options);
     } else if (job.kind === 'cachedContext') {
       result = cachedRepositoryContext(job.workspace, job.config, { ...(job.options || {}), repositoryStatuses: options.repositoryStatuses });
+    } else if (job.kind === 'cachedSummary') {
+      result = cachedRepositorySummary(job.workspace, job.config, { ...(job.options || {}), repositoryStatuses: options.repositoryStatuses });
     } else if (job.kind === 'searchGraphContext') {
       result = cachedSearchGraphContext(job.workspace, job.config, job.matches || [], { repositoryStatuses: options.repositoryStatuses });
     } else {

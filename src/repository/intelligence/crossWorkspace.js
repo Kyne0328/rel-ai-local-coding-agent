@@ -4,6 +4,7 @@ import path from 'node:path';
 import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
 import { boundedInteger } from './limits.js';
+import { recordIntelligenceDiagnostic, repositoryFreshness } from './state.js';
 
 const DEFAULT_MAX_PEERS = 24;
 const DEFAULT_MAX_HINTS_PER_WORKSPACE = 1200;
@@ -14,6 +15,15 @@ const COMPLEMENT = Object.freeze({
   EMITS: 'LISTENS_ON',
   LISTENS_ON: 'EMITS'
 });
+const GENERIC_PLATFORM_EVENTS = new Set([
+  'abort', 'aborted', 'beforeunload', 'blur', 'change', 'click', 'close', 'connect',
+  'connection', 'data', 'DOMContentLoaded', 'drain', 'end', 'error', 'finish', 'focus',
+  'hashchange', 'input', 'keydown', 'keypress', 'keyup', 'load', 'message', 'mousedown',
+  'mouseenter', 'mouseleave', 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'offline',
+  'online', 'open', 'pointerdown', 'pointermove', 'pointerup', 'popstate', 'ready', 'request',
+  'resize', 'response', 'scroll', 'storage', 'submit', 'timeout', 'touchend', 'touchmove',
+  'touchstart', 'unload', 'visibilitychange'
+].map(value => value.toLowerCase()));
 
 function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
   const allPeers = configuredPeers(workspace, config);
@@ -21,11 +31,12 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
   const peers = allPeers.slice(0, maxPeers);
   const maxHints = boundedInteger(options.maxHintsPerWorkspace, 50, 5000, DEFAULT_MAX_HINTS_PER_WORKSPACE);
   const maxRelationships = boundedInteger(options.maxRelationships, 1, 500, DEFAULT_MAX_RELATIONSHIPS);
-  const localHints = safeReadRelationshipHints(localDb, maxHints);
+  const localHints = safeReadRelationshipHints(localDb, maxHints, workspace);
   const localPackage = packageDescriptor(workspace.path);
   const repositoryStatuses = options.repositoryStatuses || {};
   const localStatus = repositoryStatuses[workspace.alias] || repositoryIndexStatus(workspace, config);
-  const localFreshness = graphFreshness(localStatus);
+  const localGeneration = currentGeneration(localDb);
+  const localFreshness = repositoryFreshness(localStatus, localGeneration);
   const peerSnapshots = [];
   const skipped = [];
 
@@ -43,7 +54,7 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
         path: peer.path,
         freshness: graph.freshness,
         generation: Number(graph.generation.id || 0),
-        hints: safeReadRelationshipHints(graph.db, maxHints),
+        hints: safeReadRelationshipHints(graph.db, maxHints, peer),
         packageInfo
       });
     } finally {
@@ -51,7 +62,8 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
     }
   }
 
-  const relationships = matchGraphRelationships(workspace, localHints, peerSnapshots, maxRelationships, localFreshness);
+  const graphPeers = peerSnapshots.filter(peer => peerHasStrongRelationshipEvidence(localPackage, localHints, peer));
+  const relationships = matchGraphRelationships(workspace, localHints, graphPeers, maxRelationships, localFreshness);
   const packageRelationships = matchPackageRelationships(workspace, localPackage, peerSnapshots, maxRelationships - relationships.length);
   const combined = [...relationships, ...packageRelationships].slice(0, maxRelationships);
   return {
@@ -60,6 +72,7 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
     configuredPeerCount: allPeers.length,
     consideredPeerCount: peers.length,
     indexedPeerCount: peerSnapshots.filter(peer => peer.generation != null).length,
+    graphEligiblePeerCount: graphPeers.length,
     relationshipCount: combined.length,
     relationships: combined,
     peers: peerSnapshots.map(peer => ({
@@ -71,7 +84,7 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
     })),
     skipped,
     truncated: allPeers.length > peers.length || combined.length >= maxRelationships,
-    policy: 'Peer workspaces are read cache-only and never indexed as a side effect of architecture inspection. Ambiguous endpoint/event matches are retained with reduced confidence.'
+    policy: 'Peer workspaces are read cache-only. Graph matching requires complementary cross-boundary evidence; generic platform/browser events are ignored, and confidence reflects evidence quality, ambiguity, and freshness.'
   };
 }
 
@@ -118,8 +131,12 @@ function crossRelation(workspace, local, peer, remote, key, matchCount, localFre
         : 'CROSS_RECEIVES_FROM';
   const localEndpoint = endpoint(workspace.alias, local);
   const remoteEndpoint = endpoint(peer.workspace, remote);
-  const freshnessPenalty = (peer.freshness === 'current' ? 0 : 0.12) + (localFreshness === 'current' ? 0 : 0.12);
+  const freshnessPenalty = (peer.freshness === 'current' ? 0 : 0.08) + (localFreshness === 'current' ? 0 : 0.08);
   const ambiguous = matchCount > 1;
+  const evidenceConfidence = Math.min(normalizedHintConfidence(local), normalizedHintConfidence(remote));
+  const evidenceBase = key.startsWith('event:') ? 0.9 : 0.97;
+  const ambiguityPenalty = ambiguous ? 0.14 : 0;
+  const confidence = Math.max(0.5, evidenceBase * (0.85 + evidenceConfidence * 0.15) - ambiguityPenalty - freshnessPenalty);
   return {
     type,
     direction: localIsSource ? 'outgoing' : 'incoming',
@@ -130,7 +147,8 @@ function crossRelation(workspace, local, peer, remote, key, matchCount, localFre
     peerGeneration: peer.generation,
     peerFreshness: peer.freshness,
     ambiguous,
-    confidence: Number(Math.max(0.5, (ambiguous ? 0.76 : 0.97) - freshnessPenalty).toFixed(2))
+    evidence: key.startsWith('event:') ? 'custom-event-contract' : 'http-contract',
+    confidence: Number(confidence.toFixed(2))
   };
 }
 
@@ -171,13 +189,16 @@ function matchPackageRelationships(workspace, localPackage, peers, remaining) {
   return result.slice(0, remaining);
 }
 
-function safeReadRelationshipHints(db, limit) {
-  try { return readRelationshipHints(db, limit); } catch { return []; }
+function safeReadRelationshipHints(db, limit, workspace = null) {
+  try { return readRelationshipHints(db, limit); } catch (error) {
+    recordIntelligenceDiagnostic(workspace, 'cross_workspace_hints_failed', error);
+    return [];
+  }
 }
 
 function readRelationshipHints(db, limit) {
   return db.prepare(`
-    SELECT rh.type, rh.target_name, rh.source_qualified_name, rh.source_name, f.path
+    SELECT rh.type, rh.target_name, rh.source_qualified_name, rh.source_name, rh.provider, rh.confidence, f.path
     FROM relation_hints rh JOIN files f ON f.id=rh.source_file_id
     WHERE rh.type IN ('HTTP_CALLS','HANDLES','EMITS','LISTENS_ON')
     ORDER BY rh.id LIMIT ?
@@ -186,6 +207,8 @@ function readRelationshipHints(db, limit) {
     targetName: row.target_name == null ? '' : String(row.target_name),
     sourceQualifiedName: row.source_qualified_name == null ? null : String(row.source_qualified_name),
     sourceName: row.source_name == null ? null : String(row.source_name),
+    provider: row.provider == null ? '' : String(row.provider),
+    confidence: Number(row.confidence || 0),
     path: String(row.path)
   }));
 }
@@ -193,7 +216,10 @@ function readRelationshipHints(db, limit) {
 function openPeerGraph(peer, config, statusOverride = null) {
   if (!peer.path || !fs.existsSync(peer.path)) return null;
   let databaseFile;
-  try { databaseFile = repositoryIndexPath(config, peer); } catch { return null; }
+  try { databaseFile = repositoryIndexPath(config, peer); } catch (error) {
+    recordIntelligenceDiagnostic(peer, 'cross_workspace_peer_path_failed', error);
+    return null;
+  }
   if (!fs.existsSync(databaseFile)) return null;
   let db;
   try {
@@ -201,18 +227,20 @@ function openPeerGraph(peer, config, statusOverride = null) {
     const generation = currentGeneration(db);
     if (!generation) { db.close(); return null; }
     const status = statusOverride || repositoryIndexStatus(peer, config);
-    return { db, generation, freshness: graphFreshness(status) };
-  } catch {
+    return { db, generation, freshness: repositoryFreshness(status, generation) };
+  } catch (error) {
     try { db?.close(); } catch {}
+    recordIntelligenceDiagnostic(peer, 'cross_workspace_peer_open_failed', error);
     return null;
   }
 }
 
 function configuredPeers(workspace, config) {
   const currentPath = normalizeFsPath(workspace.path);
+  const sourceAlias = workspace?.taskSandbox === true ? String(workspace.sourceAlias || '').trim() : '';
   const peers = [];
   for (const [alias, entry] of Object.entries(config.workspaces || {})) {
-    if (alias === workspace.alias || !entry?.path) continue;
+    if (alias === workspace.alias || alias === sourceAlias || !entry?.path) continue;
     const peerPath = normalizeFsPath(entry.path);
     if (!peerPath || peerPath === currentPath) continue;
     peers.push({ alias, path: entry.path, context: entry.context || {} });
@@ -239,7 +267,11 @@ function relationshipKey(type, targetName) {
   const value = String(targetName || '').trim();
   if (!value) return '';
   if (type === 'HTTP_CALLS' || type === 'HANDLES') return canonicalHttpKey(value);
-  if (type === 'EMITS' || type === 'LISTENS_ON') return value.startsWith('event:') ? value : `event:${value}`;
+  if (type === 'EMITS' || type === 'LISTENS_ON') {
+    const eventName = value.replace(/^event:/i, '').trim();
+    if (!eventName || GENERIC_PLATFORM_EVENTS.has(eventName.toLowerCase())) return '';
+    return `event:${eventName}`;
+  }
   return value;
 }
 
@@ -256,15 +288,32 @@ function canonicalHttpKey(value) {
   return `${match[1].toUpperCase()} ${target}`;
 }
 
+function peerHasStrongRelationshipEvidence(localPackage, localHints, peer) {
+  const remotePackage = peer?.packageInfo;
+  if (localPackage && remotePackage?.name) {
+    if (localPackage.dependencies.has(remotePackage.name)) return true;
+    if (localPackage.name && remotePackage.dependencies.has(localPackage.name)) return true;
+  }
+  const remoteKeys = new Set((peer?.hints || []).map(hint => {
+    const key = relationshipKey(hint.type, hint.targetName);
+    return key ? `${hint.type}\u0000${key}` : '';
+  }).filter(Boolean));
+  return (localHints || []).some(hint => {
+    const complement = COMPLEMENT[hint.type];
+    const key = relationshipKey(hint.type, hint.targetName);
+    return Boolean(complement && key && remoteKeys.has(`${complement}\u0000${key}`));
+  });
+}
+
+function normalizedHintConfidence(hint) {
+  const value = Number(hint?.confidence);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.8;
+}
+
 function normalizeFsPath(value) {
   let normalized = path.resolve(String(value || '')).replaceAll('\\', '/').replace(/\/$/, '');
   if (process.platform === 'win32') normalized = normalized.toLowerCase();
   return normalized;
 }
 
-function graphFreshness(status = {}) {
-  if (status.metadata) return status.dirty ? 'stale' : 'current';
-  return 'cached-unverified';
-}
-
-export { analyzeCrossWorkspace };
+export { analyzeCrossWorkspace, configuredPeers, peerHasStrongRelationshipEvidence, relationshipKey };

@@ -4,7 +4,7 @@ const DEPENDENCY_PATH = /(?:^|\/)(?:package\.json|package-lock\.json|npm-shrinkw
 const SECURITY_CONFIG_PATH = /(?:^|\/)(?:auth|oauth|security|authorization|csp|permissions?|config)(?:\/|\.|$)/i;
 const DOC_PATH = /\.(?:md|txt|rst)$/i;
 
-function classifyWorkflowRisk({ changedFiles = [], packageIds = [], impactedPaths = [], affectedTests = [], operation = {} } = {}) {
+function classifyWorkflowRisk({ changedFiles = [], packageIds = [], impactedPackageIds = [], impactedPaths = [], affectedTests = [], operation = {} } = {}) {
   const files = unique(changedFiles);
   const reasons = [];
   let boundary = packageIds.length > 1 ? 'cross_package' : packageIds.length === 1 ? 'package' : files.length <= 1 ? 'file' : 'repository';
@@ -28,6 +28,14 @@ function classifyWorkflowRisk({ changedFiles = [], packageIds = [], impactedPath
   }
   if (packageIds.length > 1 && boundary !== 'release') {
     boundary = 'cross_package'; risk = maxRisk(risk, 'high'); reasons.push('multiple packages are affected');
+  }
+  const structuralPackages = unique(impactedPackageIds);
+  if (structuralPackages.length > 1 && boundary !== 'release') {
+    boundary = 'cross_package'; risk = maxRisk(risk, 'high'); reasons.push('structural impact crosses package boundaries');
+  } else if (impactedPaths.length >= 20 && boundary !== 'release') {
+    risk = maxRisk(risk, 'high'); reasons.push('structural impact reaches many repository files');
+  } else if (affectedTests.length > 0 && risk === 'low') {
+    risk = 'medium'; reasons.push('structural impact reaches executable tests');
   }
   if (packageIds.length === 1 && boundary === 'repository' && files.every(file => file.startsWith(packagePath(packageIds[0])))) boundary = 'package';
   if (risk === 'medium') reasons.push('behavior-changing source edit');

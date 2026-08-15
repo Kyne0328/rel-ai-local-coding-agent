@@ -1,7 +1,7 @@
 import { buildCheckCatalog } from './checkCatalog.js';
 import { normalizeWorkflowSnapshot } from './contracts.js';
 import { decideWorkflow } from './decision.js';
-import { repeatFailureCount } from './evidence.js';
+import { checkEvidenceReusable, repeatFailureCount } from './evidence.js';
 import { classifyTaskIntent, normalizeTaskIntent } from './intent.js';
 import { classifyWorkflowRisk } from './risk.js';
 import { discoverRepositoryTopology, packageForPath } from './topology.js';
@@ -13,7 +13,8 @@ async function buildWorkflowSnapshot(input = {}) {
   const packageIds = unique(changedFiles.map(file => packageForPath(topology, file)?.id).filter(Boolean));
   const affectedTests = unique(input.affectedTests || []);
   const impactedPaths = unique(input.impactedPaths || []);
-  const classification = classifyWorkflowRisk({ changedFiles, packageIds, affectedTests, impactedPaths, operation: input.operation });
+  const impactedPackageIds = unique(impactedPaths.map(file => packageForPath(topology, file)?.id).filter(Boolean));
+  const classification = classifyWorkflowRisk({ changedFiles, packageIds, impactedPackageIds, affectedTests, impactedPaths, operation: input.operation });
   const evidence = summarizeEvidence(input.recentEvidence || [], integrity);
   const repeatCount = repeatFailureCount(input.recentEvidence || []);
   const intent = normalizeTaskIntent(input.intent, classifyTaskIntent(input.objective));
@@ -39,10 +40,17 @@ async function buildWorkflowSnapshot(input = {}) {
 
 function summarizeEvidence(receipts, integrity) {
   const mutation = Number(integrity.mutationGeneration || 0);
+  const currentFingerprint = String(integrity.validatedRepositoryFingerprint || integrity.validationFingerprint || '');
   let fresh = 0; let stale = 0; let reusable = 0;
   for (const receipt of receipts) {
-    if (Number(receipt?.mutationGeneration || 0) === mutation) fresh += 1; else stale += 1;
-    if (receipt?.kind === 'check' && receipt?.outcome === 'passed' && receipt?.repositoryFingerprint) reusable += 1;
+    const currentMutation = Number(receipt?.mutationGeneration || 0) === mutation;
+    if (currentMutation) fresh += 1; else stale += 1;
+    if (currentMutation && checkEvidenceReusable(receipt, {
+      commandId: receipt?.commandId,
+      command: receipt?.command,
+      cwd: receipt?.cwd,
+      repositoryFingerprint: currentFingerprint
+    })) reusable += 1;
   }
   return { fresh, stale, reusable, lastMutationGeneration: mutation, lastValidatedMutationGeneration: Number(integrity.latestValidatedMutationGeneration || 0) };
 }
