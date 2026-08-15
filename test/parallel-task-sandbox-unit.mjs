@@ -1,0 +1,138 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { allWorkspaceAliases, readConfig, resolveWorkspace } from '../src/config.js';
+import { promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
+import { resetToolActivity } from '../src/toolActivity.js';
+import { callTool as rawCallTool } from '../src/tools.js';
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-parallel-sandbox-'));
+const workspacePath = path.join(root, 'workspace');
+const stateDir = path.join(root, 'state');
+const configPath = path.join(root, 'config.json');
+const previousConfig = process.env.REL_AI_MCP_CONFIG;
+const context = { principal: 'local:trusted', publicHttpOnly: true, transportType: 'test' };
+
+function git(...args) {
+  return execFileSync('git', args, { cwd: workspacePath, encoding: 'utf8' }).trim();
+}
+
+function sandboxEntries(config) {
+  return Object.values(readSandboxRegistry(config).sandboxes || {});
+}
+
+function readText(filePath) {
+  return fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
+}
+
+try {
+  fs.mkdirSync(workspacePath, { recursive: true });
+  git('init', '--initial-branch=main');
+  git('config', 'user.email', 'relai@example.test');
+  git('config', 'user.name', 'RelAI Test');
+  fs.writeFileSync(path.join(workspacePath, 'alpha.txt'), 'alpha\n');
+  fs.writeFileSync(path.join(workspacePath, 'beta.txt'), 'beta\n');
+  fs.writeFileSync(path.join(workspacePath, 'shared.txt'), 'shared\n');
+  fs.writeFileSync(path.join(workspacePath, 'merge.txt'), 'first\nsecond\nthird\n');
+  git('add', '.');
+  git('commit', '-m', 'fixture');
+
+  fs.writeFileSync(configPath, JSON.stringify({
+    version: 4,
+    stateDir,
+    auditLogPath: path.join(stateDir, 'audit.jsonl'),
+    patch: { backup: true, requireCleanGit: false, maxUpdateBytes: 2 * 1024 * 1024 },
+    workspaces: { app: { path: workspacePath, commands: {}, testCommands: {} } }
+  }, null, 2));
+  process.env.REL_AI_MCP_CONFIG = configPath;
+  resetToolActivity();
+
+  const first = await rawCallTool('relai_work', {
+    action: 'begin', workspace: 'app', bootstrap: 'compact', objective: 'First parallel task.'
+  }, context);
+  const second = await rawCallTool('relai_work', {
+    action: 'begin', workspace: 'app', bootstrap: 'compact', objective: 'Second parallel task.'
+  }, context);
+  const config = readConfig();
+
+  await rawCallTool('relai_edit', {
+    workspace: 'app', work_id: first.work_id, path: 'alpha.txt', oldText: 'alpha\n', newText: 'alpha from first\n'
+  }, context);
+  assert.equal(fs.readFileSync(path.join(workspacePath, 'alpha.txt'), 'utf8'), 'alpha from first\n');
+  assert.equal(sandboxEntries(config).length, 0, 'the oldest active task should keep the visible workspace');
+
+  const secondEdit = await rawCallTool('relai_edit', {
+    workspace: 'app', work_id: second.work_id, path: 'beta.txt', oldText: 'beta\n', newText: 'beta from second\n'
+  }, context);
+  assert.equal(secondEdit.workspace, 'app', 'hidden aliases must not leak through tool results');
+  assert.equal(readText(path.join(workspacePath, 'beta.txt')), 'beta from second\n');
+
+  const entries = sandboxEntries(config);
+  assert.equal(entries.length, 1, 'the later parallel task should use one private sandbox');
+  assert.equal(entries[0].taskId, second.work_id);
+  assert.equal(entries[0].sourceAlias, 'app');
+  assert.ok(entries[0].alias.startsWith('__relai_sandbox_'));
+  assert.equal(
+    execFileSync('git', ['branch', '--show-current'], { cwd: entries[0].path, encoding: 'utf8' }).trim(),
+    '',
+    'private sandboxes should stay detached instead of creating user-visible branches'
+  );
+  assert.deepEqual(
+    git('branch', '--format=%(refname:short)').split(/\r?\n/).filter(Boolean),
+    ['main'],
+    'private sandboxes must not add branches to the source repository'
+  );
+  assert.deepEqual(allWorkspaceAliases(config), ['app'], 'private sandboxes must stay out of normal workspace discovery');
+  const resolvedSandbox = resolveWorkspace(config, entries[0].alias);
+  assert.equal(resolvedSandbox.taskSandbox, true);
+  assert.equal(resolvedSandbox.sourceAlias, 'app');
+
+  fs.writeFileSync(path.join(entries[0].path, 'merge.txt'), 'first from second\nsecond\nthird\n');
+  fs.writeFileSync(path.join(workspacePath, 'merge.txt'), 'first\nsecond\nthird from first\n');
+  const merged = await promoteTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
+  assert.equal(merged.promoted, true);
+  assert.equal(
+    readText(path.join(workspacePath, 'merge.txt')),
+    'first from second\nsecond\nthird from first\n',
+    'non-overlapping edits in the same file must merge without overwriting visible work'
+  );
+
+  fs.writeFileSync(path.join(entries[0].path, 'shared.txt'), 'shared from second\n');
+  fs.writeFileSync(path.join(workspacePath, 'shared.txt'), 'shared from first\n');
+  await assert.rejects(
+    () => promoteTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id),
+    error => error?.code === 'TASK_SANDBOX_PROMOTION_CONFLICT'
+  );
+  assert.equal(
+    readText(path.join(workspacePath, 'shared.txt')),
+    'shared from first\n',
+    'a conflicting private patch must never overwrite newer visible work'
+  );
+  assert.equal(sandboxEntries(config).length, 1, 'conflicting private work should remain available until task cancellation or reconciliation');
+
+  const cancelled = await rawCallTool('relai_work', {
+    action: 'cancel', workspace: 'app', work_id: second.work_id, reason: 'Conflict coverage complete.'
+  }, context);
+  assert.equal(cancelled.status, 'cancelled');
+  assert.equal(sandboxEntries(config).length, 0, 'cancelling a parallel task must remove its private sandbox');
+  assert.equal(fs.existsSync(entries[0].path), false);
+
+  await rawCallTool('relai_work', {
+    action: 'cancel', workspace: 'app', work_id: first.work_id, reason: 'Test cleanup.'
+  }, context);
+} finally {
+  repositoryIntelligence.shutdown();
+  resetToolActivity();
+  if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
+  else process.env.REL_AI_MCP_CONFIG = previousConfig;
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+console.log('Parallel tasks isolate later writers privately, promote safe changes immediately, refuse conflicts, and clean up without exposing hidden workspaces.');
+// Nested raw tool calls can leave the Windows test host's piped stdio referenced even after all app resources are closed.
+// This isolated process has completed teardown above, so exit explicitly to keep direct and spawnSync runners deterministic.
+process.exit(0);

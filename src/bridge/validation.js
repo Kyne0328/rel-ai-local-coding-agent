@@ -26,10 +26,11 @@ const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}, context = {}) {
   const currentTaskId = String(getCurrentToolActivityContext()?.taskId || context.taskId || args.work_id || '').trim();
+  const logicalWorkspaceAlias = String(workspace.sourceAlias || workspace.alias || '').trim();
   const suppliedChangedFiles = Array.isArray(args.changedFiles)
     ? [...new Set(args.changedFiles.map(file => String(file || '').trim()).filter(Boolean))]
     : [];
-  const ownedChangedFiles = currentTaskId ? taskOwnedChangedFiles(config, currentTaskId, workspace.alias) : [];
+  const ownedChangedFiles = currentTaskId ? taskOwnedChangedFiles(config, currentTaskId, logicalWorkspaceAlias) : [];
   const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : (ownedChangedFiles.length ? ownedChangedFiles : undefined);  let effectiveArgs = args;
   let validationPlan = null;
   let planSelection = '';
@@ -130,8 +131,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     executedUnits += 1;
     results.push(summary);
     if (summary.ok && currentTaskId) {
-      const authority = readTaskIntegrity(config, currentTaskId, workspace.alias);
-      const workspaceIntegrity = readWorkspaceIntegrity(config, workspace.alias);
+      const authority = readTaskIntegrity(config, currentTaskId, logicalWorkspaceAlias);
+      const workspaceIntegrity = readWorkspaceIntegrity(config, logicalWorkspaceAlias);
       const receipt = buildWorkflowEvidenceReceipt({
         tool: 'relai_validate',
         args: { command, cwd: unit.cwd || '.' },

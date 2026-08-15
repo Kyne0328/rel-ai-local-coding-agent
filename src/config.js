@@ -11,6 +11,7 @@ import { readProjectInstructions, summarizeProjectInstructions } from './project
 import { normalizeAllowedKeys } from './processEnvironment.js';
 import { writeJsonAtomic } from './durableState.js';
 import { defaultStateDir } from './stateLayout.js';
+import { resolveTaskSandboxWorkspace } from './parallelTaskSandbox.js';
 const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
   'npm:test:fast-task',
   'npm:test:oneclick',
@@ -411,7 +412,12 @@ function resolveWorkspace(config, alias) {
     commands: entry.commands || {},
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
-    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
+    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
+    ...(entry.taskSandbox === true ? {
+      taskSandbox: true,
+      sourceAlias: entry.sourceAlias,
+      sourceBranch: entry.sourceBranch
+    } : {})
   };
 }
 
@@ -420,7 +426,8 @@ function allWorkspaceAliases(config) {
 }
 
 function workspaceEntryForAlias(config, alias) {
-  return Object.hasOwn(config.workspaces || {}, alias) ? config.workspaces[alias] : null;
+  if (Object.hasOwn(config.workspaces || {}, alias)) return config.workspaces[alias];
+  return resolveTaskSandboxWorkspace(config, alias);
 }
 
 function isSafeWorkspaceAlias(value) {
