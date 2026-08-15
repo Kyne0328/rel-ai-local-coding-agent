@@ -30,6 +30,8 @@ const processes = new Map();
 const metadataScanAt = new Map();
 const metadataPruneAt = new Map();
 const metadataWriteQueues = new Map();
+const processStateListeners = new Set();
+let processStateVersion = 0;
 
 function processRoot(config) {
   return path.join(getStateDir(config), 'processes');
@@ -165,6 +167,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     record.child = child;
     record.pid = child.pid || null;
     processes.set(processId, record);
+    notifyProcessState(record);
     const startupSignal = combineAbortSignals(
       context.signal,
       getCurrentTaskAbortSignal()
@@ -177,6 +180,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
       if (record.status !== 'starting') return;
       record.status = 'running';
       safePersistMetadata(config, record);
+      notifyProcessState(record);
       addSpanEvent('process.spawned', { 'process.pid': record.pid || 0 });
     });
     child.once('error', error => finishRecord(config, record, {
@@ -461,6 +465,7 @@ async function stopRecordInternal(config, record, options = {}) {
 
   record.status = 'stopping';
   safePersistMetadata(config, record);
+  notifyProcessState(record);
   const outcome = await terminateProcessTree(target, {
     graceMs: clampNumber(options.graceMs, 0, 30000, DEFAULT_STOP_GRACE_MS),
     forceWaitMs: DEFAULT_FORCE_WAIT_MS
@@ -470,6 +475,7 @@ async function stopRecordInternal(config, record, options = {}) {
     record.status = 'orphaned';
     record.error = 'Managed process termination could not be confirmed.';
     safePersistMetadata(config, record);
+    notifyProcessState(record);
   } else if (record.status === 'stopping') {
     finishRecord(config, record, {
       status: 'stopped',
@@ -673,6 +679,7 @@ function finishRecord(config, record, fields) {
   clearScheduledPersist(record);
   Object.assign(record, fields, { endedAt: new Date().toISOString() });
   record.child = null;
+  notifyProcessState(record);
   if (!record.discarded) {
     void drainLogWrites(config, record).then(() => queueMetadataPersist(config, record));
   }
@@ -984,6 +991,7 @@ function pruneManagedProcesses(config) {
     if (TERMINAL_STATUSES.has(record.status) && Date.now() - timestamp > RECENT_RETENTION_MS) {
       fs.rmSync(path.join(root, entry.name), { recursive: true, force: true });
       processes.delete(entry.name);
+      notifyProcessState({ processId: entry.name, status: 'removed' });
       removed += 1;
     }
   }
@@ -1017,6 +1025,29 @@ function processNeedsTermination(record) {
     && isProcessTreeAlive(record.pid);
 }
 
+function onManagedProcessChange(listener) {
+  if (typeof listener !== 'function') return () => {};
+  processStateListeners.add(listener);
+  return () => processStateListeners.delete(listener);
+}
+
+function managedProcessStateRevision() {
+  return processStateVersion;
+}
+
+function notifyProcessState(record) {
+  processStateVersion += 1;
+  const event = {
+    revision: processStateVersion,
+    processId: String(record?.processId || ''),
+    status: String(record?.status || '')
+  };
+  for (const listener of processStateListeners) {
+    try { listener(event); }
+    catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] process state listener:', error); }
+  }
+}
+
 function cancellationError(message) {
   const error = taskError('TASK_CANCELLED', message);
   error.cancelled = true;
@@ -1032,6 +1063,8 @@ function clampNumber(value, min, max, fallback) {
 export {
   activeProcessesForWorkspace,
   listManagedProcesses,
+  managedProcessStateRevision,
+  onManagedProcessChange,
   pruneManagedProcesses,
   readManagedProcess,
   startManagedProcess,

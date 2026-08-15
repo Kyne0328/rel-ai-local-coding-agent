@@ -1,14 +1,22 @@
-// Dashboard SSE connection state and event delivery.
+// Dashboard SSE connection state and typed event delivery.
 let _es = null;
+let _sourceListeners = [];
 let _onEvent = null;
 let _onState = null;
 let _tokenFn = null;
-let _snapshotRevision = '';
 let _reconnectTimer = null;
 let _stopped = true;
 let _visibilityWired = false;
 let _generation = 0;
 let _retryCount = 0;
+
+const LIVE_EVENT_TYPES = Object.freeze([
+  'dashboard.bootstrap',
+  'task.updated',
+  'connection.updated',
+  'workspace.updated',
+  'process.updated'
+]);
 
 export function initEvents(onEvent, onState) {
   _onEvent = onEvent || null;
@@ -18,9 +26,8 @@ export function initEvents(onEvent, onState) {
   document.addEventListener('visibilitychange', _handleVisibilityChange);
 }
 
-export function startSSE(tokenFn, snapshotRevision = '') {
+export function startSSE(tokenFn) {
   _tokenFn = tokenFn || _tokenFn;
-  _snapshotRevision = String(snapshotRevision || _snapshotRevision || '');
   _stopped = false;
   if (_es) return;
   _connect();
@@ -58,36 +65,29 @@ function _connect() {
   const token = _tokenFn ? _tokenFn() : '';
   const params = new URLSearchParams();
   if (token) params.set('token', token);
-  if (_snapshotRevision) params.set('revision', _snapshotRevision);
   const query = params.toString();
   const url = query ? `/events?${query}` : '/events';
   emitState(_retryCount ? 'reconnecting' : 'connecting');
   const source = new EventSource(url, { withCredentials: true });
   _es = source;
 
-  source.addEventListener('open', () => markLive(source, generation));
-  source.addEventListener('ready', event => {
+  listenSource(source, 'open', () => markLive(source, generation));
+  listenSource(source, 'ready', event => {
     if (!isCurrent(source, generation)) return;
     markLive(source, generation);
-    try {
-      const payload = JSON.parse(event.data || '{}');
-      if (payload.generatedAt) emitState('live', { lastEventAt: Date.parse(payload.generatedAt) || Date.now() });
-    } catch (error) {
-      debugError(error);
-    }
+    const payload = parseEventData(event);
+    if (payload?.generatedAt) emitState('live', { lastEventAt: Date.parse(payload.generatedAt) || Date.now() });
   });
-  source.addEventListener('dashboard', event => {
-    if (!isCurrent(source, generation)) return;
-    try {
-      const data = JSON.parse(event.data);
-      if (data?.snapshot?.revision) _snapshotRevision = String(data.snapshot.revision);
+  for (const type of LIVE_EVENT_TYPES) {
+    listenSource(source, type, event => {
+      if (!isCurrent(source, generation)) return;
+      const data = parseEventData(event);
+      if (!data) return;
       markLive(source, generation, Date.now());
-      _onEvent?.(data);
-    } catch (error) {
-      debugError(error);
-    }
-  });
-  source.addEventListener('error', () => {
+      _onEvent?.({ type, data });
+    });
+  }
+  listenSource(source, 'error', () => {
     if (!isCurrent(source, generation)) return;
     closeSource();
     if (_stopped) return;
@@ -102,6 +102,20 @@ function _connect() {
   });
 }
 
+function listenSource(source, type, handler) {
+  source.addEventListener(type, handler);
+  _sourceListeners.push({ source, type, handler });
+}
+
+function parseEventData(event) {
+  try {
+    return JSON.parse(event?.data || '{}');
+  } catch (error) {
+    debugError(error);
+    return null;
+  }
+}
+
 function markLive(source, generation, lastEventAt = 0) {
   if (!isCurrent(source, generation)) return;
   _retryCount = 0;
@@ -114,7 +128,12 @@ function isCurrent(source, generation) {
 
 function closeSource() {
   if (!_es) return;
-  _es.close();
+  const source = _es;
+  for (const listener of _sourceListeners) {
+    if (listener.source === source) listener.source.removeEventListener(listener.type, listener.handler);
+  }
+  _sourceListeners = _sourceListeners.filter(listener => listener.source !== source);
+  source.close();
   _es = null;
 }
 

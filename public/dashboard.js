@@ -1,5 +1,5 @@
 import { setToken, getToken, fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
-import { init as initStore, get as getStore } from './ui/store.js';
+import { init as initStore, get as getStore, applyLiveEvent } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getRouteParams, replaceRouteParams, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
 import { mountHome, updateHomeLiveState } from './ui/features/home/index.js';
@@ -10,7 +10,6 @@ import { normalizeRouteKey } from './ui/route-policy.js';
 import { closeDrawer } from './ui/components/drawer.js';
 import { initWindowChrome } from './ui/window-chrome.js';
 import { createDashboardClock } from './ui/clock.js';
-import { createSnapshotGate } from './ui/snapshot-order.js';
 import { initUpdateAvailableModal } from './ui/update-available-modal.js';
 import { initSidebar } from './ui/sidebar.js';
 
@@ -37,11 +36,10 @@ let _dashboardClock = null;
 let _shellStatus = { label: 'Connecting', tone: 'warn' };
 let _liveState = 'connecting';
 let _refreshPromise = null;
-let _renderFingerprint = '';
+let _renderRevisionKey = '';
 let _renderFrame = 0;
 let _renderWaiters = [];
 let _deferredViewRender = false;
-const _snapshotGate = createSnapshotGate();
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -96,7 +94,6 @@ async function boot() {
   window.addEventListener('pagehide', () => _dashboardClock?.stop(), { once: true });
   const initialPayload = readInitialPayload();
   const initial = initialPayload?.ok !== false ? withConnectionState(initialPayload || {}, _liveState) : initialPayload;
-  _snapshotGate.accept(initialPayload);
   initStore(initial?.ok !== false ? initial || {} : {});
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
@@ -104,10 +101,10 @@ async function boot() {
   initDesktopBridge();
   window.addEventListener('relai:route-change', () => {
     closeDrawer();
-    _renderFingerprint = '';
+    _renderRevisionKey = '';
   });
   window.addEventListener('relai:route-mounted', event => {
-    _renderFingerprint = viewFingerprint(getStore());
+    _renderRevisionKey = viewRevisionKey(getStore());
     focusWorkspaceCard(event);
   });
   if (initial && initial.ok !== false) {
@@ -132,7 +129,7 @@ async function boot() {
   }, true);
   window.addEventListener('relai:dropdown-closed', flushDeferredViewRender);
   initEvents(liveOnEvent, liveStateChange);
-  startSSE(getToken, initial?.snapshot?.revision);
+  startSSE(getToken);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void doRefresh({ source: 'visibility-resume' });
   });
@@ -243,9 +240,11 @@ function renderDashboardState(kind, title, description) {
   routeRoot.querySelector('[data-dashboard-retry]')?.addEventListener('click', () => doRefresh({ source: 'retry', render: true }));
 }
 
-async function liveOnEvent(data) {
-  if (!data || data.ok === false || !_snapshotGate.accept(data)) return;
-  const hydrated = withConnectionState(data, _liveState);
+async function liveOnEvent(event) {
+  if (!event?.type || !event.data || event.data.ok === false) return;
+  const applied = applyLiveEvent(event.type, event.data);
+  if (!applied.accepted) return;
+  const hydrated = withConnectionState(applied.state, _liveState);
   initStore(hydrated);
   updateShell(hydrated);
   if (!_routerReady) activateRouter();
@@ -260,7 +259,7 @@ async function syncLiveView(data) {
     debugError(error);
   }
   if (!updated) return false;
-  _renderFingerprint = viewFingerprint(data);
+  _renderRevisionKey = viewRevisionKey(data);
   return true;
 }
 
@@ -349,9 +348,9 @@ function renderViewIfChanged(data) {
     return Promise.resolve(false);
   }
   _deferredViewRender = false;
-  const nextFingerprint = viewFingerprint(data);
-  if (nextFingerprint === _renderFingerprint) return Promise.resolve(false);
-  _renderFingerprint = nextFingerprint;
+  const nextRevisionKey = viewRevisionKey(data);
+  if (nextRevisionKey === _renderRevisionKey) return Promise.resolve(false);
+  _renderRevisionKey = nextRevisionKey;
   return new Promise(resolve => {
     _renderWaiters.push(resolve);
     if (_renderFrame) return;
@@ -363,11 +362,11 @@ function renderViewIfChanged(data) {
           await rerender({ preserveView: true });
           rendered = true;
         } else {
-          _renderFingerprint = '';
+          _renderRevisionKey = '';
           _deferredViewRender = true;
         }
       } catch (error) {
-        _renderFingerprint = '';
+        _renderRevisionKey = '';
         debugError(error);
       }
       const waiters = _renderWaiters.splice(0);
@@ -376,55 +375,29 @@ function renderViewIfChanged(data) {
   });
 }
 
-function viewFingerprint(data = {}) {
-  const path = currentRoutePath();
-  const route = `${path}?${getRouteParams().toString()}`;
-  const config = data.config || {};
-  const desktop = data.desktopStatus || {};
-  const desktopState = {
-    serverRunning: desktop.serverRunning,
-    starting: desktop.starting,
-    tunnelStatus: desktop.tunnelStatus,
-    tunnelId: desktop.tunnelId,
-    tunnelHealthUrl: desktop.tunnelHealthUrl,
-    localMcpUrl: desktop.localMcpUrl,
-    errorCode: desktop.errorCode,
-    error: desktop.error
-  };
-  const liveRevision = data.snapshot?.revision || data.taskActivity?.revision || data.generatedAt || '';
-  let payload;
+function viewRevisionKey(data = {}) {
+  const route = `${currentRoutePath()}?${getRouteParams().toString()}`;
+  const revisions = data.live?.revisions || {};
+  const structural = data.snapshot?.revision || '';
+  const task = Number(revisions.task || 0);
+  const connection = Number(revisions.connection || 0);
+  const workspace = Number(revisions.workspace || 0);
+  const process = Number(revisions.process || 0);
   switch (currentSection()) {
     case 'activity':
-      payload = route;
-      break;
-    case 'tasks':
-      payload = [route, liveRevision];
-      break;
-    case 'workspaces':
-      payload = [route, liveRevision];
-      break;
-    case 'processes':
-      payload = [route, liveRevision];
-      break;
+    case 'tasks': return `${route}|t:${task}`;
+    case 'workspaces': return `${route}|t:${task}|w:${workspace}`;
+    case 'processes': return `${route}|p:${process}`;
+    case 'connection': return `${route}|c:${connection}`;
+    case 'system': return `${route}|c:${connection}|p:${process}`;
+    case 'settings':
     case 'tools':
     case 'reference':
-      payload = [route, data.tools || []];
-      break;
-    case 'usage':
-      payload = route;
-      break;
-    case 'settings':
-    case 'system':
-    case 'connection':
     case 'diagnostics':
-      payload = [route, data.application || {}, config, data.connectionState || {}, data.mcpAuthentication || {}, data.mcpConnection || {}, desktopState];
-      break;
-    default:
-      payload = [route, liveRevision, data.connectionState?.status || data.connectionState?.overall || '', data.mcpAuthentication?.status || '', data.mcpConnection?.revision || '', desktopState];
+    case 'usage': return `${route}|s:${structural}`;
+    default: return `${route}|t:${task}|c:${connection}|w:${workspace}|p:${process}|s:${structural}`;
   }
-  return JSON.stringify(payload);
 }
-
 function focusWorkspaceCard(event) {
   if (event?.detail?.section !== 'workspaces') return;
   const params = event.detail.params || getRouteParams();
@@ -493,7 +466,7 @@ function flushDeferredViewRender(options = {}) {
   window.requestAnimationFrame(() => {
     if (!_deferredViewRender || hasBlockingInteraction(options)) return;
     _deferredViewRender = false;
-    _renderFingerprint = '';
+    _renderRevisionKey = '';
     void renderViewIfChanged(getStore());
   });
 }

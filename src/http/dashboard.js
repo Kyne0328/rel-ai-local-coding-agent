@@ -15,7 +15,7 @@ import { getVersion } from "../version.js";
 import { resolveRequireHttpToken } from "./auth.js";
 import { readTaskHistory, readTaskHistorySession } from "../taskHistoryStore.js";
 import { onToolActivity } from "../toolActivity.js";
-import { buildDashboardPayload, mergeDashboardActivity } from "./dashboardData.js";
+import { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskProjection, mergeDashboardActivity } from "./dashboardData.js";
 import { handleOpenFolder, handlePickFolder, handleWorkspaceChecks, workspacePathPreflight } from "./dashboardActions.js";
 import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
@@ -23,6 +23,7 @@ import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
 import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS } from '../ui/navigation-catalog.js';
 import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
+import { listManagedProcesses, managedProcessStateRevision, onManagedProcessChange } from '../processManager.js';
 import { readCachedStaticAsset } from './dashboardAssets.js';
 
 const DASHBOARD_SHARED_MODULES = Object.freeze({
@@ -191,9 +192,8 @@ function readConfigCached() {
   return value;
 }
 
-const DASHBOARD_SNAPSHOT_COALESCE_MS = 350;
-const DASHBOARD_SNAPSHOT_MAX_WAIT_MS = 1200;
-const dashboardPayloadCache = { signature: '', payload: null };
+const DASHBOARD_EVENT_STREAM_ID = crypto.randomUUID();
+let dashboardEventSequence = 0;
 
 function statSignature(file) {
   try {
@@ -251,23 +251,6 @@ function desktopStatusRevision(status = null) {
   ]);
 }
 
-function dashboardStreamPayload(signature, options) {
-  if (dashboardPayloadCache.signature === signature && dashboardPayloadCache.payload) return dashboardPayloadCache.payload;
-  const config = readConfigCached();
-  const payload = buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision: signature }, false);
-  dashboardPayloadCache.signature = signature;
-  dashboardPayloadCache.payload = payload;
-  return payload;
-}
-
-function requestedDashboardRevision(req) {
-  try {
-    return new URL(req?.url || '/events', 'http://127.0.0.1').searchParams.get('revision') || '';
-  } catch {
-    return '';
-  }
-}
-
 function openDashboardEvents(res, req, options) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -275,44 +258,78 @@ function openDashboardEvents(res, req, options) {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no"
   });
-  let lastSignature = dashboardSourceRevision(options);
-  const clientRevision = requestedDashboardRevision(req);
-  const sendSnapshot = (force = false) => {
-    try {
-      const signature = dashboardSourceRevision(options);
-      if (!force && signature === lastSignature) return;
-      lastSignature = signature;
-      const payload = dashboardStreamPayload(signature, options);
-      sendSse(res, 'dashboard', payload, { id: `${payload.snapshot.streamId}:${payload.snapshot.sequence}` });
-    } catch (error) {
-      sendSse(res, 'error', errorPayload(
-        ERROR_CODES.UNKNOWN,
-        error instanceof Error ? error.message : String(error)
-      ));
-    }
-  };
-  sendSse(res, 'ready', { ok: true, generatedAt: new Date().toISOString(), revision: lastSignature });
-  if (!clientRevision || clientRevision !== lastSignature) sendSnapshot(true);
 
-  let pendingSnapshot = null;
-  let pendingSince = 0;
-  const scheduleSnapshot = () => {
+  const sendDomain = (eventName, domain, revision, payload) => {
     if (res.destroyed) return;
-    const now = Date.now();
-    if (!pendingSince) pendingSince = now;
-    if (pendingSnapshot) clearTimeout(pendingSnapshot);
-    const remaining = Math.max(0, DASHBOARD_SNAPSHOT_MAX_WAIT_MS - (now - pendingSince));
-    const delay = Math.min(DASHBOARD_SNAPSHOT_COALESCE_MS, remaining);
-    pendingSnapshot = setTimeout(() => {
-      pendingSnapshot = null;
-      pendingSince = 0;
-      if (!res.destroyed) sendSnapshot(false);
-    }, delay);
-    pendingSnapshot.unref?.();
+    const sequence = ++dashboardEventSequence;
+    sendSse(res, eventName, {
+      ok: true,
+      streamId: DASHBOARD_EVENT_STREAM_ID,
+      sequence,
+      domain,
+      revision: Number(revision || 0),
+      generatedAt: new Date().toISOString(),
+      ...payload
+    }, { id: `${DASHBOARD_EVENT_STREAM_ID}:${sequence}` });
   };
-  const unsubscribe = onToolActivity(scheduleSnapshot);
-  const unsubscribeConnection = mcpConnectionManager.onChange(scheduleSnapshot);
-  const unsubscribeWorkspace = onWorkspaceStateChange(scheduleSnapshot);
+
+  const sendConnection = (snapshot = null) => {
+    try {
+      const config = readConfigCached();
+      const mcp = snapshot || mcpConnectionManager.snapshot();
+      sendDomain('connection.updated', 'connection', mcp.revision, buildDashboardConnectionProjection(config, options, mcp));
+    } catch (error) { sendDashboardStreamError(res, error); }
+  };
+
+  let lastDesktopRevision = desktopStatusRevision(typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null);
+  const sendDesktopConnectionIfChanged = () => {
+    const current = desktopStatusRevision(typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null);
+    if (current === lastDesktopRevision) return;
+    lastDesktopRevision = current;
+    sendConnection();
+  };
+
+  try {
+    const config = readConfigCached();
+    const taskActivity = typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : null;
+    const connectionSnapshot = mcpConnectionManager.snapshot();
+    const bootstrap = buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision: dashboardSourceRevision(options, config) }, false);
+    sendSse(res, 'ready', { ok: true, generatedAt: new Date().toISOString(), streamId: DASHBOARD_EVENT_STREAM_ID });
+    sendDomain('dashboard.bootstrap', 'bootstrap', 1, {
+      ...bootstrap,
+      live: {
+        streamId: DASHBOARD_EVENT_STREAM_ID,
+        revisions: {
+          task: Number(taskActivity?.revision || 0),
+          connection: Number(connectionSnapshot.revision || 0),
+          workspace: Number(workspaceStateRevision() || 0),
+          process: Number(managedProcessStateRevision() || 0)
+        }
+      }
+    });
+  } catch (error) {
+    sendDashboardStreamError(res, error);
+  }
+
+  const unsubscribe = onToolActivity(activity => {
+    try {
+      const config = readConfigCached();
+      sendDomain('task.updated', 'task', activity.revision, buildDashboardTaskProjection(config, options));
+      sendDesktopConnectionIfChanged();
+    } catch (error) { sendDashboardStreamError(res, error); }
+  });
+  const unsubscribeConnection = mcpConnectionManager.onChange(snapshot => sendConnection(snapshot));
+  const unsubscribeWorkspace = onWorkspaceStateChange(event => {
+    sendDomain('workspace.updated', 'workspace', event.version, { alias: event.alias, state: event.state });
+  });
+  const unsubscribeProcess = onManagedProcessChange(event => {
+    try {
+      const config = readConfigCached();
+      sendDomain('process.updated', 'process', event.revision, {
+        managedProcesses: listManagedProcesses(config, { limit: 200, activeOnly: true }).processes
+      });
+    } catch (error) { sendDashboardStreamError(res, error); }
+  });
   const heartbeat = setInterval(() => {
     if (!res.destroyed) res.write(`: keepalive ${Date.now()}\n\n`);
   }, 15000);
@@ -321,9 +338,17 @@ function openDashboardEvents(res, req, options) {
     unsubscribe();
     unsubscribeConnection();
     unsubscribeWorkspace();
-    if (pendingSnapshot) clearTimeout(pendingSnapshot);
+    unsubscribeProcess();
     clearInterval(heartbeat);
   });
+}
+
+function sendDashboardStreamError(res, error) {
+  if (res.destroyed) return;
+  sendSse(res, 'error', errorPayload(
+    ERROR_CODES.UNKNOWN,
+    error instanceof Error ? error.message : String(error)
+  ));
 }
 
 function safeInitialDashboardData(options = {}) {
