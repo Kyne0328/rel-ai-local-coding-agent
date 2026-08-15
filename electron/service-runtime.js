@@ -1,32 +1,48 @@
-import { isPortAvailable } from './launcher-config.js';
 import { normalizePort, normalizeTunnelId, readGuiConfig } from './launcher-utils.js';
 import { desktopStatusFailure, initialDesktopStatus } from './desktop-status.js';
-import { closeHttpServer } from './shutdown-coordinator.js';
 
 function createDesktopServiceRuntime(deps) {
   const {
-    app, connection, configModule, startHttpServer, stopAllManagedProcesses, dashboardSessions, dashboardWindowManager,
-    toolActivityRuntime, runtimeLogs, secureTunnelRuntime, tunnelCredentials, errorCodes, getRuntimeAccess,
-    getCurrentStatus, setStatus, replaceCurrentStatus, pushStatus
+    app,
+    connection,
+    configModule,
+    serviceProcessClient,
+    dashboardWindowManager,
+    runtimeLogs,
+    secureTunnelRuntime,
+    tunnelCredentials,
+    errorCodes,
+    getRuntimeAccess,
+    getCurrentStatus,
+    setStatus,
+    replaceCurrentStatus,
+    pushStatus
   } = deps;
-  let httpServer = null;
   let startPromise = null;
   let localReadyPromise = null;
   let lifecycleToken = 0;
 
-  function isListening() { return Boolean(httpServer?.listening); }
+  function isListening() { return serviceProcessClient.isListening(); }
 
   async function startServer() {
-    if (isListening() && secureTunnelRuntime.snapshot().state === 'running') { pushStatus(); return getCurrentStatus(); }
+    if (isListening() && secureTunnelRuntime.snapshot().state === 'running') {
+      pushStatus();
+      return getCurrentStatus();
+    }
     if (startPromise) return startPromise;
     const runToken = ++lifecycleToken;
     const localReady = deferred();
     localReadyPromise = localReady.promise;
     const pendingStart = start(runToken, localReady.resolve);
     startPromise = pendingStart;
-    void pendingStart.then(status => localReady.resolve(status), () => localReady.resolve(getCurrentStatus())).finally(clearPending);
+    void pendingStart
+      .then(status => localReady.resolve(status), () => localReady.resolve(getCurrentStatus()))
+      .finally(clearPending);
     return pendingStart;
-    function clearPending() { if (startPromise === pendingStart) startPromise = null; }
+
+    function clearPending() {
+      if (startPromise === pendingStart) startPromise = null;
+    }
   }
 
   async function start(runToken, markLocalReady) {
@@ -44,27 +60,38 @@ function createDesktopServiceRuntime(deps) {
         connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
       }
     } catch (error) {
-      setStatus(desktopStatusFailure(errorCodes.CONFIGURATION_INVALID, error, { serverRunning: false, tunnelStatus: 'failed', tunnelId: '', mcpUrl: '' }));
-      return getCurrentStatus();
-    }
-    if (!await isPortAvailable(guiConfig.port)) {
-      setStatus(desktopStatusFailure(errorCodes.LOCAL_PORT_IN_USE, `Port ${guiConfig.port} is already in use.`, { serverRunning: false, tunnelStatus: 'failed', tunnelId: guiConfig.tunnelId, mcpUrl: '' }));
+      setStatus(desktopStatusFailure(errorCodes.CONFIGURATION_INVALID, error, {
+        serverRunning: false,
+        tunnelStatus: 'failed',
+        tunnelId: '',
+        mcpUrl: ''
+      }));
       return getCurrentStatus();
     }
 
     let actualPort;
     try {
-      httpServer = startHttpServer({
-        host: '127.0.0.1', port: guiConfig.port, token: guiConfig.token, publicUrl: '', exitOnError: false,
-        pickFolder: () => dashboardWindowManager.pickFolder(), openFolder: folderPath => dashboardWindowManager.openFolder(folderPath),
-        getTaskActivity: toolActivityRuntime.getStatus, getDesktopStatus: getCurrentStatus, getRuntimeAccess,
-        resetTaskActivity: toolActivityRuntime.resetHistory, getRuntimeLogs: runtimeLogs.snapshot, clearRuntimeLogs: runtimeLogs.clear,
-        onRuntimeLogChange: runtimeLogs.onChange
+      serviceProcessClient.updateContext({
+        status: getCurrentStatus(),
+        runtimeAccess: getRuntimeAccess(),
+        runtimeLogs: runtimeLogs.snapshot()
       });
-      actualPort = await waitForListening(httpServer);
+      const localService = await serviceProcessClient.start({
+        host: '127.0.0.1',
+        port: guiConfig.port,
+        token: guiConfig.token
+      });
+      actualPort = Number(localService.port || guiConfig.port);
     } catch (error) {
-      httpServer = null;
-      setStatus(desktopStatusFailure(errorCodes.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed', tunnelId: guiConfig.tunnelId, mcpUrl: '' }));
+      const portInUse = error?.code === 'EADDRINUSE';
+      const code = portInUse ? errorCodes.LOCAL_PORT_IN_USE : errorCodes.LOCAL_SERVICE_START_FAILED;
+      const failure = portInUse ? `Port ${guiConfig.port} is already in use.` : error;
+      setStatus(desktopStatusFailure(code, failure, {
+        serverRunning: false,
+        tunnelStatus: 'failed',
+        tunnelId: guiConfig.tunnelId,
+        mcpUrl: ''
+      }));
       return getCurrentStatus();
     }
 
@@ -77,7 +104,9 @@ function createDesktopServiceRuntime(deps) {
       mcpUrl: '',
       localMcpUrl: `${localUrl}/mcp`,
       authenticationRequired: false,
-      error: '', errorCode: '', localUrl
+      error: '',
+      errorCode: '',
+      localUrl
     });
     markLocalReady(getCurrentStatus());
 
@@ -92,20 +121,34 @@ function createDesktopServiceRuntime(deps) {
     } catch (error) {
       if (runToken !== lifecycleToken) return getCurrentStatus();
       setStatus(desktopStatusFailure(errorCodes.SECURE_TUNNEL_FAILED, error, {
-        serverRunning: true, tunnelStatus: 'failed', tunnelId: guiConfig.tunnelId, mcpUrl: '', localMcpUrl: `${localUrl}/mcp`
+        serverRunning: true,
+        tunnelStatus: 'failed',
+        tunnelId: guiConfig.tunnelId,
+        mcpUrl: '',
+        localMcpUrl: `${localUrl}/mcp`
       }));
       return getCurrentStatus();
     }
     if (runToken !== lifecycleToken || result.cancelled) return getCurrentStatus();
 
     connection.writeConnectionProfile({
-      host: '127.0.0.1', port: actualPort, tunnelId: guiConfig.tunnelId,
-      tunnelProvider: 'openai-secure-mcp', configPath: configModule.getConfigPath()
+      host: '127.0.0.1',
+      port: actualPort,
+      tunnelId: guiConfig.tunnelId,
+      tunnelProvider: 'openai-secure-mcp',
+      configPath: configModule.getConfigPath()
     });
     setStatus({
-      serverRunning: true, tunnelStatus: 'running', tunnelId: guiConfig.tunnelId,
-      tunnelHealthUrl: result.healthUrl || '', mcpUrl: '', localMcpUrl: `${localUrl}/mcp`,
-      authenticationRequired: false, error: '', errorCode: '', localUrl
+      serverRunning: true,
+      tunnelStatus: 'running',
+      tunnelId: guiConfig.tunnelId,
+      tunnelHealthUrl: result.healthUrl || '',
+      mcpUrl: '',
+      localMcpUrl: `${localUrl}/mcp`,
+      authenticationRequired: false,
+      error: '',
+      errorCode: '',
+      localUrl
     });
     return getCurrentStatus();
   }
@@ -118,7 +161,9 @@ function createDesktopServiceRuntime(deps) {
     try {
       return await Promise.race([
         pending,
-        new Promise(resolve => { timer = setTimeout(() => resolve(getCurrentStatus()), Math.max(1, Number(timeoutMs || 10_000))); })
+        new Promise(resolve => {
+          timer = setTimeout(() => resolve(getCurrentStatus()), Math.max(1, Number(timeoutMs || 10_000)));
+        })
       ]);
     } finally {
       if (timer) clearTimeout(timer);
@@ -127,37 +172,40 @@ function createDesktopServiceRuntime(deps) {
 
   async function stopServer(options = {}) {
     lifecycleToken += 1;
-    const runtimeConfig = configModule.readConfig();
-    const ownedServer = httpServer;
-    httpServer = null;
     startPromise = null;
     localReadyPromise = null;
-    const [managedProcesses, secureTunnel, localService] = await Promise.all([
-      stopAllManagedProcesses(runtimeConfig).catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: formatError(error) })),
-      secureTunnelRuntime.stop().catch(error => ({ stopped: false, exited: false, error: formatError(error) })),
-      closeHttpServer(ownedServer)
+    const [localRuntime, secureTunnel] = await Promise.all([
+      serviceProcessClient.stop().catch(error => ({
+        ok: false,
+        cleanup: {
+          clean: false,
+          managedProcesses: { attempted: 0, stopped: 0, orphaned: 1, error: formatError(error) },
+          localService: { closed: false, forced: false, error: formatError(error) }
+        }
+      })),
+      secureTunnelRuntime.stop().catch(error => ({ stopped: false, exited: false, error: formatError(error) }))
     ]);
+    if (options.terminateUtility === true) await serviceProcessClient.dispose({ stop: false });
     if (!options.preserveDashboard) await dashboardWindowManager.close();
-    dashboardSessions.clearDashboardSessions();
     const nextStatus = initialDesktopStatus(app.getVersion());
     replaceCurrentStatus(nextStatus, { silent: options.silent === true });
-    return {
-      ...nextStatus,
-      cleanup: {
-        clean: managedProcesses.orphaned === 0 && secureTunnel.stopped !== false && secureTunnel.exited !== false && localService.closed !== false,
-        managedProcesses, secureTunnel, localService
-      }
+    const runtimeCleanup = localRuntime.cleanup || {};
+    const cleanup = {
+      clean: runtimeCleanup.clean !== false && secureTunnel.stopped !== false && secureTunnel.exited !== false,
+      managedProcesses: runtimeCleanup.managedProcesses || { attempted: 0, stopped: 0, orphaned: 0 },
+      secureTunnel,
+      localService: runtimeCleanup.localService || { closed: true, forced: false }
     };
+    return { ...nextStatus, cleanup };
   }
 
-  function buildDashboardConnection() {
-    const port = (httpServer?.listening && httpServer.address()?.port) || readGuiConfig().port || 3333;
-    const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
-    const bootstrap = dashboardSessions.createDashboardBootstrap(token);
+  async function buildDashboardConnection() {
+    if (!isListening()) throw new Error('Local service is not running.');
+    const authorization = await serviceProcessClient.dashboardBootstrap();
     const chrome = dashboardWindowManager.getState();
     const chromeMode = chrome.customTitleBar ? 'custom' : 'native';
     return {
-      url: `http://127.0.0.1:${port}/dashboard?surface=desktop&chrome=${chromeMode}&platform=${encodeURIComponent(chrome.platform)}&bootstrap=${encodeURIComponent(bootstrap)}`,
+      url: `http://127.0.0.1:${authorization.port}/dashboard?surface=desktop&chrome=${chromeMode}&platform=${encodeURIComponent(chrome.platform)}&bootstrap=${encodeURIComponent(authorization.bootstrap)}`,
       authGeneration: lifecycleToken
     };
   }
@@ -179,13 +227,8 @@ function deferred() {
   };
 }
 
-function waitForListening(server) {
-  return new Promise((resolve, reject) => {
-    server.once('listening', () => resolve(server.address().port));
-    server.once('error', reject);
-  });
+function formatError(error) {
+  return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
-
-function formatError(error) { return error instanceof Error ? error.message : String(error || 'Unknown error'); }
 
 export { createDesktopServiceRuntime };

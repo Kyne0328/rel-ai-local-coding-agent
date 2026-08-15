@@ -88,6 +88,12 @@ function createTaskActivityRuntime(options) {
   emitStatus();
 
   function handleActivity(event = {}) {
+    if (event.phase === 'snapshot' && event.snapshot) {
+      status = normalizeActivityStatus(event.snapshot);
+      syncBlocker(status, event);
+      emitStatus();
+      return;
+    }
     status = reduceActivityStatus(status, event);
     syncBlocker(status, event);
     if (event.phase === 'finished' && event.ok === false) notify('errors', buildFailureNotification(event));

@@ -26,14 +26,24 @@ for (const removedPath of ['scripts/installed-app-smoke.mjs', 'scripts/release-e
 for (const removedFile of ['installed-smoke.js', 'window-smoke.js', 'smoke-evidence.js']) assert.equal(electronPackage.build.files.includes(removedFile), false);
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|smokeWindowRoles|getSmokeWindowRole/);
 
-for (const required of ['spec.executableName', 'resources/app.asar', 'resources/src/httpServer.js', 'resources/src/tools/actionCatalog.js', 'resources/public/dashboard.js', 'spec.tunnelClientDirectory', 'spec.tunnelClientFile']) {
+for (const required of [
+  'spec.executableName',
+  "resourcePath('app.asar')",
+  "resourcePath('src', 'httpServer.js')",
+  "resourcePath('src', 'tools', 'actionCatalog.js')",
+  "resourcePath('public', 'dashboard.js')",
+  "'service-process.js'",
+  "'service-process-client.js'",
+  'spec.tunnelClientDirectory',
+  'spec.tunnelClientFile'
+]) {
   assert.ok(verifier.includes(required), `Packaged verifier must check ${required}.`);
 }
 assert.match(electronPlatform, /tunnelClientDirectory: 'win32'/);
 assert.match(electronPlatform, /tunnelClientFile: 'tunnel-client\.exe'/);
 assert.doesNotMatch(verifier, /spawnSync\(executablePath|Start-Process|uninstall|quitAndInstall/i, 'Packaged verification must not launch the Electron application, installer, uninstaller, or updater install path.');
 assert.match(verifier, /spawnSync\(binaryPath, \['-h'\]/, 'Packaged verification may execute the reviewed Zoekt binary only for a bounded help probe.');
-assert.match(verifier, /resources\/bin\/ngrok/, 'Packaged verification must reject obsolete transport resources.');
+assert.match(verifier, /resourcePath\('bin', 'ngrok'\)/, 'Packaged verification must reject obsolete transport resources.');
 
 assert.match(ci, /name: packaged Windows application/i);
 assert.match(ci, /npm run electron:build/);

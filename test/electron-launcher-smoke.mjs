@@ -26,6 +26,8 @@ for (const file of [
   'secure-tunnel-runtime.js',
   'tunnel-credentials.js',
   'service-runtime.js',
+  'service-process.js',
+  'service-process-client.js',
   'desktop-settings.js',
   'desktop-status.js',
   'preload.cjs',
@@ -59,9 +61,14 @@ const main = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 const serviceRuntime = fs.readFileSync(path.join(root, 'electron', 'service-runtime.js'), 'utf8');
 assert.match(main, /createSecureTunnelRuntime/);
 assert.match(main, /createTunnelCredentialStore/);
+assert.match(main, /createServiceProcessClient/);
+assert.match(main, /utilityProcess/);
+assert.doesNotMatch(main, /startHttpServer|stopAllManagedProcesses/, 'Electron main must not own the MCP HTTP/runtime process path');
 assert.doesNotMatch(main, /createGatewayClient|createPublicConnectionRuntime|createApprovalTokenManager|managedNgrok/);
+assert.match(serviceRuntime, /serviceProcessClient\.start\(\{[\s\S]*host:[\s\S]*port:[\s\S]*token:/s);
 assert.match(serviceRuntime, /secureTunnelRuntime\.start\(\{[\s\S]*tunnelId:[\s\S]*port:[\s\S]*localToken:[\s\S]*apiKey/s);
 assert.match(serviceRuntime, /http:\/\/127\.0\.0\.1:\$\{actualPort\}/);
+assert.doesNotMatch(serviceRuntime, /isPortAvailable/, 'desktop startup must bind the real service once and handle EADDRINUSE directly');
 assert.doesNotMatch(serviceRuntime, /connectionMode|gateway|ngrok|onOAuthAuthorized/i);
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));

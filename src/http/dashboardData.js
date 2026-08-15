@@ -1,5 +1,4 @@
 import { listManagedProcesses } from '../processManager.js';
-import { readAudit } from '../audit.js';
 import * as crypto from 'node:crypto';
 import * as connection from '../connectionProfile.js';
 import * as productUx from '../productUx.js';
@@ -40,6 +39,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     runtimeCompatibility: runtimeState.compatibility,
     readiness: release.releaseReadiness(config, { requireHttpToken }),
     ...connectionProjection,
+    ...(options.live ? { live: options.live } : {}),
     taskActivity: sanitizeTaskActivity(taskActivity),
     snapshot: {
       streamId: DASHBOARD_STREAM_ID,
@@ -52,22 +52,6 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     tasks,
     workspaceStates,
     managedProcesses: listManagedProcesses(config, { limit: 200, activeOnly: true }).processes
-  };
-}
-
-function buildDashboardTaskProjection(config, options = {}, activityOverride = null) {
-  const taskActivity = activityOverride || (typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : emptyTaskActivity());
-  const limit = Math.max(Number(options.limit || 100), 200);
-  const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(summarizeDashboardTask);
-  const liveActivityTasks = Array.isArray(taskActivity.tasks) ? taskActivity.tasks : [];
-  const auditLimit = Math.min(limit, 200);
-  const auditSource = readAudit(config, { limit: Math.max(auditLimit, 500) });
-  const auditTail = mergeDashboardActivity({ ...auditSource, entries: auditSource.entries.slice(-auditLimit) }, liveActivityTasks, limit);
-  return {
-    taskActivity: sanitizeTaskActivity(taskActivity),
-    tasks,
-    auditTail,
-    workspaceStates: buildWorkspaceStates(config, tasks, taskActivity)
   };
 }
 
@@ -226,4 +210,4 @@ function sanitizeTaskActivity(activity = {}) {
   };
 }
 
-export { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskDelta, buildDashboardTaskProjection, mergeDashboardActivity, summarizeDashboardTask };
+export { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskDelta, mergeDashboardActivity, summarizeDashboardTask };
