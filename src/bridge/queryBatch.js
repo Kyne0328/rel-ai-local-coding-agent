@@ -1,3 +1,5 @@
+import { parallel, runPlan, step } from '../executionPlan.js';
+
 function resolveQueryTerms(args = {}, options = {}) {
   const singleField = String(options.singleField || 'query');
   const label = String(options.label || singleField);
@@ -39,6 +41,20 @@ function compactBatchResult(value) {
   return rest;
 }
 
+async function runQueryBatch(terms, execute, options = {}) {
+  const plan = parallel(
+    terms.map((term, index) => step(`query ${index + 1}`, () => execute(term, index), { metadata: { index, term } })),
+    { maxConcurrency: options.maxConcurrency || 4, stopOnFailure: true }
+  );
+  const outcome = await runPlan(plan, { signal: options.signal, onEvent: options.onEvent });
+  const failed = outcome.results.find(result => result.ok === false);
+  if (failed) throw failed.error || new Error(`Query batch failed at ${failed.name}.`);
+  return {
+    results: outcome.results.map(result => result.value),
+    metrics: outcome.metrics
+  };
+}
+
 function summarizeBatchResults(results = []) {
   const files = new Set();
   let matchCount = 0;
@@ -60,4 +76,4 @@ function summarizeBatchResults(results = []) {
   return { matchCount, resultCount, returnedBytes, uniqueFileCount: files.size, truncated };
 }
 
-export { compactBatchResult, resolveQueryTerms, splitBatchLimit, summarizeBatchResults };
+export { compactBatchResult, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults };
