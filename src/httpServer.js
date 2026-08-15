@@ -63,9 +63,11 @@ function startHttpServer(options = {}) {
     configurationGeneration: generations.configurationGeneration,
     manifest
   });
-  initializeTelemetry(runtimeConfig);
-  pruneManagedProcesses(runtimeConfig);
-  pruneNativeToolTasks(runtimeConfig);
+  if (!isolated) {
+    initializeTelemetry(runtimeConfig);
+    pruneManagedProcesses(runtimeConfig);
+    pruneNativeToolTasks(runtimeConfig);
+  }
 
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
@@ -86,16 +88,21 @@ function startHttpServer(options = {}) {
 
   let shutdownPromise = Promise.resolve();
   server.on('close', () => {
-    shutdownPromise = Promise.allSettled([
+    const shutdownTasks = [
       shutdownMcpTransport(),
-      mcpConnectionManager.shutdown('http_server_closed'),
-      flushAuditWrites(),
-      flushTaskHistoryPersistence(),
-      flushLocalAnalytics(runtimeConfig),
-      stopAllManagedProcesses(runtimeConfig),
-      stopAllUiSessions(),
-      shutdownTelemetry()
-    ]);
+      mcpConnectionManager.shutdown('http_server_closed')
+    ];
+    if (!isolated) {
+      shutdownTasks.push(
+        flushAuditWrites(),
+        flushTaskHistoryPersistence(),
+        flushLocalAnalytics(runtimeConfig),
+        stopAllManagedProcesses(runtimeConfig),
+        stopAllUiSessions(),
+        shutdownTelemetry()
+      );
+    }
+    shutdownPromise = Promise.allSettled(shutdownTasks);
   });
   server.waitForShutdown = () => shutdownPromise;
 
