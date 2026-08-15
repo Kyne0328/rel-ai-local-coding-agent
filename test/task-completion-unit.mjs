@@ -1,8 +1,7 @@
 import { callTool as rawCallTool } from "../src/tools.js";
 import { getToolActivity, resetToolActivity } from "../src/toolActivity.js";
 import { readConfig } from "../src/config.js";
-import { flushAuditWrites, getAuditPath, readAudit } from "../src/audit.js";
-import { repositoryIntelligence } from "../src/repository/intelligence/service.js";
+import { getAuditPath, readAudit } from "../src/audit.js";
 import { resolvePolicy } from "../src/policyResolver.js";
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -444,58 +443,31 @@ try {
     oldText: 'console.log("changed after validation");',
     newText: 'console.log("changed by another task");'
   }, sharedWorkspaceScope);
+  await assert.rejects(
+    () => callTool('relai_work', { action: 'finish',
+      workspace: 'app',
+      work_id: taskE,
+      summary: 'Task E must detect task F changed the shared worktree.'
+    }, sharedWorkspaceScope),
+    error => error?.code === 'TASK_PERSISTENCE_CONFLICT' &&
+      /another work session changed/i.test(error.message) &&
+      error.allowedAlternatives?.some(item => /complete:true/i.test(item))
+  );
+  const sharedWorkspaceBlock = getToolActivity().tasks.find(task => task.id === taskE);
+  assert.equal(sharedWorkspaceBlock?.status, 'blocked');
+  assert.equal(sharedWorkspaceBlock?.currentStage, 'Validation required');
+  assert.equal(sharedWorkspaceBlock?.lastOutcome, 'blocked');
+  await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: taskE, level: 'standard' }, sharedWorkspaceScope);
   const completedE = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
     work_id: taskE,
-    summary: 'Task E stays valid because task F changed content outside task E validation scope.'
+    summary: 'Task E revalidated the shared worktree and completed safely.'
   }, sharedWorkspaceScope);
   assert.equal(completedE.work_id, taskE);
   assert.equal(getToolActivity().tasks.some(task => task.taskId === taskF), true, 'task F must remain active after task E completes');
-  await callTool('relai_work', {
-    action: 'cancel', workspace: 'app', work_id: taskF, reason: 'Unrelated shared-workspace coverage complete.'
-  }, sharedWorkspaceScope);
 
-  resetToolActivity();
-  const overlapScope = { publicHttpOnly: true };
-  const taskG = await startTask('overlapping-task-scope');
-  await callTool('relai_edit', {
-    workspace: 'app', work_id: taskG, path: 'src/overlap.js', content: 'export const owner = "task-g";\n'
-  }, overlapScope);
-  const taskH = await startTask('overlapping-task-scope');
-  await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: taskG, level: 'standard' }, overlapScope);
-  await callTool('relai_edit', {
-    workspace: 'app',
-    work_id: taskH,
-    path: 'src/overlap.js',
-    oldText: 'export const owner = "task-g";',
-    newText: 'export const owner = "task-h";'
-  }, overlapScope);
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app', work_id: taskG, summary: 'Overlapping task changes must still require reconciliation.'
-    }, overlapScope),
-    error => error?.code === 'TASK_REVALIDATION_REQUIRED' && /relevant workspace content changed/i.test(error.message)
-  );
-  await callTool('relai_edit', {
-    workspace: 'app',
-    work_id: taskG,
-    path: 'src/overlap.js',
-    oldText: 'export const owner = "task-h";',
-    newText: 'export const owner = "task-g-reconciled";'
-  }, overlapScope);
-  const completedG = await callTool('relai_validate', {
-    action: 'checks', workspace: 'app', work_id: taskG, level: 'standard', complete: true,
-    summary: 'Reconciled the overlapping change and validated the final task-owned content.'
-  }, overlapScope);
-  assert.equal(completedG.completionKnown, true);
-  await callTool('relai_work', {
-    action: 'cancel', workspace: 'app', work_id: taskH, reason: 'Overlap reconciliation coverage complete.'
-  }, overlapScope);
-
-  console.log('Task-scoped atomic, standalone, retry, restart, unrelated-concurrency, overlap, and multi-chat completion tests passed.');
+  console.log('Task-scoped atomic, standalone, retry, restart, shared-worktree, and multi-chat completion tests passed.');
 } finally {
-  await flushAuditWrites();
-  repositoryIntelligence.shutdown();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
   fs.rmSync(temp, { recursive: true, force: true });
