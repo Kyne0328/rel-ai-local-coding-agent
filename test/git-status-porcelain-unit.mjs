@@ -24,7 +24,7 @@ try {
   git(['add', '.']);
   git(['commit', '-qm', 'base']);
 
-  writeSessionPolicy(config, workspace.alias, { workspaceRoot: root });
+  await writeSessionPolicy(config, workspace.alias, { workspaceRoot: root });
   fs.appendFileSync(path.join(root, 'space file.txt'), 'space changed\n');
   fs.appendFileSync(path.join(root, 'café.txt'), 'unicode changed\n');
   git(['mv', 'old name.txt', 'new café name.txt']);
@@ -46,7 +46,7 @@ try {
   assert.ok(review.statusEntries.some((entry) => entry.path === 'café.txt'));
   assert.ok(review.statusEntries.some((entry) => entry.path === 'space file.txt'));
 
-  const baseline = captureBaselineDirty(root);
+  const baseline = await captureBaselineDirty(root);
   assert.ok(baseline.includes('café.txt'));
   assert.ok(baseline.includes('space file.txt'));
   assert.ok(baseline.includes('new café name.txt'));

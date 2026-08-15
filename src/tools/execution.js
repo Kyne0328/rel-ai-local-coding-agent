@@ -54,7 +54,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const result = await runWorkspaceOperation(
         executionName === 'relai_cancel_work' ? '' : handlerArgs?.workspace,
         async () => {
-          sessionStart = maybeStartSession(config, executionName, effectiveArgs || {}, { taskId });
+          sessionStart = await maybeStartSession(config, executionName, effectiveArgs || {}, { taskId });
           if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
           const handled = await definition.handler(config, handlerArgs || {}, {
             connector: Boolean(context?.publicHttpOnly),

@@ -36,7 +36,7 @@ try {
     workspaces: { app: workspace }
   };
 
-  writeSessionPolicy(config, workspace.alias, { workspaceRoot: repo });
+  await writeSessionPolicy(config, workspace.alias, { workspaceRoot: repo });
   fs.writeFileSync(path.join(repo, 'tracked.txt'), 'changed\n');
   fs.writeFileSync(path.join(repo, 'untracked.txt'), 'new\n');
 
