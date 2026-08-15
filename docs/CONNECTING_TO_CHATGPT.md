@@ -1,6 +1,6 @@
 # Connecting Rel.AI MCP to ChatGPT
 
-Rel.AI turns ChatGPT web into a repository-capable coding agent by exposing one canonical 12-tool MCP surface through **OpenAI Secure MCP Tunnel**. ChatGPT provides the conversation and reasoning; repository files, Git operations, commands, validation, builds, and managed processes execute on the computer running Rel.AI.
+Rel.AI connects ChatGPT web to local projects through **OpenAI Secure MCP Tunnel**. ChatGPT provides the conversation and reasoning. Rel.AI lets it find files, edit code, run commands and tests, check the result, review changes, and use Git on the computer running Rel.AI.
 
 ## Configure the tunnel
 
@@ -18,25 +18,26 @@ Create or reconnect the Rel.AI MCP integration in ChatGPT using the **Tunnel** c
 After enabling Rel.AI MCP in a chat, start with a read-only request:
 
 ```text
-Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain the returned work_id, then call relai_snapshot with that work_id. Do not modify files yet.
+Use Rel.AI MCP with workspace "myapp". Start one work session, read the project, and explain how the relevant parts work before changing anything.
 ```
 
-Each independent repository objective receives its own principal-bound `work_id`. Tunnel connectivity, ChatGPT conversation identity, and repository name do not replace that work-session boundary.
+Rel.AI creates a separate work session for each new goal. Internally, that session has a `work_id` so edits, checks, review, recovery, and completion stay attached to the same task even if the connection changes.
 
-## ChatGPT models and usage
+## Why Rel.AI uses ChatGPT
 
-Rel.AI uses ChatGPT's app/tool path, not Codex. OpenAI currently documents that:
+Rel.AI uses ChatGPT's app/tool path, not Codex. OpenAI currently documents that [Apps use the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in), while [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits). Rel.AI therefore does not draw from the Codex agentic allowance. Your normal ChatGPT plan limits still apply, so Rel.AI does not describe its usage as unlimited.
 
-- [Apps follow the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in). Rel.AI adds no separate per-tool usage quota.
-- [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits). Rel.AI app calls therefore do not draw from the Codex agentic allowance.
-- [GPT-5.6 Sol powers Medium, High, and Extra High reasoning on eligible plans](https://help.openai.com/en/articles/20001354-gpt-5-6-in-chatgpt).
-- ChatGPT Apps are available with all models except Pro models. That means GPT-5.6 Sol High can be used when available to the plan, and Extra High can be used where the plan exposes it, but GPT-5.6 Sol Pro cannot be used with the Rel.AI app.
+ChatGPT supplies the model and reasoning. Rel.AI supplies the local coding tools. Model availability and plan limits are controlled by ChatGPT and may change independently of Rel.AI.
 
-Model availability and plan limits are controlled by ChatGPT and may change independently of Rel.AI.
+For many everyday repository tasks, Rel.AI can take the place of a Codex-style workflow: it can help ChatGPT read the project, edit files, run commands and tests, inspect the result, and use Git. Rel.AI does not emulate Codex internals or claim to be the same product.
 
-## Authentication boundary
+## Why other AI clients are not supported
 
-The private local MCP service requires a bearer credential. The bundled tunnel client injects that bearer header when it forwards MCP traffic to Rel.AI. ChatGPT does not receive or need the local Rel.AI bearer token.
+Rel.AI does not currently support Claude, Cursor, Gemini, or other AI clients. The desktop app, Secure MCP Tunnel connection, work-session model, workspace permissions, checks, recovery, and publishing rules are designed and tested around ChatGPT. Supporting another client would require its own connection and compatibility contract.
+
+## Local connection security
+
+The local Rel.AI MCP service requires a bearer credential. The bundled tunnel client adds that credential when it forwards MCP traffic to Rel.AI. ChatGPT does not receive or need the local Rel.AI bearer token.
 
 The public Rel.AI runtime no longer exposes a local OAuth authorization server. `/register`, `/authorize`, `/token`, legacy `/sse`, and legacy `/messages` are not supported connection paths.
 
@@ -48,7 +49,7 @@ Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/t
 
 ## Reconnects and tool changes
 
-A tunnel reconnect restores transport only. It does not select a workspace, infer a `work_id`, replay an uncertain mutation, or mark repository work complete.
+A tunnel reconnect restores the connection only. It does not choose a workspace, pick a work session, repeat an uncertain edit, or mark repository work complete.
 
 When the public tool schema changes, use the current ChatGPT integration refresh/review flow so ChatGPT observes the current Rel.AI tool surface. Application updates, tunnel connectivity, and host-side tool refresh are separate states.
 
@@ -62,4 +63,4 @@ If ChatGPT cannot reach Rel.AI:
 - confirm the local connection port is available; and
 - open **Diagnostics** for sanitized tunnel and local-service logs.
 
-If a workspace cannot be found, confirm its alias under **Workspaces**, then retry a read-only `relai_work begin` + `relai_snapshot` request. Opening `/mcp` in a normal browser is not a connection test; MCP clients use `POST /mcp`.
+If a workspace cannot be found, confirm its alias under **Workspaces**, then retry a simple read-only request in ChatGPT. Opening `/mcp` in a normal browser is not a connection test; MCP clients use `POST /mcp`.

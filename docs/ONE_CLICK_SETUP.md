@@ -1,6 +1,6 @@
 # Rel.AI MCP One-Click Setup
 
-This guide covers the packaged desktop application. Rel.AI lets you use ChatGPT web like a repository-capable coding agent through one supported transport: **OpenAI Secure MCP Tunnel**. ChatGPT remains the conversation and reasoning surface; repository access and tool execution stay on the computer running Rel.AI.
+This guide covers the packaged desktop application. Rel.AI connects ChatGPT web to local projects through one supported connection: **OpenAI Secure MCP Tunnel**. ChatGPT provides the conversation and reasoning; project files and commands stay on the computer running Rel.AI.
 
 ## Before you begin
 
@@ -34,7 +34,7 @@ ChatGPT
   -> configured local workspace
 ```
 
-Repository files, absolute workspace paths, commands, Git operations, tests, builds, managed processes, workspace configuration, task history, and local analytics remain on this computer. The tunnel is transport only; it does not become the authority for repository work.
+Repository files, full workspace paths, commands, Git operations, tests, builds, managed processes, workspace configuration, task history, and local analytics stay on this computer. The tunnel is the private connection between ChatGPT and Rel.AI; it does not own your project or decide what happens to a work session.
 
 ## Add your first workspace
 
@@ -48,7 +48,7 @@ Repository files, absolute workspace paths, commands, Git operations, tests, bui
 Use a read-only first request before allowing edits:
 
 ```text
-Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain the returned work_id, then call relai_snapshot with that work_id. Do not modify files yet.
+Use Rel.AI MCP with workspace "myapp". Start one work session, read the project, and explain how the relevant parts work before changing anything.
 ```
 
 ## Connection and Usage
@@ -57,7 +57,7 @@ Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain
 
 **Usage** is built from locally observed Rel.AI activity. It is not ChatGPT model-token or billing accounting.
 
-For ChatGPT-side usage, OpenAI documents that Apps follow the normal ChatGPT rate limits for your plan, while Codex usage counts toward agentic usage. Rel.AI therefore does not consume the Codex agentic allowance. GPT-5.6 Sol powers Medium, High, and Extra High reasoning on eligible plans; ChatGPT Apps exclude Pro models, so GPT-5.6 Sol Pro is not available through Rel.AI.
+Rel.AI uses the normal ChatGPT app/tool path rather than Codex. OpenAI documents that ChatGPT Apps use the normal limits for your plan while Codex usage counts toward agentic usage, so Rel.AI does not draw from the Codex agentic allowance. Your normal ChatGPT plan limits still apply. See [Connecting to ChatGPT](CONNECTING_TO_CHATGPT.md) for the current usage and compatibility notes.
 
 ## Application updates
 
