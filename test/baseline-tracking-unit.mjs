@@ -10,6 +10,10 @@ function git(args, options = {}) {
 }
 
 import { writeSessionPolicy, resolvePolicy, captureBaselineDirty } from "../src/policyResolver.js";
+
+const policyResolverSource = fs.readFileSync(new URL('../src/policyResolver.js', import.meta.url), 'utf8');
+assert.doesNotMatch(policyResolverSource, /spawnSync/, 'session baseline capture must never block the MCP event loop');
+assert.match(policyResolverSource, /await runProcess\('git'/, 'session baseline capture must use the asynchronous process runner');
 import { classifyStatusOwnership } from "../src/localRepoBridge.js";
 
 function makeRepo() {
@@ -29,7 +33,7 @@ function makeRepo() {
   const repo = makeRepo();
   fs.writeFileSync(path.join(repo, 'pre-existing.txt'), 'dirty\n');
   fs.writeFileSync(path.join(repo, 'tracked.txt'), 'modified\n');
-  const baseline = captureBaselineDirty(repo);
+  const baseline = await captureBaselineDirty(repo);
   assert.ok(baseline.includes('pre-existing.txt'), 'untracked file must appear in baseline');
   assert.ok(baseline.includes('tracked.txt'), 'modified tracked file must appear in baseline');
   fs.rmSync(repo, { recursive: true, force: true });
@@ -38,15 +42,15 @@ function makeRepo() {
 // 2. captureBaselineDirty returns [] for non-git dir
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-baseline-nogit-'));
-  const baseline = captureBaselineDirty(dir);
+  const baseline = await captureBaselineDirty(dir);
   assert.deepEqual(baseline, [], 'non-git dir must return empty array');
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
 // 3. captureBaselineDirty with null/undefined → []
-assert.deepEqual(captureBaselineDirty(null), []);
-assert.deepEqual(captureBaselineDirty(undefined), []);
-assert.deepEqual(captureBaselineDirty(''), []);
+assert.deepEqual(await captureBaselineDirty(null), []);
+assert.deepEqual(await captureBaselineDirty(undefined), []);
+assert.deepEqual(await captureBaselineDirty(''), []);
 
 // 4. writeSessionPolicy persists baselineDirty and resolvePolicy exposes it
 {
@@ -54,7 +58,7 @@ assert.deepEqual(captureBaselineDirty(''), []);
   fs.writeFileSync(path.join(repo, 'leftover.txt'), 'x\n');
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
-  writeSessionPolicy(config, 'myapp', { taskHint: 'fix bug', workspaceRoot: repo });
+  await writeSessionPolicy(config, 'myapp', { taskHint: 'fix bug', workspaceRoot: repo });
   const policy = resolvePolicy({ alias: 'myapp', path: repo }, config);
   assert.equal(policy.sessionActive, true);
   assert.ok(Array.isArray(policy.baselineDirty), 'baselineDirty must be array');
@@ -68,7 +72,7 @@ assert.deepEqual(captureBaselineDirty(''), []);
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
   // Seed session file with baseline
-  writeSessionPolicy(config, 'myapp', { taskHint: 'x' });
+  await writeSessionPolicy(config, 'myapp', { taskHint: 'x' });
   // Manually inject baselineDirty into the session file
   const sessionFile = path.join(stateDir, 'sessions', 'myapp-policy.json');
   const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
@@ -109,7 +113,7 @@ assert.deepEqual(captureBaselineDirty(''), []);
 {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
-  writeSessionPolicy(config, 'myapp', {});
+  await writeSessionPolicy(config, 'myapp', {});
   const sessionFile = path.join(stateDir, 'sessions', 'myapp-policy.json');
   const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
   data.baselineDirty = ['lib/old/zone_validator.dart'];

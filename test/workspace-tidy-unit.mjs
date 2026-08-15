@@ -32,7 +32,7 @@ function makeTempRepo() {
   try {
     // A session must be active for untracked files to be attributable as
     // session-owned; the artifact is created after the session starts.
-    writeSessionPolicy(config, workspace.alias, { workspaceRoot: dir });
+    await writeSessionPolicy(config, workspace.alias, { workspaceRoot: dir });
     const artifact = path.join(dir, 'generated.svg');
     fs.writeFileSync(artifact, '<svg></svg>');
 
@@ -60,7 +60,7 @@ function makeTempRepo() {
   const workspace = { alias: 'test', path: dir };
   const config = { stateDir };
   try {
-    writeSessionPolicy(config, workspace.alias, { workspaceRoot: dir });
+    await writeSessionPolicy(config, workspace.alias, { workspaceRoot: dir });
     const artifact = path.join(dir, 'generated.svg');
     fs.writeFileSync(artifact, '<svg>old</svg>');
     const plan = await workspaceTidyPlan(workspace, config, {});

@@ -24,7 +24,7 @@ try {
     assert.equal(policy.trusted, true);
   }
 
-  writeSessionPolicy(config, alias, { taskHint: 'fix auth bug' });
+  await writeSessionPolicy(config, alias, { taskHint: 'fix auth bug' });
   const session = readSessionPolicy(config, alias);
   assert.equal(session.workspace, alias);
   assert.equal(session.taskHint, 'fix auth bug');
@@ -39,7 +39,7 @@ try {
   assert.match(active.sessionCreatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   resetSession();
-  writeSessionPolicy(config, alias, { workspaceRoot: path.join(stateDir, 'missing-workspace') });
+  await writeSessionPolicy(config, alias, { workspaceRoot: path.join(stateDir, 'missing-workspace') });
   const failedBaseline = resolvePolicy({ alias }, config);
   assert.equal(failedBaseline.sessionActive, true);
   assert.equal(failedBaseline.baselineCaptured, false);

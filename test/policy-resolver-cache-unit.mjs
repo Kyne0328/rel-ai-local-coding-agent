@@ -24,7 +24,7 @@ function taskFile(alias, taskId) {
 try {
   const alias = 'app';
   const taskId = 'task-1';
-  writeSessionPolicy(config, alias, { workspaceRoot, taskId, taskHint: 'cache test' });
+  await writeSessionPolicy(config, alias, { workspaceRoot, taskId, taskHint: 'cache test' });
   const file = taskFile(alias, taskId);
   const persistedBeforeTouch = fs.readFileSync(file, 'utf8');
 
@@ -36,7 +36,7 @@ try {
   );
   assert.equal(readSessionPolicy(config, alias, taskId)?.taskHint, 'cache test');
   assert.equal(
-    ensureSessionStarted(config, alias, workspaceRoot, { taskId, taskHint: 'ignored' }),
+    await ensureSessionStarted(config, alias, workspaceRoot, { taskId, taskHint: 'ignored' }),
     false,
     'an active cached session must not recapture baseline state'
   );

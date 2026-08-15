@@ -2,8 +2,7 @@ import { getCurrentToolActivityContext } from './toolActivity.js';
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { spawnSync } from "node:child_process";
-import { resolveGitExecutable } from "./gitExecutable.js";
+import { runProcess } from './process.js';
 import { gitStatusArgs, parseGitStatus } from "./repo/gitStatus.js";
 
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
@@ -124,19 +123,18 @@ function readSessionPolicy(config, alias, taskId = '') {
   return policies.length === 1 ? policies[0] : null;
 }
 
-function captureBaselineState(workspaceRoot) {
+async function captureBaselineState(workspaceRoot) {
   if (!workspaceRoot) return { ok: false, files: [], error: 'workspace root is missing' };
   try {
-    const git = resolveGitExecutable();
-    if (!git) return { ok: false, files: [], error: 'Git executable was not found' };
-    const result = spawnSync(git, gitStatusArgs({ branch: false }), {
+    // Keep the branch record first so process-output normalization cannot strip
+    // the leading status column from records such as " M file.js".
+    const result = await runProcess('git', gitStatusArgs(), {
       cwd: workspaceRoot,
-      encoding: 'utf8',
       timeout: 15000,
-      maxBuffer: 8 * 1024 * 1024
+      maxOutputBytes: 8 * 1024 * 1024
     });
-    if (result.status !== 0) {
-      return { ok: false, files: [], error: String(result.stderr || result.stdout || `git status exited ${result.status}`).trim() };
+    if (result.exitCode !== 0 || result.stdoutTruncated) {
+      return { ok: false, files: [], error: String(result.error || result.stderr || result.stdout || `git status exited ${result.exitCode}`).trim() };
     }
     const files = parseGitStatus(result.stdout || '').entries.map((entry) => entry.path);
     return { ok: true, files, error: '' };
@@ -146,17 +144,17 @@ function captureBaselineState(workspaceRoot) {
   }
 }
 
-function captureBaselineDirty(workspaceRoot) {
-  return captureBaselineState(workspaceRoot).files;
+async function captureBaselineDirty(workspaceRoot) {
+  return (await captureBaselineState(workspaceRoot)).files;
 }
 
-function writeSessionPolicy(config, alias, { taskHint, workspaceRoot, taskId } = {}) {
+async function writeSessionPolicy(config, alias, { taskHint, workspaceRoot, taskId } = {}) {
   const resolved = String(taskId || '').trim();
   const filePath = resolved
     ? taskSessionFilePath(config, alias, resolved)
     : legacySessionFilePath(config, alias);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const baseline = captureBaselineState(workspaceRoot);
+  const baseline = await captureBaselineState(workspaceRoot);
   const now = new Date().toISOString();
   const data = {
     workspace: alias,
@@ -203,7 +201,7 @@ function persistPolicy(filePath, policy) {
   fs.writeFileSync(filePath, `${JSON.stringify(policy, null, 2)}\n`, { mode: 0o600 });
 }
 
-function ensureSessionStarted(config, alias, workspaceRoot, options = {}) {
+async function ensureSessionStarted(config, alias, workspaceRoot, options = {}) {
   if (!alias) return false;
   const taskId = String(options.taskId || currentTaskId() || '').trim();
   const existing = readSessionPolicy(config, alias, taskId);
@@ -211,7 +209,7 @@ function ensureSessionStarted(config, alias, workspaceRoot, options = {}) {
     touchSessionPolicy(config, alias, taskId);
     return false;
   }
-  writeSessionPolicy(config, alias, { workspaceRoot, taskId, taskHint: options.taskHint });
+  await writeSessionPolicy(config, alias, { workspaceRoot, taskId, taskHint: options.taskHint });
   return true;
 }
 
