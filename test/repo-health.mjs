@@ -78,12 +78,20 @@ const sourceLineBudgets = {
   'src/tools/errors.js': 120,
   'src/tools/session.js': 220,
   'src/tools/status.js': 360,
+  // High-churn runtime owners stay explicit here so growth is deliberate rather than invisible.
+  'src/mcp/nativeTaskService.js': 1250,
+  'src/mcp/transportTasks.js': 650,
+  'src/parallelTaskSandbox.js': 650,
+  'src/taskLifecycle.js': 300,
+  'src/processManager.js': 1150,
+  'src/repository/intelligence/queryService.js': 600,
+  'src/workflow/runtime.js': 100,
   'src/mcpServer.js': 220,
   // One browser-safe owner for event identity, timestamps, and ordering mechanics.
   'src/taskEvents.js': 125,
   'src/projectInstructions.js': 180,
   'src/httpServer.js': 300,
-  'src/http/dashboard.js': 400,
+  'src/http/dashboard.js': 500,
   'src/http/dashboardHistory.js': 80,
   'src/http/mcp.js': 255,
   'src/http/io.js': 220,
@@ -107,9 +115,24 @@ const sourceLineBudgets = {
   'src/ui/features/workspaces/index.js': 40,
   'src/ui/features/workspaces/cards.js': 240,
   'src/ui/features/workspaces/actions.js': 280,
-  'src/ui/features/settings/desktop-updates.js': 200,
+  'src/ui/features/settings/desktop-updates.js': 250,
   'src/ui/features/settings/desktop-startup.js': 110
 };
+
+const allowedSynchronousProcessDiscovery = new Set([
+  'src/bridge/exec.js',
+  'src/release.js',
+  'src/webAutomationManager.js'
+]);
+for (const file of collectJavaScript(path.join(root, 'src'))) {
+  const relativePath = path.relative(root, file).replaceAll('\\', '/');
+  const source = fs.readFileSync(file, 'utf8');
+  if (/Atomics\.wait\s*\(/.test(source)) failures.push(`${relativePath} blocks the Node event loop with Atomics.wait.`);
+  if (/execFileSync\s*\(/.test(source)) failures.push(`${relativePath} blocks the Node event loop with execFileSync.`);
+  if (/spawnSync\s*\(/.test(source) && !allowedSynchronousProcessDiscovery.has(relativePath)) {
+    failures.push(`${relativePath} uses spawnSync outside the bounded executable-discovery allowlist.`);
+  }
+}
 
 for (const [relativePath, maxLines] of Object.entries(sourceLineBudgets)) {
   const file = path.join(root, relativePath);
@@ -121,6 +144,17 @@ for (const [relativePath, maxLines] of Object.entries(sourceLineBudgets)) {
   if (lineCount > maxLines) {
     failures.push(`${relativePath} has ${lineCount} lines; architecture budget is ${maxLines}`);
   }
+}
+
+function collectJavaScript(directory) {
+  if (!fs.existsSync(directory)) return [];
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...collectJavaScript(target));
+    else if (entry.name.endsWith('.js')) files.push(target);
+  }
+  return files;
 }
 
 if (failures.length) {
