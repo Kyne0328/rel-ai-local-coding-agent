@@ -4,93 +4,12 @@ import {
   getCatalogToolDefinition,
   getCatalogToolDefinitions,
   getOperationDefinition,
-  getOperationDefinitions
+  getOperationDefinitions,
+  getPublicActionContract
 } from './actionDefinitions.js';
-import { schemaFromDefinition } from './schemaBuilder.js';
+import { ACTION_REGISTRY } from './actionRegistry.js';
 
 const TOOL_SURFACE_VERSION = 42;
-const READ = 'repository:read';
-const WRITE = 'repository:write';
-const EXECUTE = 'command:execute';
-const PROCESS = 'process:manage';
-const PUBLISH = 'git:publish';
-
-// This registry is the single owner of every public action's executable operation,
-// authorization capability, approval rule, and action-shape behavior. Everything
-// else in this module is derived from these entries plus the canonical operation
-// definitions, so an action cannot silently drift from its runtime policy.
-const ACTION_REGISTRY = Object.freeze({
-  relai_work: Object.freeze({
-    begin: operation('relai_begin_work', { capability: READ }),
-    status: operation('relai_status', { capability: READ }),
-    finish: operation('relai_finish_work', { capability: READ }),
-    cancel: operation('relai_cancel_work', { capability: READ })
-  }),
-  relai_snapshot: Object.freeze({ default: operation('relai_repo_snapshot', { capability: READ }) }),
-  relai_read: Object.freeze({ default: operation('relai_read', { capability: READ }) }),
-  relai_search: Object.freeze({
-    text: operation('relai_search', { capability: READ }),
-    semantic: operation('relai_semantic_search', { capability: READ })
-  }),
-  relai_inspect: Object.freeze({
-    symbol: operation('relai_code_inspect', { capability: READ, keepAction: true }),
-    references: operation('relai_code_inspect', { capability: READ, keepAction: true }),
-    related: operation('relai_code_inspect', { capability: READ, keepAction: true }),
-    impact: operation('relai_code_inspect', { capability: READ, keepAction: true }),
-    trace: operation('relai_code_inspect', { capability: READ, keepAction: true }),
-    diagnostics: operation('relai_code_inspect', { capability: READ, keepAction: true }),
-    architecture: operation('relai_code_inspect', { capability: READ, keepAction: true })
-  }),
-  relai_edit: Object.freeze({ default: operation('relai_edit', { capability: WRITE }) }),
-  relai_exec: Object.freeze({ default: operation('relai_exec', { capability: EXECUTE }) }),
-  relai_process: Object.freeze({
-    start: operation('relai_process_start', { capability: PROCESS }),
-    read: operation('relai_process_read', { capability: READ }),
-    write: operation('relai_process_write', { capability: PROCESS }),
-    stop: operation('relai_process_stop', { capability: PROCESS }),
-    list: operation('relai_process_list', { capability: READ })
-  }),
-  relai_ui: Object.freeze({
-    start: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    navigate: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    snapshot: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    interact: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    screenshot: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    console: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    network: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    viewport: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    reload: operation('relai_ui', { capability: PROCESS, keepAction: true }),
-    stop: operation('relai_ui', { capability: PROCESS, keepAction: true })
-  }),
-  relai_validate: Object.freeze({
-    checks: operation('relai_run_checks', { capability: EXECUTE }),
-    diagnostics: operation('relai_diagnostics_run', { capability: EXECUTE }),
-    http: operation('relai_http_probe', { capability: READ })
-  }),
-  relai_changes: Object.freeze({
-    diff: operation('relai_diff', { capability: READ }),
-    restore: operation('relai_restore_paths', { capability: WRITE }),
-    reset: operation('relai_reset_workspace', {
-      capability: WRITE,
-      approval: args => ({ message: `Discard workspace changes using ${args.removeUntracked ? 'RESET_AND_CLEAN' : 'RESET'}?` })
-    }),
-    tidy_plan: operation('relai_tidy_plan', { capability: READ }),
-    tidy_run: operation('relai_tidy_run', { capability: WRITE })
-  }),
-  relai_publish: Object.freeze({
-    commit: operation('relai_git_commit', {
-      capability: WRITE,
-      approval: args => (args.addAll === true || args.sensitiveAuthorization
-        ? { message: `Create the requested Git commit${args.addAll ? ' including all current changes' : ''}?` }
-        : null)
-    }),
-    push: operation('relai_git_push', {
-      capability: PUBLISH,
-      approval: args => ({ message: `Publish branch ${args.branch || '(current branch)'} to ${args.remote || 'origin'}?` })
-    }),
-    draft_pr: operation('relai_git_draft_pr', { capability: READ })
-  })
-});
 
 const TOOL_ACTION_CATALOG = Object.freeze(buildCatalog());
 const ACTION_BY_KEY = new Map(TOOL_ACTION_CATALOG.map(entry => [catalogKey(entry.publicTool, entry.action), entry]));
@@ -109,7 +28,7 @@ function buildCatalog() {
       if (!operationMetadata) {
         throw new Error(`Catalog action ${publicTool}:${action} references unknown operation '${mapping.operationName}'.`);
       }
-      const contract = actionContract(publicDefinition, action, operationMetadata);
+      const contract = actionContract(publicDefinition, action);
       const capability = mapping.capability;
       if (!capability) throw new Error(`Catalog action ${publicTool}:${action} has no authorization capability.`);
       entries.push(Object.freeze({
@@ -137,31 +56,8 @@ function buildCatalog() {
   return entries;
 }
 
-function actionContract(publicDefinition, action, operationMetadata) {
-  if (action === 'default') {
-    const schema = schemaFromDefinition(publicDefinition).inputSchema;
-    return Object.freeze({
-      fields: Object.freeze(Object.keys(schema.properties || {}).filter(field => field !== 'action').sort()),
-      required: Object.freeze([...(schema.required || [])].filter(field => field !== 'action').sort())
-    });
-  }
-  const contract = publicDefinition.actionContracts?.find(item => item.action === action);
-  if (!contract) throw new Error(`Catalog action ${publicDefinition.name}:${action} has no public action contract.`);
-  const required = [...contract.required];
-  if (operationMetadata.behavior?.taskScope === 'required' && !required.includes('work_id')) required.push('work_id');
-  return Object.freeze({
-    fields: Object.freeze([...contract.fields]),
-    required: Object.freeze(required.sort())
-  });
-}
-
-function operation(operationName, options = {}) {
-  return Object.freeze({
-    operationName,
-    keepAction: options.keepAction === true,
-    capability: String(options.capability || ''),
-    approval: typeof options.approval === 'function' ? options.approval : null
-  });
+function actionContract(publicDefinition, action) {
+  return getPublicActionContract(publicDefinition, action);
 }
 
 function catalogKey(publicTool, action) {
@@ -214,9 +110,11 @@ function normalizeOperationArguments(publicName, action, entry, args) {
   if (entry.keepAction) allowed.add('action');
   const unsupported = Object.keys(args).filter(field => !allowed.has(field));
   if (unsupported.length) {
-    const publicDefinition = getCatalogToolDefinition(publicName);
+    const publicTool = TOOL_CATALOG.find(item => item.definition.name === publicName);
+    if (!publicTool) throw new Error(`Unknown public tool '${publicName}'.`);
     const publicFields = new Set([
-      ...Object.keys(schemaFromDefinition(publicDefinition).inputSchema?.properties || {}),
+      'action',
+      ...publicTool.actions.flatMap(item => item.fields || []),
       '_operationTaskId'
     ]);
     const unknown = unsupported.filter(field => !publicFields.has(field));

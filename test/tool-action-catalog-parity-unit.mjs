@@ -14,11 +14,11 @@ import {
 } from '../src/tools/actionCatalog.js';
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSchemas } from '../src/tools/schema.js';
-import { schemaFromDefinition } from '../src/tools/schemaBuilder.js';
 
 const catalog = getToolActionCatalog();
 const catalogTools = getCatalogTools();
 const currentDefinitions = getToolDefinitions();
+const currentSchemas = new Map(getToolSchemas().map(item => [item.name, item]));
 const currentMetadata = new Map(getToolMetadata().map(item => [item.name, item]));
 
 assert.equal(catalogTools.length, 12);
@@ -26,22 +26,24 @@ assert.equal(catalog.length, 43);
 assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, 43);
 assert.deepEqual(getCatalogToolDefinitions(), currentDefinitions);
 assert.deepEqual(
-  getCatalogToolDefinitions().map(definition => {
-    const { outputSchema: _outputSchema, ...schema } = schemaFromDefinition(definition);
-    return schema;
-  }),
-  getToolSchemas().map(schema => {
-    const { outputSchema: _outputSchema, ...rest } = schema;
-    return rest;
-  })
+  getCatalogToolDefinitions().map(definition => ({
+    name: definition.name,
+    title: definition.title,
+    description: definition.description,
+    annotations: definition.annotations
+  })),
+  getToolSchemas().map(schema => ({
+    name: schema.name,
+    title: schema.title,
+    description: schema.description,
+    annotations: schema.annotations
+  }))
 );
 assert.deepEqual(
   catalogTools.map(tool => ({ name: tool.definition.name, actions: tool.actions.map(action => action.action) })),
   currentDefinitions.map(definition => ({
     name: definition.name,
-    actions: definition.actionContracts?.length
-      ? definition.actionContracts.map(contract => contract.action)
-      : ['default']
+    actions: currentMetadata.get(definition.name)?.actions?.map(action => action.action) || ['default']
   }))
 );
 
@@ -76,7 +78,7 @@ for (const entry of catalog) {
 
   const toolMetadata = currentMetadata.get(entry.publicTool);
   if (entry.action === 'default') {
-    const schema = schemaFromDefinition(currentDefinitions.find(item => item.name === entry.publicTool)).inputSchema;
+    const schema = currentSchemas.get(entry.publicTool).inputSchema;
     assert.deepEqual(entry.fields, Object.keys(schema.properties || {}).filter(field => field !== 'action').sort());
     assert.deepEqual(entry.required, [...(schema.required || [])].filter(field => field !== 'action').sort());
   } else {

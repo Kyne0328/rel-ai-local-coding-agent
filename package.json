@@ -162,7 +162,8 @@
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "playwright-core": "^1.62.1",
     "tree-sitter-wasms": "^0.1.13",
-    "web-tree-sitter": "^0.25.10"
+    "web-tree-sitter": "^0.25.10",
+    "zod": "^4.4.3"
   },
   "bundledDependencies": [
     "@modelcontextprotocol/server",
@@ -173,7 +174,8 @@
     "@opentelemetry/semantic-conventions",
     "playwright-core",
     "tree-sitter-wasms",
-    "web-tree-sitter"
+    "web-tree-sitter",
+    "zod"
   ],
   "overrides": {
     "@hono/node-server": "2.0.12",
@@ -188,6 +190,7 @@
     "@opentelemetry/semantic-conventions",
     "playwright-core",
     "tree-sitter-wasms",
-    "web-tree-sitter"
+    "web-tree-sitter",
+    "zod"
   ]
 }

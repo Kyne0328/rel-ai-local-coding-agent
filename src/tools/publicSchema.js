@@ -23,7 +23,7 @@ function connectorSafeInputSchema(inputSchema) {
   const allOf = [];
   if (Array.isArray(variants) && variants.length) {
     if (variants.every(isActionVariant)) {
-      allOf.push(...variants.map(actionVariantGuard));
+      allOf.push(...variants.map(branch => actionVariantGuard(branch, schema.properties || {})));
     } else {
       allOf.push({ oneOf: variants });
     }
@@ -35,15 +35,23 @@ function isActionVariant(branch) {
   return branch?.properties?.action?.const != null;
 }
 
-function actionVariantGuard(branch) {
-  const { properties = {}, required = [], ...constraints } = branch;
+function actionVariantGuard(branch, sharedProperties) {
+  const {
+    type: _type,
+    properties = {},
+    required = [],
+    additionalProperties: _additionalProperties,
+    ...constraints
+  } = branch;
   const { action, ...branchProperties } = properties;
+  const specificProperties = Object.fromEntries(Object.entries(branchProperties)
+    .filter(([name, fieldSchema]) => JSON.stringify(fieldSchema) !== JSON.stringify(sharedProperties[name])));
   const branchRequired = required.filter(field => field !== 'action');
   return {
     if: { properties: { action }, required: ['action'] },
     then: {
       ...constraints,
-      ...(Object.keys(branchProperties).length ? { properties: branchProperties } : {}),
+      ...(Object.keys(specificProperties).length ? { properties: specificProperties } : {}),
       ...(branchRequired.length ? { required: branchRequired } : {})
     }
   };
