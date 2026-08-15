@@ -1,3 +1,5 @@
+import { OPERATION_IDS as OP } from './operationIds.js';
+
 function enhanceToolError(toolName, error) {
   const raw = error instanceof Error ? error.message : String(error);
   const append = (extra) => {
@@ -11,7 +13,7 @@ function enhanceToolError(toolName, error) {
 }
 
 function editErrorHint(toolName, raw, append) {
-  if (toolName !== 'relai_edit') return null;
+  if (toolName !== OP.EDIT && toolName !== 'relai_edit') return null;
   if (/Invalid IPv6 URL|Invalid URL|ERR_INVALID_URL/i.test(raw)) {
     return append('Edit payload was rejected by a URL parser, likely on the client transport. Use relai_edit with content, updateText, or smaller oldText/newText blocks.');
   }
@@ -28,7 +30,7 @@ function editErrorHint(toolName, raw, append) {
 }
 
 function patchErrorHint(toolName, raw, append, error) {
-  if (toolName !== 'relai_edit') return null;
+  if (toolName !== OP.EDIT && toolName !== 'relai_edit') return null;
   if (/corrupt patch|patch .* invalid|did not contain any valid|patch failed/i.test(raw)) {
     return append("Accepted updateText formats are Git unified diff and structured OpenAI patch format. Re-read the current files before regenerating the patch.");
   }
@@ -42,10 +44,10 @@ function patchErrorHint(toolName, raw, append, error) {
 }
 
 function operationForTool(toolName) {
-  if (toolName === 'relai_read' || toolName === 'relai_search' || toolName === 'relai_repo_snapshot') return 'read';
-  if (toolName === 'relai_restore_paths' || toolName === 'relai_reset_workspace') return 'restore';
-  if (toolName === 'relai_git_commit') return 'commit';
-  if (toolName === 'relai_diff' || toolName === 'relai_git_draft_pr') return 'review';
+  if ([OP.READ, OP.SEARCH_TEXT, OP.SEARCH_SEMANTIC, OP.SNAPSHOT, OP.INSPECT, 'relai_read', 'relai_search', 'relai_snapshot', 'relai_inspect'].includes(toolName)) return 'read';
+  if ([OP.CHANGES_RESTORE, OP.CHANGES_RESET, 'relai_changes'].includes(toolName)) return 'restore';
+  if ([OP.PUBLISH_COMMIT, 'relai_publish'].includes(toolName)) return 'commit';
+  if ([OP.CHANGES_DIFF, OP.PUBLISH_DRAFT_PR].includes(toolName)) return 'review';
   return 'write';
 }
 

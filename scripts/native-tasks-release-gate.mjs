@@ -21,7 +21,7 @@ const RELEASE_GATE_CHECKS = Object.freeze([
   check('stdio_discovery', 'stdio discovery and public tool surface', 'test/smoke.mjs'),
   check('http_discovery', 'HTTP discovery and native Tasks advertisement', 'test/http-smoke.mjs'),
   check('http_authentication', 'HTTP authentication and stateless ChatGPT initialization', 'test/http-auth-smoke.mjs'),
-  check('modern_no_tasks_fallback', 'Modern client bounded synchronous operation without Tasks capability', 'test/chatgpt-local-compat-smoke.mjs')
+  check('current_surface_without_tasks', 'Current tool surface remains synchronous without Tasks capability', 'test/chatgpt-local-hard-cutover-smoke.mjs')
 ]);
 
 const RELEASE_GATE_BLOCKERS = Object.freeze([

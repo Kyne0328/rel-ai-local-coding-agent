@@ -335,7 +335,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
   const repoProbe = ensureGitRepo(workspace, config);
   repoProbe.catch(() => {});
   const message = String(args.message || "").trim();
-  if (!message) throw new Error("relai_git_commit requires a non-empty commit message.");
+  if (!message) throw new Error('relai_publish action "commit" requires a non-empty commit message.');
   const dryRun = Boolean(args.dryRun);
   const authorization = normalizeSensitiveAuthorization(workspace, args);
   const paths = Array.isArray(args.paths)
@@ -452,13 +452,13 @@ function normalizeGitPath(value) {
 // ("+HEAD:main"), option-looking values, and git's own invalid-ref forms.
 function assertPlainBranchName(branch) {
   if (branch.includes(":")) {
-    throw new Error(`relai_git_push expects a branch name, not a refspec: ${branch}`);
+    throw new Error(`relai_publish action "push" expects a branch name, not a refspec: ${branch}`);
   }
   if (branch.startsWith("+") || branch.startsWith("-")) {
-    throw new Error(`relai_git_push branch must not start with '+' or '-': ${branch}`);
+    throw new Error(`relai_publish action "push" branch must not start with '+' or '-': ${branch}`);
   }
   if (/[\s~^?*[\\]/.test(branch) || branch.includes("..") || branch.includes("@{") || branch.endsWith(".lock") || branch.endsWith("/")) {
-    throw new Error(`relai_git_push branch name is not a valid ref: ${branch}`);
+    throw new Error(`relai_publish action "push" branch name is not a valid ref: ${branch}`);
   }
 }
 
@@ -466,7 +466,7 @@ async function relaiGitPush(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const remote = await resolvePublishRemote(workspace, config, args.remote || "origin");
   const branch = String(args.branch || await currentGitBranch(workspace, config)).trim();
-  if (!branch) throw new Error("relai_git_push could not determine the branch to push.");
+  if (!branch) throw new Error('relai_publish action "push" could not determine the branch to push.');
   // git push treats this argument as a refspec: ":main" deletes the remote branch and
   // "+HEAD:main" force-pushes over it. Accept a plain branch name only.
   assertPlainBranchName(branch);

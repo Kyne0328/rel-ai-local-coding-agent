@@ -61,7 +61,7 @@ const unsubscribe = tracker.onToolActivity(event => {
 });
 
 try {
-  const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'app', createTask: true, title: 'Benchmark task' });
+  const start = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'app', createTask: true, title: 'Benchmark task' });
   const taskId = start.taskId;
   start({ ok: true });
   const historyDirectory = path.join(config.stateDir, 'sessions');

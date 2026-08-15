@@ -110,7 +110,7 @@ for (const entry of catalog) {
     approvalRequirement(entry.publicTool, args),
     `${entry.publicTool}:${entry.action} approval policy must have one meaning across the catalog and runtime`
   );
-  if (entry.operationName === 'relai_git_commit') {
+  if (entry.publicTool === 'relai_publish' && entry.action === 'commit') {
     const addAllArgs = { ...args, addAll: true };
     assert.deepEqual(catalogApprovalRequirement(entry.publicTool, addAllArgs), approvalRequirement(entry.publicTool, addAllArgs));
   }

@@ -69,7 +69,7 @@
     "release": "node scripts/release-bump.mjs",
     "test:release": "npm run release:check && node test/release-workflow-smoke.mjs",
     "test:context": "node test/workspace-context-smoke.mjs",
-    "test:compat": "node test/chatgpt-local-compat-smoke.mjs",
+    "test:hard-cutover": "node test/chatgpt-local-hard-cutover-smoke.mjs",
     "test:public-workflow": "node test/workflow-smoke.mjs",
     "test:connector-wording": "node test/connector-wording-smoke.mjs",
     "test:regressions": "node test/regression-fixes-smoke.mjs",

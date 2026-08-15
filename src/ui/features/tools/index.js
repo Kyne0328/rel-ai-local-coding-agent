@@ -175,11 +175,10 @@ function toolCard(tool) {
   const card = document.createElement('article');
   const capabilities = toolCapabilities(tool);
   const parameters = Array.isArray(tool.parameters) ? tool.parameters : [];
-  const compatibility = tool?.state === 'deprecated' || tool?.category === 'Compatibility';
-  card.className = `tool-card ${capabilities.map(capability => `capability-${capability}`).join(' ')}${compatibility ? ' compatibility' : ''}`;
+  card.className = `tool-card ${capabilities.map(capability => `capability-${capability}`).join(' ')}`;
   card.innerHTML = `
     <div class="tool-card-head">
-      <span class="tool-capability">${esc(compatibility ? 'Compatibility' : capabilities.map(capabilityLabel).join(' · '))}</span>
+      <span class="tool-capability">${esc(capabilities.map(capabilityLabel).join(' · '))}</span>
       <span class="tool-parameter-count">${parameters.length} parameter${parameters.length === 1 ? '' : 's'}</span>
     </div>
     <div class="tool-card-title">
@@ -210,14 +209,8 @@ export function orderToolsForCatalog(tools = []) {
   return [...(Array.isArray(tools) ? tools : [])].sort((left, right) => {
     const capabilityDifference = capabilityRank(left) - capabilityRank(right);
     if (capabilityDifference) return capabilityDifference;
-    const lifecycleDifference = lifecycleRank(left) - lifecycleRank(right);
-    if (lifecycleDifference) return lifecycleDifference;
     return toolSortLabel(left).localeCompare(toolSortLabel(right), 'en-US', { numeric: true, sensitivity: 'base' });
   });
-}
-
-function lifecycleRank(tool) {
-  return tool?.state === 'deprecated' || tool?.category === 'Compatibility' ? 1 : 0;
 }
 
 function capabilityRank(tool) {
@@ -232,24 +225,11 @@ export function toolCapabilities(tool) {
   const explicit = Array.isArray(tool?.capabilities)
     ? tool.capabilities.filter(capability => CAPABILITY_IDS.has(capability))
     : [];
-  if (explicit.length) return [...new Set(explicit)];
-  return [legacyToolCapability(tool?.name)];
+  return explicit.length ? [...new Set(explicit)] : ['inspect'];
 }
 
 function toolCapability(tool) {
   return toolCapabilities(tool)[0] || 'inspect';
-}
-
-function legacyToolCapability(name) {
-  const value = String(name || '');
-  if (value === 'relai_work') return 'workflow';
-  if (value === 'relai_exec' || value === 'relai_process') return 'execute';
-  if (value === 'relai_changes') return 'review';
-  if (value.startsWith('relai_git_') || value === 'relai_publish') return 'git';
-  if (/restore|reset|tidy/.test(value)) return 'recover';
-  if (/run_checks|http_probe|ui_check|browser/.test(value) || value === 'relai_validate') return 'validate';
-  if (/edit|write|replace/.test(value)) return 'edit';
-  return 'inspect';
 }
 
 function capabilityLabel(capability) {

@@ -5,45 +5,50 @@ import { ACTION_REGISTRY } from './actionRegistry.js';
 import { MAX_BATCH_EDITS } from '../editLimits.js';
 import { outputSchemaFor } from './outputSchemas.js';
 import { OPERATION_DEFINITION_VALUES } from './operationDefinitionValues.js';
+import { OPERATION_IDS as OP } from './operationIds.js';
 
 /** @typedef {import('../../types/boundaries.d.ts').ToolDefinitionMetadata} ToolDefinitionMetadata */
 /** @typedef {Omit<ToolDefinitionMetadata, 'annotations' | 'connectorStrip' | 'groups' | 'behavior' | 'dashboard' | 'outputSchema'> & { annotations?: Partial<ToolDefinitionMetadata['annotations']>, connectorStrip?: string[], groups?: import('../../types/boundaries.d.ts').ToolGroup[], behavior?: Partial<ToolDefinitionMetadata['behavior']>, dashboard?: Partial<ToolDefinitionMetadata['dashboard']>, outputSchema?: import('../../types/boundaries.d.ts').JsonSchema }} ToolDefinitionInput */
 
+/** @type {Set<string>} */
 const READ_ONLY_TOOLS = new Set([
-  'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
-  'relai_process_read', 'relai_process_list', 'relai_tidy_plan', 'relai_http_probe', 'relai_diff',
-  'relai_status', 'relai_git_draft_pr'
+  OP.SNAPSHOT, OP.READ, OP.SEARCH_TEXT, OP.INSPECT, OP.SEARCH_SEMANTIC,
+  OP.PROCESS_READ, OP.PROCESS_LIST, OP.CHANGES_TIDY_PLAN, OP.VALIDATE_HTTP, OP.CHANGES_DIFF,
+  OP.WORK_STATUS, OP.PUBLISH_DRAFT_PR
 ]);
+/** @type {Set<string>} */
 const DESTRUCTIVE_TOOLS = new Set([
-  'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop', 'relai_ui',
-  'relai_diagnostics_run', 'relai_tidy_run', 'relai_run_checks', 'relai_restore_paths',
-  'relai_reset_workspace', 'relai_edit'
+  OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.PROCESS_STOP, OP.UI,
+  OP.VALIDATE_DIAGNOSTICS, OP.CHANGES_TIDY_RUN, OP.VALIDATE_CHECKS, OP.CHANGES_RESTORE,
+  OP.CHANGES_RESET, OP.EDIT
 ]);
+/** @type {Set<string>} */
 const IDEMPOTENT_TOOLS = new Set([
-  ...READ_ONLY_TOOLS, 'relai_process_stop', 'relai_restore_paths', 'relai_reset_workspace',
-  'relai_cancel_work', 'relai_finish_work'
+  ...READ_ONLY_TOOLS, OP.PROCESS_STOP, OP.CHANGES_RESTORE, OP.CHANGES_RESET,
+  OP.WORK_CANCEL, OP.WORK_FINISH
 ]);
+/** @type {Set<string>} */
 const OPEN_WORLD_TOOLS = new Set([
-  'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_ui',
-  'relai_diagnostics_run', 'relai_run_checks', 'relai_git_push'
+  OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.UI,
+  OP.VALIDATE_DIAGNOSTICS, OP.VALIDATE_CHECKS, OP.PUBLISH_PUSH
 ]);
-// INTENTIONAL FORWARD-COMPATIBILITY: these operations can run as Native MCP Tasks,
-// but only when the request uses the modern protocol and explicitly advertises the
-// Tasks capability. The legacy ChatGPT compatibility route does not advertise Tasks,
-// so these remain ordinary synchronous tool calls there. Keep this eligibility list
-// even while current ChatGPT traffic uses the legacy route; removing it would prevent
-// automatic activation when a future client negotiates Native Tasks support.
+// These operations may use Native MCP Tasks only when the connected client explicitly
+// negotiates the Tasks capability. Clients without that capability use the same current
+// operations synchronously; no legacy operation names or fallback routes are retained.
+/** @type {Set<string>} */
 const NATIVE_TASK_ELIGIBLE_TOOLS = new Set([
-  'relai_exec',
-  'relai_diagnostics_run',
-  'relai_run_checks'
+  OP.EXEC,
+  OP.VALIDATE_DIAGNOSTICS,
+  OP.VALIDATE_CHECKS
 ]);
+/** @type {Set<string>} */
 const PERSISTENT_PROCESS_TOOLS = new Set([
-  'relai_process_start', 'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list'
+  OP.PROCESS_START, OP.PROCESS_READ, OP.PROCESS_WRITE, OP.PROCESS_STOP, OP.PROCESS_LIST
 ]);
+/** @type {Set<string>} */
 const ALWAYS_IMMEDIATE_TOOLS = new Set([
-  'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search',
-  'relai_status', 'relai_cancel_work', 'relai_finish_work'
+  OP.WORK_BEGIN, OP.SNAPSHOT, OP.READ, OP.SEARCH_TEXT,
+  OP.WORK_STATUS, OP.WORK_CANCEL, OP.WORK_FINISH
 ]);
 
 const DEFAULT_BEHAVIOR = Object.freeze({

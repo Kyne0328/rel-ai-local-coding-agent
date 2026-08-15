@@ -4,12 +4,11 @@ import { readConfig, resolveWorkspace, resolveWorkspaceInput } from '../config.j
 import { principalFingerprint, principalForContext } from '../mcp/principal.js';
 import { assertAuthorizedToolCall } from '../mcp/authorizationPolicy.js';
 import { clearSessionPolicy } from '../policyResolver.js';
-import { assertRuntimeCompatibility } from '../runtimeCompatibility.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { activeProcessesForWorkspace } from '../processManager.js';
 import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
 import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
-import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
+import { beginConnectorToolCall, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
 import { serializeConnectorResult } from './connector.js';
 import { enhanceToolError } from './errors.js';
 import { executeToolCall } from './execution.js';
@@ -24,6 +23,7 @@ import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
 import { buildWorkflowSnapshot } from '../workflow/runtime.js';
 import { invalidateRepositoryTopology } from '../workflow/topology.js';
+import { OPERATION_IDS as OP } from './operationIds.js';
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
@@ -59,7 +59,7 @@ async function callTool(name, args = {}, context = {}) {
     if (taskScoped && !requestedTaskId) {
       throw taskError('TASK_ID_REQUIRED', `${name} requires the work_id returned by relai_work action begin.`);
     }
-    if (requestedTaskId && operationName !== 'relai_begin_work') {
+    if (requestedTaskId && operationName !== OP.WORK_BEGIN) {
       knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal);
       if (taskAware && !String(effectiveArgs?.workspace || '').trim()) effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
     }
@@ -84,16 +84,16 @@ async function callTool(name, args = {}, context = {}) {
       }
     }
     await validateExecutableOperationInput(operationName, effectiveArgs);
-    assertRuntimeCompatibility(config, operationName, effectiveArgs, { activeTaskCount: getToolActivity().activeTaskCount });
-    const duplicateTerminalCancellation = operationName === 'relai_cancel_work' && knownTask?.status === 'cancelled';
+    const duplicateTerminalCancellation = operationName === OP.WORK_CANCEL && knownTask?.status === 'cancelled';
     const terminalTaskReference = isTerminalTaskReference(knownTask, operationName);
     finishActivity = beginConnectorToolCall({
       tool: name,
+      internalOperation: operationName,
       workspace: effectiveArgs?.workspace,
       scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
-      createTask: operationName === 'relai_begin_work',
-      trackTask: !duplicateTerminalCancellation && !terminalTaskReference && (operationName === 'relai_begin_work' || Boolean(requestedTaskId)),
+      createTask: operationName === OP.WORK_BEGIN,
+      trackTask: !duplicateTerminalCancellation && !terminalTaskReference && (operationName === OP.WORK_BEGIN || Boolean(requestedTaskId)),
       connector,
       operation: describeToolOperation(operationName, effectiveArgs || {}),
       title: effectiveArgs?.title,
@@ -302,7 +302,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       impactedPaths: Array.isArray(value?.impactedPaths) ? value.impactedPaths : [],
       affectedTests: Array.isArray(value?.affectedTests) ? value.affectedTests : [],
       processes,
-      operation: { kind: operationName === 'relai_run_checks' && args?.migration === true ? 'migration' : '' }
+      operation: { kind: operationName === OP.VALIDATE_CHECKS && args?.migration === true ? 'migration' : '' }
     });
     recordWorkflowState(config, workId, { receipt, workflow }, { defer: true });
     return workflow;
@@ -338,10 +338,10 @@ function signalRepositoryIntelligenceMutation(config, operationName, args, value
   const changedFiles = Array.isArray(value?.changedFiles)
     ? [...new Set(value.changedFiles.map(item => String(item || '').trim().replaceAll('\\', '/')).filter(Boolean))]
     : [];
-  const broadMutation = operationName === 'relai_reset_workspace' && value?.ok !== false;
+  const broadMutation = operationName === OP.CHANGES_RESET && value?.ok !== false;
   const targetedMutation = changedFiles.length > 0
-    && ['relai_edit', 'relai_exec', 'relai_tidy_run'].includes(operationName);
-  const restoreMutation = operationName === 'relai_restore_paths' && value?.ok !== false
+    && [OP.EDIT, OP.EXEC, OP.CHANGES_TIDY_RUN].includes(operationName);
+  const restoreMutation = operationName === OP.CHANGES_RESTORE && value?.ok !== false
     ? [...new Set((Array.isArray(args?.paths) ? args.paths : []).map(item => String(item || '').trim().replaceAll('\\', '/')).filter(Boolean))]
     : [];
   if (!broadMutation && !targetedMutation && !restoreMutation.length) return;

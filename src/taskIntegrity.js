@@ -6,21 +6,22 @@ import { runProcess } from './process.js';
 import { gitStatusArgs, parseGitStatus } from './repo/gitStatus.js';
 import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { getStateDir } from './statePaths.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const STORE_VERSION = 1;
 const LOCK_STALE_MS = 30_000;
 const integrityCache = new Map();
 const CODE_MUTATING_TOOLS = new Set([
-  'relai_edit',
-  'relai_tidy_run',
-  'relai_restore_paths',
-  'relai_reset_workspace'
+  OP.EDIT,
+  OP.CHANGES_TIDY_RUN,
+  OP.CHANGES_RESTORE,
+  OP.CHANGES_RESET
 ]);
 const REPOSITORY_RECONCILE_TOOLS = new Set([
-  'relai_run_checks',
-  'relai_git_commit',
-  'relai_finish_work',
-  'relai_cancel_work'
+  OP.VALIDATE_CHECKS,
+  OP.PUBLISH_COMMIT,
+  OP.WORK_FINISH,
+  OP.WORK_CANCEL
 ]);
 
 class TaskIntegrityError extends Error {
@@ -44,7 +45,7 @@ async function recordTaskIntegrityEvent(config, event = {}) {
     return withIntegrityLock(config, () => {
       let authority = readJson(taskFile(config, taskId));
       if (!authority) {
-        if (clean(event.tool) !== 'relai_begin_work') {
+        if (clean(event.tool) !== OP.WORK_BEGIN) {
           throw new TaskIntegrityError(
             'TASK_INTEGRITY_STATE_MISSING',
             `Authoritative integrity state is missing for logical task '${taskId}'. Start a new logical task rather than reconstructing safety state from audit history.`
@@ -122,15 +123,15 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event, reposi
     };
   }
 
-  if (tool === 'relai_run_checks' || (tool === 'relai_edit' && clean(event.validationStatus))) {
+  if (tool === OP.VALIDATE_CHECKS || (tool === OP.EDIT && clean(event.validationStatus))) {
     applyValidationState(authority, workspaceState, event, timestamp);
   }
 
-  if (event.completionKnown === true || tool === 'relai_finish_work' && event.ok !== false) {
+  if (event.completionKnown === true || tool === OP.WORK_FINISH && event.ok !== false) {
     authority.finalCompletionGeneration = authority.mutationGeneration;
     authority.completedAt = timestamp;
   }
-  if (tool === 'relai_cancel_work' && event.ok !== false) authority.cancelledAt = timestamp;
+  if (tool === OP.WORK_CANCEL && event.ok !== false) authority.cancelledAt = timestamp;
 
   if (mutation || REPOSITORY_RECONCILE_TOOLS.has(tool)) {
     authority.ambientChangedFiles = Array.isArray(repositoryChanged) ? repositoryChanged : authority.ambientChangedFiles;
@@ -146,7 +147,7 @@ function integrityEventRequiresPersistence(event) {
   const tool = clean(event?.tool);
   const changedFiles = exactChangedFiles(event);
   const mutation = eventMutatedCode(event) && (event?.ok !== false || changedFiles.length > 0);
-  return tool === 'relai_begin_work'
+  return tool === OP.WORK_BEGIN
     || mutation
     || Boolean(clean(event?.validationStatus))
     || REPOSITORY_RECONCILE_TOOLS.has(tool)
@@ -236,7 +237,7 @@ function createWorkspaceState(workspace) {
 async function repositoryStateForEvent(workspace, config, event) {
   const tool = clean(event?.tool);
   const mutation = eventMutatedCode(event) && (event?.ok !== false || exactChangedFiles(event).length > 0);
-  const needsChangedFiles = tool === 'relai_begin_work' || mutation || REPOSITORY_RECONCILE_TOOLS.has(tool);
+  const needsChangedFiles = tool === OP.WORK_BEGIN || mutation || REPOSITORY_RECONCILE_TOOLS.has(tool);
   if (!needsChangedFiles) return { baseline: null, changedFiles: null };
   const statusResult = await runProcess('git', gitStatusArgs(), {
     cwd: workspace.path,
@@ -247,7 +248,7 @@ async function repositoryStateForEvent(workspace, config, event) {
     ? parseGitStatus(statusResult.stdout || '')
     : { branch: null, unborn: false, entries: [] };
   const changedFiles = unique((parsed.entries || []).map(entry => normalizePath(entry.path)).filter(Boolean)).sort();
-  if (tool !== 'relai_begin_work') return { baseline: null, changedFiles };
+  if (tool !== OP.WORK_BEGIN) return { baseline: null, changedFiles };
   const headResult = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
     cwd: workspace.path,
     timeout: 30_000,
@@ -267,7 +268,7 @@ async function repositoryStateForEvent(workspace, config, event) {
 
 function eventMutatedCode(event) {
   const tool = clean(event.tool);
-  if (tool === 'relai_exec') {
+  if (tool === OP.EXEC) {
     return exactChangedFiles(event).length > 0;
   }
   return CODE_MUTATING_TOOLS.has(tool);

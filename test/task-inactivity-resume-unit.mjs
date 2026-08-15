@@ -35,7 +35,7 @@ const tracker = createToolActivityTracker({
   clearTimer(id) { timers.delete(id); }
 });
 tracker.onToolActivity(event => events.push(event));
-const begin = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', createTask: true, title: 'Resume me', objective: 'Preserve task identity.' });
+const begin = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', createTask: true, title: 'Resume me', objective: 'Preserve task identity.' });
 const taskId = begin.taskId;
 begin({ ok: true });
 const failed = tracker.beginConnectorToolCall({ tool: 'relai_search', workspace: 'repo', taskId });

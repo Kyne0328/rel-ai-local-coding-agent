@@ -1,35 +1,36 @@
 import assert from 'node:assert/strict';
 import { serializeConnectorResult } from '../src/tools/connector.js';
+import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
 
 const cases = [
-  fixture('relai_work:begin', 'relai_work', 'begin', 'relai_begin_work', 'work_begin', {
+  fixture('relai_work:begin', 'relai_work', 'begin', OP.WORK_BEGIN, 'work_begin', {
     ok: true, workspace: 'repo', work_id: 'work_begin', status: 'planning', identity: 'work_session',
     workspaceBinding: { alias: 'repo' }, title: 'Contract work', objective: 'Characterize results.', intent: 'investigation', nextAction: 'Use bootstrap.'
   }, {
     ok: true, workspace: 'repo', work_id: 'work_begin', status: 'planning', identity: 'work_session',
     title: 'Contract work', objective: 'Characterize results.', intent: 'investigation'
   }),
-  fixture('relai_work:status', 'relai_work', 'status', 'relai_status', 'work_status', {
+  fixture('relai_work:status', 'relai_work', 'status', OP.WORK_STATUS, 'work_status', {
     ok: true, version: '0.24.0', runtime: 'node', tools: ['relai_read'],
-    toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12, tools: [{ name: 'relai_read' }], deprecations: [], compatibilityAliases: {} },
+    toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12, tools: [{ name: 'relai_read' }], deprecations: [] },
     workspaceCount: 1, workspaceAliases: ['repo']
   }, {
     ok: true, version: '0.24.0', runtime: 'node', toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12 },
     workspaceCount: 1, workspaceAliases: ['repo'], work_id: 'work_status'
   }),
-  fixture('relai_read', 'relai_read', '', 'relai_read', 'work_read', {
+  fixture('relai_read', 'relai_read', '', OP.READ, 'work_read', {
     ok: true, workspace: 'repo', items: [{ type: 'file', path: 'README.md', bytes: 12, content: '# Project\n', cacheHit: false, writeGuidance: { recommendedMode: 'direct-write' } }], skipped: []
   }, {
     ok: true, workspace: 'repo', items: [{ type: 'file', path: 'README.md', bytes: 12, content: '# Project\n' }], work_id: 'work_read'
   }, { guidanceMode: 'none' }),
-  fixture('relai_snapshot', 'relai_snapshot', '', 'relai_repo_snapshot', 'work_snapshot', {
+  fixture('relai_snapshot', 'relai_snapshot', '', OP.SNAPSHOT, 'work_snapshot', {
     ok: true, workspace: 'repo', fileCount: 700, files: ['src/index.js', 'src/other.js'], skipped: [], truncated: false,
     manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {}, hints: [], git: {}, recommendedFlow: []
   }, {
     ok: true, workspace: 'repo', manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {},
     fileCount: 700, files: ['src/index.js', 'src/other.js'], returnedFileCount: 2, omittedFiles: 0, skippedCount: 0, truncated: false,
     git: {}, work_id: 'work_snapshot'
-  }),  fixture('relai_exec', 'relai_exec', '', 'relai_exec', 'work_exec', {
+  }),  fixture('relai_exec', 'relai_exec', '', OP.EXEC, 'work_exec', {
     ok: false, workspace: 'repo', command: 'npm test', commandSummary: 'npm test', cwd: '.', shell: 'PowerShell 7', exitCode: 1,
     durationMs: 120, stdout: 'running', stderr: 'failed', stdoutBytes: 7, stderrBytes: 6, stdoutTruncated: false,
     stderrTruncated: false, timedOut: false, environmentKeys: ['CI'], changedFiles: ['package-lock.json'], changedFilesTruncated: false, mutationTracking: 'git'
@@ -37,7 +38,7 @@ const cases = [
     ok: false, workspace: 'repo', command: 'npm test', shell: 'PowerShell 7', exitCode: 1, durationMs: 120, stdout: 'running', stderr: 'failed', stdoutBytes: 7,
     stderrBytes: 6, environmentKeys: ['CI'], changedFiles: ['package-lock.json'], mutationTracking: 'git', work_id: 'work_exec'
   }),
-  fixture('relai_process:read', 'relai_process', 'read', 'relai_process_read', 'work_process', {
+  fixture('relai_process:read', 'relai_process', 'read', OP.PROCESS_READ, 'work_process', {
     ok: true, processId: 'proc_1', pid: 123, workspace: 'repo', workspaceId: 'repo', label: 'Server', kind: 'service', purpose: 'Serve.',
     commandSummary: 'npm run dev', cwd: '.', status: 'running', metadataRevision: 'rev_1', startedAt: '2026-08-05T00:00:00.000Z',
     stdoutBytes: 10, stderrBytes: 0, stdout: { text: 'ready\n', nextOffset: 10 }, stderr: { text: '', nextOffset: 0 }
@@ -46,18 +47,18 @@ const cases = [
     metadataRevision: 'rev_1', startedAt: '2026-08-05T00:00:00.000Z', stdoutBytes: 10,
     stdout: { text: 'ready\n', nextOffset: 10 }, stderr: { text: '', nextOffset: 0 }, work_id: 'work_process'
   }),
-  fixture('relai_validate:checks', 'relai_validate', 'checks', 'relai_run_checks', 'work_checks', {
+  fixture('relai_validate:checks', 'relai_validate', 'checks', OP.VALIDATE_CHECKS, 'work_checks', {
     ok: true, workspace: 'repo', level: 'standard', checks: ['npm test'], commands: ['npm test'],
     results: [{ command: 'npm test', ok: true, exitCode: 0, durationMs: 40, stdout: 'noise', stderr: '', stdoutBytes: 5, stderrBytes: 0 }],
-    validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion', completionSource: 'relai_run_checks',
+    validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion', completionSource: 'relai_validate:checks',
     summary: 'Validated.', validationAt: '2026-08-05T00:00:00.000Z', changedFiles: ['src/index.js'], message: 'Validation passed.'
   }, {
     ok: true, workspace: 'repo', level: 'standard', checks: ['npm test'],
     results: [{ command: 'npm test', ok: true, exitCode: 0, durationMs: 40, stdoutBytes: 5 }],
-    validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion', completionSource: 'relai_run_checks',
+    validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion', completionSource: 'relai_validate:checks',
     summary: 'Validated.', validationAt: '2026-08-05T00:00:00.000Z', changedFiles: ['src/index.js'], message: 'Validation passed.', work_id: 'work_checks'
   }),
-  fixture('relai_changes:diff', 'relai_changes', 'diff', 'relai_diff', 'work_diff', {
+  fixture('relai_changes:diff', 'relai_changes', 'diff', OP.CHANGES_DIFF, 'work_diff', {
     ok: true, workspace: 'repo', branch: 'main', status: ' M src/index.js\n M baseline.js\n', changedFiles: ['src/index.js', 'baseline.js'], untrackedFiles: [],
     statusEntries: [{ path: 'src/index.js' }, { path: 'baseline.js' }], staged: false, path: 'src/index.js',
     sessionChangedFiles: ['src/index.js'], baselineChangedFiles: ['baseline.js'], untrackedSessionFiles: ['new.js'], untrackedBaselineFiles: ['old.tmp'], baselineSource: 'session',
@@ -67,10 +68,10 @@ const cases = [
     path: 'src/index.js', sessionChangedFiles: ['src/index.js'], baselineChangedFiles: ['baseline.js'], untrackedSessionFiles: ['new.js'], untrackedBaselineFiles: ['old.tmp'], baselineSource: 'session',
     diff: 'diff --git a/src/index.js b/src/index.js', work_id: 'work_diff'
   }),
-  fixture('relai_publish:commit', 'relai_publish', 'commit', 'relai_git_commit', 'work_commit', {
+  fixture('relai_publish:commit', 'relai_publish', 'commit', OP.PUBLISH_COMMIT, 'work_commit', {
     ok: true, workspace: 'repo', commit: 'abc123', message: 'Committed.', changedFiles: []
   }, { ok: true, workspace: 'repo', commit: 'abc123', message: 'Committed.', work_id: 'work_commit' }),
-  fixture('relai_publish:push', 'relai_publish', 'push', 'relai_git_push', 'work_push', {
+  fixture('relai_publish:push', 'relai_publish', 'push', OP.PUBLISH_PUSH, 'work_push', {
     ok: true, workspace: 'repo', remote: 'origin', branch: 'main', pushed: true
   }, { ok: true, workspace: 'repo', remote: 'origin', branch: 'main', pushed: true, work_id: 'work_push' })
 ];

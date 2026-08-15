@@ -17,6 +17,7 @@ import {
 import { isTerminalTaskStatus, normalizeLiveTaskStatus } from './taskState.js';
 import { canonicalTaskSnapshot, lifecycleChangedFields } from './taskLifecycle.js';
 import { classifyTaskIntent } from './workflow/intent.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
 
@@ -46,7 +47,7 @@ function createToolActivityTracker(options = {}) {
       tasksById.set(task.id, task);
     } else {
       if (!requestedTaskId) {
-        throw taskError('TASK_ID_REQUIRED', 'Task-scoped tool calls require the exact work_id returned by relai_begin_work.');
+        throw taskError('TASK_ID_REQUIRED', 'Task-scoped tool calls require the exact work_id returned by relai_work with action "begin".');
       }
       task = tasksById.get(requestedTaskId);
       if (!task) {
@@ -60,16 +61,18 @@ function createToolActivityTracker(options = {}) {
 
     const connectorCall = details.connector !== false;
     const operationId = crypto.randomUUID();
+    const internalOperation = String(details.internalOperation || details.tool || '');
     const initialActivity = buildToolActivityDetails(
-      String(details.tool || ''),
+      internalOperation,
       details.input || {},
       null,
       null,
-      { operation: details.operation, phase: 'running', metadata: details.metadata }
+      { operation: details.operation, phase: 'running', metadata: { ...(details.metadata || {}), internalOperation } }
     );
     const operation = {
       id: operationId,
       tool: String(details.tool || ''),
+      internalOperation,
       label: String(details.operation || initialActivity.title || defaultOperation(details.tool)),
       detail: String(details.detail || initialActivity.summary || ''),
       workspace: String(details.workspace || task.workspace || ''),
@@ -85,9 +88,9 @@ function createToolActivityTracker(options = {}) {
       })
     };
 
-    if (task.titleSource === 'fallback' && details.tool !== 'relai_begin_work') {
+    if (task.titleSource === 'fallback' && operation.internalOperation !== OP.WORK_BEGIN) {
       task.title = deriveTaskTitle({
-        tool: details.tool,
+        tool: operation.internalOperation,
         operation: details.operation,
         workspace: details.workspace,
         ...(details.input || {})
@@ -103,7 +106,7 @@ function createToolActivityTracker(options = {}) {
     task.calls += 1;
     task.lastActivityAt = startedAt;
     task.updatedAt = startedAt;
-    const controlCall = operation.tool === 'relai_cancel_work';
+    const controlCall = operation.internalOperation === OP.WORK_CANCEL;
     if (!controlCall) {
       task.status = initialActivity.category === 'validation' ? 'validating' : 'running';
       task.currentStage = initialActivity.currentStage || operation.label;
@@ -132,7 +135,7 @@ function createToolActivityTracker(options = {}) {
         return { taskId: task.id, scopeId: task.scopeId, duplicate: true };
       }
       const conflicting = [...task.currentOperations.values()].filter(item =>
-        item.id !== operationId && item.tool !== 'relai_finish_work'
+        item.id !== operationId && item.internalOperation !== OP.WORK_FINISH
       );
       if (conflicting.length > 0) {
         throw taskError(
@@ -204,20 +207,19 @@ function createToolActivityTracker(options = {}) {
       task.updatedAt = finishedAt;
       const completionActivity = result.activity && typeof result.activity === 'object'
         ? result.activity
-        : buildToolActivityDetails(current.tool, {}, null, result.ok === false ? { message: result.error } : null, {
+        : buildToolActivityDetails(current.internalOperation || current.tool, {}, null, result.ok === false ? { message: result.error } : null, {
             operation: current.label,
             phase: 'complete'
           });
       applyActivityPatch(current.activity, completionActivity);
-      current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.tool !== 'relai_cancel_work'
+      current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.internalOperation !== OP.WORK_CANCEL
         ? 'cancelled'
         : result.ok === false
           ? (completionActivity.status || 'failed')
           : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
       const blockedResult = current.activity.status === 'blocked';
       const validationStatus = String(current.activity?.metadata?.validationStatus || '');
-      const validationTool = current.tool === 'relai_run_checks'
-        || current.activity?.metadata?.internalOperation === 'relai_run_checks';
+      const validationTool = current.internalOperation === OP.VALIDATE_CHECKS;
       const recoverableValidationFailure = validationTool && ['failed', 'not_run'].includes(validationStatus);
       if (!terminalBeforeFinish && result.ok === false && !blockedResult && !recoverableValidationFailure) task.failures += 1;
       if (!terminalBeforeFinish) task.lastOutcome = blockedResult ? 'blocked' : result.ok === false ? 'failed' : 'succeeded';
@@ -274,7 +276,7 @@ function createToolActivityTracker(options = {}) {
         durationMs: Math.max(0, finishedAt - startedAt),
         activityEvent: cloneActivityEvent(current.activity)
       });
-      if (result.ok === false && current.tool === 'relai_finish_work') task.completionRequest = null;
+      if (result.ok === false && current.internalOperation === OP.WORK_FINISH) task.completionRequest = null;
       if (task.activeCalls === 0) {
         if (isTerminalTaskStatus(task.status)) {
           lastTask = buildTerminalTaskSnapshot(task);
@@ -362,7 +364,7 @@ function createToolActivityTracker(options = {}) {
     finish.operation = operation.label;
     finish.update = update;
     finish.requestCompletion = () => {
-      throw taskError('TASK_ID_REQUIRED', 'Task completion requires an explicit work_id returned by relai_begin_work.');
+      throw taskError('TASK_ID_REQUIRED', 'Task completion requires an explicit work_id returned by relai_work with action "begin".');
     };
     return finish;
   }
@@ -376,12 +378,12 @@ function createToolActivityTracker(options = {}) {
       title: deriveTaskTitle({
         title: explicitTitle,
         objective: details.objective,
-        tool: details.tool,
+        tool: details.internalOperation || details.tool,
         operation: details.operation,
         workspace: details.workspace,
         ...(details.input || {})
       }),
-      titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : details.tool === 'relai_begin_work' ? 'fallback' : 'operation',
+      titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : String(details.internalOperation || '') === OP.WORK_BEGIN ? 'fallback' : 'operation',
       objective: sanitizeDisplayText(details.objective, 500),
       intent: classifyTaskIntent(details.objective),
       correlation: compactCorrelation(details.correlation, details.workspace),
@@ -449,7 +451,7 @@ function createToolActivityTracker(options = {}) {
     task.updatedAt = endedAt;
     task.completionRequest = null;
     for (const operation of task.currentOperations.values()) {
-      if (operation.tool === 'relai_cancel_work') continue;
+      if (operation.internalOperation === OP.WORK_CANCEL) continue;
       operation.activity.status = 'cancelled';
       operation.activity.summary = sanitizeDisplayText(`${operation.activity.summary || operation.label || 'Operation'} Cancelled: ${reason}`, 500);
       operation.activity.completedAt = new Date(endedAt).toISOString();

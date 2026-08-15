@@ -10,22 +10,23 @@ import { isSecretPath } from './safety.js';
 import { getStateDir } from './statePaths.js';
 import { taskError } from './toolActivity.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const REGISTRY_VERSION = 1;
-const CREATE_SANDBOX_OPERATIONS = new Set(['relai_edit', 'relai_exec']);
+const CREATE_SANDBOX_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
 const SANDBOX_ROUTED_OPERATIONS = new Set([
-  'relai_repo_snapshot',
-  'relai_read',
-  'relai_search',
-  'relai_code_inspect',
-  'relai_exec',
-  'relai_semantic_search',
-  'relai_diagnostics_run',
-  'relai_run_checks',
-  'relai_diff',
-  'relai_edit'
+  OP.SNAPSHOT,
+  OP.READ,
+  OP.SEARCH_TEXT,
+  OP.INSPECT,
+  OP.EXEC,
+  OP.SEARCH_SEMANTIC,
+  OP.VALIDATE_DIAGNOSTICS,
+  OP.VALIDATE_CHECKS,
+  OP.CHANGES_DIFF,
+  OP.EDIT
 ]);
-const LIVE_PROMOTION_OPERATIONS = new Set(['relai_edit', 'relai_exec']);
+const LIVE_PROMOTION_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'cancelled', 'failed', 'inactive']);
 
 function registryPath(config) {

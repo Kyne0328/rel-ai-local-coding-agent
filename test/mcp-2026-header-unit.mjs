@@ -82,14 +82,14 @@ assert.equal(
 );
 assert.equal(
   validateMcpRequestHeaders(headers('tools/call'), message('tools/call', {
-    name: 'relai_status', arguments: {}
+    name: 'relai_work', arguments: { action: 'status' }
   })).code,
   -32020
 );
 assert.equal(
   validateMcpRequestHeaders(
     headers('tools/call', 'wrong-name'),
-    message('tools/call', { name: 'relai_status', arguments: {} })
+    message('tools/call', { name: 'relai_work', arguments: { action: 'status' } })
   ).code,
   -32020
 );
@@ -115,7 +115,7 @@ assert.equal(
   -32601
 );
 assert.equal(validateMcpRequestHeaders(headers(), []).code, -32600);
-assert.equal(expectedMcpName('tools/call', { name: 'relai_status' }), 'relai_status');
+assert.equal(expectedMcpName('tools/call', { name: 'relai_work' }), 'relai_work');
 assert.equal(expectedMcpName('resources/read', { uri: 'relai://server/help' }), 'relai://server/help');
 assert.equal(expectedMcpName('tasks/get', { taskId: 'task_abc' }), 'task_abc');
 

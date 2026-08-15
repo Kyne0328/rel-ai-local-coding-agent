@@ -53,7 +53,7 @@ tracker.onToolActivity(event => recordTaskActivityEvent(config, event));
 const originalSecret = 'production-path-secret-123456';
 try {
   const start = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     operation: 'Starting security regression task',
     workspace: 'repo',
     createTask: true
@@ -62,7 +62,7 @@ try {
   start({ ok: true });
 
   const complete = tracker.beginConnectorToolCall({
-    tool: 'relai_finish_work',
+    tool: 'relai_work', internalOperation: 'work.finish',
     operation: 'Reporting task completion',
     workspace: 'repo',
     taskId
@@ -102,7 +102,7 @@ try {
     events: [{ eventId: 'legacy-event', summary: `password=${originalSecret}` }]
   }));
   const historical = readTaskHistorySession(config, historicalTaskId);
-  assert.equal(historical.status, 'cancelled');
+  assert.equal(historical.status, 'inactive', 'hard cutover must not reinterpret historical inactive records as current cancellation semantics');
   assert.equal(JSON.stringify(historical).includes(originalSecret), false);
   assert.equal(JSON.stringify(sanitizeTaskRecord(historical)).includes(originalSecret), false);
 } finally {

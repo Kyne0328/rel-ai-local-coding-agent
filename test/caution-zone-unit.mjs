@@ -18,7 +18,7 @@ for (const toolName of ['relai_edit']) {
 }
 
 assert.equal(classifyCaution('relai_read', { paths: ['package.json'] }).level, null);
-assert.equal(classifyCaution('relai_run_checks', {}).level, null);
+assert.equal(classifyCaution('relai_validate', {}).level, null);
 assert.equal(classifyCaution('relai_exec', { command: 'npm install' }).level, null);
 assert.equal(classifyCaution('relai_exec', { command: 'git reset --hard HEAD~1' }).level, 'caution');
 assert.equal(classifyCaution('relai_exec', { command: 'docker system prune -f' }).level, 'caution');

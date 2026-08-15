@@ -25,7 +25,7 @@ function makeRepo() {
   return { root, workspacePath, stateDir: path.join(root, 'state') };
 }
 
-const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alias}-policy.json`);
+const sessionFile = (stateDir, alias, taskId) => path.join(stateDir, 'sessions', `${encodeURIComponent(alias)}--${encodeURIComponent(taskId)}-policy.json`);
 
 // 1. ensureSessionStarted creates a session and captures the pre-write baseline.
 {
@@ -33,7 +33,7 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   const config = { stateDir };
   // A pre-existing untracked file must be fenced as baseline, not session-owned.
   fs.writeFileSync(path.join(workspacePath, 'preexisting.txt'), 'user file\n');
-  const started = await ensureSessionStarted(config, 'ws', workspacePath);
+  const started = await ensureSessionStarted(config, 'ws', workspacePath, { taskId: 'task-baseline' });
   assert.equal(started, true, 'first call must start a session');
   const policy = resolvePolicy({ alias: 'ws', path: workspacePath }, config);
   assert.equal(policy.sessionActive, true);
@@ -65,13 +65,14 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
 {
   const { root, workspacePath, stateDir } = makeRepo();
   const config = { stateDir };
-  await ensureSessionStarted(config, 'ws', workspacePath);
-  const first = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws'), 'utf8'));
+  const taskId = 'task-idempotent';
+  await ensureSessionStarted(config, 'ws', workspacePath, { taskId });
+  const first = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws', taskId), 'utf8'));
   // New file appears AFTER the session started — it must NOT enter the baseline.
   fs.writeFileSync(path.join(workspacePath, 'session-made.txt'), 'agent file\n');
-  const startedAgain = await ensureSessionStarted(config, 'ws', workspacePath);
+  const startedAgain = await ensureSessionStarted(config, 'ws', workspacePath, { taskId });
   assert.equal(startedAgain, false, 'second call must not start a new session');
-  const second = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws'), 'utf8'));
+  const second = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws', taskId), 'utf8'));
   assert.equal(second.createdAt, first.createdAt, 'createdAt must be preserved');
   assert.ok(!(second.baselineDirty || []).includes('session-made.txt'), 'post-session file must not enter baseline');
   fs.rmSync(root, { recursive: true, force: true });
@@ -82,13 +83,14 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
 {
   const { root, workspacePath, stateDir } = makeRepo();
   const config = { stateDir };
-  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath });
-  const file = sessionFile(stateDir, 'ws');
+  const taskId = 'task-expired';
+  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath, taskId });
+  const file = sessionFile(stateDir, 'ws', taskId);
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   data.updatedAt = new Date(Date.now() - SESSION_IDLE_TTL_MS - 1000).toISOString();
   fs.writeFileSync(file, JSON.stringify(data));
-  assert.equal(readSessionPolicy(config, 'ws'), null, 'stale session must read as expired');
-  const restarted = await ensureSessionStarted(config, 'ws', workspacePath);
+  assert.equal(readSessionPolicy(config, 'ws', taskId), null, 'stale session must read as expired');
+  const restarted = await ensureSessionStarted(config, 'ws', workspacePath, { taskId });
   assert.equal(restarted, true, 'expired session must be restartable');
   fs.rmSync(root, { recursive: true, force: true });
 }
@@ -98,19 +100,20 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   const { root, workspacePath, stateDir } = makeRepo();
   const config = { stateDir };
   fs.writeFileSync(path.join(workspacePath, 'preexisting.txt'), 'user file\n');
-  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath });
-  const before = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws'), 'utf8'));
+  const taskId = 'task-touch';
+  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath, taskId });
+  const before = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws', taskId), 'utf8'));
   before.updatedAt = new Date(Date.now() - 60_000).toISOString();
-  fs.writeFileSync(sessionFile(stateDir, 'ws'), JSON.stringify(before));
-  const ok = touchSessionPolicy(config, 'ws');
+  fs.writeFileSync(sessionFile(stateDir, 'ws', taskId), JSON.stringify(before));
+  const ok = touchSessionPolicy(config, 'ws', taskId);
   assert.equal(ok, true);
-  const after = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws'), 'utf8'));
+  const after = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws', taskId), 'utf8'));
   assert.ok(Date.parse(after.updatedAt) > Date.parse(before.updatedAt), 'updatedAt must advance');
   assert.deepEqual(after.baselineDirty, before.baselineDirty, 'baseline must be untouched');
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// 5. Tidy-plan safety fence — with NO session baseline, relai_tidy_plan refuses
+// 5. Tidy-plan safety fence — with NO session baseline, relai_changes tidy_plan refuses
 //    instead of offering pre-existing untracked files for deletion.
 {
   const { root, workspacePath, stateDir } = makeRepo();
@@ -130,7 +133,7 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   const { root, workspacePath, stateDir } = makeRepo();
   const config = { stateDir };
   fs.writeFileSync(path.join(workspacePath, 'pre-existing.txt'), 'baseline\n');
-  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath });
+  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath, taskId: 'task-tidy' });
   fs.writeFileSync(path.join(workspacePath, 'session-artifact.txt'), 'made during session\n');
   const plan = await workspaceTidyPlan({ alias: 'ws', path: workspacePath }, config, { mode: 'session_untracked' });
   assert.equal(plan.ok, true);
@@ -146,7 +149,7 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   const { root, workspacePath, stateDir } = makeRepo();
   const config = { stateDir };
   const workspace = { alias: 'ws', path: workspacePath };
-  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath });
+  await writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath, taskId: 'task-read' });
   const first = relaiRead(workspace, config, { paths: ['README.md'] });
   const second = relaiRead(workspace, config, { paths: ['README.md'] });
   assert.equal(first.items[0]?.content, '# Auto session\n');

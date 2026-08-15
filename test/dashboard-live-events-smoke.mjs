@@ -21,6 +21,8 @@ assert.doesNotMatch(dashboardSource, /sendSse\(res, ['"]dashboard['"]/, 'legacy 
 assert.match(dashboardSource, /createDashboardTaskEventBatcher/, 'production task updates must be coalesced before SSE publication');
 assert.doesNotMatch(dashboardSource, /DASHBOARD_SNAPSHOT_MAX_WAIT_MS|dashboardStreamPayload|requestedDashboardRevision/);
 assert.doesNotMatch(eventClientSource, /_snapshotRevision|params\.set\(['"]revision['"]/, 'client must not request legacy snapshot catch-up');
+assert.doesNotMatch(eventClientSource, /token|Authorization|URLSearchParams/, 'SSE authentication must rely only on the HttpOnly dashboard session cookie');
+assert.doesNotMatch(dashboardClientSource, /relai_dashboard_token|setToken|getToken/, 'dashboard renderer must never persist or read the MCP bearer token');
 assert.match(eventClientSource, /removeEventListener/, 'SSE listeners must be removed when a source closes');
 assert.match(eventClientSource, /function parseEventData[\s\S]*try[\s\S]*JSON\.parse[\s\S]*catch/, 'SSE payload parsing must fail safely');
 assert.match(dashboardClientSource, /applyLiveEvent\(event\.type, event\.data\)/, 'browser coordinator must apply typed deltas through the canonical store');
@@ -93,7 +95,7 @@ try {
 
   fs.appendFileSync(auditPath, `${JSON.stringify({ ts: new Date().toISOString(), event: 'tool_call', tool: 'relai_read', workspace: 'test', ok: true })}\n`);
   const finishStart = beginConnectorToolCall({
-    scopeId: 'dashboard-live-events-test', tool: 'relai_begin_work',
+    scopeId: 'dashboard-live-events-test', tool: 'relai_work', internalOperation: 'work.begin',
     operation: 'Starting dashboard test task', workspace: 'test', createTask: true,
     objective: 'Exercise typed dashboard events'
   });
@@ -119,7 +121,7 @@ try {
   mcpConnectionManager.finishRequest(requestId, { method: 'tools/list', ok: true });
 
   desktopStatus = { ...desktopStatus, tunnelStatus: 'running', tunnelId: 'tunnel_12345678' };
-  const finishStatus = beginConnectorToolCall({ scopeId: 'dashboard-status', taskId, tool: 'relai_status', operation: 'Status', workspace: 'test' });
+  const finishStatus = beginConnectorToolCall({ scopeId: 'dashboard-status', taskId, tool: 'relai_work', internalOperation: 'work.status', operation: 'Status', workspace: 'test' });
   finishStatus({ ok: true });
   let desktopConnection = null;
   for (let attempt = 0; attempt < 4 && desktopConnection?.desktopStatus?.tunnelStatus !== 'running'; attempt += 1) {

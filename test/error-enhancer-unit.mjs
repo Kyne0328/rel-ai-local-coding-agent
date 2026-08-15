@@ -35,7 +35,7 @@ for (const message of ['error: corrupt patch at line 24', 'Patch did not contain
 
 {
   const original = new Error('Something else entirely.');
-  assert.equal(enhanceToolError('relai_run_checks', original), original);
+  assert.equal(enhanceToolError('relai_validate', original), original);
 }
 
 {
