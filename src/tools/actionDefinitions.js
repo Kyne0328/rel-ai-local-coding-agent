@@ -380,6 +380,7 @@ const PUBLIC_DEFINITION_VALUES = [
         staged: { type: 'boolean' },
         path: STRING,
         redactSensitive: { type: 'boolean' },
+        scope: { type: 'string', enum: ['task', 'workspace'] },
         maxBytes: { type: 'number', minimum: 1000, maximum: 5242880 },
         paths: { type: 'array', items: STRING, minItems: 1, maxItems: 100 },
         confirmation: { type: 'string', enum: ['RESET', 'RESET_AND_CLEAN'] },
