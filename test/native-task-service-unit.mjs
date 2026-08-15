@@ -23,7 +23,8 @@ import {
   pruneNativeTasks,
   requestNativeTaskInput,
   updateNativeTask,
-  updateNativeTaskInputs
+  updateNativeTaskInputs,
+  updateNativeTaskRecovery
 } from '../src/mcp/nativeTaskService.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-native-task-service-'));
@@ -130,6 +131,13 @@ try {
   assert.ok(Date.now() - contentionStartedAt < 1000, 'native-task lock contention must return in under one second');
   fs.rmSync(contentionLock, { force: true });
   assert.equal(getNativeTask(config, owned.taskId, { principal: sameOwner }).status, 'working');
+  const beforeNoopUpdate = getNativeTaskRecord(config, owned.taskId, { principal: owner });
+  updateNativeTask(config, owned.taskId, { status: 'working' }, { principal: owner });
+  const afterNoopUpdate = getNativeTaskRecord(config, owned.taskId, { principal: owner });
+  assert.equal(afterNoopUpdate.revision, beforeNoopUpdate.revision, 'identical native-task status updates must not perform another durable write');
+  updateNativeTaskRecovery(config, owned.taskId, null, { principal: owner });
+  const afterNoopRecovery = getNativeTaskRecord(config, owned.taskId, { principal: owner });
+  assert.equal(afterNoopRecovery.revision, afterNoopUpdate.revision, 'identical native-task recovery updates must not perform another durable write');
   assertUnavailable(() => getNativeTask(config, owned.taskId, { principal: otherOwner }));
   assertUnavailable(() => updateNativeTask(config, owned.taskId, { statusMessage: 'cross-principal update' }, { principal: otherOwner }));
   assertUnavailable(() => getNativeTask(config, 'task_invalid', { principal: owner }));

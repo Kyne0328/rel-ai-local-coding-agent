@@ -2,7 +2,6 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getStateDir } from '../statePaths.js';
-import { runProcess } from '../process.js';
 import { workspaceGitStatus } from '../repo/gitOps.js';
 import { relaiCodeInspect } from './codeIntelligence.js';
 import { detectVerifyCheckUnits, detectVerifyChecks } from './checkDetection.js';
@@ -11,7 +10,7 @@ import { classifyWorkflowRisk } from '../workflow/risk.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 
 const PLAN_TTL_MS = 30 * 60 * 1000;
-const FINGERPRINT_VERSION = 1;
+const FINGERPRINT_VERSION = 2;
 const VALIDATION_CONFIG_PATHS = Object.freeze([
   'package.json',
   'package-lock.json',
@@ -61,8 +60,11 @@ async function createValidationPlan(workspace, config, args = {}) {
   const standard = packageScoped(standardUnits).map(checkReference);
   const release = releaseUnits.map(checkReference);
   const focused = deriveFocusedChecks(buildCheckCatalog(topology), quickUnits, packageIds, impact.affectedTests || [], workspace);
-  const classification = classifyWorkflowRisk({ changedFiles, packageIds, affectedTests: impact.affectedTests || [], impactedPaths: impact.impactedPaths || [] });
-  const fingerprint = await createValidationFingerprint(workspace, config, status);
+  const affectedTests = normalizePaths(impact.affectedTests || []);
+  const impactedPaths = normalizePaths(impact.impactedPaths || []).slice(0, 200);
+  const classification = classifyWorkflowRisk({ changedFiles, packageIds, affectedTests, impactedPaths });
+  const requestedScope = normalizePaths([...changedFiles, ...affectedTests, ...impactedPaths]).slice(0, 1000);
+  const fingerprint = await createValidationFingerprint(workspace, config, { status, paths: requestedScope });
   const payload = {
     version: 2,
     workspace: workspace.alias,
@@ -70,10 +72,11 @@ async function createValidationPlan(workspace, config, args = {}) {
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + PLAN_TTL_MS).toISOString(),
     changedFiles,
+    validationScope: fingerprint.scopePaths,
     workspaceFingerprint: fingerprint.fingerprint,
     fingerprintVersion: FINGERPRINT_VERSION,
-    affectedTests: impact.affectedTests || [],
-    impactedPaths: (impact.impactedPaths || []).slice(0, 200),
+    affectedTests,
+    impactedPaths,
     checks: { focused, quick, standard, release },
     recommended: args.release === true ? 'release' : recommendedPlanLevel(classification)
   };
@@ -83,33 +86,28 @@ async function createValidationPlan(workspace, config, args = {}) {
   return { ok: true, ...payload, planId, signature, use: 'Pass planId to relai_validate with action "checks" to execute the content-bound selected plan.' };
 }
 
-async function createValidationFingerprint(workspace, config, suppliedStatus = null) {
-  const status = suppliedStatus || await workspaceGitStatus(workspace, config, { maxBytes: 256 * 1024 });
-  const changedFiles = normalizePaths(status.changedFiles || []);
-  const relevantPaths = normalizePaths([
+async function createValidationFingerprint(workspace, config, options = {}) {
+  const explicitPaths = Array.isArray(options.paths);
+  const status = options.status || (!explicitPaths
+    ? await workspaceGitStatus(workspace, config, { maxBytes: 256 * 1024 })
+    : null);
+  const changedFiles = explicitPaths
+    ? normalizePaths(options.paths)
+    : normalizePaths(status?.changedFiles || []);
+  const scopePaths = normalizePaths([
     ...changedFiles,
-    ...VALIDATION_CONFIG_PATHS.filter(file => fs.existsSync(path.join(workspace.path, file)))
-  ]);
-  // These Git reads are independent once status has identified the relevant paths.
-  // Start them together while local file/check fingerprints are calculated so a
-  // validation fingerprint pays roughly one process-startup window, not three.
-  const headPromise = gitText(workspace.path, ['rev-parse', 'HEAD'], config);
-  const indexHashPromise = gitDigest(workspace.path, ['diff', '--cached', '--binary', '--no-ext-diff'], config);
-  const worktreeHashPromise = gitDigest(workspace.path, ['diff', '--binary', '--no-ext-diff'], config);
-  const relevantFiles = relevantPaths.map(file => fingerprintPath(workspace.path, file));
+    ...validationConfigPaths(workspace.path, changedFiles)
+  ]).slice(0, 1000);
+  const relevantFiles = scopePaths.map(file => fingerprintPath(workspace.path, file));
   const checks = {
     quick: detectVerifyChecks(workspace.path, 'quick'),
     standard: detectVerifyChecks(workspace.path, 'standard'),
     release: detectVerifyChecks(workspace.path, 'release')
   };
-  const [head, indexHash, worktreeHash] = await Promise.all([headPromise, indexHashPromise, worktreeHashPromise]);
   const descriptor = {
     version: FINGERPRINT_VERSION,
-    workspace: workspace.alias,
-    head,
-    indexHash,
-    worktreeHash,
-    changedFiles,
+    workspace: workspace.sourceAlias || workspace.alias,
+    scopePaths,
     relevantFiles,
     checks,
     workspaceCommands: workspace.commands || {},
@@ -118,8 +116,30 @@ async function createValidationFingerprint(workspace, config, suppliedStatus = n
   return {
     fingerprint: crypto.createHash('sha256').update(stableJson(descriptor)).digest('base64url'),
     version: FINGERPRINT_VERSION,
-    changedFiles
+    changedFiles,
+    scopePaths
   };
+}
+
+function validationConfigPaths(root, scopePaths = []) {
+  const directories = new Set(['']);
+  for (const file of scopePaths) {
+    let directory = path.posix.dirname(normalizePath(file));
+    while (directory && directory !== '.') {
+      directories.add(directory);
+      const parent = path.posix.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  const candidates = [];
+  for (const directory of directories) {
+    for (const file of VALIDATION_CONFIG_PATHS) {
+      const relative = directory ? path.posix.join(directory, file) : file;
+      if (fs.existsSync(path.join(root, relative))) candidates.push(relative);
+    }
+  }
+  return normalizePaths(candidates);
 }
 
 function fingerprintPath(root, relativePath) {
@@ -144,25 +164,6 @@ function fingerprintPath(root, relativePath) {
     size: stat.size,
     sha256: crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex')
   };
-}
-
-async function gitText(root, args, config) {
-  const result = await runProcess('git', args, {
-    cwd: root,
-    timeout: 30_000,
-    maxOutputBytes: 64 * 1024 * 1024
-  }, config);
-  return result.exitCode === 0 && !result.stdoutTruncated ? String(result.stdout || '').trim() : '';
-}
-
-async function gitDigest(root, args, config) {
-  const result = await runProcess('git', args, {
-    cwd: root,
-    timeout: 30_000,
-    maxOutputBytes: 64 * 1024 * 1024
-  }, config);
-  if (result.exitCode !== 0 || result.stdoutTruncated) return '';
-  return crypto.createHash('sha256').update(String(result.stdout || ''), 'utf8').digest('hex');
 }
 
 function deriveFocusedChecks(catalog, quickUnits, packageIds, affectedTests, workspace) {

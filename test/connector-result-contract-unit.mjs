@@ -1,6 +1,24 @@
 import assert from 'node:assert/strict';
 import { serializeConnectorResult } from '../src/tools/connector.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
+import { taskBootstrapFromSnapshot } from '../src/tools/task.js';
+
+const compactBootstrap = taskBootstrapFromSnapshot({
+  manifests: ['package.json'], discoveredCommands: { test: 'npm test' }, projectInstructions: { summary: 'Use project rules.' },
+  fileCount: 64, files: Array.from({ length: 64 }, (_, index) => `src/file-${index}.js`), truncated: true,
+  hints: ['node'], git: { branch: 'main' }, recommendedFlow: ['Search first.']
+}, 'compact');
+assert.equal(compactBootstrap.files, undefined, 'compact task bootstrap must not return a repository file listing');
+assert.equal(compactBootstrap.fileCount, undefined, 'a truncated compact scan must not present its scan cap as the repository file count');
+assert.equal(compactBootstrap.manifests[0], 'package.json');
+
+const fullBootstrap = taskBootstrapFromSnapshot({
+  manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {}, fileCount: 2,
+  files: ['src/a.js', 'src/b.js'], truncated: false, hints: [], git: {}, recommendedFlow: [],
+  manifestContents: { 'package.json': '{}' }, skipped: [], writeGuidance: {}, operationJournal: []
+}, 'full');
+assert.deepEqual(fullBootstrap.files, ['src/a.js', 'src/b.js'], 'full task bootstrap must retain the explicit file listing');
+assert.equal(fullBootstrap.fileCount, 2);
 
 const cases = [
   fixture('relai_work:begin', 'relai_work', 'begin', OP.WORK_BEGIN, 'work_begin', {

@@ -18,7 +18,7 @@ import { resolveExecutableToolCall, validateExecutableOperationInput } from './r
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
 import { assertKnownTask, assertTaskWorkspaceOwnership, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
-import { deterministicActionId } from '../workflow/contracts.js';
+import { deterministicActionId, stableJson } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
 import { buildWorkflowSnapshot } from '../workflow/runtime.js';
@@ -26,6 +26,14 @@ import { invalidateRepositoryTopology } from '../workflow/topology.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
+
+const WORKFLOW_PASSIVE_OPERATIONS = new Set([
+  OP.SNAPSHOT,
+  OP.READ,
+  OP.SEARCH_TEXT,
+  OP.SEARCH_SEMANTIC,
+  OP.INSPECT
+]);
 
 async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
@@ -36,6 +44,7 @@ async function callTool(name, args = {}, context = {}) {
   let effectiveArgs = publicArgs;
   let operationName = String(name || '');
   let workspaceResolution, knownTask = null;
+  let requestTaskContext = null;
   let finishActivity = null;
   let activityResult = { ok: true };
   let analyticsFailureCode = '';
@@ -75,13 +84,22 @@ async function callTool(name, args = {}, context = {}) {
       // resolution cannot change that record, so validate ownership against the
       // resolved alias without re-reading task history a second time.
       assertTaskWorkspaceOwnership(knownTask, effectiveArgs?.workspace);
-      if (!readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace)) {
+      const integrity = readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace);
+      if (!integrity) {
         throw taskError(
           'TASK_INTEGRITY_STATE_MISSING',
           'Authoritative integrity state is missing for this logical task. Start a new logical task; no task-scoped operation was executed.',
           { retryable: false }
         );
       }
+      requestTaskContext = {
+        taskId: requestedTaskId,
+        session: knownTask,
+        integrity,
+        recentEvidence: null,
+        workflowContextEvidence: null,
+        topology: null
+      };
     }
     await validateExecutableOperationInput(operationName, effectiveArgs);
     const duplicateTerminalCancellation = operationName === OP.WORK_CANCEL && knownTask?.status === 'cancelled';
@@ -108,7 +126,7 @@ async function callTool(name, args = {}, context = {}) {
       principalFingerprint: principalFingerprint(effectivePrincipal)
     });
     const execution = await executeToolCall({
-      config, name, executionName: operationName, effectiveArgs, context, finishActivity, definition, started
+      config, name, executionName: operationName, effectiveArgs, context, requestTaskContext, finishActivity, definition, started
     });
     const value = execution.value;
     sessionStart = execution.sessionStart;
@@ -154,20 +172,23 @@ async function callTool(name, args = {}, context = {}) {
       ...extraAudit,
       ...(valueOk ? {} : { error: activityResult.error })
     }, { strictIntegrity: true });
+    refreshRequestTaskIntegrity(requestTaskContext, auditEntry);
     const workflowReceipt = workId && evidenceDraft && auditEntry
       ? await persistWorkflowEvidence(config, effectiveArgs, operationName, resolved.action, value || {}, auditEntry, workId, evidenceDraft)
       : null;
-    const workflow = workId
-      ? await buildAndPersistWorkflow(config, effectiveArgs, operationName, value || {}, workId, workflowReceipt)
+    const workflowState = workId
+      ? await buildAndPersistWorkflow(config, effectiveArgs, operationName, value || {}, workId, workflowReceipt, requestTaskContext)
       : null;
+    const workflow = workflowState?.workflow || null;
     if (workflow && activityResult.activity) {
       activityResult.activity.metadata = {
         ...(activityResult.activity.metadata || {}),
         ...workflowActivityMetadata(workflow)
       };
     }
-    const valueWithWorkflow = workflow && value && typeof value === 'object'
-      ? { ...value, workflow }
+    const responseWorkflow = workflowState?.unchanged ? compactUnchangedWorkflow(workflow) : workflow;
+    const valueWithWorkflow = responseWorkflow && value && typeof value === 'object'
+      ? { ...value, workflow: responseWorkflow }
       : value;
     const responseValue = connector && resolved.compact
       ? serializeConnectorResult({
@@ -276,14 +297,22 @@ async function persistWorkflowEvidence(config, args, operationName, action, valu
   }
 }
 
-async function buildAndPersistWorkflow(config, args, operationName, value, workId, receipt = null) {
+async function buildAndPersistWorkflow(config, args, operationName, value, workId, receipt = null, requestState = null) {
   try {
     const workspace = resolveWorkspace(config, args?.workspace);
-    const integrity = readTaskIntegrity(config, workId, workspace.alias);
+    const integrity = requestState?.integrity || readTaskIntegrity(config, workId, workspace.alias);
     if (!integrity) return null;
-    const recentEvidence = readRecentWorkflowEvidence(config, workId, 100);
+    const session = requestState?.session || readTaskHistorySessionRecord(config, workId) || {};
+    if (requestState && !requestState.session) requestState.session = session;
+    if (canReuseWorkflowSnapshot(session, integrity, operationName, value)) {
+      recordWorkflowState(config, workId, { receipt, workflow: null }, { defer: true });
+      return { workflow: session.workflow, unchanged: true, reused: true };
+    }
+    const recentEvidence = requestState?.recentEvidence
+      ? [...requestState.recentEvidence]
+      : readRecentWorkflowEvidence(config, workId, 100);
     if (receipt) recentEvidence.push(receipt);
-    const session = readTaskHistorySessionRecord(config, workId) || {};
+    if (requestState) requestState.recentEvidence = recentEvidence.slice(-100);
     const processes = activeProcessesForWorkspace(config, workspace.alias).map(item => ({
       processId: item.processId,
       status: item.status,
@@ -295,6 +324,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       workspace,
       taskId: workId,
       taskIntegrity: integrity,
+      topology: requestState?.topology || undefined,
       objective: session.objective || args?.objective || '',
       intent: session.intent || '',
       recentEvidence,
@@ -304,12 +334,45 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       processes,
       operation: { kind: operationName === OP.VALIDATE_CHECKS && args?.migration === true ? 'migration' : '' }
     });
-    recordWorkflowState(config, workId, { receipt, workflow }, { defer: true });
-    return workflow;
+    const unchanged = Boolean(session.workflow && stableJson(session.workflow) === stableJson(workflow));
+    recordWorkflowState(config, workId, { receipt, workflow: unchanged ? null : workflow }, { defer: true });
+    return { workflow, unchanged };
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow snapshot:', error);
     return null;
   }
+}
+
+function canReuseWorkflowSnapshot(session, integrity, operationName, value) {
+  const workflow = session?.workflow;
+  if (!workflow || !WORKFLOW_PASSIVE_OPERATIONS.has(operationName)) return false;
+  if (Array.isArray(value?.changedFiles) && value.changedFiles.length) return false;
+  if (Array.isArray(value?.impactedPaths) && value.impactedPaths.length) return false;
+  if (Array.isArray(value?.affectedTests) && value.affectedTests.length) return false;
+  const evidence = workflow.evidence || {};
+  return Number(evidence.lastMutationGeneration || 0) === Number(integrity.mutationGeneration || 0)
+    && Number(evidence.lastValidatedMutationGeneration || 0) === Number(integrity.latestValidatedMutationGeneration || 0);
+}
+
+function refreshRequestTaskIntegrity(requestState, auditEntry) {
+  if (!requestState?.integrity || !auditEntry) return;
+  const currentMutation = Number(requestState.integrity.mutationGeneration || 0);
+  const currentValidated = Number(requestState.integrity.latestValidatedMutationGeneration || 0);
+  const nextMutation = Number(auditEntry.taskMutationGeneration ?? currentMutation);
+  const nextValidated = Number(auditEntry.taskValidatedMutationGeneration ?? currentValidated);
+  if (nextMutation !== currentMutation || nextValidated !== currentValidated) requestState.integrity = null;
+}
+
+function compactUnchangedWorkflow(workflow) {
+  if (!workflow || typeof workflow !== 'object') return workflow;
+  return {
+    version: workflow.version,
+    stage: workflow.stage,
+    intent: workflow.intent,
+    unchanged: true,
+    recommendedActions: workflow.recommendedActions,
+    completion: workflow.completion
+  };
 }
 
 function workflowCommandId(operationName, action, args = {}) {

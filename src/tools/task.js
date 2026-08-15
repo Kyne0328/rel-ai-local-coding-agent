@@ -33,16 +33,21 @@ function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
     manifests: snapshot.manifests,
     discoveredCommands: snapshot.discoveredCommands,
     projectInstructions: snapshot.projectInstructions,
-    fileCount: snapshot.fileCount,
-    files: snapshot.files,
     truncated: snapshot.truncated,
     hints: snapshot.hints,
     git: snapshot.git,
     recommendedFlow: snapshot.recommendedFlow
   };
-  if (mode !== 'full') return common;
+  if (mode !== 'full') {
+    return {
+      ...common,
+      ...(snapshot.truncated ? {} : { fileCount: snapshot.fileCount })
+    };
+  }
   return {
     ...common,
+    fileCount: snapshot.fileCount,
+    files: snapshot.files,
     manifestContents: snapshot.manifestContents,
     skipped: snapshot.skipped,
     writeGuidance: snapshot.writeGuidance,

@@ -24,7 +24,7 @@ const UNSAFE_READ_ONLY_GIT_OPTIONS = new Set([
   '--ext-diff', '--textconv', '--filters', '--open-files-in-pager'
 ]);
 
-async function executeToolCall({ config, name, executionName = name, effectiveArgs, context, finishActivity, definition, started }) {
+async function executeToolCall({ config, name, executionName = name, effectiveArgs, context, requestTaskContext = null, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
   const value = await runWithToolActivity(finishActivity, () => runSpan(config,
     executionName === OP.WORK_BEGIN ? 'relai.logical_task.start' : 'relai.tool.call',
@@ -87,6 +87,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             transportType: context?.transportType,
             executionMode: context?.executionMode || '',
             cancel: context?.cancel || null,
+            requestTaskContext,
             mutationBaselineCommit: sandboxEntry?.syncCommit || ''
           });
           if (handled && typeof handled === 'object' && !Array.isArray(handled) && handled.ok === false && handled.error?.code === 'CANCELLED') {
@@ -111,12 +112,8 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         if (executionWorkspace?.taskSandbox === true
           && !deferSandboxCompletion
           && SANDBOX_CREATE_OPERATIONS.has(executionName)) {
-          try {
-            await runWorkspaceOperation(sourceWorkspace.alias, () => finalizeTaskSandbox(sourceWorkspace, config, taskId),
-              queueOptions('write', 'workspace', taskId));
-          } catch (cleanupError) {
-            throw cleanupError;
-          }
+          await runWorkspaceOperation(sourceWorkspace.alias, () => finalizeTaskSandbox(sourceWorkspace, config, taskId),
+            queueOptions('write', 'workspace', taskId));
         }
         throw error;
       }
@@ -140,7 +137,9 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         const current = findTaskSandbox(config, sourceWorkspace.alias, taskId);
         if (!current) throw staleSandboxValidationError();
         const sandboxWorkspace = resolveTaskSandboxWorkspace(config, current.alias);
-        const currentFingerprint = await createValidationFingerprint(sandboxWorkspace, config);
+        const currentFingerprint = await createValidationFingerprint(sandboxWorkspace, config, {
+          paths: Array.isArray(result.validationScope) ? result.validationScope : []
+        });
         if (currentFingerprint.fingerprint !== String(result.validationFingerprint || '')) {
           throw staleSandboxValidationError();
         }
@@ -170,9 +169,15 @@ function isClearlyReadOnlyExec(args = {}) {
   if (String(args.input || '').length > 0) return false;
   if (args.env && typeof args.env === 'object' && Object.keys(args.env).length > 0) return false;
   const executable = path.basename(String(args.executable || '')).toLowerCase();
-  if (executable !== 'git' && executable !== 'git.exe') return false;
   const argv = Array.isArray(args.argv) ? args.argv.map(value => String(value || '')) : [];
-  if (!argv.length || argv[0].startsWith('-')) return false;
+  if (!argv.length) return false;
+  if (executable === 'node' || executable === 'node.exe') {
+    const first = argv[0].toLowerCase();
+    if (['--version', '-v', '--help', '-h'].includes(first)) return argv.length === 1;
+    return ['--check', '-c'].includes(first) && argv.length === 2 && !argv[1].startsWith('-');
+  }
+  if (executable !== 'git' && executable !== 'git.exe') return false;
+  if (argv[0].startsWith('-')) return false;
   const optionTokens = argv.slice(1).map(value => value.toLowerCase());
   if (optionTokens.some(value => UNSAFE_READ_ONLY_GIT_OPTIONS.has(value)
     || value === '--output'
