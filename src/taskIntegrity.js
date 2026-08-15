@@ -10,6 +10,7 @@ import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const STORE_VERSION = 1;
 const LOCK_STALE_MS = 30_000;
+const INTEGRITY_CACHE_RECHECK_MS = 250;
 const integrityCache = new Map();
 const CODE_MUTATING_TOOLS = new Set([
   OP.EDIT,
@@ -236,8 +237,9 @@ function createWorkspaceState(workspace) {
 
 async function repositoryStateForEvent(workspace, config, event) {
   const tool = clean(event?.tool);
-  const mutation = eventMutatedCode(event) && (event?.ok !== false || exactChangedFiles(event).length > 0);
-  const needsChangedFiles = tool === OP.WORK_BEGIN || mutation || REPOSITORY_RECONCILE_TOOLS.has(tool);
+  const needsChangedFiles = tool === OP.WORK_BEGIN
+    || REPOSITORY_RECONCILE_TOOLS.has(tool)
+    || Boolean(clean(event?.validationStatus));
   if (!needsChangedFiles) return { baseline: null, changedFiles: null };
   const statusResult = await runProcess('git', gitStatusArgs(), {
     cwd: workspace.path,
@@ -327,14 +329,19 @@ function withIntegrityLock(config, callback) {
 }
 
 function readJson(file) {
-  const identity = fileIdentity(file);
+  const now = Date.now();
   const cached = integrityCache.get(file);
-  if (identity && cached?.identity === identity) return cached.value;
+  if (cached && now - cached.checkedAt < INTEGRITY_CACHE_RECHECK_MS) return cached.value;
+  const identity = fileIdentity(file);
+  if (identity && cached?.identity === identity) {
+    cached.checkedAt = now;
+    return cached.value;
+  }
   const value = readJsonFile(file, {
     backup: true,
     validate: item => Boolean(item && typeof item === 'object' && !Array.isArray(item))
   });
-  if (value && identity) integrityCache.set(file, { identity, value });
+  if (value && identity) integrityCache.set(file, { identity, value, checkedAt: now });
   else if (!value) integrityCache.delete(file);
   return value;
 }
@@ -342,7 +349,7 @@ function readJson(file) {
 function writeJson(file, value) {
   writeJsonAtomic(file, value, { mode: 0o600, backup: true });
   const identity = fileIdentity(file);
-  if (identity) integrityCache.set(file, { identity, value });
+  if (identity) integrityCache.set(file, { identity, value, checkedAt: Date.now() });
 }
 
 function fileIdentity(file) {

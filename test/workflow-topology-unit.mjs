@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  TOPOLOGY_RECHECK_MS,
   clearTopologyCache,
   discoverRepositoryTopology,
   invalidateRepositoryTopology,
@@ -69,8 +70,10 @@ try {
     scripts: { test: 'node test.js', lint: 'node lint.js' },
     dependencies: { example: '^1.0.0' }
   }, null, 2));
+  assert.equal(discoverRepositoryTopology(invalidationRoot).fingerprint, initial.fingerprint, 'the hot cache should avoid repeated manifest stats inside its short recheck window');
+  await new Promise(resolve => setTimeout(resolve, TOPOLOGY_RECHECK_MS + 20));
   const manifestChanged = discoverRepositoryTopology(invalidationRoot);
-  assert.notEqual(manifestChanged.fingerprint, initial.fingerprint, 'known manifest stat changes must invalidate without a recursive TTL rescan');
+  assert.notEqual(manifestChanged.fingerprint, initial.fingerprint, 'external manifest edits must invalidate after the bounded recheck window');
   assert.equal(manifestChanged.packages[0].name, 'root-renamed');
   assert.deepEqual(manifestChanged.packages[0].dependencies, ['example']);
 

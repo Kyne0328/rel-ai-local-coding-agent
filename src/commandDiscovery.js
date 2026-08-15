@@ -70,9 +70,10 @@ function cacheDiscovery(root, signature, value, warnings) {
   discoveryCache.set(root, { signature, value, warnings });
 }
 
-function discoverCommands(workspacePath) {
+function discoverCommands(workspacePath, options = {}) {
   const root = String(workspacePath || "");
-  const signature = discoveryManifestSignature(root);
+  const topology = options.topology || discoverRepositoryTopology(root);
+  const signature = topology.fingerprint;
   const cached = discoveryCache.get(root);
   // Hand back a copy: several callers place the result straight into a tool response.
   if (cached?.signature === signature) return { ...cached.value };
@@ -85,7 +86,7 @@ function discoverCommands(workspacePath) {
   attemptDiscovery('Go', () => _discoverGo(discovered, root), warnings);
   attemptDiscovery('Cargo', () => _discoverCargo(discovered, root), warnings);
   attemptDiscovery('Python', () => _discoverPython(discovered, root), warnings);
-  attemptDiscovery('nested package manifests', () => projectNestedPackageCommands(discovered, discoverRepositoryTopology(root)), warnings);
+  attemptDiscovery('nested package manifests', () => projectNestedPackageCommands(discovered, topology), warnings);
   cacheDiscovery(root, signature, discovered, warnings);
   return { ...discovered };
 }

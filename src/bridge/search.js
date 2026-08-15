@@ -71,15 +71,16 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
     ...(args._workflowContext || {}),
     ...(graphPrioritized ? { graphPathScores: cachedGraph.pathScores } : {})
   };
+  const contextual = await buildContextualSearch(workspace, result.matches, searchPlan.contextArgs, {
+    requestedMode: searchPlan.requestedMode,
+    autoTier: searchPlan.autoTier,
+    selectionStrategy: graphPrioritized ? "path-match-density-and-graph" : searchPlan.selectionStrategy,
+    prioritizeFiles: searchPlan.requestedMode === "auto",
+    workflowContext
+  });
   return {
     ...baseResult,
-    ...buildContextualSearch(workspace, result.matches, searchPlan.contextArgs, {
-      requestedMode: searchPlan.requestedMode,
-      autoTier: searchPlan.autoTier,
-      selectionStrategy: graphPrioritized ? "path-match-density-and-graph" : searchPlan.selectionStrategy,
-      prioritizeFiles: searchPlan.requestedMode === "auto",
-      workflowContext
-    }),
+    ...contextual,
     next: result.timedOut && result.matches.length
       ? "Search reached its time budget and returned partial context. Narrow the pattern or glob if more coverage is needed."
       : result.matches.length

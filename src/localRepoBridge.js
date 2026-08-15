@@ -19,6 +19,7 @@ import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
 import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
 import { relaiApplyPatch, normalizeOpenAIPatchFormat } from "./bridge/patch.js";
 import { readProjectInstructions } from "./projectInstructions.js";
+import { discoverRepositoryTopology } from "./workflow/topology.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
@@ -28,6 +29,7 @@ const LARGE_RANGE_STREAM_THRESHOLD = 512 * 1024;
 const RANGE_READ_CHUNK_BYTES = 64 * 1024;
 const EXACT_REPLACE_TEXT_BYTE_LIMIT = 50000;
 const EXACT_REPLACE_MAX_OPERATIONS = 50;
+const READ_IO_CONCURRENCY = 12;
 
 async function repoSnapshot(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config || {});
@@ -40,7 +42,8 @@ async function repoSnapshot(workspace, config, args = {}) {
   const gitSummary = snapshotGitSummary(workspace, config);
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
   const manifests = readManifests(workspace.path);
-  const discoveredCommands = discoverCommands(workspace.path);
+  const topology = discoverRepositoryTopology(workspace.path);
+  const discoveredCommands = discoverCommands(workspace.path, { topology });
   const projectInstructions = readProjectInstructions(workspace, { targetPath: args.instructionPath });
   const git = await gitSummary;
   return {
@@ -106,7 +109,7 @@ function relaiRead(workspace, config, args = {}, context = {}) {
 
 async function relaiReadAsync(workspace, config, args = {}, context = {}) {
   const request = prepareReadRequest(workspace, config, args, context);
-  const results = await Promise.all(request.paths.map(requested => readSingleItemAsync(
+  const results = await mapWithConcurrency(request.paths, READ_IO_CONCURRENCY, requested => readSingleItemAsync(
     workspace,
     config,
     requested,
@@ -114,7 +117,7 @@ async function relaiReadAsync(workspace, config, args = {}, context = {}) {
     request.maxBytes,
     args,
     readOptions(request, requested)
-  )));
+  ));
   return collectReadResults(workspace, results);
 }
 
@@ -151,6 +154,20 @@ function collectReadResults(workspace, results) {
     if (result.skipped) skipped.push(result.skipped);
   }
   return { ok: true, workspace: workspace.alias, items, skipped };
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
 }
 
 // startLine/endLine apply to the whole batch, which forced one call per file whenever
@@ -266,18 +283,24 @@ async function readTextContentAsync(workspace, safe, stat, sessionActive, option
   const cached = cachedReadContent(workspace, safe, stat, sessionActive);
   if (cached) return cached;
   if (options.lineRange && options.guidanceMode !== 'full' && stat.size >= LARGE_RANGE_STREAM_THRESHOLD) {
-    return readLargeTextRangeAsync(safe.absolutePath, stat, options.lineRange, maxBytes);
+    const cachedMetadata = sessionCache.getCachedFileMetadata(workspace.alias, safe.absolutePath, stat.mtimeMs, stat.size);
+    const ranged = await readLargeTextRangeAsync(safe.absolutePath, stat, options.lineRange, maxBytes, cachedMetadata);
+    if (ranged.metadata) {
+      sessionCache.setCachedFileMetadata(workspace.alias, safe.absolutePath, stat.mtimeMs, ranged.metadata);
+    }
+    return ranged;
   }
   const data = await fs.promises.readFile(safe.absolutePath);
   return finalizeReadContent(workspace, safe, stat, sessionActive, data);
 }
 
-async function readLargeTextRangeAsync(file, stat, requestedRange, maxBytes) {
+async function readLargeTextRangeAsync(file, stat, requestedRange, maxBytes, cachedMetadata = null) {
   const handle = await fs.promises.open(file, 'r');
-  const hash = crypto.createHash('sha256');
+  const requestedEndLine = requestedRange.endLine || Number.POSITIVE_INFINITY;
+  const fullScan = !cachedMetadata || !Number.isFinite(requestedEndLine);
+  const hash = fullScan ? crypto.createHash('sha256') : null;
   const selected = [];
   const startLine = requestedRange.startLine || 1;
-  const requestedEndLine = requestedRange.endLine || Number.POSITIVE_INFINITY;
   let currentLine = stat.size === 0 ? 0 : 1;
   let selectedBytes = 0;
   let truncated = false;
@@ -289,7 +312,7 @@ async function readLargeTextRangeAsync(file, stat, requestedRange, maxBytes) {
       if (!bytesRead) break;
       const chunk = buffer.subarray(0, bytesRead);
       if (position === 0 && looksBinary(chunk)) return { data: null, text: '', cacheHit: false, sha256: null };
-      hash.update(chunk);
+      hash?.update(chunk);
       let segmentStart = 0;
       for (let index = 0; index < chunk.length; index += 1) {
         if (chunk[index] !== 10) continue;
@@ -299,19 +322,22 @@ async function readLargeTextRangeAsync(file, stat, requestedRange, maxBytes) {
       }
       if (segmentStart < chunk.length) appendRangeSegment(chunk.subarray(segmentStart), currentLine);
       position += bytesRead;
+      if (!fullScan && currentLine > requestedEndLine) break;
     }
   } finally {
     await handle.close();
   }
-  const totalLines = stat.size === 0 ? 0 : currentLine;
+  const totalLines = fullScan ? (stat.size === 0 ? 0 : currentLine) : cachedMetadata.totalLines;
+  const sha256 = fullScan ? hash.digest('hex') : cachedMetadata.sha256;
   const endLine = Math.min(requestedEndLine, totalLines);
   const content = Buffer.concat(selected).toString('utf8').replace(/\uFFFD+$/u, '');
   const returnedBytes = Buffer.byteLength(content, 'utf8');
   return {
     data: Buffer.alloc(0),
     text: content,
-    cacheHit: false,
-    sha256: hash.digest('hex'),
+    cacheHit: Boolean(cachedMetadata),
+    sha256,
+    ...(fullScan ? { metadata: { sha256, totalLines, bytes: stat.size } } : {}),
     selection: {
       content,
       returnedBytes,

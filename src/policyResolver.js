@@ -7,6 +7,7 @@ import { gitStatusArgs, parseGitStatus } from "./repo/gitStatus.js";
 
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
 const SESSION_TOUCH_PERSIST_INTERVAL_MS = 60 * 1000;
+const POLICY_CACHE_RECHECK_MS = 250;
 const policyCache = new Map();
 
 function sessionsDir(config) {
@@ -38,8 +39,19 @@ function sessionLastActivity(parsed) {
 
 function readPolicyFile(filePath, alias, expectedTaskId = '') {
   try {
+    const now = Date.now();
     const cached = policyCache.get(filePath);
-    if (cached && cached.fileRevision === policyFileRevision(filePath)) {
+    if (cached && now - cached.checkedAt < POLICY_CACHE_RECHECK_MS) {
+      if (!validPolicy(cached.policy, alias, expectedTaskId)) return null;
+      if (isExpiredPolicy(cached.policy)) {
+        policyCache.delete(filePath);
+        return null;
+      }
+      return structuredClone(cached.policy);
+    }
+    const revision = policyFileRevision(filePath);
+    if (cached && cached.fileRevision === revision) {
+      cached.checkedAt = now;
       if (!validPolicy(cached.policy, alias, expectedTaskId)) return null;
       if (isExpiredPolicy(cached.policy)) {
         policyCache.delete(filePath);
@@ -71,7 +83,7 @@ function isExpiredPolicy(parsed) {
 }
 
 function cachePolicy(filePath, policy, lastPersistedAt = Date.now(), fileRevision = policyFileRevision(filePath)) {
-  policyCache.set(filePath, { policy: structuredClone(policy), lastPersistedAt, fileRevision });
+  policyCache.set(filePath, { policy: structuredClone(policy), lastPersistedAt, fileRevision, checkedAt: Date.now() });
 }
 
 function policyFileRevision(filePath) {
@@ -251,4 +263,4 @@ function resolvePolicy(workspace, config) {
   };
 }
 
-export { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy, captureBaselineDirty, SESSION_IDLE_TTL_MS, SESSION_TOUCH_PERSIST_INTERVAL_MS };
+export { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy, captureBaselineDirty, POLICY_CACHE_RECHECK_MS, SESSION_IDLE_TTL_MS, SESSION_TOUCH_PERSIST_INTERVAL_MS };

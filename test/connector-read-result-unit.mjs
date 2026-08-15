@@ -30,6 +30,7 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 const { callTool: rawCallTool } = await import('../src/tools.js');
 const { toolResult } = await import('../src/mcpServer.js');
 const { repositoryIntelligence } = await import('../src/repository/intelligence/service.js');
+const sessionCache = await import('../src/sessionCache.js');
 const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 try {
@@ -67,6 +68,20 @@ try {
   assert.deepEqual(rangedItem.lineRange, { startLine: 4000, endLine: 4002, totalLines: largeLines.length });
   assert.equal(rangedItem.sha256, crypto.createHash('sha256').update(largeText).digest('hex'), 'ranged reads must preserve the authoritative whole-file hash');
   assert.ok(rangedItem.returnedBytes < 1024, 'a small ranged read must not return the whole large file');
+  const metadataEntriesAfterFirstRange = sessionCache.cacheStats().metadataEntries;
+  assert.ok(metadataEntriesAfterFirstRange >= 1, 'the first large ranged read should cache authoritative whole-file metadata');
+
+  const cachedRange = await callTool('relai_read', {
+    work_id: task.work_id,
+    paths: ['large-lines.txt'],
+    startLine: 7000,
+    endLine: 7001,
+    maxBytes: 16 * 1024,
+    guidanceMode: 'none'
+  }, { publicHttpOnly: true, requestId: 4, transportType: 'test' });
+  assert.equal(sessionCache.cacheStats().metadataEntries, metadataEntriesAfterFirstRange, 'later bounded ranges should reuse the existing metadata cache entry');
+  assert.equal(cachedRange.items[0].sha256, rangedItem.sha256);
+  assert.deepEqual(cachedRange.items[0].lineRange, { startLine: 7000, endLine: 7001, totalLines: largeLines.length });
 
   console.log('Connector read result limit and streamed range unit tests passed.');
 } finally {

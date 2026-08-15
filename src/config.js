@@ -68,11 +68,18 @@ function makeDefaultConfig() {
 // replaces the read+parse+normalize. Reusing one object also lets downstream callers
 // memoize per-config work by object identity.
 let configCache = null;
+const CONFIG_CACHE_RECHECK_MS = 250;
 const PUBLIC_CONFIG_SUMMARY_TTL_MS = 1000;
 let publicConfigSummaryCache = null;
 
 function readConfig(options = {}) {
   const configPath = getConfigPath();
+  const now = Date.now();
+  if (configCache
+    && configCache.path === configPath
+    && now - configCache.checkedAt < CONFIG_CACHE_RECHECK_MS) {
+    return configCache.config;
+  }
   let stat;
   try {
     // Nanosecond mtime, so two writes inside the same millisecond still invalidate.
@@ -86,6 +93,7 @@ function readConfig(options = {}) {
     && configCache.path === configPath
     && configCache.mtimeNs === stat.mtimeNs
     && configCache.size === stat.size) {
+    configCache.checkedAt = now;
     return configCache.config;
   }
   const parsed = safeReadJson(configPath);
@@ -95,7 +103,7 @@ function readConfig(options = {}) {
     writeJsonAtomic(configPath, config, { mode: 0o600, backup: true });
     stat = fs.statSync(configPath, { bigint: true });
   }
-  configCache = { path: configPath, mtimeNs: stat.mtimeNs, size: stat.size, config };
+  configCache = { path: configPath, mtimeNs: stat.mtimeNs, size: stat.size, checkedAt: Date.now(), config };
   return config;
 }
 
