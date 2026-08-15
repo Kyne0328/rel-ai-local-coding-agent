@@ -22,11 +22,13 @@ let _mounted = 0;
 let _tools = [];
 let _search = '';
 let _capability = 'all';
+let _loadError = '';
 
 export function mountTools(container) {
   const mountId = ++_mounted;
   _search = '';
   _capability = 'all';
+  _loadError = '';
   container.innerHTML = `
     <div class="section tools-section">
       <div class="section-head">
@@ -65,7 +67,7 @@ function renderToolbar(container) {
       _capability = 'all';
       renderTools(container);
     },
-    summary: _tools.length ? `${visible.length} of ${_tools.length} tools shown` : 'Loading tool catalog…'
+    summary: _loadError ? 'Tool catalog unavailable' : _tools.length ? `${visible.length} of ${_tools.length} tools shown` : 'Loading tool catalog…'
   }));
 }
 
@@ -112,9 +114,16 @@ function capabilityCount(capability) {
 }
 
 async function loadTools(container, mountId) {
-  const result = await fetchJson('/api/tools');
+  const result = await fetchJson('/api/tools', { cache: 'no-store' });
   if (mountId !== _mounted) return;
-  _tools = orderToolsForCatalog(toolsFromPayload(result));
+  const tools = toolsFromPayload(result);
+  if (result?.ok === false || tools == null) {
+    _tools = [];
+    _loadError = String(result?.error || 'The tool catalog returned an unexpected response.');
+  } else {
+    _tools = orderToolsForCatalog(tools);
+    _loadError = '';
+  }
   renderTools(container);
 }
 
@@ -124,15 +133,28 @@ function renderTools(container, { preserveToolbar = false } = {}) {
   if (!body) return;
   const visible = _tools.filter(matchesFilters);
   const filtered = _capability !== 'all' || Boolean(_search);
-  if (count) count.textContent = filtered ? `Showing ${visible.length} of ${_tools.length}` : `${_tools.length} Rel.AI tools`;
+  if (count) count.textContent = _loadError ? 'Unavailable' : filtered ? `Showing ${visible.length} of ${_tools.length}` : `${_tools.length} Rel.AI tools`;
   if (!preserveToolbar) renderToolbar(container);
   else {
     const summary = container.querySelector('#toolsToolbar .filter-summary');
     if (summary) summary.textContent = `${visible.length} of ${_tools.length} tools shown`;
   }
   body.innerHTML = '';
+  if (_loadError) {
+    body.appendChild(EmptyState({
+      icon: '!',
+      title: 'Tool catalog unavailable',
+      description: _loadError,
+      cta: 'Retry',
+      onCta: () => void loadTools(container, _mounted)
+    }));
+    return;
+  }
   if (!visible.length) {
-    body.appendChild(EmptyState({ title: 'No matching tools', description: 'Change the search or capability filter.' }));
+    body.appendChild(EmptyState({
+      title: _tools.length ? 'No matching tools' : 'No tools available',
+      description: _tools.length ? 'Change the search or capability filter.' : 'Rel.AI did not report any ChatGPT tools.'
+    }));
     return;
   }
   for (const tool of visible) body.appendChild(toolCard(tool));
@@ -180,7 +202,8 @@ function parameterMarkup(parameters) {
 
 function toolsFromPayload(result) {
   if (Array.isArray(result)) return result;
-  return Array.isArray(result?.tools) ? result.tools : [];
+  if (Array.isArray(result?.tools)) return result.tools;
+  return null;
 }
 
 export function orderToolsForCatalog(tools = []) {

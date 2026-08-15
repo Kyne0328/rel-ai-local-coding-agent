@@ -88,7 +88,15 @@ assert.doesNotMatch(wizard, /ngrok|Cloud gateway|Direct connection|approval toke
 
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-validation.js')), false);
 assert.match(workspaceMenuHtml([], ''), /aria-label="Project filter: All projects"/);
-assert.match(read('src/ui/features/settings/diagnostics.js'), /value: 'all', label: 'Everything'/);
+const diagnosticsSource = read('src/ui/features/settings/diagnostics.js');
+assert.match(diagnosticsSource, /value: 'all', label: 'Everything'/);
+assert.match(diagnosticsSource, /document\.visibilityState === 'hidden'/, 'hidden diagnostics tabs must pause live-tail requests');
+assert.match(diagnosticsSource, /captureLogScrollState/, 'diagnostic refreshes must preserve users reading older logs');
+assert.match(diagnosticsSource, /previous\.follow/, 'diagnostic logs should auto-follow only when the user was already near the tail');
+const toolsSource = read('src/ui/features/tools/index.js');
+assert.match(toolsSource, /Tool catalog unavailable/);
+assert.match(toolsSource, /cta: 'Retry'/);
+assert.match(toolsSource, /result\?\.ok === false \|\| tools == null/, 'tool API failures must not masquerade as an empty catalog');
 const appCss = read('src/ui/styles/app.css');
 assert.match(appCss, /mobile-nav[^}]*grid-template-columns:\s*repeat\(6,minmax\(52px,1fr\)\)/s, 'six top-level mobile destinations must share the responsive navigation row');
 for (const selector of ['.settings-shell', '.connection-page', '.tools-grid', '.diagnostic-page', '.workspace-grid', '.processes-card']) {

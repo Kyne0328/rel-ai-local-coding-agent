@@ -8,6 +8,7 @@ import {
   createDesktopNotifications,
   normalizeNotificationPreferences
 } from '../electron/desktop-notifications.js';
+import { normalizeDesktopStatus } from '../electron/desktop-status.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-desktop-notifications-'));
 const shown = [];
@@ -93,20 +94,20 @@ assert.equal(shown.length, 4);
 assert.equal(shown[3].options.title, 'Application update failed');
 
 service.handleDesktopStatusChange(
-  { serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', errorCode: '', error: '' },
-  { serverRunning: true, tunnelStatus: 'running', mcpUrl: 'https://example.dev/mcp', errorCode: '', error: '' }
+  normalizeDesktopStatus({ serverRunning: false, tunnelStatus: 'stopped', errorCode: '', error: '' }),
+  normalizeDesktopStatus({ serverRunning: true, tunnelStatus: 'running', errorCode: '', error: '' })
 );
 assert.equal(shown.length, 5);
 assert.equal(shown[4].options.title, 'Connection ready');
 service.handleDesktopStatusChange(
-  { serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', errorCode: '', error: '' },
-  { serverRunning: true, tunnelStatus: 'running', mcpUrl: 'https://example.dev/mcp', authenticationRequired: true, errorCode: '', error: '' }
+  normalizeDesktopStatus({ serverRunning: false, tunnelStatus: 'stopped', errorCode: '', error: '' }),
+  normalizeDesktopStatus({ serverRunning: true, tunnelStatus: 'running', authenticationRequired: true, errorCode: '', error: '' })
 );
 assert.equal(shown.length, 6);
 assert.equal(shown[5].options.title, 'ChatGPT authorization required');
 service.handleDesktopStatusChange(
-  { serverRunning: true, tunnelStatus: 'running', mcpUrl: 'https://example.dev/mcp', errorCode: '', error: '' },
-  { serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', errorCode: '', error: '' }
+  normalizeDesktopStatus({ serverRunning: true, tunnelStatus: 'running', errorCode: '', error: '' }),
+  normalizeDesktopStatus({ serverRunning: false, tunnelStatus: 'stopped', errorCode: '', error: '' })
 );
 assert.equal(shown.length, 7);
 assert.equal(shown[6].options.title, 'Rel.AI service stopped');

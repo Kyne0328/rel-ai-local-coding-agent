@@ -168,6 +168,7 @@ const shutdownCoordinator = createShutdownCoordinator({
   removeRuntimeMarker: removeControllerRuntimeMarker,
   shutdownTelemetry,
   markCleanShutdown: () => desktopLifecycle.markCleanShutdown(),
+  flushLogs: () => runtimeLogs.flush(),
   onLog: (message, options) => runtimeLogs.append(message, options)
 });
 const gotLock = app.requestSingleInstanceLock();
@@ -352,7 +353,7 @@ async function showDashboardWindow(routeHash = '') {
 }
 
 async function openDashboardWindow(routeHash = '') {
-  if (!serviceRuntime.isListening()) await startServer();
+  if (!serviceRuntime.isListening()) await waitForLocalService(startServer());
   if (!serviceRuntime.isListening()) {
     recoveryWindowManager.show();
     throw new Error(currentStatus.error || 'Rel.AI connection is not running.');
@@ -373,20 +374,41 @@ async function openDashboardDiagnostics() { return openDashboardWindow('#diagnos
 async function launchConfiguredDesktop(options = {}) {
   try {
     if (options.restart) await stopServer({ silent: true, preserveDashboard: true });
-    const status = await startServer();
-    if (!status.serverRunning) {
+    const pendingStart = startServer();
+    const status = options.background ? await pendingStart : await waitForLocalService(pendingStart);
+    if (!serviceRuntime.isListening()) {
       recoveryWindowManager.show();
       return status;
     }
     if (!options.background) await showDashboardWindow('');
     else recoveryWindowManager.hide();
-    return status;
+    return currentStatus;
   } catch (error) {
     if (currentStatus.errorCode !== ERROR_CODES.DASHBOARD_UNAVAILABLE) {
       setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed' }));
     }
     recoveryWindowManager.show();
     return currentStatus;
+  }
+}
+
+async function waitForLocalService(pendingStart, timeoutMs = 10_000) {
+  let pollTimer = null;
+  const localReady = new Promise(resolve => {
+    const startedAt = Date.now();
+    const poll = () => {
+      if (serviceRuntime.isListening() || Date.now() - startedAt >= timeoutMs) {
+        resolve(currentStatus);
+        return;
+      }
+      pollTimer = setTimeout(poll, 20);
+    };
+    poll();
+  });
+  try {
+    return await Promise.race([Promise.resolve(pendingStart), localReady]);
+  } finally {
+    if (pollTimer) clearTimeout(pollTimer);
   }
 }
 

@@ -93,6 +93,8 @@ for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:a
 assert.match(preload, /getLocalUsage/);
 assert.match(preload, /getRecoveryConfig/);
 assert.match(preload, /openRecoverySetup/);
+assert.match(preload, /return \(\) => ipcRenderer\.removeListener\(channel, listener\)/);
+assert.doesNotMatch(preload, /removeAllListeners/);
 assert.doesNotMatch(preload, /gateway|approvalToken|openExternal|open-link/i);
 assert.doesNotMatch(ipc, /desktop:gateway|desktop:approval|wizard:cloud|url:open-link/i);
 assert.match(ipc, /setTunnelApiKey/);
@@ -121,10 +123,15 @@ assert.match(main, /createSecureTunnelRuntime/);
 assert.match(main, /createTunnelCredentialStore/);
 assert.match(main, /openDashboardWindow\('#settings'\)/);
 assert.match(main, /openDashboardWindow\('#diagnostics'\)/);
+assert.match(main, /waitForLocalService\(startServer\(\)\)/, 'foreground dashboard opening must stop waiting once the local service is ready');
+assert.match(main, /options\.background \? await pendingStart : await waitForLocalService\(pendingStart\)/, 'foreground configured startup must show the dashboard while the tunnel continues connecting');
 assert.doesNotMatch(main, /createGatewayClient|createPublicConnectionRuntime|createApprovalTokenManager|managedNgrok/);
 assert.match(windowSecurity, /contextIsolation: true/);
 assert.match(windowSecurity, /sandbox: true/);
 assert.match(windowSecurity, /setPermissionRequestHandler/);
+assert.match(read('electron/local-protocol.js'), /await fs\.promises\.readFile\(target\)/, 'local renderer assets must not block the Electron main thread on file reads');
+assert.match(read('electron/runtime-log-buffer.js'), /fs\.promises\.appendFile/, 'runtime log writes must be asynchronous');
+assert.match(read('electron/runtime-log-buffer.js'), /async function flush\(\)/, 'runtime logs must expose a shutdown flush');
 assert.match(windowSecurity, /will-download/);
 
 assert.match(appUpdater, /autoDownload = false/);
@@ -146,6 +153,7 @@ assert.match(windowChromePolicy, /platform === 'win32'/);
 assert.match(windowChromePolicy, /frame: false/);
 assert.match(windowChromePolicy, /titleBarStyle: 'hiddenInset'/);
 assert.match(dashboardWindowPolicy, /desktop:window-state/);
+assert.match(dashboardWindowPolicy, /fs\.promises\.writeFile\(statePath, text\)/, 'debounced window-bound persistence must not block the Electron main thread');
 assert.match(windowChromeUi, /Restore window/);
 
 assert.match(dashboardTokens, /-webkit-app-region: drag/);

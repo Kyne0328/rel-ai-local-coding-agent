@@ -13,7 +13,8 @@ const coordinator = createShutdownCoordinator({
   },
   shutdownTelemetry: async () => calls.push('telemetry'),
   removeRuntimeMarker: () => calls.push('marker'),
-  markCleanShutdown: () => calls.push('clean')
+  markCleanShutdown: () => calls.push('clean'),
+  flushLogs: async () => calls.push('logs')
 });
 
 const first = coordinator.prepare('quit');
@@ -22,7 +23,7 @@ assert.equal(first, duplicate, 'shutdown preparation must be idempotent');
 const result = await first;
 assert.equal(result.clean, true);
 assert.equal(coordinator.isPrepared(), true);
-assert.deepEqual(calls, ['updater', 'activity', 'windows', 'service', 'telemetry', 'marker', 'clean']);
+assert.deepEqual(calls, ['updater', 'activity', 'windows', 'service', 'telemetry', 'marker', 'clean', 'logs']);
 
 const failureCalls = [];
 const failed = createShutdownCoordinator({

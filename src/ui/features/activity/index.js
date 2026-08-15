@@ -13,7 +13,6 @@ import { eventTimestampValue } from '../../../taskEvents.js';
 import {
   activityAbsoluteTime,
   activityActionLabel,
-  activityEntriesFingerprint,
   activityFilterTransition,
   activityMessage,
   activitySessionView,
@@ -38,13 +37,14 @@ let _requestedEventId = '';
 let _requestedEventRoute = '';
 let _openedRequestedEvent = false;
 let _loadError = '';
-let _renderedEntriesFingerprint = '';
+let _entriesRevision = 0;
+let _renderedTableKey = '';
 let _nextExpiryAt = Number.POSITIVE_INFINITY;
 let _clockListenerBound = false;
 let _filterOptions = { workspaces: [], tools: [] };
 let _sessionIndex = new Map();
 let _sessionIndexFingerprint = '';
-let _liveSnapshotFingerprint = '';
+let _sessionIndexRevision = 0;
 
 export function mountActivity(container, data = {}) {
   const token = ++_mountToken;
@@ -71,8 +71,8 @@ export function mountActivity(container, data = {}) {
   _liveEntriesSinceLoad = [];
   _historyLoading = true;
   _loadError = '';
-  _renderedEntriesFingerprint = '';
-  _liveSnapshotFingerprint = '';
+  _entriesRevision = 0;
+  _renderedTableKey = '';
   _nextExpiryAt = Number.POSITIVE_INFINITY;
   bindClockListener();
   container.innerHTML = '';
@@ -84,13 +84,8 @@ export function mountActivity(container, data = {}) {
 export function updateActivityLiveState(data = {}) {
   const sessionsChanged = updateSessionIndex(data.tasks || []);
   const liveEntries = Array.isArray(data.auditTail?.entries) ? data.auditTail.entries : [];
-  const liveFingerprint = activityEntriesFingerprint(liveEntries);
-  const entriesChanged = liveFingerprint === _liveSnapshotFingerprint ? false : mergeEntries(liveEntries);
-  _liveSnapshotFingerprint = liveFingerprint;
-  if (sessionsChanged && !entriesChanged) {
-    _renderedEntriesFingerprint = '';
-    renderFilteredTable({ rebuildFilterBar: true });
-  }
+  const entriesChanged = mergeEntries(liveEntries);
+  if (sessionsChanged && !entriesChanged) renderFilteredTable({ rebuildFilterBar: true });
   return sessionsChanged || entriesChanged;
 }
 
@@ -110,6 +105,7 @@ function updateSessionIndex(tasks = []) {
   if (fingerprint === _sessionIndexFingerprint) return false;
   _sessionIndex = next;
   _sessionIndexFingerprint = fingerprint;
+  _sessionIndexRevision += 1;
   return true;
 }
 
@@ -127,6 +123,7 @@ export function mergeEntries(entries) {
   const merged = mergeActivityEntries(_allEntries, entries);
   if (!merged.changed) return false;
   _allEntries = merged.entries;
+  _entriesRevision += 1;
   updateFilterOptions();
   renderFilteredTable();
   maybeOpenRequestedEvent();
@@ -216,6 +213,7 @@ function renderActivityFilterBar(scope = document) {
 
 function filteredEntries(now) {
   return filterActivityEntries(_allEntries, _filterState, now, {
+    sorted: true,
     sessionTitle: entry => activitySessionView(entry, _sessionIndex).title
   });
 }
@@ -343,9 +341,14 @@ async function loadLogs(token, options = {}) {
     if (mode === 'replace') {
       const stored = replaceActivityHistory(parsed.entries);
       _allEntries = mergeActivityEntries(stored, _liveEntriesSinceLoad).entries;
+      _entriesRevision += 1;
       _liveEntriesSinceLoad = [];
     } else {
-      _allEntries = mergeActivityEntries(_allEntries, parsed.entries).entries;
+      const merged = mergeActivityEntries(_allEntries, parsed.entries);
+      if (merged.changed) {
+        _allEntries = merged.entries;
+        _entriesRevision += 1;
+      }
     }
     _historyLoading = false;
     _loadError = '';
@@ -360,6 +363,7 @@ async function loadLogs(token, options = {}) {
       _historyLoading = false;
       _loadError = message;
       _allEntries = mergeActivityEntries([], _liveEntriesSinceLoad).entries;
+      _entriesRevision += 1;
       _liveEntriesSinceLoad = [];
       updateFilterOptions();
       renderFilteredTable();
@@ -377,6 +381,7 @@ async function resumeLiveActivity() {
   const merged = mergeActivityEntries(_allEntries, buffered);
   if (merged.changed) {
     _allEntries = merged.entries;
+    _entriesRevision += 1;
     updateFilterOptions();
     renderFilteredTable();
     maybeOpenRequestedEvent();
@@ -409,7 +414,7 @@ function renderFilteredTable(options = {}) {
   const now = Number(options.now || Date.now());
   const filtered = filteredEntries(now);
   _nextExpiryAt = nextActivityExpiry(_allEntries, _filterState, now);
-  renderTable(filtered);
+  renderTable(filtered, currentTableKey());
   if (options.resetHorizontalScroll === true) {
     const tableWrap = document.querySelector('#__activity-table-wrap .table-wrap');
     if (tableWrap) tableWrap.scrollLeft = 0;
@@ -468,19 +473,29 @@ function hasActiveFilters() {
   );
 }
 
-function renderTable(entries) {
+function currentTableKey() {
+  return [
+    _entriesRevision,
+    _sessionIndexRevision,
+    _filterState.search,
+    _filterState.timeRange,
+    _filterState.workspace,
+    _filterState.tool,
+    _filterState.status,
+    _filterState.task,
+    _historyLoading ? 1 : 0,
+    _loadError,
+    _requestedEventId,
+    Number.isFinite(_nextExpiryAt) ? _nextExpiryAt : 'infinity'
+  ].join('|');
+}
+
+function renderTable(entries, tableKey) {
   const body = document.getElementById('__activity-tbody');
   const count = document.getElementById('__activity-count');
   if (!body) return false;
-  const fingerprint = JSON.stringify([
-    activityEntriesFingerprint(entries),
-    _sessionIndexFingerprint,
-    _historyLoading,
-    _loadError,
-    _requestedEventId
-  ]);
-  if (_renderedEntriesFingerprint === fingerprint) return false;
-  _renderedEntriesFingerprint = fingerprint;
+  if (_renderedTableKey === tableKey) return false;
+  _renderedTableKey = tableKey;
 
   if (count) count.textContent = _historyLoading
     ? 'Loading…'

@@ -25,6 +25,7 @@ function createDashboardWindowManager(deps) {
   let dashboardOrigin = '';
   let dashboardAuthGeneration = '';
   let persistTimer = null;
+  let persistRevision = 0;
 
   async function open(routeHash = '') {
     const connection = await getConnection();
@@ -179,13 +180,31 @@ function createDashboardWindowManager(deps) {
 
   function schedulePersist() {
     if (persistTimer) clearTimeout(persistTimer);
-    persistTimer = setTimeout(persistBounds, 250);
+    const revision = ++persistRevision;
+    persistTimer = setTimeout(() => {
+      persistTimer = null;
+      void persistBoundsAsync(revision);
+    }, 250);
     persistTimer.unref?.();
+  }
+
+  async function persistBoundsAsync(revision) {
+    const win = getWindow();
+    if (!win || typeof win.getBounds !== 'function') return;
+    const text = JSON.stringify(dashboardWindowState(win, screen), null, 2);
+    try {
+      await fs.promises.mkdir(path.dirname(statePath), { recursive: true });
+      if (revision !== persistRevision) return;
+      await fs.promises.writeFile(statePath, text);
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] dashboard bounds:', error);
+    }
   }
 
   function persistBounds() {
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = null;
+    persistRevision += 1;
     const win = getWindow();
     if (!win || typeof win.getBounds !== 'function') return;
     try {

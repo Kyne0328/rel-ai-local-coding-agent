@@ -65,14 +65,15 @@ async function loadDiagnostics(container, options = {}) {
   updateSourceOptions(report);
   renderCurrentReport(container);
   setReportActionsEnabled(container, true);
-  scrollLogTails(container);
 }
 
 function renderCurrentReport(container) {
   const root = container.querySelector('#diagnosticSummary');
   if (!root || !currentReport) return;
+  const logScrollState = captureLogScrollState(root);
   const view = filteredDiagnosticView(currentReport);
   syncDiagnosticRegions(root, renderReport(currentReport, view));
+  restoreLogScrollState(root, logScrollState);
   bindMaintenance(root, container);
   const summary = container.querySelector('#diagnosticFilterHost .filter-summary');
   if (summary) summary.textContent = filterSummary(view);
@@ -331,7 +332,7 @@ function stopLiveTail() {
 }
 
 async function refreshLiveTail() {
-  if (liveTailLoading) return;
+  if (liveTailLoading || document.visibilityState === 'hidden') return;
   if (!currentContainer || !document.contains(currentContainer) || !location.hash.startsWith('#diagnostics')) {
     stopLiveTail();
     return;
@@ -599,8 +600,21 @@ function filterSummary(view) {
   return `${view.findings.length} of ${view.totalFindings} findings · ${view.shownLogs} of ${view.totalLogs} log entries shown`;
 }
 
-function scrollLogTails(container) {
-  for (const element of container.querySelectorAll('.diagnostic-log-list')) element.scrollTop = element.scrollHeight;
+function captureLogScrollState(container) {
+  return [...container.querySelectorAll('.diagnostic-log-list')].map(element => ({
+    top: element.scrollTop,
+    follow: element.scrollHeight - element.scrollTop - element.clientHeight <= 24
+  }));
+}
+
+function restoreLogScrollState(container, state) {
+  const logs = [...container.querySelectorAll('.diagnostic-log-list')];
+  for (let index = 0; index < logs.length; index += 1) {
+    const element = logs[index];
+    const previous = state[index];
+    if (!previous || previous.follow) element.scrollTop = element.scrollHeight;
+    else element.scrollTop = Math.min(previous.top, element.scrollHeight);
+  }
 }
 
 function downloadDiagnosticState(report) {

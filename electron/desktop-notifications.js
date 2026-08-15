@@ -202,7 +202,7 @@ function createDesktopNotifications(options = {}) {
 function desktopState(status = {}) {
   if (status.errorCode || status.error || status.tunnelStatus === 'failed') return 'error';
   if (status.serverRunning && status.authenticationRequired === true) return 'authorization_required';
-  if (status.serverRunning && status.tunnelStatus === 'running' && status.mcpUrl) return 'ready';
+  if (status.connectionState?.chatgptReadiness?.status === 'ready') return 'ready';
   if (!status.serverRunning) return 'stopped';
   return 'connecting';
 }
