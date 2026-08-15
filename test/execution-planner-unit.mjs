@@ -7,10 +7,9 @@ import { execSync } from 'node:child_process';
 import { planEdit } from "../src/executionPlanner.js";
 import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES } from "../src/editLimits.js";
 
-assert.equal(MAX_BATCH_EDITS, 100);
-assert.equal(MAX_BATCH_REPLACEMENTS, 500);
-assert.equal(MAX_BATCH_INPUT_BYTES, 8 * 1024 * 1024);
-assert.equal(MAX_BATCH_SNAPSHOT_BYTES, 64 * 1024 * 1024);
+for (const [name, value] of Object.entries({ MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES })) {
+  assert.ok(Number.isSafeInteger(value) && value > 0, `${name} must remain a positive finite bound`);
+}
 
 function gitShell(command, options = {}) {
   return execSync(command, options);
@@ -285,7 +284,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.resultDetailsCompacted, true);
     assert.equal(result.results.length, MAX_BATCH_EDITS);
     assert.equal(fs.readFileSync(path.join(dir, 'batch', 'file-0.txt'), 'utf8'), 'value-0\n');
-    assert.equal(fs.readFileSync(path.join(dir, 'batch', 'file-99.txt'), 'utf8'), 'value-99\n');
+    const lastIndex = MAX_BATCH_EDITS - 1;
+    assert.equal(fs.readFileSync(path.join(dir, 'batch', `file-${lastIndex}.txt`), 'utf8'), `value-${lastIndex}\n`);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

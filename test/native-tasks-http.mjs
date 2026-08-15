@@ -7,7 +7,8 @@ import path from 'node:path';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
-import { createHttpMcpSession, postMcp } from './helpers/http-mcp.mjs';
+import { createHttpMcpSession, MCP_VERSION, postMcp } from './helpers/http-mcp.mjs';
+import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = await reservePort();
@@ -86,11 +87,11 @@ try {
   });
   assert.equal(client.discovery.response.headers.get('mcp-session-id'), null);
   assert.deepEqual(client.discovery.body.result?.capabilities?.extensions?.[extensionId], { revision: TASKS_EXTENSION_REVISION });
-  assert.deepEqual(client.discovery.body.result?.supportedVersions, ['2026-07-28']);
+  assert.deepEqual(client.discovery.body.result?.supportedVersions, [MCP_VERSION]);
 
   const listed = await client.request('tools/list', {}, { id: 2, capabilities: {} });
   assert.equal(listed.response.status, 200, JSON.stringify(listed.body));
-  assert.equal(listed.body.result?.tools?.length, 12);
+  assert.equal(listed.body.result?.tools?.length, activeToolCount);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_native_tasks_probe'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_get'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_cancel'), false);

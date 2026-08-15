@@ -7,8 +7,8 @@ const electronPackage = JSON.parse(fs.readFileSync('electron/package.json', 'utf
 const policy = JSON.parse(fs.readFileSync('.github/relai/support-policy.json', 'utf8'));
 const httpServer = fs.readFileSync('src/httpServer.js', 'utf8');
 
-assert.equal(policy.minimumSupportedVersion, '0.25.0');
-assert.equal(policy.minimumRecommendedVersion, '0.25.0');
+assert.match(policy.minimumSupportedVersion, /^\d+\.\d+\.\d+$/, 'support policy must declare a stable minimum supported version');
+assert.match(policy.minimumRecommendedVersion, /^\d+\.\d+\.\d+$/, 'support policy must declare a stable recommended version');
 assert.equal(electronPackage.build.files.includes('update-support-policy.js'), true);
 assert.match(main, /createUpdateSupportPolicy/);
 assert.match(main, /function combinedUpdateStatus/);

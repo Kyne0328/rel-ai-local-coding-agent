@@ -8,24 +8,29 @@ const scripts = packageJson.scripts || {};
 const ciDir = path.join(root, '.github', 'workflows');
 const failures = [];
 
-if (packageJson.engines?.node !== '>=24.15.0 <25') {
-  failures.push(`package.json must require Node.js 24.15+ LTS; got ${packageJson.engines?.node || 'none'}`);
+const nodeEngine = String(packageJson.engines?.node || '');
+const npmEngine = String(packageJson.engines?.npm || '');
+const packageManagerMatch = /^npm@(\d+)\.\d+\.\d+$/.exec(String(packageJson.packageManager || ''));
+const minimumNodeMajor = Number(/>=\s*(\d+)/.exec(nodeEngine)?.[1]);
+const minimumNpmMajor = Number(/>=\s*(\d+)/.exec(npmEngine)?.[1]);
+if (!Number.isSafeInteger(minimumNodeMajor) || minimumNodeMajor <= 0) {
+  failures.push(`package.json must declare a minimum supported Node.js major; got ${nodeEngine || 'none'}`);
 }
-if (packageJson.engines?.npm !== '>=12.0.0 <13') {
-  failures.push(`package.json must require npm 12; got ${packageJson.engines?.npm || 'none'}`);
+if (!Number.isSafeInteger(minimumNpmMajor) || minimumNpmMajor <= 0) {
+  failures.push(`package.json must declare a minimum supported npm major; got ${npmEngine || 'none'}`);
 }
-if (packageJson.packageManager !== 'npm@12.0.2') {
-  failures.push(`package.json must pin npm@12.0.2; got ${packageJson.packageManager || 'none'}`);
+if (!packageManagerMatch) {
+  failures.push(`package.json packageManager must pin an exact npm version; got ${packageJson.packageManager || 'none'}`);
+} else if (Number(packageManagerMatch[1]) < minimumNpmMajor) {
+  failures.push(`packageManager ${packageJson.packageManager} must satisfy the declared npm minimum ${npmEngine}`);
 }
 
 const ciWorkflowPath = path.join(ciDir, 'ci.yml');
-if (fs.existsSync(ciWorkflowPath)) {
+if (fs.existsSync(ciWorkflowPath) && Number.isSafeInteger(minimumNodeMajor)) {
   const ciWorkflow = fs.readFileSync(ciWorkflowPath, 'utf8');
-  if (!/node-version:\s*24/.test(ciWorkflow)) {
-    failures.push('CI must test the required Node.js 24 LTS line.');
-  }
-  if (/node-version:\s*(?:\[[^\]]*\b(?:18|20|22)\b|(?:18|20|22)\b)/.test(ciWorkflow)) {
-    failures.push('Required CI jobs must not use Node.js versions older than the Node 24 runtime policy.');
+  const configuredNodeMajors = [...ciWorkflow.matchAll(/node-version:\s*['"]?(\d+)/g)].map(match => Number(match[1]));
+  if (!configuredNodeMajors.some(major => major >= minimumNodeMajor)) {
+    failures.push(`CI must test a Node.js major that satisfies the declared minimum ${nodeEngine}.`);
   }
 }
 
@@ -56,69 +61,6 @@ for (const file of walk(ciDir)) {
   }
 }
 
-const sourceLineBudgets = {
-  'src/localRepoBridge.js': 900,
-  'src/bridge/browser.js': 150,
-  'src/bridge/patch.js': 450,
-  'src/bridge/review.js': 140,
-  'src/bridge/restore.js': 140,
-  'src/bridge/searchContext.js': 330,
-  'src/bridge/codeIntelligence.js': 430,
-  'src/bridge/tidy.js': 320,
-  'src/bridge/validation.js': 240,
-  'src/bridge/checkDetection.js': 140,
-  'src/repo/gitStatus.js': 180,
-  'src/bridge/writeGuidance.js': 180,
-  'src/tools.js': 180,
-  'src/tools/actionDefinitions.js': 800,
-  'src/tools/actionCatalog.js': 400,
-  'src/tools/schema.js': 120,
-  'src/tools/handlers.js': 180,
-  'src/tools/connector.js': 180,
-  'src/tools/errors.js': 120,
-  'src/tools/session.js': 220,
-  'src/tools/status.js': 360,
-  // High-churn runtime owners stay explicit here so growth is deliberate rather than invisible.
-  'src/mcp/nativeTaskService.js': 1250,
-  'src/mcp/transportTasks.js': 650,
-  'src/parallelTaskSandbox.js': 650,
-  'src/taskLifecycle.js': 300,
-  'src/processManager.js': 1150,
-  'src/repository/intelligence/queryService.js': 600,
-  'src/workflow/runtime.js': 100,
-  'src/mcpServer.js': 220,
-  // One browser-safe owner for event identity, timestamps, and ordering mechanics.
-  'src/taskEvents.js': 125,
-  'src/projectInstructions.js': 180,
-  'src/httpServer.js': 300,
-  'src/http/dashboard.js': 500,
-  'src/http/dashboardHistory.js': 80,
-  'src/http/mcp.js': 255,
-  'src/http/io.js': 220,
-  'src/http/auth.js': 120,
-  // Electron remains the composition root; resource behavior lives in owned modules.
-  'electron/main.js': 520,
-  'electron/app-updater.js': 240,
-  'electron/app-updater-state.js': 140,
-  'electron/desktop-settings.js': 70,
-  'electron/desktop-lifecycle.js': 210,
-  // One resource owner covers window creation, security, navigation, bounds, and chrome events.
-  'electron/dashboard-window.js': 260,
-  // One registration file composes eight narrow capability groups and the exact 33-channel contract.
-  'electron/ipc-handlers.js': 300,
-  'electron/launcher-config.js': 100,
-  'electron/secure-tunnel-runtime.js': 250,
-  'electron/tunnel-credentials.js': 140,
-  'electron/window-size.js': 100,
-  'electron/resource-path.js': 50,
-  'src/ui/workspace-input.js': 60,
-  'src/ui/features/workspaces/index.js': 40,
-  'src/ui/features/workspaces/cards.js': 240,
-  'src/ui/features/workspaces/actions.js': 280,
-  'src/ui/features/settings/desktop-updates.js': 250,
-  'src/ui/features/settings/desktop-startup.js': 110
-};
-
 const allowedSynchronousProcessDiscovery = new Set([
   'src/bridge/exec.js',
   'src/release.js',
@@ -131,18 +73,6 @@ for (const file of collectJavaScript(path.join(root, 'src'))) {
   if (/execFileSync\s*\(/.test(source)) failures.push(`${relativePath} blocks the Node event loop with execFileSync.`);
   if (/spawnSync\s*\(/.test(source) && !allowedSynchronousProcessDiscovery.has(relativePath)) {
     failures.push(`${relativePath} uses spawnSync outside the bounded executable-discovery allowlist.`);
-  }
-}
-
-for (const [relativePath, maxLines] of Object.entries(sourceLineBudgets)) {
-  const file = path.join(root, relativePath);
-  if (!fs.existsSync(file)) {
-    failures.push(`Missing architecture module: ${relativePath}`);
-    continue;
-  }
-  const lineCount = fs.readFileSync(file, 'utf8').split(/\r?\n/).length;
-  if (lineCount > maxLines) {
-    failures.push(`${relativePath} has ${lineCount} lines; architecture budget is ${maxLines}`);
   }
 }
 

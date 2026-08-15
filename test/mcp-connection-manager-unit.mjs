@@ -8,9 +8,11 @@ import { resolveConnectionGenerations } from '../src/mcp/connectionGenerations.j
 import { runtimeMetadata } from '../src/runtimeCompatibility.js';
 
 const neutralManifest = buildToolManifest({});
-assert.equal(neutralManifest.schemaVersion, 7, 'public MCP contract must use schema version 7');
-assert.equal(typeof neutralManifest.instructions, 'string');
-assert.match(neutralManifest.instructions, /Start each objective/);
+assert.equal(neutralManifest.schemaVersion, runtimeMetadata().schemaVersion, 'public MCP manifest and runtime compatibility metadata must use the same schema revision');
+assert.ok(String(neutralManifest.instructions || '').trim(), 'public MCP instructions must not be empty');
+for (const invariant of [/approval/i, /task-ownership|ownership/i, /authoritative evidence/i, /completion/i]) {
+  assert.match(neutralManifest.instructions, invariant, `public MCP instructions must retain the ${invariant} safety invariant`);
+}
 assert.ok(neutralManifest.tools.every(tool => tool.outputSchema), 'every canonical tool must include its output schema');
 assert.equal(neutralManifest.version, neutralManifest.hash.slice(0, 24), 'short manifest version must derive from the full digest');
 assert.equal(neutralManifest.version, buildToolManifest({}).version, 'neutral manifest must be deterministic');

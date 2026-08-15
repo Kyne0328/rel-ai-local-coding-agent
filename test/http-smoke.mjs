@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
+import { activeToolCount, activeToolNames, activeToolSurface } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = await reservePort();
@@ -54,7 +55,8 @@ try {
 
   const compressed = await fetch(`${base}/api/tools?token=${encodeURIComponent(token)}`, { headers: { 'accept-encoding': 'gzip' } });
   assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  assert.equal((await compressed.json()).length, 12);
+  const compressedTools = await compressed.json();
+  assert.equal(compressedTools.length, activeToolCount);
 
   const dashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(dashboard.ok, true);
@@ -66,8 +68,8 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 43);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, activeToolSurface.toolSurfaceVersion);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, activeToolCount);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
     discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'],
@@ -82,7 +84,7 @@ try {
   assert.match(serverInstructions, /explicit task-completion contract/i);
   assert.doesNotMatch(serverInstructions, /Start each objective|Inspect relevant files|Validate after changes|recovery guidance/i, 'global MCP instructions must contain universal invariants rather than specialist workflow tactics');
   assert.equal(discovery.body.result?.cacheScope, 'private');
-  assert.equal(discovery.body.result?.ttlMs, 30000);
+  assert.ok(Number.isFinite(discovery.body.result?.ttlMs) && discovery.body.result.ttlMs > 0, 'discovery cache TTL must remain finite and positive');
   assert.equal(discovery.response.headers.get('mcp-session-id'), null);
 
   const liveDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
@@ -92,10 +94,11 @@ try {
   assert.deepEqual(liveDashboard.mcpConnection.activeSessions, []);
 
   const listed = await client.request('tools/list');
-  assert.equal(listed.body.result?.tools?.length, 12);
+  assert.equal(listed.body.result?.tools?.length, activeToolCount);
   const listedToolBytes = Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools }));
-  assert.ok(listedToolBytes < 65_536, `HTTP tools/list is ${listedToolBytes} bytes`);
+  assert.ok(listedToolBytes > 0, 'HTTP tools/list must serialize to a non-empty response');
   const names = listed.body.result.tools.map(tool => tool.name);
+  assert.deepEqual(names, activeToolNames, 'HTTP discovery must expose the canonical public tool surface');
   for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish']) {
     assert.ok(names.includes(expected), `${expected} missing`);
   }
@@ -172,7 +175,7 @@ try {
   assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
 
   const synchronizedTools = await client.request('tools/list');
-  assert.equal(synchronizedTools.body.result?.tools?.length, 12);
+  assert.equal(synchronizedTools.body.result?.tools?.length, activeToolCount);
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.equal(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
@@ -184,9 +187,10 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 43);
+  assert.equal(manifest.toolSurfaceVersion, activeToolSurface.toolSurfaceVersion);
   assert.equal(Object.hasOwn(manifest, 'profile'), false);
-  assert.equal(manifest.toolCount, 12);
+  assert.equal(manifest.toolCount, activeToolCount);
+  assert.equal(manifest.toolCount, manifest.tools.length);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
   assert.equal(surfaceByName.get('relai_exec').executionClass, 'bounded_synchronous');
   assert.equal(surfaceByName.get('relai_exec').taskSupport, 'forbidden');

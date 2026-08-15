@@ -95,6 +95,7 @@ function verifyReleaseBump() {
 function verifyPackageContracts() {
   const rootPackage = readJson('package.json');
   const electronPackage = readJson('electron/package.json');
+  const electronLockRoot = readJson('electron/package-lock.json').packages?.[''] || {};
   assert.equal(rootPackage.productName, 'Rel.AI MCP');
   assert.deepEqual(rootPackage.author, { name: 'Kyne', url: 'https://github.com/Kyne0328' });
   assert.deepEqual(electronPackage.author, {
@@ -103,10 +104,8 @@ function verifyPackageContracts() {
     url: 'https://github.com/Kyne0328'
   });
   assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
-  assert.equal(electronPackage.dependencies['electron-updater'], '6.8.9');
-  assert.equal(electronPackage.devDependencies.electron, '43.2.0');
-  assert.equal(electronPackage.devDependencies['electron-builder'], '26.15.3');
-  assert.equal(electronPackage.devDependencies['@electron/fuses'], '2.1.3');
+  assert.deepEqual(electronLockRoot.dependencies || {}, electronPackage.dependencies || {}, 'Electron runtime dependencies must stay synchronized with the lockfile');
+  assert.deepEqual(electronLockRoot.devDependencies || {}, electronPackage.devDependencies || {}, 'Electron development dependencies must stay synchronized with the lockfile');
 
   assert.equal(rootPackage.scripts['electron:build'], 'node scripts/electron-package.mjs --mode unpacked --platform win32');
   assert.equal(rootPackage.scripts['electron:build:linux'], 'node scripts/electron-package.mjs --mode unpacked --platform linux');

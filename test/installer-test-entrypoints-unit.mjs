@@ -80,10 +80,13 @@ assert.match(cleanScript, /retryDelay:\s*250/);
 
 assert.equal(packageJson.scripts.test, 'npm run test:all');
 assert.match(packageJson.scripts['test:all'], /test\/run-tests\.mjs/);
+assert.doesNotMatch(packageJson.scripts['test:all'], /release-check\.mjs/, 'normal development tests must not require finalized release metadata');
 assert.doesNotMatch(packageJson.scripts['test:all'], /electron:dist|electron-builder|installer|uninstall/i);
 assert.doesNotMatch(testRunner, /scripts\/installed-app-smoke|electron-builder|installer|uninstall/i);
 assert.equal(fs.existsSync(path.join(root, 'scripts', 'installed-app-smoke.mjs')), false,
   'the host-destructive installed-app harness must remain removed');
+
+assert.match(packageJson.scripts['release:check'], /release-check\.mjs/, 'release validation must still enforce finalized release metadata');
 
 assert.equal(electronPackage.scripts?.postinstall, 'node node_modules/electron/install.js',
   'clean Electron installs must always provision the pinned runtime binary');

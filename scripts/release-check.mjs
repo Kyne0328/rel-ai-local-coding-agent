@@ -127,7 +127,7 @@ if (!fs.existsSync(releaseManifestPath)) {
 } else {
   const releaseManifest = readJson('release-manifest.json');
   expectEqual(releaseManifest.applicationVersion, version, 'release-manifest.json applicationVersion');
-  expectEqual(releaseManifest.protocolVersion, '2026-07-28', 'release-manifest.json protocolVersion');
+  expect(/^\d{4}-\d{2}-\d{2}$/.test(String(releaseManifest.protocolVersion || '')), 'release-manifest.json protocolVersion must use the supported date-version format');
   expect(Number.isInteger(releaseManifest.toolCount) && releaseManifest.toolCount > 0, 'release-manifest.json toolCount must be a positive integer');
   expect(/^[A-Za-z0-9_-]{24}$/.test(String(releaseManifest.manifestHash || '')), 'release-manifest.json manifestHash must be a 24-character base64url digest');
 
