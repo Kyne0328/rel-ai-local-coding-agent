@@ -8,6 +8,7 @@ import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { getCurrentTaskAbortSignal } from '../toolActivity.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { runSpan } from '../telemetry.js';
+import { isReusableDependencyPath } from '../reusableDependencies.js';
 import { isPathInside } from '../safety.js';
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } from '../repo/gitStatus.js';
 import { clampNumber } from './limits.js';
@@ -230,7 +231,57 @@ function changedStatusFiles(before, after) {
   const files = [...all]
     .filter(file => before.get(file) !== after.get(file))
     .sort((left, right) => left.localeCompare(right));
-  return { files: files.slice(0, MAX_CHANGED_FILES), truncated: files.length > MAX_CHANGED_FILES };
+  return boundedChangedFiles(files);
+}
+
+async function changedFilesSinceCommit(workspace, config, commit) {
+  const baseline = String(commit || '').trim();
+  if (!/^[0-9a-f]{40,64}$/i.test(baseline)) return null;
+  const tracked = await runProcess('git', ['diff', '--name-status', '-z', '--no-renames', baseline, '--'], {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
+  if (tracked.exitCode !== 0 || tracked.stdoutTruncated) return null;
+  const untracked = await runProcess('git', ['ls-files', '-t', '-z', '--others', '--exclude-standard'], {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
+  if (untracked.exitCode !== 0 || untracked.stdoutTruncated) return null;
+  return boundedChangedFiles([
+    ...parseNameStatusPaths(tracked.stdout),
+    ...parseTaggedUntrackedPaths(untracked.stdout)
+  ]);
+}
+
+function parseNameStatusPaths(output) {
+  const records = String(output || '').split('\0').filter(Boolean);
+  const paths = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    const tab = record.indexOf('\t');
+    if (tab >= 0) {
+      const candidate = record.slice(tab + 1);
+      if (candidate) paths.push(candidate);
+      continue;
+    }
+    if (/^[A-Z][0-9]*$/i.test(record) && records[index + 1]) paths.push(records[++index]);
+  }
+  return paths;
+}
+
+function parseTaggedUntrackedPaths(output) {
+  return String(output || '').split('\0').filter(Boolean).map(record =>
+    record.startsWith('? ') ? record.slice(2) : record
+  ).filter(Boolean);
+}
+
+function boundedChangedFiles(files) {
+  const uniqueFiles = [...new Set(files.map(file => String(file || '').replaceAll('\\', '/')).filter(Boolean))]
+    .filter(file => !isReusableDependencyPath(file))
+    .sort((left, right) => left.localeCompare(right));
+  return { files: uniqueFiles.slice(0, MAX_CHANGED_FILES), truncated: uniqueFiles.length > MAX_CHANGED_FILES };
 }
 
 async function relaiExec(workspace, config, args = {}, context = {}) {
@@ -247,7 +298,8 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   const env = normalizeCommandEnv(args.env);
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, 2 * 1024 * 1024);
-  const statusBefore = await readGitStatusMap(workspace, config);
+  const sandboxBaseline = workspace.taskSandbox === true ? String(context.mutationBaselineCommit || '').trim() : '';
+  const statusBefore = sandboxBaseline ? null : await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
@@ -275,8 +327,21 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     const host = command ? executionLabel : executable;
     throw processExecutionError('PROCESS_SPAWN_FAILED', `Could not start ${host}: ${result.error || 'unknown spawn error'}`);
   }
-  const statusAfter = await readGitStatusMap(workspace, config);
-  const changed = changedStatusFiles(statusBefore, statusAfter);
+  let mutationTracking = 'unavailable';
+  let changed;
+  if (sandboxBaseline) {
+    changed = await changedFilesSinceCommit(workspace, config, sandboxBaseline);
+    if (changed) mutationTracking = 'sandbox-baseline';
+    else {
+      const statusAfter = await readGitStatusMap(workspace, config);
+      changed = statusAfter ? boundedChangedFiles([...statusAfter.keys()]) : { files: [], truncated: false };
+      if (statusAfter) mutationTracking = 'sandbox-status-fallback';
+    }
+  } else {
+    const statusAfter = await readGitStatusMap(workspace, config);
+    changed = changedStatusFiles(statusBefore, statusAfter);
+    if (statusBefore && statusAfter) mutationTracking = 'git';
+  }
   const commandSucceeded = result.exitCode === 0 && result.timedOut !== true && result.cancelled !== true;
   return {
     ok: true,
@@ -302,7 +367,7 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     ...(Object.keys(env).length ? { environmentKeys: Object.keys(env).sort((left, right) => left.localeCompare(right)) } : {}),
     changedFiles: changed.files,
     changedFilesTruncated: changed.truncated,
-    mutationTracking: statusBefore && statusAfter ? 'git' : 'unavailable'
+    mutationTracking
   };
 }
 

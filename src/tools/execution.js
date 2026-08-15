@@ -43,6 +43,9 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         }, queueOptions('write', 'workspace', taskId));
       }
 
+      const sandboxEntry = executionWorkspace?.taskSandbox === true && sourceWorkspace
+        ? findTaskSandbox(config, sourceWorkspace.alias, taskId)
+        : null;
       const physicalArgs = executionWorkspace?.taskSandbox === true
         ? { ...effectiveArgs, workspace: executionWorkspace.alias }
         : effectiveArgs;
@@ -66,7 +69,8 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             nativeTaskId: context?.nativeTaskId,
             transportType: context?.transportType,
             executionMode: context?.executionMode || '',
-            cancel: context?.cancel || null
+            cancel: context?.cancel || null,
+            mutationBaselineCommit: sandboxEntry?.syncCommit || ''
           });
           if (handled && typeof handled === 'object' && !Array.isArray(handled) && handled.ok === false && handled.error?.code === 'CANCELLED') {
             context?.cancel?.throwIfCancelled?.();

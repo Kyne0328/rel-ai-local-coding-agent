@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { clearSessionPolicy } from './policyResolver.js';
 import { runProcess } from './process.js';
+import { REUSABLE_DEPENDENCY_ROOTS, isReusableDependencyPath } from './reusableDependencies.js';
 import { isSecretPath } from './safety.js';
 import { getStateDir } from './statePaths.js';
 import { taskError } from './toolActivity.js';
@@ -26,7 +27,6 @@ const SANDBOX_ROUTED_OPERATIONS = new Set([
 ]);
 const LIVE_PROMOTION_OPERATIONS = new Set(['relai_edit', 'relai_exec']);
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'cancelled', 'failed', 'inactive']);
-const REUSABLE_DEPENDENCY_ROOTS = ['node_modules', 'electron/node_modules'];
 
 function registryPath(config) {
   return path.join(getStateDir(config), 'parallel-sandboxes', 'index.json');
@@ -499,11 +499,6 @@ function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, target);
   }
-}
-
-function isReusableDependencyPath(relativePath) {
-  const normalized = String(relativePath || '').replaceAll('\\', '/').replace(/^\.\//, '');
-  return REUSABLE_DEPENDENCY_ROOTS.some(root => normalized === root || normalized.startsWith(`${root}/`));
 }
 
 async function workspaceRevision(workspace, config) {

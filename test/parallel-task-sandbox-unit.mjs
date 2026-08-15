@@ -96,7 +96,17 @@ try {
   assert.equal(resolvedSandbox.taskSandbox, true);
   assert.equal(resolvedSandbox.sourceAlias, 'app');
 
-  const promotedAtBeforeRead = entries[0].lastPromotedAt;
+  const sandboxExec = await rawCallTool('relai_exec', {
+    workspace: 'app',
+    work_id: second.work_id,
+    executable: process.execPath,
+    argv: ['-e', "require('node:fs').writeFileSync('exec-generated.txt', 'generated from sandbox exec\\n')"]
+  }, context);
+  assert.deepEqual(sandboxExec.changedFiles, ['exec-generated.txt']);
+  assert.equal(sandboxExec.mutationTracking, 'sandbox-baseline');
+  assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
+
+  const promotedAtBeforeRead = sandboxEntries(config)[0].lastPromotedAt;
   await rawCallTool('relai_read', {
     workspace: 'app', work_id: second.work_id, paths: ['beta.txt']
   }, context);
