@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { allWorkspaceAliases, readConfig, resolveWorkspace } from '../src/config.js';
-import { promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
+import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
@@ -71,14 +71,33 @@ try {
   assert.equal(fs.readFileSync(path.join(workspacePath, 'alpha.txt'), 'utf8'), 'alpha from first\n');
   assert.equal(sandboxEntries(config).length, 0, 'the oldest active task should keep the visible workspace');
 
+  const readOnlyExec = await rawCallTool('relai_exec', {
+    workspace: 'app', work_id: second.work_id, executable: 'git', argv: ['status', '--short']
+  }, context);
+  assert.equal(readOnlyExec.ok, true);
+  assert.equal(sandboxEntries(config).length, 0, 'clearly read-only Git exec calls must not create private worktrees');
+
   const secondEdit = await rawCallTool('relai_edit', {
     workspace: 'app', work_id: second.work_id, path: 'beta.txt', oldText: 'beta\n', newText: 'beta from second\n'
   }, context);
   assert.equal(secondEdit.workspace, 'app', 'hidden aliases must not leak through tool results');
   assert.equal(readText(path.join(workspacePath, 'beta.txt')), 'beta from second\n');
+  assert.equal(sandboxEntries(config).length, 0, 'successful concurrent edits must retire their private worktree after promotion');
 
+  const sandboxExec = await rawCallTool('relai_exec', {
+    workspace: 'app',
+    work_id: second.work_id,
+    executable: process.execPath,
+    argv: ['-e', "require('node:fs').writeFileSync('exec-generated.txt', 'generated from sandbox exec\\n')"]
+  }, context);
+  assert.deepEqual(sandboxExec.changedFiles, ['exec-generated.txt']);
+  assert.equal(sandboxExec.mutationTracking, 'sandbox-baseline');
+  assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
+  assert.equal(sandboxEntries(config).length, 0, 'successful concurrent exec mutations must not leave code in a hidden worktree');
+
+  await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
   const entries = sandboxEntries(config);
-  assert.equal(entries.length, 1, 'the later parallel task should use one private sandbox');
+  assert.equal(entries.length, 1, 'a directly prepared concurrent task should use one private sandbox');
   assert.equal(entries[0].taskId, second.work_id);
   assert.equal(entries[0].sourceAlias, 'app');
   assert.ok(entries[0].alias.startsWith('__relai_sandbox_'));
@@ -109,16 +128,6 @@ try {
   assert.equal(incremental.synchronization, 'incremental');
   assert.deepEqual(incremental.changedFiles, ['incremental.txt']);
   assert.equal(readText(path.join(workspacePath, 'incremental.txt')), 'incremental promotion\n');
-
-  const sandboxExec = await rawCallTool('relai_exec', {
-    workspace: 'app',
-    work_id: second.work_id,
-    executable: process.execPath,
-    argv: ['-e', "require('node:fs').writeFileSync('exec-generated.txt', 'generated from sandbox exec\\n')"]
-  }, context);
-  assert.deepEqual(sandboxExec.changedFiles, ['exec-generated.txt']);
-  assert.equal(sandboxExec.mutationTracking, 'sandbox-baseline');
-  assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
 
   const promotedAtBeforeRead = sandboxEntries(config)[0].lastPromotedAt;
   await rawCallTool('relai_read', {
@@ -178,6 +187,8 @@ try {
     'a conflicting private patch must never overwrite newer visible work'
   );
   assert.equal(sandboxEntries(config).length, 1, 'conflicting private work should remain available until task cancellation or reconciliation');
+  assert.equal(sandboxEntries(config)[0].unresolved?.code, 'TASK_SANDBOX_PROMOTION_CONFLICT');
+  assert.deepEqual(sandboxEntries(config)[0].unresolved?.changedFiles, ['shared.txt']);
 
   const cancelled = await rawCallTool('relai_work', {
     action: 'cancel', workspace: 'app', work_id: second.work_id, reason: 'Conflict coverage complete.'

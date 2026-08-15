@@ -7,8 +7,7 @@ import {
   findTaskSandbox,
   prepareTaskExecutionWorkspace,
   promoteTaskSandbox,
-  resolveTaskSandboxWorkspace,
-  shouldPromoteTaskSandbox
+  resolveTaskSandboxWorkspace
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
 import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActivity } from '../toolActivity.js';
@@ -30,7 +29,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const hadSandbox = Boolean(sourceWorkspace && taskId && findTaskSandbox(config, sourceWorkspace.alias, taskId));
       let executionWorkspace = sourceWorkspace;
 
-      if (sourceWorkspace && taskId && shouldPrepareSandbox(config, sourceWorkspace.alias, taskId, executionName)) {
+      if (sourceWorkspace && taskId && shouldPrepareSandbox(config, sourceWorkspace.alias, taskId, executionName, effectiveArgs)) {
         executionWorkspace = await runWorkspaceOperation(sourceWorkspace.alias, async () => {
           if (branchChange && findTaskSandbox(config, sourceWorkspace.alias, taskId)) {
             await finalizeTaskSandbox(sourceWorkspace, config, taskId);
@@ -95,9 +94,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         invalidateSessionCacheForCall(config, executionName, handlerArgs || {});
       }
 
-      if (executionWorkspace?.taskSandbox === true && shouldPromoteTaskSandbox(executionName, result)) {
-        const changedFiles = result?.changedFilesTruncated === true ? [] : result?.changedFiles;
-        await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId, { changedFiles }),
+      if (executionWorkspace?.taskSandbox === true
+        && !deferSandboxCompletion
+        && SANDBOX_CREATE_OPERATIONS.has(executionName)) {
+        await runWorkspaceOperation(sourceWorkspace.alias, () => finalizeTaskSandbox(sourceWorkspace, config, taskId),
           queueOptions('write', 'workspace', taskId));
       }
 
@@ -122,10 +122,34 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
   return { value, sessionStart };
 }
 
-function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName) {
+function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName, args = {}) {
   if (executionName === 'relai_cancel_work') return false;
-  return SANDBOX_CREATE_OPERATIONS.has(executionName)
-    || Boolean(findTaskSandbox(config, workspaceAlias, taskId));
+  if (findTaskSandbox(config, workspaceAlias, taskId)) return true;
+  if (!SANDBOX_CREATE_OPERATIONS.has(executionName)) return false;
+  return executionName !== 'relai_exec' || !isClearlyReadOnlyExec(args);
+}
+
+function isClearlyReadOnlyExec(args = {}) {
+  if (String(args.command || '').trim()) return false;
+  const executable = path.basename(String(args.executable || '')).toLowerCase();
+  if (executable !== 'git' && executable !== 'git.exe') return false;
+  const argv = Array.isArray(args.argv) ? args.argv.map(value => String(value || '')) : [];
+  if (!argv.length || argv[0].startsWith('-')) return false;
+  const command = argv[0].toLowerCase();
+  if (new Set([
+    'status', 'diff', 'log', 'show', 'rev-parse', 'ls-files', 'ls-tree',
+    'cat-file', 'grep', 'blame', 'shortlog', 'describe', 'merge-base', 'name-rev'
+  ]).has(command)) return true;
+  if (command === 'branch') {
+    const options = argv.slice(1).map(value => value.toLowerCase());
+    return options.length === 0 || options.every(value => ['--show-current', '--list', '-a', '-r'].includes(value));
+  }
+  if (command === 'worktree') return argv[1]?.toLowerCase() === 'list';
+  if (command === 'remote') return argv.length === 1 || argv.slice(1).every(value => value === '-v' || value === '--verbose');
+  if (command === 'config') {
+    return ['--get', '--get-all', '--get-regexp', '--list', '-l'].includes(String(argv[1] || '').toLowerCase());
+  }
+  return false;
 }
 
 function mapVisibleWorkspace(result, executionWorkspace, sourceWorkspace) {
