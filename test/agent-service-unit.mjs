@@ -50,7 +50,8 @@ try {
   assert.equal(completedAgent.status, 'pending');
   assert.equal(service.pendingAttachTimers.size, 1);
   assert.equal(runtime.active.size, 1);
-  assert.match(runtime.prompts[0], /connector named "Rel\.AI MCP"/);
+  assert.match(runtime.prompts[0], /exposes the Rel\.AI actions relai_work and relai_agent/);
+  assert.match(runtime.prompts[0], /display name may be "Rel\.AI MCP" or any user-chosen name/);
   service.attach({ agent_id: completedAgent.agent_id, work_id: 'work_child_1', workspace: 'repo' }, principal);
   assert.equal(service.pendingAttachTimers.size, 0);
   const completed = await service.complete({

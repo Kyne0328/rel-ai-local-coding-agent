@@ -12,6 +12,11 @@ class FakeLocator {
     this.key = key;
   }
   first() { return this; }
+  locator(selector) {
+    if (selector.startsWith('xpath=ancestor::*')) return this;
+    return this.page.locator(selector);
+  }
+  getByRole(name, options = {}) { return this.page.getByRole(name, options); }
   async isVisible() { return this.page.visible.has(this.key); }
   async click() {
     this.page.events.push(['click', this.key]);
@@ -160,6 +165,38 @@ assert.equal(reasoningDisplayName('extra_high'), 'Extra High');
 
 {
   const page = new FakePage();
+  page.showText(/Juan can do anything the request describes/i);
+  page.showRole('button', /^deny$/i);
+  page.showRole('button', /^allow$/i);
+  const dropdown = page.showLocator('button:has-text("Allow") + button');
+  const persistent = page.key('role', 'menuitem', 'always.*allow|allow.*always|never ask');
+  page.on(dropdown, () => page.visible.add(persistent));
+  const result = await adapter.approveAppPermission(page);
+  assert.deepEqual(result, { approved: true, persistent: true });
+  assert.equal(page.events.some(event => event[0] === 'click' && event[1] === dropdown), true);
+  assert.equal(page.events.some(event => event[0] === 'click' && event[1] === persistent), true);
+}
+
+{
+  const page = new FakePage();
+  page.showText(/completely different app title and request/i);
+  page.showRole('button', /^deny$/i);
+  const allow = page.showRole('button', /^allow$/i);
+  const result = await adapter.approveAppPermission(page);
+  assert.deepEqual(result, { approved: true, persistent: false });
+  assert.equal(page.events.some(event => event[0] === 'click' && event[1] === allow), true);
+}
+
+{
+  const page = new FakePage();
+  page.showRole('button', /^allow$/i);
+  const result = await adapter.approveAppPermission(page);
+  assert.deepEqual(result, { approved: false, reason: 'not_present' });
+  assert.equal(page.events.some(event => event[0] === 'click'), false, 'an Allow button without a permission-card Deny control must never be clicked');
+}
+
+{
+  const page = new FakePage();
   page.showLocator('#prompt-textarea');
   page.showRole('button', /^send(?: message)?$/i);
   const result = await adapter.submitPrompt(page, 'delegated MCP protocol');
@@ -169,4 +206,4 @@ assert.equal(reasoningDisplayName('extra_high'), 'Extra High');
   assert.equal(typeof adapter.readResponse, 'undefined');
 }
 
-console.log('ChatGPT page adapter guest-auth rejection, Temporary Chat, verified reasoning selection, prompt submission, and fail-closed tests passed.');
+console.log('ChatGPT page adapter guest-auth rejection, Temporary Chat, verified reasoning selection, structural persistent app approval, prompt submission, and fail-closed tests passed.');

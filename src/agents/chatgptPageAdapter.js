@@ -2,6 +2,7 @@ import { normalizeReasoningLevel } from './contracts.js';
 
 const LOGIN_TEXT = /log in|sign in|sign up/i;
 const PICKER_TEXT = /^(?:instant|medium|high|extra high|pro|pro standard|pro extended)$/i;
+const PERSISTENT_PERMISSION_TEXT = /always.*allow|allow.*always|never ask/i;
 const REASONING_LABELS = Object.freeze({
   instant: Object.freeze(['Instant']),
   medium: Object.freeze(['Medium']),
@@ -136,6 +137,50 @@ class ChatGptPageAdapter {
     else await composer.press('Enter');
     return { submitted: true };
   }
+
+  async approveAppPermission(page) {
+    const deny = await firstVisible([
+      role(page, 'button', /^deny$/i),
+      locator(page, 'button:has-text("Deny")')
+    ]);
+    if (!deny) return { approved: false, reason: 'not_present' };
+    const card = scopedLocator(deny, 'xpath=ancestor::*[.//button[normalize-space()="Allow"]][1]');
+    if (!await visible(card)) return { approved: false, reason: 'approval_card_unavailable' };
+
+    const allow = await firstVisible([
+      scopedRole(card, 'button', /^allow$/i),
+      scopedLocator(card, 'button:has-text("Allow")')
+    ]);
+    if (!allow) return { approved: false, reason: 'allow_unavailable' };
+
+    const dropdown = await firstVisible([
+      scopedLocator(card, 'button:has-text("Allow") + button'),
+      scopedLocator(card, 'button:has-text("Allow") ~ button[aria-haspopup="menu"]'),
+      scopedRole(card, 'button', /allow.*(?:options|more)|(?:options|more).*allow/i),
+      scopedLocator(card, 'button[aria-label*="allow" i][aria-haspopup="menu"]'),
+      scopedLocator(card, 'button[aria-haspopup="menu"]')
+    ]);
+
+    if (dropdown) {
+      await dropdown.click();
+      const persistent = await waitForFirstVisible(page, [
+        role(page, 'menuitem', PERSISTENT_PERMISSION_TEXT),
+        role(page, 'option', PERSISTENT_PERMISSION_TEXT),
+        role(page, 'button', PERSISTENT_PERMISSION_TEXT),
+        text(page, PERSISTENT_PERMISSION_TEXT)
+      ], 1_500);
+      if (persistent) {
+        await persistent.click();
+        await shortWait(page);
+        return { approved: true, persistent: true };
+      }
+      await dismissMenu(page);
+    }
+
+    await allow.click();
+    await shortWait(page);
+    return { approved: true, persistent: false };
+  }
 }
 
 async function findComposer(page) {
@@ -217,6 +262,18 @@ async function firstVisible(values) {
   return null;
 }
 
+async function waitForFirstVisible(page, values, timeoutMs) {
+  let candidate = await firstVisible(values);
+  if (candidate || typeof page?.waitForTimeout !== 'function') return candidate;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await shortWait(page, Math.min(100, Math.max(1, deadline - Date.now())));
+    candidate = await firstVisible(values);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
 async function visible(value) {
   if (!value || typeof value.isVisible !== 'function') return false;
   try { return await value.isVisible(); } catch { return false; }
@@ -258,6 +315,11 @@ function role(page, name, matcher) {
   try { return page.getByRole(name, matcher ? { name: matcher } : undefined); } catch { return null; }
 }
 
+function scopedRole(scope, name, matcher) {
+  if (!scope || typeof scope.getByRole !== 'function') return null;
+  try { return scope.getByRole(name, matcher ? { name: matcher } : undefined); } catch { return null; }
+}
+
 function text(page, matcher) {
   if (!page || typeof page.getByText !== 'function') return null;
   try { return page.getByText(matcher, { exact: matcher instanceof RegExp ? undefined : true }); } catch { return null; }
@@ -266,6 +328,11 @@ function text(page, matcher) {
 function locator(page, selector) {
   if (!page || typeof page.locator !== 'function') return null;
   try { return page.locator(selector); } catch { return null; }
+}
+
+function scopedLocator(scope, selector) {
+  if (!scope || typeof scope.locator !== 'function') return null;
+  try { return scope.locator(selector); } catch { return null; }
 }
 
 function adapterError(code, message, cause) {

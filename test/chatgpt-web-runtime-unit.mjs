@@ -50,6 +50,10 @@ const adapter = {
   },
   async submitPrompt(_page, prompt) {
     events.push(['submitPrompt', prompt]);
+  },
+  async approveAppPermission() {
+    events.push(['approveAppPermission']);
+    return { approved: false, reason: 'not_present' };
   }
 };
 const browserFactory = {
@@ -126,11 +130,15 @@ try {
     ['submitPrompt', 'delegated protocol prompt']
   ]);
   assert.equal(typeof adapter.readResponse, 'undefined', 'runtime must not depend on response scraping');
+  assert.equal(events.some(event => event[0] === 'approveAppPermission'), true, 'runtime must watch the spawned child for Rel.AI approval cards');
 
   await assert.rejects(() => runtime.beginAuthentication(), error => error?.code === 'CHATGPT_AGENTS_ACTIVE');
+  const approvalEventsBeforeCancel = events.filter(event => event[0] === 'approveAppPermission').length;
   const cancelled = await runtime.cancel(spawned.runtimeTaskId);
   assert.equal(cancelled.cancelled, true);
   assert.equal(executionPage.closed, true);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.equal(events.filter(event => event[0] === 'approveAppPermission').length, approvalEventsBeforeCancel, 'permission watcher must stop when the child session closes');
   assert.equal((await runtime.cancel(spawned.runtimeTaskId)).alreadyTerminal, true);
 
   authenticated = false;
@@ -164,7 +172,7 @@ try {
   assert.doesNotMatch(JSON.stringify(unavailableStatus), /private|chrome\.exe|abc123/);
   await unavailableRuntime.dispose();
 
-  console.log('ChatGPT web runtime profile isolation, browser availability, manual auth, hidden execution, MCP-only output, and cleanup tests passed.');
+  console.log('ChatGPT web runtime profile isolation, browser availability, manual auth, structural app approval watching, MCP-only output, and cleanup tests passed.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

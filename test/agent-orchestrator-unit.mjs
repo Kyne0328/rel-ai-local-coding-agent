@@ -39,7 +39,9 @@ try {
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(runtimeContext.agentId, spawned.agent.agent_id);
   assert.equal(runtimeContext.connectorName, 'Rel.AI MCP');
-  assert.match(runtimeContext.prompt, /connector named "Rel\.AI MCP"/);
+  assert.match(runtimeContext.prompt, /exposes the Rel\.AI actions relai_work and relai_agent/);
+  assert.match(runtimeContext.prompt, /display name may be "Rel\.AI MCP" or any user-chosen name/);
+  assert.match(runtimeContext.prompt, /Do not use any other ChatGPT app or connector/);
   assert.equal(runtimeContext.prompt.includes('@Rel.AI MCP'), false);
   assert.match(runtimeContext.prompt, /relai_work/);
   assert.match(runtimeContext.prompt, /action "begin"/);

@@ -13,6 +13,7 @@ import { AgentRuntime } from './runtime.js';
 const DEFAULT_CHATGPT_URL = 'https://chatgpt.com/';
 const DEFAULT_REASONING = Object.freeze(['medium']);
 const RUNTIME_TASK_ID = /^chatgpt_agent_[A-Za-z0-9_-]{20,160}$/;
+const APPROVAL_WATCH_INTERVAL_MS = 500;
 
 class ChatGptWebRuntime extends AgentRuntime {
   constructor(options = {}) {
@@ -133,11 +134,13 @@ class ChatGptWebRuntime extends AgentRuntime {
       }
       await this.pageAdapter.prepareSession(page, { temporary: true, reasoning });
       await this.pageAdapter.submitPrompt(page, prompt);
+      const permissionWatcher = startPermissionWatcher(this.pageAdapter, page);
       this.sessions.set(runtimeTaskId, {
         runtimeTaskId,
         agentId: String(context.agentId || ''),
         page,
         reasoning,
+        permissionWatcher,
         createdAt: new Date().toISOString()
       });
       return { runtimeTaskId, reasoning };
@@ -155,6 +158,7 @@ class ChatGptWebRuntime extends AgentRuntime {
     const record = this.sessions.get(id);
     if (!record) return { cancelled: false, alreadyTerminal: true };
     this.sessions.delete(id);
+    await stopPermissionWatcher(record.permissionWatcher);
     await record.page.close().catch(() => {});
     return { cancelled: true, alreadyTerminal: false };
   }
@@ -162,6 +166,7 @@ class ChatGptWebRuntime extends AgentRuntime {
   async dispose() {
     const records = [...this.sessions.values()];
     this.sessions.clear();
+    await Promise.allSettled(records.map(record => stopPermissionWatcher(record.permissionWatcher)));
     await Promise.allSettled(records.map(record => record.page.close()));
     await this.closeExecutionContext();
     await this.closeAuthenticationContext();
@@ -281,6 +286,43 @@ function firstPage(context) {
 
 async function navigateToChatGpt(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+}
+
+function startPermissionWatcher(adapter, page) {
+  if (typeof adapter?.approveAppPermission !== 'function') return null;
+  const controller = new AbortController();
+  const promise = watchAppPermissions(adapter, page, controller.signal);
+  promise.catch(() => {});
+  return { controller, promise };
+}
+
+async function stopPermissionWatcher(watcher) {
+  if (!watcher) return;
+  watcher.controller.abort();
+  await watcher.promise.catch(() => {});
+}
+
+async function watchAppPermissions(adapter, page, signal) {
+  while (!signal.aborted) {
+    if (typeof page?.isClosed === 'function' && page.isClosed()) return;
+    try {
+      await adapter.approveAppPermission(page);
+    } catch {}
+    await waitForNextPermissionCheck(signal);
+  }
+}
+
+function waitForNextPermissionCheck(signal) {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(resolve => {
+    const timer = setTimeout(done, APPROVAL_WATCH_INTERVAL_MS);
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    }
+    signal.addEventListener('abort', done, { once: true });
+  });
 }
 
 function runtimeError(code, message, cause) {

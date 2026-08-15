@@ -25,7 +25,8 @@ function buildDelegatedAgentPrompt(options = {}) {
   const prompt = [
     'You are a delegated Rel.AI subagent. Your work belongs to a parent ChatGPT task.',
     '',
-    `Use the ChatGPT connector named ${JSON.stringify(connectorName)}. Do not require an @ mention; retrieve or select the connector by its name when needed.`,
+    `Use the connected ChatGPT app that exposes the Rel.AI actions relai_work and relai_agent. Its display name may be ${JSON.stringify(connectorName)} or any user-chosen name; identify it by those actions rather than by display name or @ mention.`,
+    'Do not use any other ChatGPT app or connector for this delegated task.',
     'Do not request, create, expose, or use an API key for this delegation.',
     'Do not use private ChatGPT endpoints, reverse-engineered APIs, or another subagent.',
     '',
@@ -33,7 +34,7 @@ function buildDelegatedAgentPrompt(options = {}) {
     JSON.stringify(payload, null, 2),
     '',
     'Required MCP lifecycle:',
-    `1. Using ${connectorName}, call relai_work with action "begin" for the workspace in the delegation data. Use the delegated objective and keep the returned work_id as your child work_id.`,
+    '1. Using the connected app that exposes relai_work and relai_agent, call relai_work with action "begin" for the workspace in the delegation data. Use the delegated objective and keep the returned work_id as your child work_id.',
     '2. Call relai_agent with action "attach", the delegation agent_id, and work_id equal to that child work_id. Do not pass a workspace to attach; Rel.AI derives it from the child work session.',
     '3. Use that same child work_id on every task-scoped Rel.AI call. Stay inside the delegated workspace and role capabilities.',
     '4. Perform only the delegated objective. Do not recursively delegate or broaden the task.',
