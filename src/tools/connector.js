@@ -104,9 +104,11 @@ function compactForConnector(name, value, args = {}) {
     case 'relai_exec':
       return pruneEmpty({
         ok: value.ok,
+        executed: value.executed,
+        commandSucceeded: value.commandSucceeded,
         workspace: value.workspace,
         command: value.command,
-        shell: value.ok === false ? value.shell : undefined,
+        shell: value.shell || undefined,
         cwd: value.cwd && value.cwd !== '.' ? value.cwd : undefined,
         exitCode: value.exitCode,
         durationMs: value.durationMs,

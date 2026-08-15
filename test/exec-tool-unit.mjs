@@ -94,6 +94,8 @@ try {
     env: { RELAI_EXEC_TEST: 'visible', API_TOKEN: secret }
   });
   assert.equal(success.ok, true);
+  assert.equal(success.executed, true);
+  assert.equal(success.commandSucceeded, true);
   assert.equal(success.exitCode, 0);
   assert.match(success.stdout, /cwd=workspace;env=visible;relai=1/);
   assert.equal(success.stderr, 'warning-stream');
@@ -150,7 +152,9 @@ try {
   const failure = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'fail.js'))
   });
-  assert.equal(failure.ok, false);
+  assert.equal(failure.ok, true, 'a completed process is a successful tool execution even when the command exits nonzero');
+  assert.equal(failure.executed, true);
+  assert.equal(failure.commandSucceeded, false);
   assert.equal(failure.exitCode, 7);
   assert.match(failure.stderr, /expected failure/);
 
@@ -177,7 +181,9 @@ try {
     command: nodeCommand(path.join(workspace, 'scripts', 'hang.js')),
     timeoutMs: 1000
   });
-  assert.equal(timedOut.ok, false);
+  assert.equal(timedOut.ok, true, 'hitting the requested timeout is an observed command outcome, not an MCP infrastructure failure');
+  assert.equal(timedOut.executed, true);
+  assert.equal(timedOut.commandSucceeded, false);
   assert.equal(timedOut.timedOut, true);
   assert.match(timedOut.error, /Timed out after 1000ms/);
 

@@ -6,7 +6,9 @@ function buildWorkflowEvidenceReceipt({ tool = '', args = {}, result = {}, audit
   if (!kind) return null;
   const command = normalizeCommand(args.command || result.commandSummary || result.command || '');
   const cwd = normalizeCwd(args.cwd || result.cwd || '.');
-  const outcome = result.ok === false ? 'failed' : kind === 'check' ? 'passed' : 'observed';
+  const outcome = result.ok === false || result.commandSucceeded === false
+    ? 'failed'
+    : kind === 'check' ? 'passed' : 'observed';
   const target = safeTarget(args, result);
   const receipt = {
     version: 1,
