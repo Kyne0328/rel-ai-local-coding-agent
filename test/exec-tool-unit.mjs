@@ -120,9 +120,19 @@ try {
   assert.equal(direct.shell, 'Direct process');
   assert.equal(direct.stdout, literal);
 
+  const directNpm = await execCall({ executable: 'npm', argv: ['--version'] });
+  assert.equal(directNpm.commandSucceeded, true, 'direct npm mode must work without relying on Windows .cmd execution');
+  assert.match(directNpm.stdout, /^\d+\.\d+\.\d+/);
+  if (process.platform === 'win32') assert.equal(directNpm.shell, 'Direct npm CLI');
+
+  await assert.rejects(
+    () => execCall({ executable: 'relai-definitely-missing-executable' }),
+    error => error?.code === 'PROCESS_SPAWN_FAILED' && /Could not start/.test(error.message)
+  );
+
   await assert.rejects(
     () => execCall({ command: 'echo shell', executable: process.execPath }),
-    /exactly one execution mode/i
+    /exactly one execution mode|match exactly one schema in oneOf/i
   );
   await assert.rejects(
     () => execCall({ executable: process.execPath, argv: ['ok', 42] }),
@@ -164,7 +174,7 @@ try {
   );
   await assert.rejects(
     () => execCall({ command: 'echo invalid', env: { INVALID: 1 } }),
-    /must be a string/i
+    /must be (?:a )?string/i
   );
 
   const large = await execCall({

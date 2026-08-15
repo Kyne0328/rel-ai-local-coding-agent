@@ -93,6 +93,11 @@ function normalizeExecutionInvocation(args = {}, operationName = 'relai_exec') {
     processExecutable = selectedShell.executable;
     processArgv = selectedShell.args(command);
     executionLabel = selectedShell.label;
+  } else {
+    const direct = resolveDirectProcess(executable, argv);
+    processExecutable = direct.executable;
+    processArgv = direct.argv;
+    executionLabel = direct.label;
   }
   return { command, executable, argv, input, displayCommand, processExecutable, processArgv, executionLabel };
 }
@@ -105,6 +110,37 @@ function locateWindowsExecutable(name) {
   } catch {
     return '';
   }
+}
+
+function resolveDirectProcess(executable, argv) {
+  if (process.platform !== 'win32') return { executable, argv, label: 'Direct process' };
+  const base = path.basename(String(executable || '')).toLowerCase().replace(/\.(?:cmd|exe)$/i, '');
+  if (base !== 'npm' && base !== 'npx') return { executable, argv, label: 'Direct process' };
+  const cli = resolveNpmCli(base);
+  if (!cli) return { executable, argv, label: 'Direct process' };
+  return {
+    executable: process.execPath,
+    argv: [cli, ...argv],
+    label: `Direct ${base} CLI`
+  };
+}
+
+function resolveNpmCli(command) {
+  const file = command === 'npx' ? 'npx-cli.js' : 'npm-cli.js';
+  const candidates = [
+    command === 'npm' ? process.env.npm_execpath : '',
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', file)
+  ].filter(Boolean);
+  return candidates.find(candidate => fs.existsSync(candidate)) || '';
+}
+
+function processExecutionError(code, message, retryable = false) {
+  const error = new Error(message);
+  error.code = code;
+  error.source = 'rel-ai-mcp-process';
+  error.operation = 'execute';
+  error.retryable = retryable;
+  return error;
 }
 
 function powershellCommand(command) {
@@ -237,7 +273,7 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   ));
   if (result.spawnError) {
     const host = command ? executionLabel : executable;
-    throw new Error(`Could not start ${host}: ${result.error || 'unknown spawn error'}`);
+    throw processExecutionError('PROCESS_SPAWN_FAILED', `Could not start ${host}: ${result.error || 'unknown spawn error'}`);
   }
   const statusAfter = await readGitStatusMap(workspace, config);
   const changed = changedStatusFiles(statusBefore, statusAfter);
