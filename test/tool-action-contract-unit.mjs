@@ -88,6 +88,12 @@ assert.ok(editDefinition, "relai_edit definition must exist");
 assert.match(editDefinition.description, /one logical updateText (?:patch|operation)/i, "large repository-wide changes should stay together instead of being split into repeated edit batches");
 const semanticWithMaxBytes = resolveExecutableToolCall('relai_search', { workspace: 'fixture', work_id: 'task-1', action: 'semantic', query: 'needle', maxBytes: 4096 }, {});
 assert.equal(semanticWithMaxBytes.operationArgs.maxBytes, 4096, 'semantic search must accept maxBytes advertised by the public tool schema');
+const processReadWithWorkspace = resolveExecutableToolCall('relai_process', { workspace: 'fixture', work_id: 'task-1', action: 'read', processId: 'proc_test' }, {});
+assert.equal(processReadWithWorkspace.operationArgs.workspace, 'fixture', 'process read must accept workspace advertised by the public action schema');
+const processWriteWithWorkspace = resolveExecutableToolCall('relai_process', { workspace: 'fixture', work_id: 'task-1', action: 'write', processId: 'proc_test', input: 'x' }, {});
+assert.equal(processWriteWithWorkspace.operationArgs.workspace, 'fixture', 'process write must accept workspace advertised by the public action schema');
+const processStopWithWorkspace = resolveExecutableToolCall('relai_process', { workspace: 'fixture', work_id: 'task-1', action: 'stop', processId: 'proc_test' }, {});
+assert.equal(processStopWithWorkspace.operationArgs.workspace, 'fixture', 'process stop must accept workspace advertised by the public action schema');
 const scopedDiff = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'diff', scope: 'task' }, {});
 assert.equal(scopedDiff.operationArgs.scope, 'task', 'diff scope must be exposed by the public action contract');
 assert.throws(
