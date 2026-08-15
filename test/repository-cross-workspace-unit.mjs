@@ -87,7 +87,7 @@ try {
   assert.equal(packageLink.to.workspace, 'api');
   assert.equal(packageLink.confidence, 0.99);
 
-  const cached = repositoryIntelligence.cachedContext(client, config, { maxResults: 10 });
+  const cached = await repositoryIntelligence.cachedContext(client, config, { maxResults: 10 });
   assert.ok(cached.crossWorkspace.relationships.some(item => item.type === 'CROSS_HTTP_CALLS'));
 } finally {
   repositoryIntelligence.shutdown();
