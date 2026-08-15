@@ -1,7 +1,7 @@
 function enhanceToolError(toolName, error) {
   const raw = error instanceof Error ? error.message : String(error);
   const append = (extra) => {
-    const next = new Error(`${raw}\n\n${extra}`);
+    const next = Object.assign(new Error(`${raw}\n\n${extra}`), error && typeof error === 'object' ? error : {});
     if (error?.stack) next.stack = error.stack;
     return next;
   };
@@ -64,6 +64,9 @@ function serializeToolError(toolName, error) {
       ...(error.fileClass ? { fileClass: String(error.fileClass) } : {}),
       ...(error.taskId ? { taskId: String(error.taskId) } : {}),
       ...(Number.isFinite(error.candidateCount) ? { candidateCount: Number(error.candidateCount) } : {}),
+      ...(Array.isArray(error.matchLines) ? { matchLines: error.matchLines.map(Number).filter(Number.isFinite).slice(0, 20) } : {}),
+      ...(Array.isArray(error.candidateContexts) ? { candidateContexts: error.candidateContexts.map(String).slice(0, 10) } : {}),
+      ...(error.currentSha256 ? { currentSha256: String(error.currentSha256) } : {}),
       ...(error.workspaceInput != null ? { workspaceInput: String(error.workspaceInput) } : {}),
       ...(error.workspaceInputSource ? { workspaceInputSource: String(error.workspaceInputSource) } : {}),
       ...(error.workspaceMatchStatus ? { workspaceMatchStatus: String(error.workspaceMatchStatus) } : {}),
