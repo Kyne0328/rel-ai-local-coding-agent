@@ -1,4 +1,5 @@
 import { listManagedProcesses } from '../processManager.js';
+import { readAudit } from '../audit.js';
 import * as crypto from 'node:crypto';
 import * as connection from '../connectionProfile.js';
 import * as productUx from '../productUx.js';
@@ -16,22 +17,10 @@ const DASHBOARD_STREAM_ID = crypto.randomUUID();
 let dashboardSnapshotSequence = 0;
 
 function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
-  const profile = connection.readConnectionProfile();
   const taskActivity = typeof options.getTaskActivity === 'function'
     ? options.getTaskActivity()
-    : { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: '', workspace: '', tool: '', startedAt: null, lastTask: null };
-  const desktopStatus = typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null;
-  const connectionSummary = connection.buildConnectionSummary({
-    host: profile.host || options.host || '127.0.0.1',
-    port: profile.port || options.port || 3333,
-    token: '',
-    tunnelId: profile.tunnelId || '',
-    tunnelProvider: 'openai-secure-mcp'
-  });
-  const connectionStateInput = desktopStatus || {
-    serverRunning: true,
-    tunnelStatus: profile.tunnelId ? 'connecting' : 'stopped'
-  };
+    : emptyTaskActivity();
+  const connectionProjection = buildDashboardConnectionProjection(config, options);
   const limit = Math.max(Number(options.limit || 100), 200);
   const base = productUx.dashboardData(config, { limit });
   const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(summarizeDashboardTask);
@@ -39,10 +28,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, liveActivityTasks, limit);
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   const runtimeState = runtimeCompatibility(config, { activeTaskCount: taskActivity.activeTaskCount });
-  const mcpConnection = mcpConnectionManager.snapshot();
-  const mcpAuthentication = readMcpAuthenticationStatus(mcpConnection, {
-    staticBearerConfigured: Boolean(options.token)
-  });
+
   if (Array.isArray(base.config?.workspaces)) {
     for (const workspace of base.config.workspaces) workspace.operational = workspaceStates[workspace.alias] || null;
   }
@@ -53,12 +39,8 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     repositoryRuntime: runtimeState.repository,
     runtimeCompatibility: runtimeState.compatibility,
     readiness: release.releaseReadiness(config, { requireHttpToken }),
-    connection: connectionSummary,
-    connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
-    mcpConnection,
-    mcpAuthentication,
+    ...connectionProjection,
     taskActivity: sanitizeTaskActivity(taskActivity),
-    desktopStatus,
     snapshot: {
       streamId: DASHBOARD_STREAM_ID,
       sequence: ++dashboardSnapshotSequence,
@@ -71,6 +53,52 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     workspaceStates,
     managedProcesses: listManagedProcesses(config, { limit: 200, activeOnly: true }).processes
   };
+}
+
+function buildDashboardTaskProjection(config, options = {}, activityOverride = null) {
+  const taskActivity = activityOverride || (typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : emptyTaskActivity());
+  const limit = Math.max(Number(options.limit || 100), 200);
+  const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(summarizeDashboardTask);
+  const liveActivityTasks = Array.isArray(taskActivity.tasks) ? taskActivity.tasks : [];
+  const auditLimit = Math.min(limit, 200);
+  const auditSource = readAudit(config, { limit: Math.max(auditLimit, 500) });
+  const auditTail = mergeDashboardActivity({ ...auditSource, entries: auditSource.entries.slice(-auditLimit) }, liveActivityTasks, limit);
+  return {
+    taskActivity: sanitizeTaskActivity(taskActivity),
+    tasks,
+    auditTail,
+    workspaceStates: buildWorkspaceStates(config, tasks, taskActivity)
+  };
+}
+
+function buildDashboardConnectionProjection(_config, options = {}, mcpOverride = null) {
+  const profile = connection.readConnectionProfile();
+  const desktopStatus = typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null;
+  const connectionSummary = connection.buildConnectionSummary({
+    host: profile.host || options.host || '127.0.0.1',
+    port: profile.port || options.port || 3333,
+    token: '',
+    tunnelId: profile.tunnelId || '',
+    tunnelProvider: 'openai-secure-mcp'
+  });
+  const connectionStateInput = desktopStatus || {
+    serverRunning: true,
+    tunnelStatus: profile.tunnelId ? 'connecting' : 'stopped'
+  };
+  const mcpConnection = mcpOverride || mcpConnectionManager.snapshot();
+  return {
+    connection: connectionSummary,
+    connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
+    mcpConnection,
+    mcpAuthentication: readMcpAuthenticationStatus(mcpConnection, {
+      staticBearerConfigured: Boolean(options.token)
+    }),
+    desktopStatus
+  };
+}
+
+function emptyTaskActivity() {
+  return { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: '', workspace: '', tool: '', startedAt: null, lastTask: null };
 }
 
 function mergeDashboardActivity(auditTail, tasks, limit) {
@@ -152,4 +180,4 @@ function sanitizeTaskActivity(activity = {}) {
   };
 }
 
-export { buildDashboardPayload, mergeDashboardActivity, summarizeDashboardTask };
+export { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskProjection, mergeDashboardActivity, summarizeDashboardTask };

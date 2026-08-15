@@ -42,20 +42,20 @@ async function exerciseSyncLiveView(updateBehavior) {
       calls.push(['render', data]);
       return 'rendered';
     },
-    viewFingerprint: data => `fingerprint:${data.revision}`,
+    viewRevisionKey: data => `revision:${data.revision}`,
     debugError: error => calls.push(['debug', error.message])
   };
   vm.runInNewContext(`
-    let _renderFingerprint = 'original';
+    let _renderRevisionKey = 'original';
     ${functionSource(dashboard, 'syncLiveView')}
     globalThis.testApi = {
       syncLiveView,
-      readFingerprint: () => _renderFingerprint
+      readFingerprint: () => _renderRevisionKey
     };
   `, context);
   const data = { revision: 2 };
   const result = await context.testApi.syncLiveView(data);
-  return { calls, result, fingerprint: context.testApi.readFingerprint() };
+  return { calls, result, revisionKey: context.testApi.readFingerprint() };
 }
 
 assert.match(dashboard, /module\.updateSystemLiveState\(root, currentSection\(\), data\)/);
@@ -90,21 +90,21 @@ assert.equal(dashboard.includes('module.updateSystemLiveState(root, currentSecti
 {
   const supported = await exerciseSyncLiveView(true);
   assert.deepEqual(supported.calls.map(call => call[0]), ['update']);
-  assert.equal(supported.fingerprint, 'fingerprint:2');
+  assert.equal(supported.revisionKey, 'revision:2');
   assert.equal(supported.result, true);
 }
 
 {
   const unsupported = await exerciseSyncLiveView(false);
   assert.deepEqual(unsupported.calls.map(call => call[0]), ['update'], 'unsupported passive updates must not remount the route');
-  assert.equal(unsupported.fingerprint, 'original');
+  assert.equal(unsupported.revisionKey, 'original');
   assert.equal(unsupported.result, false);
 }
 
 {
   const failed = await exerciseSyncLiveView(new Error('partial update failed'));
   assert.deepEqual(failed.calls.map(call => call[0]), ['update', 'debug'], 'failed passive updates must leave the mounted route intact');
-  assert.equal(failed.fingerprint, 'original');
+  assert.equal(failed.revisionKey, 'original');
   assert.equal(failed.result, false);
 }
 
@@ -165,6 +165,7 @@ assert.match(refreshSource, /options\.render !== false[\s\S]*syncLiveView\(hydra
 assert.match(api, /export function requestDashboardRefresh\(options = \{\}\)/, 'dashboard refresh helper must accept refresh intent');
 assert.match(api, /structural: options\.structural === true/, 'dashboard refresh helper must default structural intent to false');
 assert.match(desktopConnection, /saveSettings\([\s\S]*requestDashboardRefresh\(\{ structural: true \}\)/, 'Secure tunnel configuration changes must structurally refresh the Connection route');
-assert.match(functionSource(dashboard, 'viewFingerprint'), /tunnelId: desktop\.tunnelId/, 'the configured Secure MCP Tunnel must participate in structural refresh fingerprinting');
+assert.doesNotMatch(functionSource(dashboard, 'viewRevisionKey'), /JSON\.stringify/, 'route invalidation must use explicit revisions instead of serializing dashboard objects');
+assert.match(functionSource(dashboard, 'viewRevisionKey'), /data\.live\?\.revisions/, 'route invalidation must use typed domain revisions');
 
 console.log('Dashboard live rendering contracts passed.');
