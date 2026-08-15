@@ -14,15 +14,15 @@
   "license": "Apache-2.0",
   "main": "main.js",
   "engines": {
-    "node": ">=24.0.0 <25",
-    "npm": ">=11.0.0 <12"
+    "node": ">=24.15.0 <25",
+    "npm": ">=12.0.0 <13"
   },
   "scripts": {
     "postinstall": "node node_modules/electron/install.js"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",
-    "electron": "43.2.0",
+    "electron": "43.4.0",
     "electron-builder": "26.15.3"
   },
   "build": {
@@ -299,5 +299,8 @@
   },
   "dependencies": {
     "electron-updater": "6.8.9"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true
   }
 }
