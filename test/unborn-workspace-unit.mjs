@@ -74,8 +74,7 @@ try {
   }, context);
   assert.equal(patchEdit.ok, true);
   assert.deepEqual(patchEdit.changedFiles, ['src/worker.js']);
-  assert.equal(patchEdit.backup?.type, 'unborn-worktree');
-  assert.equal(patchEdit.backup?.unborn, true);
+  assert.equal(Object.hasOwn(patchEdit, 'backup'), false, 'removed advanced patch backups must not reappear for unborn repositories');
 
   const review = await rawCallTool('relai_changes', {
     action: 'diff',
