@@ -39,10 +39,8 @@ function checkEvidenceReusable(receipt, current = {}) {
     && String(receipt.repositoryFingerprint) === String(current.repositoryFingerprint || ''));
 }
 
-function repeatFailureCount(receipts = [], mutationGeneration) {
-  const failures = receipts.filter(item => item?.outcome === 'failed'
-    && nonNegativeInt(item.mutationGeneration) === nonNegativeInt(mutationGeneration)
-    && item.failureSignature);
+function repeatFailureCount(receipts = []) {
+  const failures = receipts.filter(item => item?.outcome === 'failed' && item.failureSignature).slice(-12);
   if (!failures.length) return 0;
   const latest = failures.at(-1).failureSignature;
   return failures.filter(item => item.failureSignature === latest).length;
@@ -57,6 +55,7 @@ function evidenceKind(tool, args, result) {
   if (tool === 'relai_exec' && looksLikeCheck(args?.command || result?.commandSummary || result?.command)) return 'check';
   if (tool === 'relai_run_checks' || tool === 'relai_validate') return 'check';
   if (tool === 'relai_read') return 'read';
+  if (tool === 'relai_ui') return 'ui';
   if (/inspect|search/.test(tool)) return 'inspection';
   if (/diff|changes/.test(tool)) return 'review';
   if (/process_(?:start|read)/.test(tool)) return 'process';
@@ -77,6 +76,14 @@ function compactMetadata(result = {}, tool = '') {
   if (result.processId) output.processId = String(result.processId).slice(0, 200);
   if (result.reviewHash) output.reviewHash = String(result.reviewHash).slice(0, 128);
   if (result.reviewScope) output.reviewScope = String(result.reviewScope).slice(0, 40);
+  if (tool === 'relai_ui') {
+    if (result.action) output.uiAction = String(result.action).slice(0, 40);
+    if (result.sessionId) output.sessionId = String(result.sessionId).slice(0, 200);
+    if (result.route || result.url) output.route = String(result.route || result.url).slice(0, 500);
+    if (Number.isFinite(Number(result.consoleErrorCount))) output.consoleErrorCount = Math.max(0, Number(result.consoleErrorCount));
+    if (Number.isFinite(Number(result.networkFailureCount))) output.networkFailureCount = Math.max(0, Number(result.networkFailureCount));
+    if (result.evidenceId) output.evidenceId = String(result.evidenceId).slice(0, 200);
+  }
   if (tool === 'relai_read' && Array.isArray(result.items)) {
     output.reads = result.items.slice(0, 50).map(item => ({
       path: String(item?.path || '').trim().replaceAll('\\', '/').slice(0, 500),

@@ -15,6 +15,7 @@ import {
   sanitizeTaskRecord
 } from './taskObservability.js';
 import { isTerminalTaskStatus, normalizeLiveTaskStatus } from './taskState.js';
+import { classifyTaskIntent } from './workflow/intent.js';
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
 
@@ -380,6 +381,7 @@ function createToolActivityTracker(options = {}) {
       }),
       titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : details.tool === 'relai_begin_work' ? 'fallback' : 'operation',
       objective: sanitizeDisplayText(details.objective, 500),
+      intent: classifyTaskIntent(details.objective),
       correlation: compactCorrelation(details.correlation, details.workspace),
       principalFingerprint: String(details.principalFingerprint || ''),
       status: 'planning',
@@ -522,6 +524,7 @@ function createToolActivityTracker(options = {}) {
       id: task.id,
       title: task.title,
       objective: task.objective,
+      intent: task.intent,
       status,
       resumeStatus,
       progress: normalizeTaskProgress(task.progress, status),
@@ -569,6 +572,7 @@ function createToolActivityTracker(options = {}) {
       id: task.id,
       title: task.title,
       objective: task.objective,
+      intent: task.intent,
       status,
       progress: completeProgress('Task completed'),
       currentStage: 'Completed',
@@ -663,6 +667,7 @@ function createToolActivityTracker(options = {}) {
       scopeId: task.scopeId,
       title: task.title,
       objective: task.objective,
+      intent: task.intent,
       status: task.status,
       state: task.activeCalls > 0 ? 'working' : 'waiting',
       progress: normalizeTaskProgress(task.progress, task.status),

@@ -7,7 +7,7 @@ import { clearSessionPolicy } from '../policyResolver.js';
 import { assertRuntimeCompatibility } from '../runtimeCompatibility.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { activeProcessesForWorkspace } from '../processManager.js';
-import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
+import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
 import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
 import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
 import { serializeConnectorResult } from './connector.js';
@@ -275,6 +275,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
     if (!integrity) return null;
     const recentEvidence = readRecentWorkflowEvidence(config, workId, 100);
     if (receipt) recentEvidence.push(receipt);
+    const session = readTaskHistorySessionRecord(config, workId) || {};
     const processes = activeProcessesForWorkspace(config, workspace.alias).map(item => ({
       processId: item.processId,
       status: item.status,
@@ -286,6 +287,8 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       workspace,
       taskId: workId,
       taskIntegrity: integrity,
+      objective: session.objective || args?.objective || '',
+      intent: session.intent || '',
       recentEvidence,
       currentResult: value,
       impactedPaths: Array.isArray(value?.impactedPaths) ? value.impactedPaths : [],

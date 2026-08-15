@@ -2,6 +2,7 @@ import { buildCheckCatalog } from './checkCatalog.js';
 import { normalizeWorkflowSnapshot } from './contracts.js';
 import { decideWorkflow } from './decision.js';
 import { repeatFailureCount } from './evidence.js';
+import { classifyTaskIntent, normalizeTaskIntent } from './intent.js';
 import { classifyWorkflowRisk } from './risk.js';
 import { discoverRepositoryTopology, packageForPath } from './topology.js';
 
@@ -14,8 +15,8 @@ async function buildWorkflowSnapshot(input = {}) {
   const impactedPaths = unique(input.impactedPaths || []);
   const classification = classifyWorkflowRisk({ changedFiles, packageIds, affectedTests, impactedPaths, operation: input.operation });
   const evidence = summarizeEvidence(input.recentEvidence || [], integrity);
-  const repeatCount = repeatFailureCount(input.recentEvidence || [], integrity.mutationGeneration || 0);
-  const intent = inferIntent(input, changedFiles);
+  const repeatCount = repeatFailureCount(input.recentEvidence || []);
+  const intent = normalizeTaskIntent(input.intent, classifyTaskIntent(input.objective));
   const completion = normalizeCompletion(input.hardCompletion, integrity, changedFiles);
   const liveMatchingProcess = Boolean((input.processes || []).find(item => item?.reused === true || item?.matchesCurrent === true));
   const decision = decideWorkflow({ intent, boundary: classification.boundary, risk: classification.risk, completion, evidence, repeatCount, reviewFresh: input.reviewFresh, liveMatchingProcess });
@@ -44,13 +45,6 @@ function summarizeEvidence(receipts, integrity) {
     if (receipt?.kind === 'check' && receipt?.outcome === 'passed' && receipt?.repositoryFingerprint) reusable += 1;
   }
   return { fresh, stale, reusable, lastMutationGeneration: mutation, lastValidatedMutationGeneration: Number(integrity.latestValidatedMutationGeneration || 0) };
-}
-function inferIntent(input, changedFiles) {
-  const explicit = String(input.intent || '').trim();
-  if (explicit) return explicit;
-  if (!changedFiles.length && input.currentResult) return 'investigation';
-  if (changedFiles.length && changedFiles.every(file => /\.(md|txt|rst)$/i.test(file))) return 'documentation';
-  return changedFiles.length ? 'bugfix' : 'auto';
 }
 function normalizeCompletion(explicit, integrity, changedFiles) {
   if (explicit && typeof explicit === 'object') return { hardReady: explicit.hardReady === true, blockers: unique(explicit.blockers || []), recommendations: unique(explicit.recommendations || []) };

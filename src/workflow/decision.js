@@ -15,8 +15,8 @@ function decideWorkflow(facts = {}) {
 
   if (repeatCount >= 2) {
     stage = 'repair';
-    recommendations.push(action('relai_inspect', 'impact', 'Repeated failure detected for the current mutation generation; inspect the failure boundary before retrying.', { paths: boundary.changedFiles || [] }, 'small'));
-    avoid.push({ action: 'repeat the identical failed command', reason: 'The same failure has already repeated without a new mutation or diagnosis.' });
+    recommendations.push(action('relai_inspect', 'impact', 'Repeated failure detected across task mutations; inspect the failure boundary and root-cause hypothesis before another edit.', { paths: boundary.changedFiles || [] }, 'small'));
+    avoid.push({ action: 'repeat the same repair approach', reason: 'The same failure family has survived multiple mutations; gather new evidence before another similar edit.' });
   } else if (!changed) {
     if (facts.intent === 'investigation' && completion.hardReady) stage = 'complete';
     else stage = facts.intent === 'feature' ? 'design' : 'investigate';
