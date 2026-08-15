@@ -43,7 +43,7 @@ export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATIO
 export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
-  route('preferences', 'Preferences', 'settings', 'Control appearance, density, and desktop notifications.', 'Settings'),
+  route('preferences', 'Preferences', 'settings', 'Change appearance and desktop notifications.', 'Settings'),
   route('application', 'Application', 'settings/application', 'Manage startup, recovery, and application updates.', 'Settings'),
   route('about', 'About', 'settings/about', 'View application, developer, repository, and license information.', 'Settings')
 ]);

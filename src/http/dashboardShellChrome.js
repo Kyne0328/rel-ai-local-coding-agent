@@ -9,7 +9,6 @@ function renderDashboardShellBootstrap() {
   Object.assign(document.documentElement.dataset, {
     themePreference,
     theme: resolvedTheme,
-    density: localStorage.getItem('relai_ui_density') || 'comfortable',
     sidebar: localStorage.getItem('relai_sidebar_collapsed') === '1' ? 'collapsed' : 'expanded',
     surface: desktopSurface ? 'desktop' : 'browser',
     windowChrome: desktopSurface && launchParams.get('chrome') === 'custom' ? 'custom' : 'native',

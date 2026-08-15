@@ -78,8 +78,7 @@ export function createDesktopSetupChecklist(options = {}) {
         <p>${completedCount} of ${steps.length} steps complete · follow the highlighted step next</p>
       </div>
       <button class="secondary compact-button" type="button" data-dismiss-setup>Dismiss guide</button>
-    </div>
-    <div class="desktop-setup-intro"><strong>How setup works:</strong> choose a repository, connect this computer through OpenAI Secure MCP Tunnel, add Rel.AI MCP in ChatGPT with <b>Tunnel + No authentication</b>, then send one read-only request to confirm the full path.</div>`;
+    </div>`;
 
   const body = document.createElement('div');
   body.className = 'card-body desktop-setup-items';

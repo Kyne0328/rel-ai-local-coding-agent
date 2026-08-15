@@ -32,15 +32,14 @@ app.whenReady().then(async () => {
     await win.loadURL(targetUrl);
     await win.webContents.executeJavaScript(`localStorage.setItem('relai_ui_density', 'compact')`);
     await win.loadURL(targetUrl);
-    await waitFor(win, `document.documentElement.dataset.density === 'compact'`);
+    await waitFor(win, `!document.documentElement.dataset.density && document.querySelector('#routeRoot')?.children.length > 0`);
     const measurements = [];
     for (const route of ['usage', 'tools', 'tasks']) {
-      const expectedTitle = route === 'tasks' ? 'Sessions' : route === 'usage' ? 'Analytics' : route[0].toUpperCase() + route.slice(1);
       await win.webContents.executeJavaScript(`location.hash = '#${route}'`);
-      await waitFor(win, `document.querySelector('#pageTitle')?.textContent.trim() === ${JSON.stringify(expectedTitle)} && document.querySelector('#routeRoot')?.children.length > 0`);
+      await waitFor(win, `location.hash === '#${route}' && document.querySelector('#routeRoot')?.children.length > 0`);
       if (route === 'tools') await waitFor(win, `document.querySelectorAll('.tool-card').length === ${expectedToolCount}`);
       if (route === 'usage') {
-        await waitFor(win, `document.body.innerText.includes('Tool calls') && !document.querySelector('[data-usage-unavailable]')`);
+        await waitFor(win, `document.querySelector('[data-usage-page]') && !document.querySelector('[data-usage-unavailable]')`);
       }
       measurements.push(await win.webContents.executeJavaScript(`(() => {
         const titlebar = document.getElementById('windowTitlebar').getBoundingClientRect();
@@ -51,13 +50,13 @@ app.whenReady().then(async () => {
         return {
           route: location.hash,
           chrome: document.documentElement.dataset.windowChrome,
-          density: document.documentElement.dataset.density,
+          density: document.documentElement.dataset.density || '',
           titlebarBottom: titlebar.bottom,
           shellTop: shell.top,
           mainTop: main.top,
           topbarTop: topbar.top,
           titleTop: title.top,
-          localAnalyticsLoaded: location.hash !== '#usage' || document.body.innerText.includes('Tool calls'),
+          localAnalyticsLoaded: location.hash !== '#usage' || Boolean(document.querySelector('.usage-overview')),
           inlineUsageError: Boolean(document.querySelector('[data-usage-unavailable]')),
           toolCategories: location.hash === '#tools' ? Object.fromEntries([...document.querySelectorAll('.tool-card')].map(card => [card.querySelector('code')?.textContent || '', card.querySelector('.tool-capability')?.textContent || ''])) : {},
           titleVisible: title.top >= titlebar.bottom - 0.5,

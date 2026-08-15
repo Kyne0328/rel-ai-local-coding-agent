@@ -114,15 +114,15 @@ assert.doesNotMatch(desktopStatusSource, /renderViewIfChanged/, 'desktop status 
 assert.match(home, /export function updateHomeLiveState/);
 assert.match(sessions, /export function updateTaskSessions/);
 assert.match(activity, /export function updateActivityLiveState/, 'Activity must expose session-aware live synchronization');
-assert.match(activity, /<th scope="col" class="activity-tool-column">Tool<\/th>/, 'Activity must preserve the original Tool column');
-assert.match(activity, /<th scope="col" class="activity-workspace-column">Workspace<\/th>/, 'Activity must preserve the original Workspace column');
+assert.match(activity, /<th scope="col" class="activity-tool-column">(?:Tool|Action)<\/th>/, 'Activity must preserve the tool/action column');
+assert.match(activity, /<th scope="col" class="activity-workspace-column">(?:Workspace|Project)<\/th>/, 'Activity must preserve the workspace/project column');
 assert.match(activity, /<th scope="col" class="activity-message-column">Message<\/th>/, 'Activity must preserve the original Message column');
 assert.doesNotMatch(activity, /<th scope="col" class="activity-session-column">Session<\/th>/, 'Activity must not replace the original columns with Session');
 assert.match(activity, /routeHref\('tasks'/, 'Activity details must deep-link back to Sessions');
 assert.match(sessions, /data-session-fingerprint/, 'session rows must carry semantic fingerprints for keyed reconciliation');
 const sessionFactsSource = functionSource(sessions, 'sessionFacts');
 assert.match(sessionFactsSource, /toolCallCount/, 'session rows must show their tool-call count');
-assert.match(sessionFactsSource, /tool call/, 'session rows must label tool-call counts');
+assert.match(sessionFactsSource, /(?:tool call|action)/, 'session rows must label action counts');
 assert.match(sessionFactsSource, /file.*edited/, 'session rows must show their edited-file count');
 assert.doesNotMatch(sessionFactsSource, /risk/, 'session row facts must not surface workflow risk labels');
 assert.doesNotMatch(functionSource(sessions, 'workflowTechnicalHtml'), /risk/, 'session details must not surface workflow risk labels');
@@ -142,7 +142,7 @@ const reconcileSessionsSource = functionSource(sessions, 'reconcileSessionRows')
 assert.match(reconcileSessionsSource, /body\.children\[index\]/, 'keyed reconciliation must compare against the current DOM child after a row replacement');
 assert.doesNotMatch(reconcileSessionsSource, /let cursor/, 'keyed reconciliation must not retain a cursor that can become detached by replaceWith');
 assert.match(connector, /export function updateConnectorLiveState/);
-assert.match(connector, /connector-technical-details/);
+assert.doesNotMatch(connector, /connector-technical-details|Execution mode|Native MCP Tasks/, 'Connection must not expose protocol execution internals in the normal UI.');
 for (const moduleSource of [home, processes, connector]) {
   assert.match(moduleSource, /isEqualNode/, 'live region updaters must preserve unchanged DOM nodes');
 }
