@@ -6,7 +6,8 @@ import path from 'node:path';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { TOOL_SURFACE_VERSION, getCatalogAction, getCatalogToolDefinition } from '../src/tools/actionCatalog.js';
 
-assert.equal(TOOL_SURFACE_VERSION, 36);
+const releaseManifest = JSON.parse(fs.readFileSync(new URL('../release-manifest.json', import.meta.url), 'utf8'));
+assert.equal(TOOL_SURFACE_VERSION, releaseManifest.toolSurfaceVersion, 'architecture tests must follow the canonical release tool-surface version');
 const inspectDefinition = getCatalogToolDefinition('relai_inspect');
 assert.ok(inspectDefinition.inputSchema.properties.action.enum.includes('architecture'));
 const architectureAction = getCatalogAction('relai_inspect', { action: 'architecture' });

@@ -79,6 +79,7 @@ assert.equal(fs.existsSync(path.join(root, 'src', 'nativeTasksProbe.js')), false
 assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profile.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profileRegistry.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'docs', 'TOOL_PROFILES.md')), false);
+assert.equal(fs.existsSync(path.join(root, 'skills-lock.json')), false, 'removed built-in skill management must not leave an empty skills-lock.json authority behind');
 
 const removedCompatibilityNames = [
   'relai_write', 'relai_replace', 'relai_browser',
