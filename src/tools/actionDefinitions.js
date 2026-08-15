@@ -278,7 +278,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_ui',
     title: 'Test Local UI',
-    description: 'Use for browser/UI runtime evidence and interaction in a workspace-scoped local session. Do not use when source inspection alone answers the question.',
+    description: 'Use for local UI runtime evidence and interaction in a workspace-scoped session. Do not use when source inspection alone answers the question.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -506,7 +506,7 @@ function clonePublicExecOperation() {
     'relai_exec',
     'relai_exec',
     'Run Command',
-    'Use for bounded one-shot workspace commands. Do not use for persistent services or watchers; prefer executable + argv and use command only when shell syntax is required.',
+    'Use for bounded one-shot workspace commands. Do not use for persistent services or watchers; prefer executable + argv and use command only when command-line syntax is required.',
     {
       inputSchema: publicExecInputSchema(source.inputSchema),
       dashboard: { capabilities: ['execute'] }
