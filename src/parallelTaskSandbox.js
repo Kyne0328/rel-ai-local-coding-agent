@@ -136,7 +136,10 @@ async function prepareTaskExecutionWorkspace(workspace, config, taskId, operatio
 
   const existing = findTaskSandbox(config, workspace.alias, owner);
   if (existing) {
-    await promoteTaskSandbox(workspace, config, owner);
+    const sourceRevision = await workspaceRevision(workspace, config);
+    if (!existing.sourceRevision || existing.sourceRevision !== sourceRevision) {
+      await promoteTaskSandbox(workspace, config, owner, { sourceRevision });
+    }
     const current = findTaskSandbox(config, workspace.alias, owner);
     return current && SANDBOX_ROUTED_OPERATIONS.has(operation)
       ? resolveTaskSandboxWorkspace(config, current.alias)
@@ -196,6 +199,7 @@ async function createTaskSandbox(workspace, config, taskId) {
     taskId,
     sourceBranch: baseline.branch,
     syncCommit: baseline.commit,
+    sourceRevision: await workspaceRevision(workspace, config),
     createdAt: new Date().toISOString(),
     promotedFiles: []
   };
@@ -255,7 +259,7 @@ async function workspaceSnapshotCommit(workspace, config) {
     if (untrackedResult.exitCode !== 0 || untrackedResult.stdoutTruncated) {
       throw new Error('Could not inspect untracked workspace files for parallel execution.');
     }
-    const untracked = splitNullList(untrackedResult.stdout);
+    const untracked = splitNullList(untrackedResult.stdout).filter(item => !isReusableDependencyPath(item));
     const excludedSensitive = untracked.filter(isSecretPath);
     const safeUntracked = untracked.filter(item => !isSecretPath(item));
     for (let index = 0; index < safeUntracked.length; index += 100) {
@@ -292,7 +296,7 @@ async function workspaceSnapshotCommit(workspace, config) {
   }
 }
 
-async function promoteTaskSandbox(sourceWorkspace, config, taskId) {
+async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {}) {
   const entry = findTaskSandbox(config, sourceWorkspace.alias, taskId);
   if (!entry) return { promoted: false, changedFiles: [] };
   if (!fs.existsSync(entry.path)) {
@@ -357,6 +361,7 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId) {
   const current = registry.sandboxes?.[entry.alias];
   if (current) {
     current.syncCommit = sourceSnapshot.commit;
+    current.sourceRevision = options.sourceRevision || await workspaceRevision(sourceWorkspace, config);
     current.lastPromotedAt = new Date().toISOString();
     current.promotedFiles = [...new Set([...(current.promotedFiles || []), ...changedFiles])];
     writeSandboxRegistry(config, registry);
@@ -412,7 +417,7 @@ async function changedPaths(root, fromCommit, toCommit, config) {
   if (result.exitCode !== 0 || result.stdoutTruncated) {
     throw promotionError('TASK_SANDBOX_PROMOTION_FAILED', 'Could not calculate the private task change set. The sandbox was preserved.');
   }
-  return [...new Set(splitNullList(result.stdout))];
+  return [...new Set(splitNullList(result.stdout).filter(item => !isReusableDependencyPath(item)))];
 }
 
 async function writeCommitDiff(config, root, fromCommit, toCommit) {
@@ -484,6 +489,7 @@ async function removeSandboxEntry(entry, config) {
 
 function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
   for (const relativePath of files || []) {
+    if (isReusableDependencyPath(relativePath)) continue;
     const source = path.join(sourceRoot, relativePath);
     const target = path.join(targetRoot, relativePath);
     let stat;
@@ -492,6 +498,49 @@ function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, target);
   }
+}
+
+function isReusableDependencyPath(relativePath) {
+  const normalized = String(relativePath || '').replaceAll('\\', '/').replace(/^\.\//, '');
+  return normalized === 'node_modules'
+    || normalized.startsWith('node_modules/')
+    || normalized === 'electron/node_modules'
+    || normalized.startsWith('electron/node_modules/');
+}
+
+async function workspaceRevision(workspace, config) {
+  const headResult = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
+    cwd: workspace.path, timeout: 30000
+  }, config);
+  const statusResult = await runProcess('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {
+    cwd: workspace.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
+  }, config);
+  if (statusResult.exitCode !== 0 || statusResult.stdoutTruncated) {
+    throw promotionError('TASK_SANDBOX_SYNC_FAILED', 'Could not determine whether the visible workspace changed. The private task sandbox was preserved.');
+  }
+  const hash = crypto.createHash('sha256');
+  hash.update(String(headResult.exitCode === 0 ? headResult.stdout : 'unborn').trim());
+  hash.update('\0');
+  hash.update(String(statusResult.stdout || ''));
+  for (const entry of splitNullList(statusResult.stdout)) {
+    const relativePath = statusPath(entry);
+    if (!relativePath || isReusableDependencyPath(relativePath)) continue;
+    const absolutePath = path.join(workspace.path, relativePath);
+    try {
+      const stat = fs.lstatSync(absolutePath, { bigint: true });
+      hash.update(`\0${relativePath}\0${stat.mode}\0${stat.size}\0${stat.mtimeNs}`);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      hash.update(`\0${relativePath}\0missing`);
+    }
+  }
+  return hash.digest('hex');
+}
+
+function statusPath(entry) {
+  const value = String(entry || '');
+  if (value.length >= 4 && value[2] === ' ') return value.slice(3);
+  return value;
 }
 
 function linkReusableDependencies(sourceRoot, targetRoot) {

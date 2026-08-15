@@ -38,8 +38,11 @@ try {
   fs.writeFileSync(path.join(workspacePath, 'beta.txt'), 'beta\n');
   fs.writeFileSync(path.join(workspacePath, 'shared.txt'), 'shared\n');
   fs.writeFileSync(path.join(workspacePath, 'merge.txt'), 'first\nsecond\nthird\n');
+  fs.writeFileSync(path.join(workspacePath, 'source-only.txt'), 'source baseline\n');
   git('add', '.');
   git('commit', '-m', 'fixture');
+  fs.mkdirSync(path.join(workspacePath, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(workspacePath, 'node_modules', '.relai-marker'), 'shared dependency\n');
 
   fs.writeFileSync(configPath, JSON.stringify({
     version: 4,
@@ -90,6 +93,36 @@ try {
   const resolvedSandbox = resolveWorkspace(config, entries[0].alias);
   assert.equal(resolvedSandbox.taskSandbox, true);
   assert.equal(resolvedSandbox.sourceAlias, 'app');
+
+  const promotedAtBeforeRead = entries[0].lastPromotedAt;
+  await rawCallTool('relai_read', {
+    workspace: 'app', work_id: second.work_id, paths: ['beta.txt']
+  }, context);
+  assert.equal(
+    sandboxEntries(config)[0].lastPromotedAt,
+    promotedAtBeforeRead,
+    'an unchanged source revision must not trigger snapshot/promotion work for ordinary reads'
+  );
+
+  fs.writeFileSync(path.join(workspacePath, 'source-only.txt'), 'source changed outside sandbox\n');
+  await rawCallTool('relai_read', {
+    workspace: 'app', work_id: second.work_id, paths: ['source-only.txt']
+  }, context);
+  assert.equal(
+    readText(path.join(entries[0].path, 'source-only.txt')),
+    'source changed outside sandbox\n',
+    'a real source revision change must synchronize into the private task before a routed read'
+  );
+  assert.notEqual(
+    sandboxEntries(config)[0].lastPromotedAt,
+    promotedAtBeforeRead,
+    'source revision changes should advance synchronization state exactly when needed'
+  );
+  assert.equal(
+    fs.existsSync(path.join(entries[0].path, 'node_modules', '.relai-marker')),
+    true,
+    'shared dependency links must survive source synchronization without entering task diffs'
+  );
 
   fs.writeFileSync(path.join(entries[0].path, 'merge.txt'), 'first from second\nsecond\nthird\n');
   fs.writeFileSync(path.join(workspacePath, 'merge.txt'), 'first\nsecond\nthird from first\n');
