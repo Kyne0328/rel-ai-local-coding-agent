@@ -274,6 +274,10 @@ function verifyTunnelClientTamperDetection() {
   const missing = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });
   assert.notEqual(missing.status, 0);
   assert.match(`${missing.stdout}\n${missing.stderr}`, /bundled OpenAI tunnel-client is missing for win32/i);
+
+  // A normal source consistency check must not require ignored build-time binaries.
+  // Packaging supplies REL_AI_TARGET_PLATFORM and performs the strict artifact check.
+  run('release-check.mjs');
 }
 
 function run(script, args = []) {
