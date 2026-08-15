@@ -9,12 +9,44 @@ const PUBLIC_INPUT_DESCRIPTIONS = Object.freeze({
 });
 
 function compactPublicInputSchema(name, inputSchema) {
-  // Keep the connector-facing object flat. OpenAI's MCP importer projects each
-  // top-level oneOf branch as a complete argument object, so branches that only
-  // carry required/const constraints hide the shared top-level properties. The
-  // executable schema and operation dispatcher still enforce those constraints.
-  const { allOf: _runtimeGuards, oneOf: _runtimeVariants, ...schema } = inputSchema || {};
+  // Keep shared connector properties at the top level. OpenAI's MCP importer can
+  // project a top-level oneOf branch as a complete argument object, hiding shared
+  // properties. Preserve the exact executable constraints by moving action
+  // variants into conditional allOf guards and wrapping non-action variants one
+  // level down instead of discarding them.
+  const schema = connectorSafeInputSchema(inputSchema || {});
   return stripPublicDescriptions(schema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
+}
+
+function connectorSafeInputSchema(inputSchema) {
+  const { oneOf: variants, allOf: existingGuards = [], ...schema } = inputSchema;
+  const allOf = [...existingGuards];
+  if (Array.isArray(variants) && variants.length) {
+    if (variants.every(isActionVariant)) {
+      allOf.push(...variants.map(actionVariantGuard));
+    } else {
+      allOf.push({ oneOf: variants });
+    }
+  }
+  return { ...schema, ...(allOf.length ? { allOf } : {}) };
+}
+
+function isActionVariant(branch) {
+  return branch?.properties?.action?.const != null;
+}
+
+function actionVariantGuard(branch) {
+  const { properties = {}, required = [], ...constraints } = branch;
+  const { action, ...branchProperties } = properties;
+  const branchRequired = required.filter(field => field !== 'action');
+  return {
+    if: { properties: { action }, required: ['action'] },
+    then: {
+      ...constraints,
+      ...(Object.keys(branchProperties).length ? { properties: branchProperties } : {}),
+      ...(branchRequired.length ? { required: branchRequired } : {})
+    }
+  };
 }
 
 function stripPublicDescriptions(value, retained, path = '') {

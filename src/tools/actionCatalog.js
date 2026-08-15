@@ -8,7 +8,7 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 40;
+const TOOL_SURFACE_VERSION = 41;
 const READ = 'repository:read';
 const WRITE = 'repository:write';
 const EXECUTE = 'command:execute';

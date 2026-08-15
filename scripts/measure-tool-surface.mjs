@@ -56,10 +56,9 @@ const report = {
   }
 };
 
-if (surface.publicTools !== 13) throw new Error(`Unified surface exposes ${surface.publicTools} tools; expected exactly 13.`);
-if (surface.discoverySchemaBytes >= 29_000) throw new Error(`Unified discovery is ${surface.discoverySchemaBytes} bytes; limit is 28999.`);
+if (surface.publicTools !== 12) throw new Error(`Unified surface exposes ${surface.publicTools} tools; expected exactly 12.`);
+if (surface.discoverySchemaBytes >= 48_000) throw new Error(`Unified discovery is ${surface.discoverySchemaBytes} bytes; limit is 47999.`);
 if (surface.globalInstructionBytes >= 512) throw new Error('Global connector instructions exceed 511 bytes.');
-if (report.change.discoveryReductionPercent < 5) throw new Error(`Discovery reduction is ${report.change.discoveryReductionPercent}%; expected a reduction from the expanded direct-surface baseline.`);
 if (report.resultBudgets.workBeginAfter >= report.resultBudgets.workBeginBefore) throw new Error('Compact work begin result did not shrink.');
 if (report.resultBudgets.execSuccess >= 1000) throw new Error(`Exec success envelope is ${report.resultBudgets.execSuccess} bytes; limit is 999.`);
 if (report.resultBudgets.boundedSnapshot >= 16_000) throw new Error(`Snapshot result is ${report.resultBudgets.boundedSnapshot} bytes; limit is 15999.`);

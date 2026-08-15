@@ -1,5 +1,6 @@
 // @ts-check
 
+import { fromJsonSchema } from '@modelcontextprotocol/server';
 import { HANDLERS } from './handlers.js';
 import {
   getCatalogToolDefinition as getPublicMetadata,
@@ -10,13 +11,18 @@ import {
 
 // Executable-only function map retained to avoid the handlers -> status -> schema -> catalog import cycle.
 // The catalog remains the sole owner of schemas, policy, and execution metadata.
-const OPERATION_EXECUTABLES = new Map(getOperationMetadata().map(metadata => {
+const OPERATION_METADATA = getOperationMetadata();
+const OPERATION_EXECUTABLES = new Map(OPERATION_METADATA.map(metadata => {
   const handler = HANDLERS[metadata.handlerName];
   if (typeof handler !== 'function') {
     throw new Error(`Internal operation '${metadata.name}' references unknown handler '${metadata.handlerName}'.`);
   }
   return [metadata.name, Object.freeze({ ...metadata, handler })];
 }));
+const OPERATION_INPUT_VALIDATORS = new Map(OPERATION_METADATA.map(metadata => [
+  metadata.name,
+  fromJsonSchema(metadata.inputSchema)['~standard']
+]));
 
 function resolveExecutableToolCall(name, args = {}, config = {}) {
   const operation = resolveToolOperation(name, args);
@@ -35,6 +41,22 @@ function resolveExecutableToolCall(name, args = {}, config = {}) {
     action: operation.action || '',
     compact: true
   };
+}
+
+async function validateExecutableOperationInput(operationName, args = {}) {
+  const name = String(operationName || '');
+  const validator = OPERATION_INPUT_VALIDATORS.get(name);
+  if (!validator) throw new Error(`Unknown internal operation '${name}'.`);
+  const input = Object.fromEntries(Object.entries(args || {}).filter(([key]) => !['work_id', '_operationTaskId'].includes(key)));
+  const result = await validator.validate(input);
+  if (!result.issues) return;
+  const details = result.issues.map(issue => {
+    const location = Array.isArray(issue.path)
+      ? issue.path.map(segment => String(segment?.key ?? segment)).filter(Boolean).join('.')
+      : '';
+    return `${location || '<root>'}: ${issue.message}`;
+  });
+  throw new Error(`Input validation error for ${name}: ${details.join('; ')}.`);
 }
 
 function getExecutableToolDefinition(name, config = {}, args) {
@@ -59,4 +81,4 @@ function getExecutableToolDefinitions(config = {}) {
   return getPublicDefinitions(config).map(definition => getExecutableToolDefinition(definition.name, config));
 }
 
-export { getExecutableToolDefinition, getExecutableToolDefinitions, resolveExecutableToolCall };
+export { getExecutableToolDefinition, getExecutableToolDefinitions, resolveExecutableToolCall, validateExecutableOperationInput };

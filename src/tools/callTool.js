@@ -15,7 +15,7 @@ import { enhanceToolError } from './errors.js';
 import { executeToolCall } from './execution.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { describeToolOperation } from './operation.js';
-import { resolveExecutableToolCall } from './runtimeRegistry.js';
+import { resolveExecutableToolCall, validateExecutableOperationInput } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
 import { assertKnownTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
@@ -80,6 +80,7 @@ async function callTool(name, args = {}, context = {}) {
         );
       }
     }
+    await validateExecutableOperationInput(operationName, effectiveArgs);
     assertRuntimeCompatibility(config, operationName, effectiveArgs, { activeTaskCount: getToolActivity().activeTaskCount });
     const duplicateTerminalCancellation = operationName === 'relai_cancel_work' && knownTask?.status === 'cancelled';
     const terminalTaskReference = isTerminalTaskReference(knownTask, operationName);

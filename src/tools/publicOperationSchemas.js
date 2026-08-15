@@ -19,11 +19,10 @@ function publicExecInputSchema(inputSchema) {
 }
 
 function publicEditInputSchema(inputSchema, maxBatchEdits) {
-  const { oneOf: _oneOf, ...structuralSchema } = inputSchema;
   const properties = inputSchema.properties || {};
   const describe = (name, description) => ({ ...properties[name], description });
   return {
-    ...structuralSchema,
+    ...inputSchema,
     description: 'Choose one primary form. Rel.AI validates the selected form before touching the workspace.',
     properties: {
       ...properties,
