@@ -114,14 +114,32 @@ function maybeOpenRequestedSession() {
   void openSession(session);
 }
 
-function sessionSummary(sessions) {
-  const active = sessions.filter(session => workSessionStateView(session).active).length;
-  const open = sessions.filter(session => {
+export function sessionSummary(sessions) {
+  const counts = sessions.reduce((summary, session) => {
     const state = workSessionStateView(session);
-    return !state.terminal && !state.active;
-  }).length;
-  const completed = sessions.filter(session => workSessionStateView(session).status === 'completed').length;
-  return `${active} active · ${open} open · ${completed} completed`;
+    const inactive = state.status === 'inactive';
+    const open = !state.terminal && !inactive;
+    const active = open && Number(session.activeCalls || 0) > 0;
+
+    if (open) summary.open += 1;
+    if (active) summary.active += 1;
+    if (['waiting_for_approval', 'blocked', 'validation_failed'].includes(state.status)) summary.attention += 1;
+    else if (inactive) summary.inactive += 1;
+    else if (state.status === 'completed') summary.completed += 1;
+    else if (state.status === 'cancelled') summary.cancelled += 1;
+    else if (state.status === 'failed') summary.failed += 1;
+    else if (!open) summary.other += 1;
+    return summary;
+  }, { active: 0, open: 0, attention: 0, inactive: 0, completed: 0, cancelled: 0, failed: 0, other: 0 });
+
+  const parts = [`${counts.active} active`, `${counts.open} open`];
+  if (counts.attention) parts.push(`${counts.attention} need attention`);
+  if (counts.inactive) parts.push(`${counts.inactive} inactive`);
+  parts.push(`${counts.completed} completed`);
+  if (counts.cancelled) parts.push(`${counts.cancelled} cancelled`);
+  if (counts.failed) parts.push(`${counts.failed} failed`);
+  if (counts.other) parts.push(`${counts.other} other`);
+  return parts.join(' · ');
 }
 
 function sessionCountLabel(sessions, workspace) {
