@@ -135,7 +135,9 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
     deviceId,
     ...totals,
     completed: totals.successes + totals.failures,
-    successRate: totals.reliabilityCalls ? totals.reliableCalls / totals.reliabilityCalls * 100 : 0,
+    successRate: totals.successes + totals.failures ? totals.successes / (totals.successes + totals.failures) * 100 : 0,
+    operationSuccessRate: totals.successes + totals.failures ? totals.successes / (totals.successes + totals.failures) * 100 : 0,
+    reliabilityRate: totals.reliabilityCalls ? totals.reliableCalls / totals.reliabilityCalls * 100 : null,
     averageDuration: totals.successes + totals.failures ? totals.executionMs / (totals.successes + totals.failures) : 0,
     tools,
     devices,
@@ -174,7 +176,7 @@ function normalizeTotals(value) {
   if (!value || typeof value !== 'object') throw new Error('Analytics unavailable: monthly totals were not returned.');
   const result = {};
   for (const key of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) result[key] = exactNumber(value[key], key);
-  return { ...result, ...normalizeReliability(value, result.successes, result.failures, 'totals') };
+  return { ...result, ...normalizeReliability(value, 'totals') };
 }
 
 function normalizeBreakdown(value, kind) {
@@ -191,7 +193,7 @@ function normalizeBreakdown(value, kind) {
       toolCalls: exactNumber(row.toolCalls ?? row.calls, `${kind}.toolCalls`),
       successes,
       failures,
-      ...normalizeReliability(row, successes, failures, kind),
+      ...normalizeReliability(row, kind),
       executionMs: exactNumber(row.executionMs, `${kind}.executionMs`)
     };
   });
@@ -210,7 +212,7 @@ function normalizeSeries(value, kind) {
       toolCalls: exactNumber(item?.toolCalls ?? 0, `${kind}.toolCalls`),
       successes,
       failures,
-      ...normalizeReliability(item, successes, failures, kind),
+      ...normalizeReliability(item, kind),
       requestBytes: exactNumber(item?.requestBytes ?? 0, `${kind}.requestBytes`),
       resultBytes: exactNumber(item?.resultBytes ?? 0, `${kind}.resultBytes`),
       executionMs: exactNumber(item?.executionMs ?? 0, `${kind}.executionMs`)
@@ -318,14 +320,11 @@ function normalizeMonth(value) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(text) ? text : '';
 }
 
-function normalizeReliability(row, successes, failures, label) {
-  const legacyCompleted = successes + failures;
-  const reliabilityCalls = optionalNumber(row?.reliabilityCalls, legacyCompleted, `${label}.reliabilityCalls`);
-  const reliableCalls = optionalNumber(row?.reliableCalls, successes, `${label}.reliableCalls`);
+function normalizeReliability(row, label) {
   return {
-    reliabilityCalls,
-    reliableCalls,
-    infrastructureFailures: optionalNumber(row?.infrastructureFailures, Math.max(0, reliabilityCalls - reliableCalls), `${label}.infrastructureFailures`),
+    reliabilityCalls: optionalNumber(row?.reliabilityCalls, 0, `${label}.reliabilityCalls`),
+    reliableCalls: optionalNumber(row?.reliableCalls, 0, `${label}.reliableCalls`),
+    infrastructureFailures: optionalNumber(row?.infrastructureFailures, 0, `${label}.infrastructureFailures`),
     operationFailures: optionalNumber(row?.operationFailures, 0, `${label}.operationFailures`),
     recoverableFailures: optionalNumber(row?.recoverableFailures, 0, `${label}.recoverableFailures`),
     cancellations: optionalNumber(row?.cancellations, 0, `${label}.cancellations`)

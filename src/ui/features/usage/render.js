@@ -12,32 +12,23 @@ export function renderUsage(content, { bounds, current, previous }) {
     </section>
     ${timelineSection(current)}
     ${activityBarsSection('Tool usage', current.tools, 'tool')}
-    ${current.failures ? failureCategoriesSection(current.failureCategories) : ''}
     ${current.kind === 'workspace'
-      ? breakdownSection('Devices', current.devices, 'device')
-      : activityBarsSection('Workspace activity', current.workspaces, 'workspace')}`;
+      ? `${failureCategoriesSection(current.failureCategories, current.failures)}${breakdownSection('Devices', current.devices, 'device')}`
+      : `<div class="usage-side-by-side">${failureCategoriesSection(current.failureCategories, current.failures)}${activityBarsSection('Workspace activity', current.workspaces, 'workspace')}</div>`}`;
   wireTimeline(content, current);
 }
 
 function analyticsMetrics(scope, previous) {
   const values = key => scope.points.map(point => pointMetric(point, key));
-  const compare = (key, options = {}) => scope.usedMonthlyFallback ? null : deltaFor(scope, previous, key, options);
-  const metric = (label, key, value, detail = '', options = {}) => ({ label, value, detail, delta: compare(key, options), values: values(options.sparkKey || key), tone: options.metricTone || '' });
-  if (scope.kind !== 'workspace') return [
-    metric('Tool calls', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
-    metric('Successful', 'successes', integer(scope.successes)),
-    metric('Success rate', 'successRate', percent(scope.successRate), '', { rate: true, sparkKey: 'successRate' }),
-    metric('Failed', 'failures', integer(scope.failures), '', { inverse: true, metricTone: scope.failures ? 'bad' : 'good' }),
-    metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed call' : '', { inverse: true, sparkKey: 'averageDuration' }),
-    metric('Active days', 'activeDays', integer(scope.activeDays), 'UTC', { neutral: true, sparkKey: 'toolCalls' })
-  ];
+  const compare = (key, options = {}) => scope.usedMonthlyFallback || options.available === false ? null : deltaFor(scope, previous, key, options);
+  const metric = (label, key, value, detail = '', options = {}) => ({ label, value, detail, delta: compare(key, options), values: options.spark === false ? [] : values(options.sparkKey || key), tone: options.metricTone || '' });
   return [
     metric('Tool calls', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
-    metric('Successful', 'successes', integer(scope.successes)),
-    metric('Failed', 'failures', integer(scope.failures), '', { inverse: true, metricTone: scope.failures ? 'bad' : 'good' }),
-    metric('Success rate', 'successRate', percent(scope.successRate), '', { rate: true, sparkKey: 'successRate' }),
-    metric('Execution time', 'executionMs', duration(scope.executionMs), 'Completed calls', { neutral: true }),
-    metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed call' : '', { inverse: true, sparkKey: 'averageDuration' })
+    metric('Reliability', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} classified calls` : 'Starts with newly classified calls', { rate: true, available: scope.reliabilityCalls > 0, spark: false }),
+    metric('Infra failures', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Classified calls only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
+    metric('Recoverable', 'recoverableFailures', integer(scope.recoverableFailures), 'Classified calls only', { inverse: true }),
+    metric('Operation success', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'All completed calls, including legacy', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0 }),
+    metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed call' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0 })
   ];
 }
 
@@ -48,7 +39,7 @@ function metricHtml(metric) {
 }
 
 function timelineSection(scope) {
-  const switches = [['toolCalls', 'Tool calls'], ['failures', 'Failed'], ['successRate', 'Success rate'], ['averageDuration', 'Avg tool time']];
+  const switches = [['toolCalls', 'Tool calls'], ['infrastructureFailures', 'Infra failures'], ['operationSuccessRate', 'Operation success'], ['averageDuration', 'Avg tool time']];
   return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><h3>Activity</h3><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}" aria-pressed="${i ? 'false' : 'true'}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')), 'Tool calls')}</div></section>`;
 }
 
@@ -88,17 +79,19 @@ function sparkline(values, tone='') {
 
 function pointMetric(point,key) {
   const completed=point.successes+point.failures;
-  if(key==='successRate') return point.reliabilityCalls?point.reliableCalls/point.reliabilityCalls*100:0;
+  if(key==='reliabilityRate') return point.reliabilityCalls?point.reliableCalls/point.reliabilityCalls*100:0;
+  if(key==='operationSuccessRate') return completed?point.successes/completed*100:0;
+  if(key==='successRate') return completed?point.successes/completed*100:0;
   if(key==='averageDuration') return completed?point.executionMs/completed:0;
   return Number(point[key]||0);
 }
 
-function failureCategoriesSection(rows) {
+function failureCategoriesSection(rows, totalFailures = 0) {
   const visible = [...(rows || [])].sort((a, b) => b.failures - a.failures).slice(0, 10);
   const max = Math.max(1, ...visible.map(row => row.failures));
   const body = visible.length
     ? `<div class="usage-bar-list">${visible.map(row => failureCategoryRow(row, max)).join('')}</div>`
-    : '<div class="usage-breakdown-empty">Failure categories are unavailable for older data.</div>';
+    : `<div class="usage-breakdown-empty">${Number(totalFailures || 0) > 0 ? 'Failure categories are unavailable for older data.' : 'No failures in this range.'}</div>`;
   return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><div><h3>Failure categories</h3><p>Raw error messages are not stored.</p></div></div><div class="card-body">${body}</div></section>`;
 }
 
@@ -117,7 +110,7 @@ function bar(row,key,max){const label=key==='workspace'?(row.workspace||'Unattri
 function breakdownSection(title,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Tool calls</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
 function breakdownRow(row,key){const label=key==='device'?(row.displayName||shortId(row.deviceId)||'Unknown device'):(row[key]||'Unknown');return `<tr><th scope="row">${esc(label)}</th><td>${integer(row.toolCalls)}</td><td>${integer(row.successes)}</td><td>${integer(row.failures)}</td><td>${duration(row.executionMs)}</td></tr>`;}
 function formatChartValue(value, metricLabel) {
-  if (metricLabel === 'Success rate') return percent(value);
+  if (metricLabel === 'Reliability' || metricLabel === 'Operation success' || metricLabel === 'Success rate') return percent(value);
   if (/duration|tool time/i.test(metricLabel)) return duration(value);
   return integer(value);
 }

@@ -5,7 +5,8 @@ import { writeTextAtomicAsync } from './durableState.js';
 import { failureCategoryFromCode, normalizeFailureCategory } from './analyticsFailureCategory.js';
 import { classifyAnalyticsOutcome, reliabilityCountersForOutcome } from './analyticsOutcome.js';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+const LEGACY_SCHEMA_VERSION = 1;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCAL_DEVICE_ID = 'local-device';
@@ -153,8 +154,9 @@ function readDocument(config, month) {
     if (!stat.isFile() || stat.size > MAX_FILE_BYTES) document = emptyDocument(month);
     else {
       const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      document = parsed?.schemaVersion === SCHEMA_VERSION && parsed?.month === month
-        ? sanitizeDocument(parsed, month)
+      const supportedSchema = parsed?.schemaVersion === SCHEMA_VERSION || parsed?.schemaVersion === LEGACY_SCHEMA_VERSION;
+      document = supportedSchema && parsed?.month === month
+        ? sanitizeDocument(parsed, month, { resetReliability: parsed.schemaVersion !== SCHEMA_VERSION })
         : emptyDocument(month);
     }
   } catch {
@@ -237,31 +239,31 @@ function emptyDocument(month) {
   return { schemaVersion: SCHEMA_VERSION, month, totals: emptyAggregate(true), tools: [], workspaces: [], workspaceTools: [], failureCategories: [], workspaceFailureCategories: [], hours: [] };
 }
 
-function sanitizeDocument(value, month) {
+function sanitizeDocument(value, month, { resetReliability = false } = {}) {
   const doc = emptyDocument(month);
-  doc.totals = sanitizeAggregate(value.totals, true);
-  doc.tools = sanitizeNamedRows(value.tools, 'tool');
-  doc.workspaces = sanitizeNamedRows(value.workspaces, 'workspace');
-  doc.workspaceTools = sanitizeWorkspaceTools(value.workspaceTools);
+  doc.totals = sanitizeAggregate(value.totals, true, resetReliability);
+  doc.tools = sanitizeNamedRows(value.tools, 'tool', resetReliability);
+  doc.workspaces = sanitizeNamedRows(value.workspaces, 'workspace', resetReliability);
+  doc.workspaceTools = sanitizeWorkspaceTools(value.workspaceTools, resetReliability);
   doc.failureCategories = sanitizeFailureCategories(value.failureCategories);
   doc.workspaceFailureCategories = sanitizeWorkspaceFailureCategories(value.workspaceFailureCategories);
   doc.hours = (Array.isArray(value.hours) ? value.hours : []).filter(row => /^\d{4}-\d{2}-\d{2}T\d{2}$/.test(String(row?.hour || ''))).slice(-744).map(row => ({
     hour: String(row.hour),
-    ...sanitizeAggregate(row, true),
-    tools: sanitizeNamedRows(row.tools, 'tool'),
-    workspaces: sanitizeNamedRows(row.workspaces, 'workspace'),
-    workspaceTools: sanitizeWorkspaceTools(row.workspaceTools),
+    ...sanitizeAggregate(row, true, resetReliability),
+    tools: sanitizeNamedRows(row.tools, 'tool', resetReliability),
+    workspaces: sanitizeNamedRows(row.workspaces, 'workspace', resetReliability),
+    workspaceTools: sanitizeWorkspaceTools(row.workspaceTools, resetReliability),
     failureCategories: sanitizeFailureCategories(row.failureCategories),
     workspaceFailureCategories: sanitizeWorkspaceFailureCategories(row.workspaceFailureCategories)
   }));
   return doc;
 }
 
-function sanitizeNamedRows(rows, field) {
-  return (Array.isArray(rows) ? rows : []).slice(0, 512).map(row => ({ [field]: boundedLabel(row?.[field], 160), ...sanitizeAggregate(row) })).filter(row => row[field]);
+function sanitizeNamedRows(rows, field, resetReliability = false) {
+  return (Array.isArray(rows) ? rows : []).slice(0, 512).map(row => ({ [field]: boundedLabel(row?.[field], 160), ...sanitizeAggregate(row, false, resetReliability) })).filter(row => row[field]);
 }
-function sanitizeWorkspaceTools(rows) {
-  return (Array.isArray(rows) ? rows : []).slice(0, 2048).map(row => ({ workspace: boundedLabel(row?.workspace, 160), tool: boundedLabel(row?.tool, 160), ...sanitizeAggregate(row) })).filter(row => row.workspace && row.tool);
+function sanitizeWorkspaceTools(rows, resetReliability = false) {
+  return (Array.isArray(rows) ? rows : []).slice(0, 2048).map(row => ({ workspace: boundedLabel(row?.workspace, 160), tool: boundedLabel(row?.tool, 160), ...sanitizeAggregate(row, false, resetReliability) })).filter(row => row.workspace && row.tool);
 }
 function sanitizeFailureCategories(rows) {
   return (Array.isArray(rows) ? rows : []).slice(0, 32).map(row => ({ category: normalizeFailureCategory(row?.category), failures: number(row?.failures) })).filter(row => row.failures > 0);
@@ -269,12 +271,11 @@ function sanitizeFailureCategories(rows) {
 function sanitizeWorkspaceFailureCategories(rows) {
   return (Array.isArray(rows) ? rows : []).slice(0, 512).map(row => ({ workspace: boundedLabel(row?.workspace, 160), category: normalizeFailureCategory(row?.category), failures: number(row?.failures) })).filter(row => row.workspace && row.failures > 0);
 }
-function sanitizeAggregate(row, includeRequests = false) {
+function sanitizeAggregate(row, includeRequests = false, resetReliability = false) {
   const successes = number(row?.successes);
   const failures = number(row?.failures);
-  const legacyCompleted = successes + failures;
-  const reliabilityCalls = hasNumber(row, 'reliabilityCalls') ? number(row.reliabilityCalls) : legacyCompleted;
-  const reliableCalls = hasNumber(row, 'reliableCalls') ? number(row.reliableCalls) : successes;
+  const reliabilityCalls = resetReliability ? 0 : number(row?.reliabilityCalls);
+  const reliableCalls = resetReliability ? 0 : number(row?.reliableCalls);
   return {
     ...(includeRequests ? { requests: number(row?.requests) } : {}),
     toolCalls: number(row?.toolCalls),
@@ -282,10 +283,10 @@ function sanitizeAggregate(row, includeRequests = false) {
     failures,
     reliabilityCalls,
     reliableCalls,
-    infrastructureFailures: hasNumber(row, 'infrastructureFailures') ? number(row.infrastructureFailures) : Math.max(0, reliabilityCalls - reliableCalls),
-    operationFailures: number(row?.operationFailures),
-    recoverableFailures: number(row?.recoverableFailures),
-    cancellations: number(row?.cancellations),
+    infrastructureFailures: resetReliability ? 0 : number(row?.infrastructureFailures),
+    operationFailures: resetReliability ? 0 : number(row?.operationFailures),
+    recoverableFailures: resetReliability ? 0 : number(row?.recoverableFailures),
+    cancellations: resetReliability ? 0 : number(row?.cancellations),
     executionMs: number(row?.executionMs)
   };
 }
@@ -321,7 +322,6 @@ function incrementAggregate(row, success, failure, durationMs, reliability = {})
   }
   row.executionMs = number(row.executionMs) + durationMs;
 }
-function hasNumber(row, key) { return row && Object.hasOwn(row, key) && Number.isFinite(Number(row[key])) && Number(row[key]) >= 0; }
 function findOrCreate(rows, predicate, create) { let row = rows.find(predicate); if (!row) { row = create(); rows.push(row); } return row; }
 function boundedDate(value) { const date = value instanceof Date ? value : new Date(value == null ? Date.now() : value); return Number.isFinite(date.getTime()) ? date : new Date(); }
 function boundedDuration(value) { const n = Number(value); return Number.isFinite(n) ? Math.min(MAX_DURATION_MS, Math.max(0, Math.round(n))) : 0; }

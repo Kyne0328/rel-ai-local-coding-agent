@@ -6,6 +6,7 @@ import path from 'node:path';
 import { OUTCOME_CLASSES, classifyAnalyticsOutcome } from '../src/analyticsOutcome.js';
 import { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot } from '../src/localAnalytics.js';
 import { analyticsBounds, analyticsRangeScope, normalizeUsageSnapshot } from '../src/ui/features/usage/range-model.js';
+import { renderUsage } from '../src/ui/features/usage/render.js';
 
 assert.equal(classifyAnalyticsOutcome({ ok: true }), OUTCOME_CLASSES.SUCCESS);
 assert.equal(classifyAnalyticsOutcome({ ok: false, operationName: 'relai_validate', errorMessage: 'test exited 1' }), OUTCOME_CLASSES.OPERATION_FAILURE);
@@ -35,7 +36,8 @@ try {
   const model = normalizeUsageSnapshot(snapshot, '2026-08');
   const bounds = analyticsBounds('24h', { now: new Date('2026-08-15T03:00:00Z') });
   const scope = analyticsRangeScope([model], bounds);
-  assert.equal(scope.successRate.toFixed(2), '66.67');
+  assert.equal(scope.reliabilityRate.toFixed(2), '66.67');
+  assert.equal(scope.operationSuccessRate, 0, 'all recorded operations in this fixture failed even though two failures were reliable tool behavior');
 
   const legacy = normalizeUsageSnapshot({
     source: 'local',
@@ -46,7 +48,72 @@ try {
     toolSeries: [], workspaceSeries: [], workspaceToolSeries: []
   }, '2026-08');
   const legacyScope = analyticsRangeScope([legacy], bounds);
-  assert.equal(legacyScope.successRate, 50, 'legacy analytics use the conservative historical success/failure fallback');
+  assert.equal(legacyScope.operationSuccessRate, 50, 'legacy successes and failures remain available as raw operation success');
+  assert.equal(legacyScope.reliabilityRate, null, 'legacy analytics must not be guessed into the new reliability denominator');
+  assert.equal(legacyScope.reliabilityCalls, 0);
+
+  const legacyContent = {
+    innerHTML: '',
+    querySelector: () => null,
+    querySelectorAll: () => []
+  };
+  renderUsage(legacyContent, { bounds, current: legacyScope, previous: analyticsRangeScope([], bounds) });
+  assert.match(legacyContent.innerHTML, /Starts with newly classified calls/);
+  assert.match(legacyContent.innerHTML, /Operation success/);
+
+  const legacyStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-reliability-v1-'));
+  try {
+    const analyticsDir = path.join(legacyStateDir, 'analytics', 'local');
+    fs.mkdirSync(analyticsDir, { recursive: true });
+    const legacyAggregate = {
+      requests: 10, toolCalls: 10, successes: 9, failures: 1, executionMs: 100,
+      reliabilityCalls: 10, reliableCalls: 9, infrastructureFailures: 1,
+      operationFailures: 0, recoverableFailures: 0, cancellations: 0
+    };
+    fs.writeFileSync(path.join(analyticsDir, '2026-08.json'), JSON.stringify({
+      schemaVersion: 1,
+      month: '2026-08',
+      totals: legacyAggregate,
+      tools: [], workspaces: [], workspaceTools: [],
+      failureCategories: [{ category: 'runtime', failures: 1 }], workspaceFailureCategories: [],
+      hours: [{
+        hour: '2026-08-15T02', ...legacyAggregate,
+        tools: [], workspaces: [], workspaceTools: [],
+        failureCategories: [{ category: 'runtime', failures: 1 }], workspaceFailureCategories: []
+      }]
+    }));
+    const migrated = readLocalUsageSnapshot({ stateDir: legacyStateDir }, '2026-08');
+    assert.equal(migrated.totals.successes, 9);
+    assert.equal(migrated.totals.failures, 1);
+    assert.equal(migrated.totals.reliabilityCalls, 0, 'schema-v1 reliability counters are ambiguous and must be reset during migration');
+    assert.equal(migrated.totals.infrastructureFailures, 0);
+
+    recordLocalToolOutcome({ stateDir: legacyStateDir }, { tool: 'relai_read', workspace: 'repo', ok: true, durationMs: 5, at: '2026-08-15T02:30:00Z' });
+    const afterNewCall = readLocalUsageSnapshot({ stateDir: legacyStateDir }, '2026-08');
+    assert.equal(afterNewCall.totals.successes, 10, 'raw operation history is preserved across the migration');
+    assert.equal(afterNewCall.totals.failures, 1);
+    assert.equal(afterNewCall.totals.reliabilityCalls, 1, 'reliability starts with the first newly classified call');
+    assert.equal(afterNewCall.totals.reliableCalls, 1);
+    await flushLocalAnalytics({ stateDir: legacyStateDir });
+    const migratedDocument = JSON.parse(fs.readFileSync(path.join(analyticsDir, '2026-08.json'), 'utf8'));
+    assert.equal(migratedDocument.schemaVersion, 2);
+    assert.equal(migratedDocument.totals.reliabilityCalls, 1);
+  } finally {
+    fs.rmSync(legacyStateDir, { recursive: true, force: true });
+  }
+
+  const content = {
+    innerHTML: '',
+    querySelector: () => null,
+    querySelectorAll: () => []
+  };
+  renderUsage(content, { bounds, current: scope, previous: analyticsRangeScope([], bounds) });
+  assert.match(content.innerHTML, />Reliability</);
+  assert.match(content.innerHTML, />Operation success</);
+  assert.match(content.innerHTML, /Infra failures/);
+  assert.match(content.innerHTML, /Recoverable/);
+  assert.match(content.innerHTML, /usage-side-by-side/);
+  assert.ok(content.innerHTML.indexOf('Failure categories') < content.innerHTML.indexOf('Workspace activity'), 'failure categories should sit beside workspace activity in the compact final row');
 
   await flushLocalAnalytics(config);
   const persisted = fs.readFileSync(path.join(stateDir, 'analytics', 'local', '2026-08.json'), 'utf8');

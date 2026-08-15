@@ -4,6 +4,8 @@
 .usage-month-control { @apply grid gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .usage-month-control input { min-width: 154px; }
 .usage-content, .usage-overview { @apply grid gap-3; }
+.usage-side-by-side { @apply grid min-w-0 gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.usage-side-by-side > .card { min-width: 0; }
 .usage-loading { @apply rounded-xl border p-5 text-[12px]; color: var(--ui-text-secondary); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
 .usage-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); overflow: hidden; background: var(--ui-surface-primary); }
 .usage-metric { @apply grid min-w-0 gap-1 p-4; border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
@@ -95,6 +97,9 @@
 .usage-chart-axis { stroke: var(--ui-border-default); stroke-width: 1; }
 .usage-timeline-scale { @apply flex items-center justify-between text-[10px] font-medium; color: var(--ui-text-tertiary); }
 .usage-chart-empty { @apply grid min-h-[180px] place-items-center rounded-xl border border-dashed text-[12px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
+@media (max-width: 900px) {
+  .usage-side-by-side { grid-template-columns: minmax(0,1fr); }
+}
 @media (max-width: 1180px) {
   .usage-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .usage-metric:nth-child(3n) { border-right: 0; }
