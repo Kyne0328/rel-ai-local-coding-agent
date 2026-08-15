@@ -1,18 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
+import { runProcess } from '../../process.js';
 import { isTestPath } from './languages.js';
-import { repositoryIndexPath } from './database.js';
-import { scanWorkspace } from './indexBuild.js';
 
 const COMMAND_TIMEOUT_MS = 10000;
 const INDEX_TIMEOUT_MS = 120000;
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
-const availabilityCache = new Map();
-
-function zoektPaths(config, workspace) {
-  const root = path.dirname(repositoryIndexPath(config, workspace));
+function zoektPaths(databaseFile) {
+  const root = path.dirname(databaseFile);
   return {
     root,
     indexDir: path.join(root, 'zoekt'),
@@ -20,8 +16,7 @@ function zoektPaths(config, workspace) {
   };
 }
 
-function zoektExecutables(config = {}) {
-  const settings = config.repositoryIntelligence || {};
+function zoektExecutables(settings = {}) {
   const search = settings.zoektSearchExecutable || process.env.REL_AI_ZOEKT_SEARCH || packagedBinary('zoekt');
   const index = settings.zoektIndexExecutable || process.env.REL_AI_ZOEKT_INDEX || packagedBinary('zoekt-index');
   return { search, index };
@@ -39,55 +34,37 @@ function packagedBinary(name) {
   return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0] || fileName;
 }
 
-function executableAvailable(executable) {
-  const key = String(executable || '');
-  if (!key) return false;
-  if (availabilityCache.has(key)) return availabilityCache.get(key);
-  if ((key.includes('/') || key.includes('\\')) && !fs.existsSync(key)) {
-    availabilityCache.set(key, false);
-    return false;
-  }
-  const result = spawnSync(key, ['-h'], { encoding: 'utf8', timeout: 2000, windowsHide: true });
-  const available = !result.error && result.status === 0;
-  availabilityCache.set(key, available);
-  return available;
-}
-
-function zoektAvailable(config = {}) {
-  const binaries = zoektExecutables(config);
-  return executableAvailable(binaries.search) && executableAvailable(binaries.index);
-}
-
-function ensureZoektIndex(workspace, config, graphIndex) {
-  const binaries = zoektExecutables(config);
-  if (!executableAvailable(binaries.search) || !executableAvailable(binaries.index)) {
-    return { available: false, current: false, reason: 'Zoekt binaries are not installed or packaged.' };
-  }
-  const paths = zoektPaths(config, workspace);
+async function rebuildZoektIndex(workspace, databaseFile, settings, graphIndex, candidates, options = {}) {
+  const binaries = zoektExecutables(settings);
+  const paths = zoektPaths(databaseFile);
   const meta = readJson(paths.metaFile);
   if (meta?.fingerprint === graphIndex.fingerprint && fs.existsSync(paths.indexDir)) {
     return { available: true, current: true, indexDir: paths.indexDir, fingerprint: meta.fingerprint };
   }
+  if (!Array.isArray(candidates)) {
+    return { available: false, current: false, reason: 'Zoekt index rebuild requires a full repository scan.' };
+  }
 
-  const scan = scanWorkspace(workspace, graphIndex.discoveredFileCount || undefined);
   const stagingSource = path.join(paths.root, `.zoekt-source-${process.pid}-${Date.now()}`);
   const stagingIndex = path.join(paths.root, `.zoekt-index-${process.pid}-${Date.now()}`);
   fs.mkdirSync(stagingSource, { recursive: true });
   fs.mkdirSync(stagingIndex, { recursive: true });
   try {
-    for (const candidate of scan.candidates) stageCandidate(candidate, stagingSource);
-    const result = spawnSync(binaries.index, ['-disable_ctags', '-parallelism', '2', '-index', stagingIndex, stagingSource], {
-      encoding: 'utf8', timeout: INDEX_TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true
+    for (const candidate of candidates) stageCandidate(candidate, stagingSource);
+    const result = await runProcess(binaries.index, ['-disable_ctags', '-parallelism', '2', '-index', stagingIndex, stagingSource], {
+      timeout: INDEX_TIMEOUT_MS,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+      signal: options.signal
     });
-    if (result.error || result.status !== 0) {
+    if (result.spawnError || result.timedOut || result.exitCode !== 0) {
       return {
-        available: true,
+        available: !result.spawnError,
         current: false,
-        reason: String(result.error?.message || result.stderr || `zoekt-index exited ${result.status}`).trim().slice(0, 1000)
+        reason: processFailureReason(result, 'zoekt-index')
       };
     }
     promoteDirectory(stagingIndex, paths.indexDir);
-    writeJsonAtomic(paths.metaFile, { fingerprint: graphIndex.fingerprint, indexedAt: new Date().toISOString(), fileCount: scan.candidates.length });
+    writeJsonAtomic(paths.metaFile, { fingerprint: graphIndex.fingerprint, indexedAt: new Date().toISOString(), fileCount: candidates.length });
     return { available: true, current: true, indexDir: paths.indexDir, fingerprint: graphIndex.fingerprint };
   } finally {
     try { fs.rmSync(stagingSource, { recursive: true, force: true }); } catch {}
@@ -95,18 +72,20 @@ function ensureZoektIndex(workspace, config, graphIndex) {
   }
 }
 
-function searchZoekt(workspace, config, graphIndex, query, maxResults = 100) {
-  const state = ensureZoektIndex(workspace, config, graphIndex);
-  if (!state.available || !state.current) return { ...state, results: [] };
-  const { search } = zoektExecutables(config);
-  const result = spawnSync(search, ['-index_dir', state.indexDir, '-jsonl', String(query)], {
-    encoding: 'utf8', timeout: COMMAND_TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true
+async function searchZoekt(workspace, databaseFile, settings, graphIndex, query, maxResults = 100, options = {}) {
+  const state = currentZoektIndex(databaseFile, graphIndex);
+  if (!state.current) return { ...state, results: [] };
+  const { search } = zoektExecutables(settings);
+  const result = await runProcess(search, ['-index_dir', state.indexDir, '-jsonl', String(query)], {
+    timeout: COMMAND_TIMEOUT_MS,
+    maxOutputBytes: MAX_OUTPUT_BYTES,
+    signal: options.signal
   });
-  if (result.error || result.status !== 0) {
+  if (result.spawnError || result.timedOut || result.exitCode !== 0) {
     return {
-      available: true,
+      available: !result.spawnError,
       current: true,
-      reason: String(result.error?.message || result.stderr || `zoekt exited ${result.status}`).trim().slice(0, 1000),
+      reason: processFailureReason(result, 'zoekt'),
       results: []
     };
   }
@@ -129,14 +108,23 @@ function searchZoekt(workspace, config, graphIndex, query, maxResults = 100) {
   return { available: true, current: true, results };
 }
 
+function currentZoektIndex(databaseFile, graphIndex) {
+  const paths = zoektPaths(databaseFile);
+  const meta = readJson(paths.metaFile);
+  if (meta?.fingerprint !== graphIndex?.fingerprint || !fs.existsSync(paths.indexDir)) {
+    return { available: true, current: false, reason: 'Zoekt index is not current; using the lexical fallback until the next full Repository Intelligence refresh.' };
+  }
+  return { available: true, current: true, indexDir: paths.indexDir, fingerprint: meta.fingerprint };
+}
+
+function processFailureReason(result, label) {
+  return String(result?.error || result?.stderr || `${label} exited ${result?.exitCode ?? -1}`).trim().slice(0, 1000);
+}
+
 function stageCandidate(candidate, stagingRoot) {
   const target = path.join(stagingRoot, ...candidate.path.split('/'));
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  try {
-    fs.linkSync(candidate.absolutePath, target);
-  } catch {
-    fs.copyFileSync(candidate.absolutePath, target);
-  }
+  fs.copyFileSync(candidate.absolutePath, target);
 }
 
 function promoteDirectory(staging, active) {
@@ -172,4 +160,4 @@ function writeJsonAtomic(file, value) {
   fs.renameSync(temp, file);
 }
 
-export { ensureZoektIndex, searchZoekt, zoektAvailable };
+export { rebuildZoektIndex, searchZoekt };

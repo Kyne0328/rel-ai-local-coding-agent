@@ -9,6 +9,14 @@ import { relaiCodeInspect } from '../src/bridge/codeIntelligence.js';
 import { openIndexDatabase, repositoryIndexPath } from '../src/repository/intelligence/database.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
+const zoektSource = fs.readFileSync(new URL('../src/repository/intelligence/zoekt.js', import.meta.url), 'utf8');
+const indexBuildSource = fs.readFileSync(new URL('../src/repository/intelligence/indexBuild.js', import.meta.url), 'utf8');
+const queryServiceSource = fs.readFileSync(new URL('../src/repository/intelligence/queryService.js', import.meta.url), 'utf8');
+assert.doesNotMatch(zoektSource, /spawnSync/, 'Zoekt subprocesses must never block the MCP event loop');
+assert.match(zoektSource, /await runProcess\(/, 'Zoekt commands must use the asynchronous process runner');
+assert.match(indexBuildSource, /await rebuildZoektIndex\(/, 'full Zoekt rebuilds must execute inside the Repository Intelligence worker job');
+assert.match(queryServiceSource, /await searchZoekt\(/, 'query-time Zoekt search must remain asynchronous');
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-intelligence-'));
 const stateDir = path.join(root, 'state');
 fs.mkdirSync(path.join(root, 'src', 'runtime'), { recursive: true });
