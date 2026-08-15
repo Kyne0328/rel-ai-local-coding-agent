@@ -4,10 +4,10 @@ import { serializeConnectorResult } from '../src/tools/connector.js';
 const cases = [
   fixture('relai_work:begin', 'relai_work', 'begin', 'relai_begin_work', 'work_begin', {
     ok: true, workspace: 'repo', work_id: 'work_begin', status: 'planning', identity: 'work_session',
-    workspaceBinding: { alias: 'repo' }, title: 'Contract work', objective: 'Characterize results.', nextAction: 'Use bootstrap.'
+    workspaceBinding: { alias: 'repo' }, title: 'Contract work', objective: 'Characterize results.', intent: 'investigation', nextAction: 'Use bootstrap.'
   }, {
     ok: true, workspace: 'repo', work_id: 'work_begin', status: 'planning', identity: 'work_session',
-    title: 'Contract work', objective: 'Characterize results.'
+    title: 'Contract work', objective: 'Characterize results.', intent: 'investigation'
   }),
   fixture('relai_work:status', 'relai_work', 'status', 'relai_status', 'work_status', {
     ok: true, version: '0.24.0', runtime: 'node', tools: ['relai_read'],

@@ -45,6 +45,8 @@ const FIELD_SCHEMAS = Object.freeze({
   operationJournal: { type: ['object', 'array'], additionalProperties: true, items: OBJECT },
   work_id: STRING,
   taskId: STRING,
+  executed: BOOLEAN,
+  commandSucceeded: BOOLEAN,
   status: STRING,
   staged: BOOLEAN,
   redactSensitive: BOOLEAN,
@@ -64,6 +66,7 @@ const FIELD_SCHEMAS = Object.freeze({
   sensitiveValuesReturned: BOOLEAN,
   identity: STRING,
   objective: STRING,
+  intent: STRING,
   bootstrap: OBJECT,
   workspaceBinding: OBJECT,
   nextAction: STRING,
@@ -331,7 +334,7 @@ const FIELD_SCHEMAS = Object.freeze({
 });
 
 const TOOL_FIELDS = Object.freeze({
-  relai_begin_work: ['ok', 'workspace', 'work_id', 'status', 'identity', 'title', 'objective', 'workspaceBinding', 'bootstrap', 'nextAction'],
+  relai_begin_work: ['ok', 'workspace', 'work_id', 'status', 'identity', 'title', 'objective', 'intent', 'workspaceBinding', 'bootstrap', 'nextAction'],
   relai_repo_snapshot: ['ok', 'workspace', 'work_id', 'root', 'toolMode', 'trustedLocalAgent', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles', 'next'],
   relai_read: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'truncated'],
   relai_search: ['ok', 'workspace', 'work_id', 'pattern', 'glob', 'fixed', 'ignoreCase', 'matches', 'matchCount', 'mode', 'effectiveMode', 'autoTier', 'selectionStrategy', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'files', 'results', 'resultCount', 'returnedFileCount', 'returnedRangeCount', 'contextMatchCount', 'returnedBytes', 'maxBytes', 'omittedFiles', 'omittedRanges', 'truncated', 'contextTruncated', 'next'],
