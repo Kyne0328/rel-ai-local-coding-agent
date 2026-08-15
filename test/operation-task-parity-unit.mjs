@@ -52,7 +52,7 @@ try {
     error => error?.code === 'NATIVE_TASK_UNAVAILABLE'
   );
 
-  const completed = completeNativeToolTask(config, created.taskId, { ok: true, checks: 3 });
+  const completed = await completeNativeToolTask(config, created.taskId, { ok: true, checks: 3 });
   assert.equal(completed.status, 'completed');
   assert.deepEqual(completed.result, { ok: true, checks: 3 });
   assert.equal(completed.statusMessage, 'Tool execution completed.');
@@ -62,7 +62,7 @@ try {
     name: 'relai_exec',
     principal: 'principal-a'
   });
-  const failed = failNativeToolTask(config, failedTask.taskId, 'Command failed.');
+  const failed = await failNativeToolTask(config, failedTask.taskId, 'Command failed.');
   assert.equal(failed.status, 'failed');
   assert.equal(failed.error.message, 'Command failed.');
 

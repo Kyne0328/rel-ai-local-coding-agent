@@ -28,7 +28,7 @@ try {
     /not available/
   );
 
-  const completed = completeNativeToolTask(config, created.taskId, { ok: true });
+  const completed = await completeNativeToolTask(config, created.taskId, { ok: true });
   assert.equal(completed.status, 'completed');
   assert.deepEqual(getNativeTask(config, created.taskId, { principal: 'client-a' }).result, { ok: true });
   assert.equal(fs.existsSync(path.join(root, 'operation-tasks')), false);
