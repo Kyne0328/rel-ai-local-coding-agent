@@ -96,6 +96,7 @@
     "test:observability-browser": "node test/dashboard-browser-acceptance.mjs",
     "benchmark:observability": "node --expose-gc scripts/observability-benchmark.mjs",
     "benchmark:workflow": "node scripts/benchmark-workflow-intelligence.mjs",
+    "benchmark:internal-parallelism": "node scripts/benchmark-internal-parallelism.mjs",
     "benchmark:repository-index": "node scripts/repository-intelligence-benchmark.mjs --files 100000 --json",
     "benchmark:mcp-startup": "node test/mcp-startup-budget-unit.mjs",
     "verify:packaged": "node scripts/verify-packaged-wrapper.mjs",
