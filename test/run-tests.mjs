@@ -37,6 +37,7 @@ const files = [
   'task-state-unit.mjs',
   'task-integrity-unit.mjs',
   'task-completion-unit.mjs',
+  'atomic-validation-race-unit.mjs',
   'parallel-task-sandbox-unit.mjs',
   'process-manager-unit.mjs',
   'baseline-tracking-unit.mjs',

@@ -12,7 +12,7 @@ import {
   resolveTaskSandboxWorkspace
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
-import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActivity } from '../toolActivity.js';
+import { getToolActivity, runWithToolActivity, updateCurrentToolActivity } from '../toolActivity.js';
 import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
 import { finalizeValidationResult } from './completion.js';
 import { invalidateSessionCacheForCall, maybeStartSession } from './session.js';
@@ -68,6 +68,27 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         && executionName === OP.VALIDATE_CHECKS
         && effectiveArgs?.complete === true;
       const handlerArgs = deferSandboxCompletion ? { ...physicalArgs, complete: false } : physicalArgs;
+      const invokeHandler = async (args, baselineEntry = sandboxEntry) => {
+        if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
+        const handled = await definition.handler(config, args || {}, {
+          connector: Boolean(context?.publicHttpOnly),
+          taskId,
+          requestHeaders: context?.requestHeaders || {},
+          mcp: context?.mcp || {},
+          signal: context?.signal,
+          principal: context?.principal,
+          nativeTaskId: context?.nativeTaskId,
+          transportType: context?.transportType,
+          executionMode: context?.executionMode || '',
+          cancel: context?.cancel || null,
+          requestTaskContext,
+          mutationBaselineCommit: baselineEntry?.syncCommit || ''
+        });
+        if (handled && typeof handled === 'object' && !Array.isArray(handled) && handled.ok === false && handled.error?.code === 'CANCELLED') {
+          context?.cancel?.throwIfCancelled?.();
+        }
+        return handled;
+      };
 
       let result;
       try {
@@ -75,24 +96,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
           executionName === OP.WORK_CANCEL ? '' : handlerArgs?.workspace,
           async () => {
           sessionStart = await maybeStartSession(config, executionName, effectiveArgs || {}, { taskId });
-          if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
-          const handled = await definition.handler(config, handlerArgs || {}, {
-            connector: Boolean(context?.publicHttpOnly),
-            taskId,
-            requestHeaders: context?.requestHeaders || {},
-            mcp: context?.mcp || {},
-            signal: context?.signal,
-            principal: context?.principal,
-            nativeTaskId: context?.nativeTaskId,
-            transportType: context?.transportType,
-            executionMode: context?.executionMode || '',
-            cancel: context?.cancel || null,
-            requestTaskContext,
-            mutationBaselineCommit: sandboxEntry?.syncCommit || ''
-          });
-          if (handled && typeof handled === 'object' && !Array.isArray(handled) && handled.ok === false && handled.error?.code === 'CANCELLED') {
-            context?.cancel?.throwIfCancelled?.();
-          }
+          const handled = await invokeHandler(handlerArgs);
           setSpanAttributes({
             'relai.tool.ok': handled?.ok !== false,
             'relai.tool.duration_ms': Date.now() - started,
@@ -135,17 +139,34 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       return runWorkspaceOperation(sourceWorkspace.alias, async () => {
         await promoteTaskSandbox(sourceWorkspace, config, taskId);
         const current = findTaskSandbox(config, sourceWorkspace.alias, taskId);
-        if (!current) throw staleSandboxValidationError();
-        const sandboxWorkspace = resolveTaskSandboxWorkspace(config, current.alias);
-        const currentFingerprint = await createValidationFingerprint(sandboxWorkspace, config, {
-          paths: Array.isArray(result.validationScope) ? result.validationScope : []
-        });
-        if (currentFingerprint.fingerprint !== String(result.validationFingerprint || '')) {
-          throw staleSandboxValidationError();
+        const sandboxWorkspace = current ? resolveTaskSandboxWorkspace(config, current.alias) : null;
+        let completionResult = result;
+        let needsLockedRevalidation = current == null;
+        if (sandboxWorkspace) {
+          const currentFingerprint = await createValidationFingerprint(sandboxWorkspace, config, {
+            paths: Array.isArray(completionResult.validationScope) ? completionResult.validationScope : []
+          });
+          needsLockedRevalidation = currentFingerprint.fingerprint !== String(completionResult.validationFingerprint || '');
         }
-        await finalizeTaskSandbox(sourceWorkspace, config, taskId);
+        if (needsLockedRevalidation) {
+          addSpanEvent('relai.validation.atomic_revalidate', {
+            'relai.workspace': sourceWorkspace.alias,
+            'relai.task_id': taskId
+          });
+          updateCurrentToolActivity({
+            status: 'validating',
+            currentStage: 'Revalidating synchronized changes',
+            currentActivity: 'Relevant concurrent changes arrived during validation. Rechecking once against the visible synchronized workspace.'
+          });
+          completionResult = await invokeHandler({ ...handlerArgs, workspace: sourceWorkspace.alias, complete: false }, null);
+          if (completionResult?.ok !== true) return completionResult;
+        }
+        if (current) await finalizeTaskSandbox(sourceWorkspace, config, taskId);
         invalidateSessionCacheForCall(config, executionName, { ...effectiveArgs, workspace: sourceWorkspace.alias });
-        return finalizeValidationResult(config, sourceWorkspace, visibleResult, effectiveArgs.summary);
+        const completionVisibleResult = sandboxWorkspace
+          ? mapVisibleWorkspace(completionResult, sandboxWorkspace, sourceWorkspace)
+          : completionResult;
+        return finalizeValidationResult(config, sourceWorkspace, completionVisibleResult, effectiveArgs.summary);
       }, queueOptions('write', 'workspace', taskId));
     }, { carrier: context?.requestHeaders || {} }
   ));
@@ -218,19 +239,6 @@ function isExplicitBranchChange(executionName, args = {}) {
   return /\bgit(?:\.exe)?\b[^\n;&|]*\b(?:switch|checkout)\b/i.test(String(args.command || ''));
 }
 
-function staleSandboxValidationError() {
-  return taskError(
-    'TASK_REVALIDATION_REQUIRED',
-    'The visible workspace changed while this parallel task was validating. Its safe changes remain visible, but final validation must run again against the synchronized task state.',
-    {
-      retryable: true,
-      allowedAlternatives: [
-        'Run relai_validate with action "checks" again using the same work_id.',
-        'Cancel the task only when the remaining work should not be completed.'
-      ]
-    }
-  );
-}
 
 function queueOptions(mode, scope, taskId) {
   return {
