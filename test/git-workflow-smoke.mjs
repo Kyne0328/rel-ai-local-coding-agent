@@ -78,9 +78,20 @@ assert.equal(dryPatch.dryRun, true);
 assert.deepEqual(dryPatch.changedFiles, []);
 assert.equal(fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replaceAll('\r\n', '\n'), '# Git smoke\n');
 
+// A path-scoped commit must not absorb unrelated files that another task or the user
+// already staged. The unrelated index entry must remain staged after the commit.
+fs.writeFileSync(path.join(workspace.path, 'unrelated-staged.txt'), 'keep staged\n');
+git(['add', 'unrelated-staged.txt'], { cwd: workspace.path });
 const commit = await relaiGitCommit(workspace, config, { message: 'add notes', paths: ['notes.txt'] });
 assert.equal(commit.ok, true);
 assert.ok(/add notes/.test(JSON.stringify(commit.commit)));
+const committedPaths = git(['show', '--name-only', '--format=', 'HEAD'], { cwd: workspace.path }).toString('utf8').split(/\r?\n/).filter(Boolean);
+assert.ok(committedPaths.includes('notes.txt'), 'selected path must be included in the commit');
+assert.ok(!committedPaths.includes('unrelated-staged.txt'), 'path-scoped commit must exclude unrelated staged files');
+const stagedAfterScopedCommit = git(['diff', '--cached', '--name-only'], { cwd: workspace.path }).toString('utf8').split(/\r?\n/).filter(Boolean);
+assert.ok(stagedAfterScopedCommit.includes('unrelated-staged.txt'), 'unrelated staged files must remain staged after a path-scoped commit');
+git(['reset', 'HEAD', '--', 'unrelated-staged.txt'], { cwd: workspace.path, stdio: 'ignore' });
+fs.rmSync(path.join(workspace.path, 'unrelated-staged.txt'), { force: true });
 
 const pushDryRun = await relaiGitPush(workspace, config, { remote: 'origin', branch: 'main', dryRun: true });
 assert.equal(pushDryRun.ok, true);
