@@ -10,12 +10,12 @@
 </head>
 <body class="wizard-body">
   <main class="wizard-shell">
-    <header class="wizard-brand"><div class="wizard-logo">R</div><div><span>Rel.AI</span><small>MCP</small></div></header>
+    <header class="wizard-brand"><img class="wizard-logo" src="relai-logo.png" alt="" aria-hidden="true" width="193" height="187"><div><span>Rel.AI</span><small>/ MCP</small></div></header>
     <section class="wizard-step">
       <div class="wizard-cloud-hero">
-        <span class="wizard-eyebrow">ChatGPT web + OpenAI Secure MCP Tunnel</span>
-        <h1>Turn ChatGPT into a coding agent for this computer</h1>
-        <p>Connect the Secure MCP Tunnel so ChatGPT can use Rel.AI's local repository tools.</p>
+        <span class="wizard-eyebrow">Connect Rel.AI to ChatGPT</span>
+        <h1>Connect ChatGPT to your projects on this computer</h1>
+        <p>Set up an OpenAI Secure MCP Tunnel so ChatGPT can use Rel.AI with your local projects.</p>
       </div>
 
       <div class="wizard-cloud-card wizard-security-card">
@@ -23,7 +23,7 @@
           <div class="wizard-value-step-head">
             <span class="wizard-step-number" aria-hidden="true">1</span>
             <div>
-              <strong id="tunnelStepTitle">Create your tunnel</strong>
+              <strong id="tunnelStepTitle">Create your Secure MCP Tunnel</strong>
               <p>Choose the OpenAI organization and ChatGPT workspace where you will use Rel.AI.</p>
             </div>
           </div>
@@ -47,22 +47,22 @@
           <div class="wizard-value-step-head">
             <span class="wizard-step-number" aria-hidden="true">2</span>
             <div>
-              <strong id="runtimeKeyStepTitle">Create a runtime key</strong>
+              <strong id="runtimeKeyStepTitle">Create a runtime API key</strong>
               <p>Create it in the same OpenAI organization as your tunnel, then copy it while OpenAI still shows it.</p>
             </div>
           </div>
           <button class="secondary wizard-open-button" type="button" data-open-openai="apiKeys">Open OpenAI API Keys</button>
           <div class="wizard-field-group">
-            <label for="tunnelApiKeyInput"><span>Paste Runtime API key here</span></label>
-            <input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the restricted runtime key" aria-describedby="runtimeKeyHelp runtimeKeyError" aria-invalid="false" required />
+            <label for="tunnelApiKeyInput"><span>Paste runtime API key here</span></label>
+            <input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the runtime API key" aria-describedby="runtimeKeyHelp runtimeKeyError" aria-invalid="false" required />
             <p class="wizard-field-help" id="runtimeKeyHelp">Stored securely on this computer.</p>
             <p class="wizard-field-error" id="runtimeKeyError" role="alert" hidden></p>
           </div>
           <details class="wizard-help-details">
-            <summary>About the runtime key</summary>
+            <summary>About the runtime API key</summary>
             <div>
               <p>Use a restricted API key from the same OpenAI organization as the tunnel and allow it to access the tunnel.</p>
-              <p>Rel.AI uses the key only to run the OpenAI tunnel client. It is encrypted with the operating system credential store and the saved value is never shown again.</p>
+              <p>Rel.AI uses this key only to operate this Secure MCP Tunnel. It is encrypted by your operating system and is never shown again after you save it.</p>
             </div>
           </details>
         </section>
@@ -77,7 +77,7 @@
           </div>
         </details>
         <p class="wizard-inline-error" id="setupError" role="alert" aria-live="polite"></p>
-        <button class="primary wizard-main-action" id="connectBtn" type="button">Start secure connection</button>
+        <button class="primary wizard-main-action" id="connectBtn" type="button">Connect to ChatGPT</button>
       </div>
       <div class="wizard-actions"><button class="secondary" id="cancelWizardBtn" type="button">Cancel</button></div>
     </section>

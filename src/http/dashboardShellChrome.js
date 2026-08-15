@@ -30,7 +30,7 @@ function renderDashboardAccordion(parent, items) {
 
 function renderDashboardWindowTitlebar() {
   return `<header class="window-titlebar" id="windowTitlebar" aria-label="Application title bar">
-  <div class="window-titlebar-identity" aria-hidden="true"><img src="/public/assets/relai-logo.png" alt=""><strong>Rel.AI MCP</strong><span id="windowContext">Overview</span></div>
+  <div class="window-titlebar-identity" aria-hidden="true"><img src="/public/assets/relai-logo.png" alt="" aria-hidden="true" width="193" height="187"><strong>Rel.AI MCP</strong><span id="windowContext">Overview</span></div>
   <div class="window-titlebar-drag" aria-hidden="true"></div>
   <div class="window-titlebar-controls" id="windowTitlebarControls" role="group" aria-label="Window controls">
     <button class="window-titlebar-button" id="windowMinimizeBtn" type="button" aria-label="Minimize window" title="Minimize window"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5h8" /></svg></button>

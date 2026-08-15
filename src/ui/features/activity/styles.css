@@ -34,7 +34,7 @@
 .activity-skeleton-action { width: 28px; height: 28px; margin-inline: auto; border-radius: 8px; }
 .activity-skeleton-row .activity-message-mobile-meta .activity-skeleton { flex: 0 0 auto; }
 .clickable-row { @apply cursor-pointer; }
-.activity-freeze.active { background: var(--ui-status-info-background); color: var(--ui-action-primary); }
+.activity-freeze.active { background: var(--ui-selection-background); color: var(--ui-action-primary); }
 
 .activity-detail { @apply gap-4; }
 .activity-detail-head { @apply flex items-center justify-between gap-3; }

@@ -42,7 +42,7 @@
 .overview-actions { @apply mt-5 flex flex-wrap gap-2; }
 
 .task-overview { @apply grid items-center gap-4 p-4; grid-template-columns: 42px minmax(0,1fr) auto; }
-.task-overview-mark { @apply grid size-10 place-items-center rounded-xl text-lg font-bold; background: var(--ui-status-info-background); color: var(--ui-action-primary); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 30%, transparent); }
+.task-overview-mark { @apply grid size-10 place-items-center rounded-xl text-lg font-bold; background: var(--ui-selection-background); color: var(--ui-action-primary); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 30%, transparent); }
 .task-overview-spinner {
   display: block;
   width: 18px;

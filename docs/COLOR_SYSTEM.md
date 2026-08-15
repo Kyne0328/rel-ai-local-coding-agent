@@ -1,8 +1,8 @@
 # Rel.AI MCP color system
 
-`src/ui/colorTokens.mjs` is the build-time ESM owner of application colors. Dashboard, Electron setup/recovery, and OAuth surfaces consume generated CSS artifacts; runtime application modules do not import the manifest.
+`src/ui/colorTokens.mjs` is the build-time ESM owner of application colors. Dashboard and Electron setup/recovery surfaces consume generated CSS artifacts; runtime application modules do not import the manifest.
 
-The system preserves the established blue-and-slate Rel.AI identity while enforcing WCAG 2.2 Level AA contrast, consistent operational meaning, and centralized maintenance.
+The system preserves the Rel.AI lime-and-navy identity while enforcing WCAG 2.2 Level AA contrast, consistent operational meaning, and centralized maintenance. Lime owns brand identity and primary interaction; blue is reserved for informational and in-progress state.
 
 ## Generated artifacts
 
@@ -24,8 +24,7 @@ npm run verify:color-tokens
 The generator writes:
 
 - `src/ui/styles/color-tokens.css` for the dashboard;
-- `electron/renderer/color-tokens.css` for setup and recovery renderers;
-- `public/oauth.css` for OAuth authorization and error pages; and
+- `electron/renderer/color-tokens.css` for setup and recovery renderers; and
 - `docs/color-system-reference.svg` as the reviewable palette reference.
 
 Generated files must not be edited directly. `test/color-token-staleness-unit.mjs` proves that a modified generated asset fails verification, regeneration restores the exact canonical file, and verification then passes.
@@ -65,11 +64,13 @@ A component-specific color is permitted only when the component has a genuine pl
 | Text primary | `#172033` | `#EDF3FC` |
 | Text secondary | `#526078` | `#A7B4C9` |
 | Text tertiary | `#647187` | `#8390A6` |
-| Action primary | `#1769C2` | `#5AA6FF` |
+| Action primary | `#657F00` | `#D8FF74` |
 | Action foreground | `#FFFFFF` | `#07111F` |
 | Success foreground | `#137A4C` | `#4FE09A` |
 | Warning foreground | `#7A4B00` | `#FFC24B` |
 | Danger foreground | `#BF3149` | `#FF6F88` |
+
+The dark action color uses the website's canonical `#D8FF74` lime. The light theme uses a darker brand-relative action value so white action text and focus indicators remain accessible. Information remains blue in both themes instead of sharing the primary-action role.
 
 The complete values, including backgrounds, borders, hover states, overlays, scrollbars, and shadows, are defined in the manifest rather than duplicated here.
 
@@ -98,8 +99,6 @@ Status must never be communicated through color alone. Compact status UI include
 ## Theme ownership
 
 The dashboard supports persisted `system`, `dark`, and `light` preferences. Electron setup and recovery renderers follow the operating-system preference. Both surfaces resolve the same semantic roles through generated CSS.
-
-OAuth remains intentionally minimal and dark. Its static stylesheet is generated from the canonical dark theme and served through `/public/oauth.css`; authorization code does not import the build-time manifest.
 
 `electron/startup-background.js` separately owns one neutral BrowserWindow pre-render canvas value. It prevents the default white first frame before generated renderer CSS loads and intentionally does not duplicate the theme palette.
 
@@ -131,11 +130,10 @@ The color test verifies:
 - text, action, status, focus, and control-boundary contrast;
 - absence of every removed compatibility alias;
 - native ESM exports with no CommonJS bridge;
-- deterministic dashboard, Electron, OAuth, and SVG output;
+- deterministic dashboard, Electron, and SVG output;
 - explicit stale-generated-asset failure and exact regeneration;
 - absence of raw component colors;
 - consistent running, waiting, success, and failure semantics;
-- Electron token stylesheet ordering and startup-canvas ownership; and
-- OAuth use of the shared manifest.
+- Electron token stylesheet ordering and startup-canvas ownership.
 
-Before release, manually inspect the representative dashboard, Electron setup/recovery, and OAuth flows in light, dark, Windows high-contrast, and common color-vision-deficiency simulations. Review default, hover, focus, active, selected, disabled, loading, success, warning, danger, offline, and empty states at desktop and narrow viewport sizes.
+Before release, manually inspect the representative dashboard and Electron setup/recovery flows in light, dark, Windows high-contrast, and common color-vision-deficiency simulations. Review default, hover, focus, active, selected, disabled, loading, success, warning, danger, offline, and empty states at desktop and narrow viewport sizes.

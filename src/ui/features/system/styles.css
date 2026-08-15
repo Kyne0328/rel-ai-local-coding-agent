@@ -84,7 +84,7 @@
 .diagnostic-page-actions { @apply min-w-0 flex-wrap justify-end; }
 .diagnostic-page-actions button { @apply min-w-0; }
 .diagnostic-live-tail { @apply min-w-0 whitespace-nowrap; }
-.diagnostic-live-tail.active { background: var(--ui-status-info-background); color: var(--ui-action-primary); }
+.diagnostic-live-tail.active { background: var(--ui-selection-background); color: var(--ui-action-primary); }
 .diagnostic-summary, .diagnostic-list { @apply flex min-w-0 flex-col gap-3; }
 .diagnostic-metric { @apply flex items-end justify-between gap-3; }
 .diagnostic-metric span { @apply text-[11px] font-semibold; color: var(--ui-text-secondary); }

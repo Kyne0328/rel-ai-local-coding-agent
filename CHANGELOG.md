@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.26.0] — 2026-08-15
+
+### ChatGPT coding-agent workflow and MCP contracts
+- **Reposition Rel.AI around ChatGPT coding-agent workflows.** Product copy, bundled guidance, and connector wording now describe the actual local-repository workflow more clearly, with less internal jargon and tighter action guidance.
+- **Tighten the public MCP surface without expanding it.** Rel.AI remains a 12-tool surface while advancing the release manifest to schema version 7 and tool-surface version 42, with canonical action definitions, simpler Zod-backed schemas, stricter schema/runtime parity, and clearer executable argument contracts.
+- **Make execution outcomes easier to interpret.** Command execution is distinguished from operation success, direct-process failures keep useful diagnostics, task-scoped diff review is exposed explicitly, and safe observation remains available after task completion.
+- **Improve workflow evidence and recovery.** Persist workflow intent and failure evidence, recover more cleanly from exact-edit mismatches, preserve classifier-safe tool guidance, and strengthen completion, cancellation, process-workspace, and transport-task contracts.
+
+### Parallel work and runtime performance
+- **Isolate concurrent coding work in parallel task sandboxes.** Each task can work against a stable repository snapshot while promotion, dependency cleanup, dirty-file mutation tracking, and unchanged-file synchronization are bounded and safer under concurrent work.
+- **Keep normal tool calls off blocking repository paths.** Git integrity probes, validation probes, session baseline capture, process-tree checks, lexical fallback, Zoekt work, and repository-intelligence queries move off or avoid the MCP event loop where practical.
+- **Reduce repeated repository work.** Cache runtime compatibility and active-session policy metadata, invalidate topology from meaningful manifest changes, bound operation-journal reads, append staged edit payloads efficiently, and skip unchanged sandbox synchronization.
+- **Centralize task lifecycle behavior.** Live task state, completion evidence, workflow intent, and promotion decisions share tighter ownership, reducing duplicate state transitions and improving reliability during parallel sessions.
+
+### Repository Intelligence
+- **Move expensive queries into isolated workers.** Repository Intelligence query execution is offloaded from the main runtime, while index refreshes, lexical fallback, and Zoekt integration are tuned to avoid unnecessary blocking.
+- **Improve search and semantic-query contracts.** Semantic search respects the published `maxBytes` boundary, repository index refreshes do less redundant work, and architecture/health gates cover the worker-backed implementation.
+
+### Desktop app, setup, and visual identity
+- **Match the Electron app to the new Rel.AI website identity.** Replace the old/synthetic branding with the canonical Rel.AI mark, ship the new app/tray/notification icon and favicons, use the website's dark navy surfaces and lime primary action color, and reserve blue for informational state.
+- **Align desktop typography and geometry with the website.** Reduce excessive visual weight and rounding, tighten common radii and font weights, improve focus/selection treatments, and keep the existing application information architecture rather than redesigning the product.
+- **Simplify desktop information density and Secure Tunnel onboarding.** Setup, recovery, connection guidance, dashboard summaries, and settings expose the important state with less competing copy while preserving the OpenAI Secure MCP Tunnel workflow.
+- **Improve updater and completion feedback.** Application update UX, taskbar completion badges, Electron task activity handling, and notification behavior are more consistent and less costly during normal operation.
+
+### Dashboard and analytics reliability
+- **Stream smaller dashboard domain updates.** Live dashboard state changes avoid unnecessary broad remounts and keep task, connection, and activity views more stable while work is running.
+- **Separate reliability from raw operation success.** Analytics migration no longer guesses historical reliability counters; newly classified reliability is reported separately from legacy operation success, with clearer infrastructure-failure and recoverable-failure presentation.
+- **Use a more compact analytics layout.** Usage metrics and failure/workspace breakdowns are simplified for faster scanning without dropping the underlying operational data.
+
+### Validation and regression coverage
+- **Expand release and architecture gates around the new runtime contracts.** Add or strengthen checks for parallel sandboxes, executable skill behavior, skill metadata, repository architecture, workflow evidence, analytics migration, web automation, MCP schema parity, and Electron UI behavior.
+- **Keep generated branding and color artifacts deterministic.** Color-token generation, WCAG contrast checks, dashboard/Electron token parity, official logo usage, and synthetic-logo regression checks are covered by focused tests.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.0.
+
 ## [0.25.2] — 2026-08-14
 
 ### Repository workflow hardening

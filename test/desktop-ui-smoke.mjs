@@ -45,9 +45,12 @@ for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.h
   assert.match(html, /<link\s+rel="stylesheet"\s+href="\.\/app\.css"\s*\/?\s*>|<link\s+rel="stylesheet"\s+href="app\.css"\s*\/?\s*>/);
   assert.match(html, /Content-Security-Policy/);
   assert.match(html, /connect-src 'none'/);
+  assert.match(html, /relai-logo\.png[^>]*width="193"[^>]*height="187"/);
   assert.doesNotMatch(html, /<style\b/i);
   assert.doesNotMatch(html, /Open in browser/i);
 }
+assert.doesNotMatch(wizardHtml, /<div class="wizard-logo">R<\/div>/, 'setup wizard must not restore the synthetic R badge');
+assert.match(wizardHtml, /<small>\/ MCP<\/small>/, 'setup wizard branding should match the website wordmark treatment');
 
 assert.match(wizardHtml, /OpenAI Secure MCP Tunnel/);
 assert.match(wizardHtml, /id="tunnelIdInput"/);

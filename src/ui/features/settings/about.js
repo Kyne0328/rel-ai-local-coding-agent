@@ -6,17 +6,17 @@ export function mountAbout(container) {
   container.innerHTML = '';
   container.appendChild(header(
     'About Rel.AI',
-    'Rel.AI turns ChatGPT web into a repository-capable coding agent using controlled local development tools.'
+    'Rel.AI lets ChatGPT work with your local code projects while files and commands stay on your computer.'
   ));
 
   const information = panel('Application information');
   information.body.appendChild(productSummary(metadata));
   information.body.appendChild(developerRow(metadata.developer || {}));
   information.body.appendChild(linkRow(
-    'Repository',
+    'Source code',
     repositoryLabel(metadata.repositoryUrl),
     metadata.repositoryUrl,
-    'Rel.AI MCP repository on GitHub'
+    'Rel.AI MCP source code on GitHub'
   ));
   information.body.appendChild(valueRow('License', metadata.license));
   container.appendChild(information.el);
@@ -27,6 +27,8 @@ function productSummary(metadata) {
   product.className = 'about-product';
   const logo = document.createElement('img');
   logo.src = '/public/assets/relai-logo.png';
+  logo.width = 193;
+  logo.height = 187;
   logo.alt = '';
   logo.setAttribute('aria-hidden', 'true');
   const copy = document.createElement('div');

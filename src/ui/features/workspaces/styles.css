@@ -1,5 +1,5 @@
 @layer components {
-.workspace-focus-label { @apply max-w-48 truncate rounded-lg px-2.5 py-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 34%, transparent); }
+.workspace-focus-label { @apply max-w-48 truncate rounded-lg px-2.5 py-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-selection-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 34%, transparent); }
 .workspace-toolbar button[data-add-workspace], .workspace-empty-state button[data-add-workspace] {
   border-color: color-mix(in srgb, var(--ui-action-primary) 72%, transparent) !important;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-action-primary) 18%, transparent);
@@ -44,7 +44,7 @@
 .workspace-empty-state > * { @apply max-w-xl; }
 .workspace-empty-state strong { @apply mt-3 block text-lg; }
 .workspace-empty-state p { @apply my-3 text-[12px]; color: var(--ui-text-secondary); }
-.workspace-empty-mark { @apply grid size-12 place-items-center rounded-2xl text-2xl; background: var(--ui-status-info-background); color: var(--ui-action-primary); }
+.workspace-empty-mark { @apply grid size-12 place-items-center rounded-2xl text-2xl; background: var(--ui-selection-background); color: var(--ui-action-primary); }
 .workspace-card-focused { outline: 2px solid var(--ui-action-primary); outline-offset: 3px; }
 
 .ws-form-intro { @apply grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }

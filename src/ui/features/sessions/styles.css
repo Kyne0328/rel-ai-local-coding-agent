@@ -43,7 +43,7 @@
 .task-detail-header > div { @apply min-w-0; }
 .task-detail-header h2 { @apply mt-1 text-lg font-bold leading-tight; }
 .task-detail-header p { @apply mt-1.5 text-[12px] leading-5; color: var(--ui-text-secondary); }
-.task-detail-current { @apply grid gap-1 rounded-lg p-3; background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 24%, var(--ui-border-default)); }
+.task-detail-current { @apply grid gap-1 rounded-lg p-3; background: var(--ui-selection-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 24%, var(--ui-border-default)); }
 .task-detail-current.attention { background: var(--ui-status-danger-background); border-color: var(--ui-status-danger-border); }
 .task-detail-current strong { @apply text-[12px] font-bold; color: var(--ui-text-primary); }
 .task-detail-current span { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
@@ -74,7 +74,7 @@
 .task-event-copy { @apply grid min-w-0 gap-0.5; }
 .task-event-copy small { @apply truncate text-[11px] font-normal; color: var(--ui-text-tertiary); }
 .task-event code { @apply min-w-0 truncate text-[11px]; color: var(--ui-text-secondary); }
-.task-event-link:hover { background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 34%, var(--ui-border-default)); }
+.task-event-link:hover { background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 34%, var(--ui-border-default)); }
 .task-detail-overflow { @apply overflow-hidden rounded-md; background: color-mix(in srgb, var(--ui-surface-secondary) 65%, transparent); border: 1px solid var(--ui-border-default); }
 .task-detail-overflow > summary { @apply flex min-h-11 cursor-pointer items-center px-3 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .task-detail-overflow[open] > summary { border-bottom: 1px solid var(--ui-border-default); }

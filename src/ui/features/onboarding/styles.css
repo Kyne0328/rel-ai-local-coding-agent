@@ -30,7 +30,7 @@
   border-bottom: 1px solid var(--ui-border-subtle);
 }
 .desktop-setup-item:last-child { border-bottom: 0; }
-.desktop-setup-item.current { background: color-mix(in srgb, var(--ui-status-info-background) 42%, transparent); }
+.desktop-setup-item.current { background: color-mix(in srgb, var(--ui-selection-background) 82%, transparent); }
 .desktop-setup-item.locked { opacity: .64; }
 .desktop-setup-item.done { opacity: .78; }
 .desktop-setup-index {
