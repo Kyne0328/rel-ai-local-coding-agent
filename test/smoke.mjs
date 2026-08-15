@@ -20,8 +20,12 @@ try {
   if (!discovery.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks']) {
     throw new Error('stdio must advertise native Tasks support through the task-aware transport');
   }
-  if (!String(discovery.result?.instructions || '').includes('relai_work action finish')) {
-    throw new Error('server/discover did not advertise the explicit final-completion contract');
+  const serverInstructions = String(discovery.result?.instructions || '');
+  if (!/explicit task-completion contract/i.test(serverInstructions)) {
+    throw new Error('server/discover did not advertise the explicit final-completion invariant');
+  }
+  if (/Inspect relevant files|Validate after changes|recovery guidance/i.test(serverInstructions)) {
+    throw new Error('server/discover must not duplicate specialist workflow tactics in global instructions');
   }
 
   client.send(2, 'tools/list');
