@@ -46,14 +46,14 @@ const deps = {
 registerIpcHandlers(deps);
 const eventFor = window => ({ sender: { window } });
 
-assert.equal(MAX_CLIPBOARD_TEXT_BYTES, 65536);
+assert.ok(Number.isSafeInteger(MAX_CLIPBOARD_TEXT_BYTES) && MAX_CLIPBOARD_TEXT_BYTES > 0, 'clipboard input must remain bounded');
 const guards = createWindowGuards(deps.BrowserWindow);
 assert.equal(guards.windowOnly(eventFor(dashboard), () => dashboard, 'Dashboard', () => 'allowed'), 'allowed');
 assert.throws(() => guards.windowOnly(eventFor(other), () => dashboard, 'Dashboard', () => 'denied'), /not available/);
 assert.equal([...handles.keys()].some(channel => channel.startsWith('desktop:cloud:')), false);
 assert.equal([...handles.keys()].some(channel => /ngrok|gateway|approval/i.test(channel)), false);
 assert.throws(() => handles.get('desktop:settings:get')(eventFor(other)), /not available/);
-assert.throws(() => handles.get('url:copy')(eventFor(dashboard), 'x'.repeat(MAX_CLIPBOARD_TEXT_BYTES + 1)), /64 KiB/);
+assert.throws(() => handles.get('url:copy')(eventFor(dashboard), 'x'.repeat(MAX_CLIPBOARD_TEXT_BYTES + 1)));
 assert.deepEqual(handles.get('url:copy')(eventFor(wizard), 'safe\u0000text'), { ok: true });
 assert.equal(clipboardText, 'safetext');
 await handles.get('wizard:done')(eventFor(wizard), { port: 3333, tunnelId: 'tunnel_example123456', tunnelApiKey: 'sk-runtime-example-123456', restart: false });

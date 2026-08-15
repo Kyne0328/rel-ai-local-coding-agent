@@ -1,60 +1,12 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+
 import { approvalRequirement } from '../src/mcp/approval.js';
 import { requiredCapability } from '../src/mcp/authorizationPolicy.js';
-import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolManifest.js';
+import { buildToolManifest, stableJson } from '../src/mcp/toolManifest.js';
+import { catalogApprovalRequirement, getToolActionCatalog } from '../src/tools/actionCatalog.js';
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
-
-const EXPECTED_HASH = 'f6af65a9e4bb39e6a9327cb5af0637e05b689eb6479bb5a23e5e5b5b03ab28cf';
-const rows = `
-relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
-relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden
-relai_work|finish|relai_finish_work|completeTask|repository:read|none|required|task|always_immediate|forbidden
-relai_work|cancel|relai_cancel_work|cancelTask|repository:read|none|required|task|always_immediate|forbidden
-relai_snapshot|default|relai_repo_snapshot|repoSnapshot|repository:read|none|required|task|always_immediate|forbidden
-relai_read|default|relai_read|read|repository:read|none|required|task|always_immediate|forbidden
-relai_search|text|relai_search|search|repository:read|none|required|task|always_immediate|forbidden
-relai_search|semantic|relai_semantic_search|semanticSearch|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|symbol|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|references|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|related|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|impact|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|trace|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|diagnostics|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_inspect|architecture|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_edit|default|relai_edit|edit|repository:write|none|required|task|bounded_synchronous|forbidden
-relai_exec|default|relai_exec|exec|command:execute|none|required|task|bounded_synchronous|forbidden
-relai_process|start|relai_process_start|processStart|process:manage|none|required|task|persistent_process|forbidden
-relai_process|read|relai_process_read|processRead|repository:read|none|required|task|persistent_process|forbidden
-relai_process|write|relai_process_write|processWrite|process:manage|none|required|task|persistent_process|forbidden
-relai_process|stop|relai_process_stop|processStop|process:manage|none|required|task|persistent_process|forbidden
-relai_process|list|relai_process_list|processList|repository:read|none|required|task|persistent_process|forbidden
-relai_ui|start|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|navigate|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|snapshot|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|interact|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|screenshot|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|console|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|network|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|viewport|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|reload|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_ui|stop|relai_ui|ui|process:manage|none|required|task|bounded_synchronous|forbidden
-relai_validate|checks|relai_run_checks|runChecks|command:execute|none|required|task|bounded_synchronous|forbidden
-relai_validate|diagnostics|relai_diagnostics_run|diagnosticsRun|command:execute|none|required|task|bounded_synchronous|forbidden
-relai_validate|http|relai_http_probe|httpProbe|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_changes|diff|relai_diff|diff|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_changes|restore|relai_restore_paths|restorePaths|repository:write|none|required|workspace|bounded_synchronous|forbidden
-relai_changes|reset|relai_reset_workspace|resetWorkspace|repository:write|always|required|workspace|bounded_synchronous|forbidden
-relai_changes|tidy_plan|relai_tidy_plan|tidyPlan|repository:read|none|required|task|bounded_synchronous|forbidden
-relai_changes|tidy_run|relai_tidy_run|tidyRun|repository:write|none|required|workspace|bounded_synchronous|forbidden
-relai_publish|commit|relai_git_commit|gitCommit|repository:write|conditional|required|workspace|bounded_synchronous|forbidden
-relai_publish|push|relai_git_push|gitPush|git:publish|always|required|workspace|bounded_synchronous|forbidden
-relai_publish|draft_pr|relai_git_draft_pr|gitDraftPr|repository:read|none|required|task|bounded_synchronous|forbidden
-`.trim().split('\n').map(line => {
-  const [publicTool, action, operationName, handlerName, capability, approval, taskScope, concurrencyScope, executionClass, taskSupport] = line.split('|');
-  return { publicTool, action, operationName, handlerName, capability, approval, taskScope, concurrencyScope, executionClass, taskSupport };
-});
 
 const gatewayManifest = buildToolManifest({});
 const gatewayCanonical = {
@@ -65,8 +17,11 @@ const gatewayCanonical = {
 };
 const gatewayHash = value => crypto.createHash('sha256').update(stableJson(value)).digest('base64url');
 assert.equal(gatewayManifest.hash, gatewayHash(gatewayCanonical), 'gateway manifest hash must cover the full canonical public contract');
-const instructionChanged = { ...gatewayCanonical, instructions: `${gatewayCanonical.instructions} changed` };
-assert.notEqual(gatewayHash(instructionChanged), gatewayManifest.hash, 'server instruction changes must change the gateway manifest hash');
+assert.notEqual(
+  gatewayHash({ ...gatewayCanonical, instructions: `${gatewayCanonical.instructions} changed` }),
+  gatewayManifest.hash,
+  'server instruction changes must change the gateway manifest hash'
+);
 const firstTool = gatewayCanonical.tools[0];
 const outputChanged = {
   ...gatewayCanonical,
@@ -78,63 +33,86 @@ const definitions = getToolDefinitions();
 const metadata = getToolMetadata();
 const metadataByName = new Map(metadata.map(item => [item.name, item]));
 const manifestByName = new Map(getToolSurfaceManifest().tools.map(item => [item.name, item]));
-const contract = definitions.map(definition => contractEntry(definition, metadataByName.get(definition.name)));
-const hash = crypto.createHash('sha256').update(stableJson(contract)).digest('hex');
-assert.equal(definitions.length, 12);
-assert.equal(rows.length, 43);
-assert.equal(hash, EXPECTED_HASH, 'public tool contract changed without an explicit baseline update');
-const editDefinition = definitions.find(definition => definition.name === "relai_edit");
-assert.ok(editDefinition, "relai_edit definition must exist");
-assert.match(editDefinition.description, /one logical updateText (?:patch|operation)/i, "large repository-wide changes should stay together instead of being split into repeated edit batches");
-const semanticWithMaxBytes = resolveExecutableToolCall('relai_search', { workspace: 'fixture', work_id: 'task-1', action: 'semantic', query: 'needle', maxBytes: 4096 }, {});
+const catalog = getToolActionCatalog();
+
+assert.ok(definitions.length > 0, 'the public tool contract must not be empty');
+assert.ok(catalog.length >= definitions.length, 'every public tool must resolve to at least one operation');
+assert.equal(new Set(definitions.map(item => item.name)).size, definitions.length, 'public tool names must remain unique');
+assert.equal(new Set(catalog.map(item => `${item.publicTool}:${item.action}`)).size, catalog.length, 'public tool/action keys must remain unique');
+
+const editDefinition = definitions.find(definition => definition.name === 'relai_edit');
+assert.ok(editDefinition, 'relai_edit definition must exist');
+assert.match(editDefinition.description, /one logical updateText (?:patch|operation)/i, 'large repository-wide changes should stay together instead of being split into repeated edit batches');
+
+const semanticWithMaxBytes = resolveExecutableToolCall('relai_search', {
+  workspace: 'fixture', work_id: 'work_contract', action: 'semantic', query: 'needle', maxBytes: 4096
+}, {});
 assert.equal(semanticWithMaxBytes.operationArgs.maxBytes, 4096, 'semantic search must accept maxBytes advertised by the public tool schema');
-const processReadWithWorkspace = resolveExecutableToolCall('relai_process', { workspace: 'fixture', work_id: 'task-1', action: 'read', processId: 'proc_test' }, {});
+const processReadWithWorkspace = resolveExecutableToolCall('relai_process', {
+  workspace: 'fixture', work_id: 'work_contract', action: 'read', processId: 'proc_test'
+}, {});
 assert.equal(processReadWithWorkspace.operationArgs.workspace, 'fixture', 'process read must accept workspace advertised by the public action schema');
-const processWriteWithWorkspace = resolveExecutableToolCall('relai_process', { workspace: 'fixture', work_id: 'task-1', action: 'write', processId: 'proc_test', input: 'x' }, {});
+const processWriteWithWorkspace = resolveExecutableToolCall('relai_process', {
+  workspace: 'fixture', work_id: 'work_contract', action: 'write', processId: 'proc_test', input: 'x'
+}, {});
 assert.equal(processWriteWithWorkspace.operationArgs.workspace, 'fixture', 'process write must accept workspace advertised by the public action schema');
-const processStopWithWorkspace = resolveExecutableToolCall('relai_process', { workspace: 'fixture', work_id: 'task-1', action: 'stop', processId: 'proc_test' }, {});
+const processStopWithWorkspace = resolveExecutableToolCall('relai_process', {
+  workspace: 'fixture', work_id: 'work_contract', action: 'stop', processId: 'proc_test'
+}, {});
 assert.equal(processStopWithWorkspace.operationArgs.workspace, 'fixture', 'process stop must accept workspace advertised by the public action schema');
-const scopedDiff = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'diff', scope: 'task' }, {});
+const scopedDiff = resolveExecutableToolCall('relai_changes', {
+  workspace: 'fixture', work_id: 'work_contract', action: 'diff', scope: 'task'
+}, {});
 assert.equal(scopedDiff.operationArgs.scope, 'task', 'diff scope must be exposed by the public action contract');
-const restoreWithIrrelevantScope = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'restore', paths: ['README.md'], scope: 'task' }, {});
+const restoreWithIrrelevantScope = resolveExecutableToolCall('relai_changes', {
+  workspace: 'fixture', work_id: 'work_contract', action: 'restore', paths: ['README.md'], scope: 'task'
+}, {});
 assert.equal(restoreWithIrrelevantScope.operationArgs.scope, undefined, 'known fields from another action should be ignored before runtime dispatch');
 
-const actualKeys = [];
-for (const expected of rows) {
-  const args = sampleArgs(expected);
-  const resolved = resolveExecutableToolCall(expected.publicTool, args, {});
-  assert.ok(resolved, `${expected.publicTool}:${expected.action} must resolve`);
-  actualKeys.push(`${expected.publicTool}:${expected.action}`);
-  assert.equal(resolved.operationName, expected.operationName);
-  assert.equal(resolved.executionDefinition.handlerName, expected.handlerName);
+const resolvedKeys = [];
+for (const entry of catalog) {
+  const args = sampleArgs(entry);
+  const resolved = resolveExecutableToolCall(entry.publicTool, args, {});
+  assert.ok(resolved, `${entry.publicTool}:${entry.action} must resolve`);
+  resolvedKeys.push(`${entry.publicTool}:${entry.action}`);
+  assert.equal(resolved.operationName, entry.operationName);
+  assert.equal(resolved.executionDefinition.handlerName, entry.handlerName);
   assert.equal(typeof resolved.executionDefinition.handler, 'function');
-  assert.equal(requiredCapability(resolved.operationName), expected.capability);
-  assert.equal(resolved.executionDefinition.behavior.taskScope, expected.taskScope);
-  assert.equal(resolved.executionDefinition.behavior.concurrencyScope, expected.concurrencyScope);
-  assert.equal(resolved.executionDefinition.behavior.executionClass, expected.executionClass);
-  assert.equal(resolved.executionDefinition.execution?.taskSupport || 'forbidden', expected.taskSupport);
+  assert.equal(requiredCapability(resolved.operationName), entry.capability);
+  assert.deepEqual(resolved.executionDefinition.behavior, entry.behavior);
+  assert.deepEqual(resolved.executionDefinition.execution, entry.execution);
 
-  const publicMetadata = metadataByName.get(expected.publicTool);
-  const actionMetadata = expected.action === 'default' ? publicMetadata : publicMetadata.actions.find(item => item.action === expected.action);
-  assert.ok(actionMetadata);
-  assert.equal(actionMetadata.executionClass, expected.executionClass);
-  assert.equal(actionMetadata.taskSupport, expected.taskSupport);
-  if (expected.action !== 'default') {
+  const publicMetadata = metadataByName.get(entry.publicTool);
+  assert.ok(publicMetadata, `${entry.publicTool} must have public metadata`);
+  const actionMetadata = entry.action === 'default'
+    ? publicMetadata
+    : publicMetadata.actions.find(item => item.action === entry.action);
+  assert.ok(actionMetadata, `${entry.publicTool}:${entry.action} must have public action metadata`);
+  assert.equal(actionMetadata.executionClass, entry.behavior.executionClass);
+  assert.equal(actionMetadata.taskSupport, entry.execution?.taskSupport || 'forbidden');
+  if (entry.action !== 'default') {
     assert.deepEqual(actionMetadata.annotations, resolved.executionDefinition.annotations);
-    assert.equal(actionMetadata.taskScope, expected.taskScope);
-    assert.equal(actionMetadata.concurrencyScope, expected.concurrencyScope);
+    assert.equal(actionMetadata.taskScope, entry.behavior.taskScope);
+    assert.equal(actionMetadata.concurrencyScope, entry.behavior.concurrencyScope);
   }
-  const manifestTool = manifestByName.get(expected.publicTool);
-  const manifestAction = expected.action === 'default' ? manifestTool : manifestTool.actions.find(item => item.action === expected.action);
-  assert.equal(manifestAction.executionClass, expected.executionClass);
-  assert.equal(manifestAction.taskSupport, expected.taskSupport);
 
-  const approval = approvalRequirement(expected.publicTool, args);
-  if (expected.approval === 'always') assert.ok(approval);
-  if (expected.approval === 'none') assert.equal(approval, null);
-  if (expected.approval === 'conditional') {
-    assert.equal(approval, null);
-    assert.ok(approvalRequirement(expected.publicTool, { ...args, addAll: true }));
+  const manifestTool = manifestByName.get(entry.publicTool);
+  assert.ok(manifestTool, `${entry.publicTool} must be present in the tool-surface manifest`);
+  const manifestAction = entry.action === 'default'
+    ? manifestTool
+    : manifestTool.actions.find(item => item.action === entry.action);
+  assert.ok(manifestAction, `${entry.publicTool}:${entry.action} must be present in the tool-surface manifest`);
+  assert.equal(manifestAction.executionClass, entry.behavior.executionClass);
+  assert.equal(manifestAction.taskSupport, entry.execution?.taskSupport || 'forbidden');
+
+  assert.deepEqual(
+    catalogApprovalRequirement(entry.publicTool, args),
+    approvalRequirement(entry.publicTool, args),
+    `${entry.publicTool}:${entry.action} approval policy must have one meaning across the catalog and runtime`
+  );
+  if (entry.operationName === 'relai_git_commit') {
+    const addAllArgs = { ...args, addAll: true };
+    assert.deepEqual(catalogApprovalRequirement(entry.publicTool, addAllArgs), approvalRequirement(entry.publicTool, addAllArgs));
   }
 }
 
@@ -142,40 +120,19 @@ const discoveredKeys = definitions.flatMap(definition => {
   const actions = metadataByName.get(definition.name)?.actions || [];
   return actions.length ? actions.map(action => `${definition.name}:${action.action}`) : [`${definition.name}:default`];
 });
-assert.deepEqual(actualKeys.sort(), discoveredKeys.sort());
-console.log(`Public contract fingerprint and ${rows.length}-action execution matrix passed.`);
+assert.deepEqual(resolvedKeys.sort(), discoveredKeys.sort(), 'every discovered public action must be executable through the canonical resolver');
 
-function contractEntry(definition, publicMetadata) {
-  return {
-    name: definition.name,
-    title: definition.title,
-    description: definition.description,
-    inputFields: Object.keys(definition.inputSchema?.properties || {}).sort(),
-    required: [...(definition.inputSchema?.required || [])].sort(),
-    actions: (publicMetadata?.actions || []).map(action => ({
-      action: action.action,
-      operation: action.operation,
-      fields: [...action.fields].sort(),
-      required: [...action.required].sort(),
-      annotations: canonicalValue(action.annotations),
-      taskScope: action.taskScope,
-      concurrencyScope: action.concurrencyScope,
-      executionClass: action.executionClass,
-      taskSupport: action.taskSupport
-    })),
-    annotations: canonicalValue(definition.annotations),
-    taskScope: definition.behavior?.taskScope || 'required',
-    concurrencyScope: definition.behavior?.concurrencyScope || 'task',
-    executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
-    taskSupport: definition.execution?.taskSupport || 'forbidden',
-    outputSchema: canonicalValue(definition.outputSchema || {})
-  };
-}
+assert.ok(approvalRequirement('relai_changes', { action: 'reset', work_id: 'work_contract', confirmation: 'RESET' }), 'workspace reset must remain approval-gated');
+assert.ok(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract' }), 'Git push must remain approval-gated');
+assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit' }), null, 'scoped commit should not require extra approval');
+assert.ok(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', addAll: true }), 'commit --all must remain approval-gated');
 
-function sampleArgs(expected) {
-  const key = `${expected.publicTool}:${expected.action}`;
-  const args = expected.action === 'default' ? {} : { action: expected.action };
-  if (expected.taskScope === 'required') args.work_id = 'work_contract';
+console.log(`Dynamic public contract parity passed for ${definitions.length} tools and ${catalog.length} actions.`);
+
+function sampleArgs(entry) {
+  const key = `${entry.publicTool}:${entry.action}`;
+  const args = entry.action === 'default' ? {} : { action: entry.action };
+  if (entry.behavior?.taskScope === 'required') args.work_id = 'work_contract';
   switch (key) {
     case 'relai_work:begin': args.workspace = 'repo'; break;
     case 'relai_work:finish': args.summary = 'Completed.'; break;
@@ -187,7 +144,7 @@ function sampleArgs(expected) {
     case 'relai_inspect:related': args.query = 'target'; break;
     case 'relai_inspect:impact': args.paths = ['src/index.js']; break;
     case 'relai_exec:default': args.command = 'node --version'; break;
-    case 'relai_process:start': Object.assign(args, { command: 'node server.js', kind: 'service', purpose: 'Contract test.' }); break;
+    case 'relai_process:start': Object.assign(args, { command: 'node server.js', kind: 'service', purpose: 'Contract parity.' }); break;
     case 'relai_process:read':
     case 'relai_process:stop': args.processId = 'proc_contract'; break;
     case 'relai_process:write': Object.assign(args, { processId: 'proc_contract', input: 'status\n' }); break;

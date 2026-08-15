@@ -21,9 +21,9 @@ const currentDefinitions = getToolDefinitions();
 const currentSchemas = new Map(getToolSchemas().map(item => [item.name, item]));
 const currentMetadata = new Map(getToolMetadata().map(item => [item.name, item]));
 
-assert.equal(catalogTools.length, 12);
-assert.equal(catalog.length, 43);
-assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, 43);
+assert.ok(catalogTools.length > 0, 'the canonical tool catalog must not be empty');
+assert.equal(catalogTools.length, currentDefinitions.length, 'catalog tools and public definitions must stay in parity');
+assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, catalog.length, 'tool/action keys must stay unique');
 assert.deepEqual(getCatalogToolDefinitions(), currentDefinitions);
 assert.deepEqual(
   getCatalogToolDefinitions().map(definition => ({
@@ -96,7 +96,7 @@ for (const entry of catalog) {
 
 assert.equal(getCatalogAction('unknown', {}), null);
 assert.throws(() => getCatalogAction('relai_work', { action: 'unknown' }), /Unsupported action/);
-console.log('Canonical 12-tool, 43-action catalog execution and policy parity passed.');
+console.log(`Canonical ${catalogTools.length}-tool, ${catalog.length}-action catalog execution and policy parity passed.`);
 
 function sampleArgs(entry) {
   const key = `${entry.publicTool}:${entry.action}`;

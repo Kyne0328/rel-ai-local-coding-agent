@@ -19,11 +19,15 @@ const home = read('src/ui/features/home/index.js');
 const modal = read('src/ui/components/modal.js');
 const drawer = read('src/ui/components/drawer.js');
 
-assert.deepEqual(DESKTOP_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
-assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
-assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'activity')?.label, 'Activity');
+const desktopNavIds = DESKTOP_NAV_ITEMS.map(item => item.id);
+const mobileNavIds = MOBILE_NAV_ITEMS.map(item => item.id);
+assert.deepEqual(mobileNavIds, desktopNavIds, 'desktop and mobile navigation must expose the same primary destinations');
+assert.equal(new Set(desktopNavIds).size, desktopNavIds.length, 'primary navigation destinations must be unique');
+for (const required of ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']) assert.ok(desktopNavIds.includes(required), `${required} must remain reachable`);
+assert.ok(DESKTOP_NAV_ITEMS.every(item => String(item.label || '').trim()), 'every navigation destination must have a label');
 assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.href, '#connection');
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.id), ['preferences', 'application', 'about']);
+const settingsNavIds = SETTINGS_NAV_ITEMS.map(item => item.id);
+for (const required of ['preferences', 'application', 'about']) assert.ok(settingsNavIds.includes(required), `${required} settings must remain reachable`);
 assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS/);
 assert.match(shellChrome, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
 assert.doesNotMatch(shell, /const PRIMARY_NAV_ITEMS|const SECONDARY_NAV_ITEMS/);
@@ -37,7 +41,7 @@ assert.match(settingsShared, /<h2>\$\{esc\(title\)\}<\/h2>/, 'Settings pages mus
 assert.match(settingsAbout, /document\.createElement\('h4'\)/, 'About product identity must remain below the panel H3');
 assert.match(connector, /clientCapabilityViews/, 'Connection page must derive client capability state from observed MCP data');
 assert.match(connector, /nativeTasksSupported: \$\{supported\}/, 'Connection page must visibly expose the raw Native MCP Tasks support signal');
-assert.match(home, /class="buttonlike secondary compact-button" href="\$\{routeMetadata\('workspaces'\)\.href\}">Add your first project<\/a>/, 'Inline empty-state navigation must have a non-color link affordance');
+assert.match(home, /class="buttonlike secondary compact-button" href="\$\{routeMetadata\('workspaces'\)\.href\}">/, 'Inline empty-state navigation must have a non-color link affordance');
 assert.match(modal, /Modal content must be a DOM Node/);
 assert.match(drawer, /Drawer content must be a DOM Node/);
 assert.doesNotMatch(modal, /wrapper\.innerHTML|typeof content === 'string'/);

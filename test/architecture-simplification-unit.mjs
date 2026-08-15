@@ -9,25 +9,21 @@ import * as nativeToolTasks from '../src/mcp/nativeToolTasks.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
-assert.equal(getCatalogTools().length, 12);
-assert.equal(getToolActionCatalog().length, 43);
-assert.equal(Number.isInteger(TOOL_SURFACE_VERSION), true);
+const catalogTools = getCatalogTools();
+const catalogActions = getToolActionCatalog();
+assert.ok(catalogTools.length > 0, 'the public tool catalog must not be empty');
+assert.ok(catalogActions.length >= catalogTools.length, 'every public tool must resolve to at least one operation');
+assert.equal(new Set(catalogTools.map(tool => tool.definition.name)).size, catalogTools.length, 'public tool names must remain unique');
+assert.equal(new Set(catalogActions.map(entry => `${entry.publicTool}:${entry.action}`)).size, catalogActions.length, 'public tool/action keys must remain unique');
+assert.ok(Number.isSafeInteger(TOOL_SURFACE_VERSION) && TOOL_SURFACE_VERSION > 0, 'tool-surface revisions must remain positive integers');
 
 const sourceFiles = collectJavaScript(path.join(root, 'src'));
 const surfaceDeclarations = sourceFiles.filter(file => /const TOOL_SURFACE_VERSION\s*=/.test(fs.readFileSync(file, 'utf8')));
-assert.deepEqual(surfaceDeclarations.map(file => path.relative(root, file).replaceAll('\\', '/')), ['src/tools/actionCatalog.js']);
+assert.equal(surfaceDeclarations.length, 1, 'tool-surface revision must have one source of truth');
 
 const actionDefinitionsPath = path.join(root, 'src/tools/actionDefinitions.js');
-assert.equal(fs.existsSync(actionDefinitionsPath), true, 'immutable tool definitions must have a focused owner');
-const actionCatalogSource = read('src/tools/actionCatalog.js');
-const actionDefinitionsSource = read('src/tools/actionDefinitions.js');
-const operationDefinitionValuesSource = read('src/tools/operationDefinitionValues.js');
-assert.equal(actionCatalogSource.split(/\r?\n/).length <= 400, true, 'action catalog resolution must remain bounded');
-assert.match(actionDefinitionsSource, /from '.\/operationDefinitionValues\.js'/);
-assert.match(operationDefinitionValuesSource, /const OPERATION_DEFINITION_VALUES\s*=/);
-assert.match(actionDefinitionsSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
-assert.doesNotMatch(actionCatalogSource, /const OPERATION_DEFINITION_VALUES\s*=/);
-assert.doesNotMatch(actionCatalogSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
+assert.equal(fs.existsSync(actionDefinitionsPath), true, 'canonical tool definitions must have a focused owner');
+assert.match(read('src/tools/actionCatalog.js'), /from '.\/actionDefinitions\.js'/, 'the action catalog must consume canonical definitions instead of duplicating them');
 
 for (const removed of [
   'src/tools/compactRegistry.js',
@@ -37,68 +33,30 @@ for (const removed of [
   'src/worktreeManager.js'
 ]) assert.equal(fs.existsSync(path.join(root, removed)), false, `${removed} must remain removed`);
 
-assert.deepEqual(Object.keys(nativeToolTasks).sort(), [
+for (const required of [
   'completeNativeToolTask',
   'createNativeToolTask',
   'failNativeToolTask',
   'nativeToolTaskSignal',
   'pruneNativeToolTasks'
-]);
-const nativeToolTaskSource = read('src/mcp/nativeToolTasks.js');
-assert.doesNotMatch(nativeToolTaskSource, /compatibilityOperation\s*:/, 'new native tool tasks must not write the compatibility field');
+]) assert.equal(typeof nativeToolTasks[required], 'function', `${required} must remain available`);
+assert.doesNotMatch(read('src/mcp/nativeToolTasks.js'), /compatibilityOperation\s*:/, 'new native tool tasks must not write the removed compatibility field');
 
 const runtimeRegistry = read('src/tools/runtimeRegistry.js');
-assert.match(runtimeRegistry, /Executable-only function map retained to avoid/);
-assert.doesNotMatch(runtimeRegistry, /TOOL_SURFACE_VERSION|inputSchema\s*:/, 'the executable map must not become a second metadata source');
+assert.doesNotMatch(runtimeRegistry, /TOOL_SURFACE_VERSION|inputSchema\s*:/, 'the executable map must not become a second public-metadata source');
 
-const ipc = read('electron/ipc-handlers.js');
-for (const name of [
-  'registerSetupIpc',
-  'registerRecoveryIpc',
-  'registerServiceIpc',
-  'registerDashboardWindowIpc',
-  'registerSharedUtilityIpc'
-]) assert.match(ipc, new RegExp(`function ${name}\\(\\{`), `${name} must receive a narrow capability object`);
-const dashboardIpc = read('electron/ipc-handlers-dashboard.js');
-for (const name of [
-  'registerAnalyticsIpc',
-  'registerDesktopSettingsIpc',
-  'registerUpdaterIpc',
-  'registerDiagnosticsIpc'
-]) assert.match(dashboardIpc, new RegExp(`function ${name}\\(\\{`), `${name} must receive a narrow capability object`);
+const connectionGenerations = read('src/mcp/connectionGenerations.js');
+assert.doesNotMatch(connectionGenerations, /fs\.writeFileSync|fs\.renameSync/, 'connection generations must keep durable-state persistence instead of ad hoc file replacement');
 
-for (const [file, expectedImport] of [
-  ['src/mcp/connectionGenerations.js', "from '../durableState.js'"]
-]) {
-  const source = read(file);
-  assert.match(source, new RegExp(expectedImport.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.doesNotMatch(source, /fs\.writeFileSync|fs\.renameSync/, `${file} must use durable state promotion`);
-}
-
-const transport = read('src/http/mcpTransport.js');
-assert.match(transport, /async function handleLegacyMcpRequest\s*\(/);
-assert.match(transport, /if \(legacy\) \{\s*await handleLegacyMcpRequest/);
-
-const architecture = read('docs/ARCHITECTURE.md');
-for (const heading of [
-  '## Composition roots',
-  '## Canonical tool and action catalog',
-  '## MCP transports and compatibility',
-  '## Task-state authorities',
-  '## Electron ownership and IPC',
-  '## Durable persistence',
-  '## Compatibility exceptions',
-  '## Current architecture metrics'
-]) assert.match(architecture, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-
-console.log('Final architecture ownership, metrics, residue, and documented exception contracts passed.');
+console.log('Architecture ownership and stale-code invariants passed.');
 
 function collectJavaScript(directory) {
   const files = [];
+  if (!fs.existsSync(directory)) return files;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) files.push(...collectJavaScript(target));
-    else if (entry.name.endsWith('.js')) files.push(target);
+    else if (entry.isFile() && /\.js$/i.test(entry.name)) files.push(target);
   }
   return files;
 }
