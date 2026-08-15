@@ -96,7 +96,8 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       }
 
       if (executionWorkspace?.taskSandbox === true && shouldPromoteTaskSandbox(executionName, result)) {
-        await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId),
+        const changedFiles = result?.changedFilesTruncated === true ? [] : result?.changedFiles;
+        await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId, { changedFiles }),
           queueOptions('write', 'workspace', taskId));
       }
 

@@ -45,6 +45,7 @@ try {
   fs.writeFileSync(path.join(workspacePath, 'node_modules', '.relai-marker'), 'shared dependency\n');
   fs.mkdirSync(path.join(workspacePath, 'electron', 'node_modules'), { recursive: true });
   fs.writeFileSync(path.join(workspacePath, 'electron', 'node_modules', '.relai-marker'), 'shared electron dependency\n');
+  fs.writeFileSync(path.join(workspacePath, 'workspace-untracked.txt'), 'untracked baseline\n');
 
   fs.writeFileSync(configPath, JSON.stringify({
     version: 4,
@@ -95,6 +96,19 @@ try {
   const resolvedSandbox = resolveWorkspace(config, entries[0].alias);
   assert.equal(resolvedSandbox.taskSandbox, true);
   assert.equal(resolvedSandbox.sourceAlias, 'app');
+  assert.equal(
+    readText(path.join(entries[0].path, 'workspace-untracked.txt')),
+    'untracked baseline\n',
+    'the private sandbox must preserve safe untracked source bytes exactly'
+  );
+
+  fs.writeFileSync(path.join(entries[0].path, 'incremental.txt'), 'incremental promotion\n');
+  const incremental = await promoteTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id, {
+    changedFiles: ['incremental.txt']
+  });
+  assert.equal(incremental.synchronization, 'incremental');
+  assert.deepEqual(incremental.changedFiles, ['incremental.txt']);
+  assert.equal(readText(path.join(workspacePath, 'incremental.txt')), 'incremental promotion\n');
 
   const sandboxExec = await rawCallTool('relai_exec', {
     workspace: 'app',
@@ -145,6 +159,7 @@ try {
   fs.writeFileSync(path.join(workspacePath, 'merge.txt'), 'first\nsecond\nthird from first\n');
   const merged = await promoteTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
   assert.equal(merged.promoted, true);
+  assert.equal(merged.synchronization, 'reconciled');
   assert.equal(
     readText(path.join(workspacePath, 'merge.txt')),
     'first from second\nsecond\nthird from first\n',

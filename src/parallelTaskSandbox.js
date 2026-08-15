@@ -206,7 +206,7 @@ async function createTaskSandbox(workspace, config, taskId) {
   };
 
   try {
-    overlayWorkspaceFileBytes(workspace.path, entry.path, baseline.overlayFiles);
+    await overlayWorkspaceFileBytes(workspace.path, entry.path, baseline.overlayFiles);
     linkReusableDependencies(workspace.path, entry.path);
     const registry = readSandboxRegistry(config);
     registry.sandboxes[alias] = entry;
@@ -221,53 +221,74 @@ async function createTaskSandbox(workspace, config, taskId) {
   }
 }
 
-async function workspaceSnapshotCommit(workspace, config) {
+async function workspaceSnapshotCommit(workspace, config, options = {}) {
   const tempRoot = path.join(getStateDir(config), 'parallel-sandboxes', 'tmp');
   fs.mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
   const tempDir = fs.mkdtempSync(path.join(tempRoot, 'snapshot-'));
   const indexPath = path.join(tempDir, 'index');
   const env = { GIT_INDEX_FILE: indexPath };
+  const requestedPaths = snapshotChangedPaths(options.changedPaths);
+  const baselineCommit = String(options.baselineCommit || '').trim();
+  const incremental = requestedPaths.length > 0 && /^[0-9a-f]{40,64}$/i.test(baselineCommit);
   try {
-    const headResult = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
-      cwd: workspace.path, timeout: 30000
-    }, config);
-    const head = headResult.exitCode === 0 ? String(headResult.stdout || '').trim() : '';
-    const branchResult = await runProcess('git', ['branch', '--show-current'], {
-      cwd: workspace.path, timeout: 30000
-    }, config);
-    const branch = branchResult.exitCode === 0 ? String(branchResult.stdout || '').trim() : '';
+    let head = baselineCommit;
+    let branch = String(options.branch || '');
+    if (!incremental) {
+      const headResult = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
+        cwd: workspace.path, timeout: 30000
+      }, config);
+      head = headResult.exitCode === 0 ? String(headResult.stdout || '').trim() : '';
+      const branchResult = await runProcess('git', ['branch', '--show-current'], {
+        cwd: workspace.path, timeout: 30000
+      }, config);
+      branch = branchResult.exitCode === 0 ? String(branchResult.stdout || '').trim() : '';
+    }
+
     const initialize = await runProcess('git', head ? ['read-tree', head] : ['read-tree', '--empty'], {
       cwd: workspace.path, timeout: 30000, env
     }, config);
     if (initialize.exitCode !== 0) throw new Error('Could not initialize the task sandbox baseline.');
 
-    const trackedResult = await runProcess('git', ['ls-files', '-z'], {
-      cwd: workspace.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
-    }, config);
-    if (trackedResult.exitCode !== 0 || trackedResult.stdoutTruncated) {
-      throw new Error('Could not inspect tracked files for the task sandbox baseline.');
-    }
-    const trackedFiles = splitNullList(trackedResult.stdout);
-
-    const stageTracked = await runProcess('git', ['add', '-u', '--', '.'], {
-      cwd: workspace.path, timeout: 120000, env
-    }, config);
-    if (stageTracked.exitCode !== 0) throw new Error('Could not snapshot tracked workspace changes for parallel execution.');
-
-    const untrackedResult = await runProcess('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
-      cwd: workspace.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
-    }, config);
-    if (untrackedResult.exitCode !== 0 || untrackedResult.stdoutTruncated) {
-      throw new Error('Could not inspect untracked workspace files for parallel execution.');
-    }
-    const untracked = splitNullList(untrackedResult.stdout).filter(item => !isReusableDependencyPath(item));
-    const excludedSensitive = untracked.filter(isSecretPath);
-    const safeUntracked = untracked.filter(item => !isSecretPath(item));
-    for (let index = 0; index < safeUntracked.length; index += 100) {
-      const staged = await runProcess('git', ['add', '--', ...safeUntracked.slice(index, index + 100)], {
+    let excludedSensitive = [];
+    let overlayFiles = [];
+    if (incremental) {
+      excludedSensitive = requestedPaths.filter(isSecretPath);
+      const safePaths = requestedPaths.filter(item => !isSecretPath(item));
+      for (let index = 0; index < safePaths.length; index += 100) {
+        const staged = await runProcess('git', ['--literal-pathspecs', 'add', '-A', '--', ...safePaths.slice(index, index + 100)], {
+          cwd: workspace.path, timeout: 120000, env
+        }, config);
+        if (staged.exitCode !== 0) throw new Error('Could not snapshot changed task paths for parallel execution.');
+      }
+    } else {
+      const trackedResult = await runProcess('git', ['ls-files', '-z'], {
+        cwd: workspace.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
+      }, config);
+      if (trackedResult.exitCode !== 0 || trackedResult.stdoutTruncated) {
+        throw new Error('Could not inspect tracked files for the task sandbox baseline.');
+      }
+      const trackedFiles = splitNullList(trackedResult.stdout);
+      const stageTracked = await runProcess('git', ['add', '-u', '--', '.'], {
         cwd: workspace.path, timeout: 120000, env
       }, config);
-      if (staged.exitCode !== 0) throw new Error('Could not snapshot untracked workspace files for parallel execution.');
+      if (stageTracked.exitCode !== 0) throw new Error('Could not snapshot tracked workspace changes for parallel execution.');
+
+      const untrackedResult = await runProcess('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+        cwd: workspace.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
+      }, config);
+      if (untrackedResult.exitCode !== 0 || untrackedResult.stdoutTruncated) {
+        throw new Error('Could not inspect untracked workspace files for parallel execution.');
+      }
+      const untracked = splitNullList(untrackedResult.stdout).filter(item => !isReusableDependencyPath(item));
+      excludedSensitive = untracked.filter(isSecretPath);
+      const safeUntracked = untracked.filter(item => !isSecretPath(item));
+      overlayFiles = [...new Set([...trackedFiles, ...safeUntracked])];
+      for (let index = 0; index < safeUntracked.length; index += 100) {
+        const staged = await runProcess('git', ['--literal-pathspecs', 'add', '--', ...safeUntracked.slice(index, index + 100)], {
+          cwd: workspace.path, timeout: 120000, env
+        }, config);
+        if (staged.exitCode !== 0) throw new Error('Could not snapshot untracked workspace files for parallel execution.');
+      }
     }
 
     const treeResult = await runProcess('git', ['write-tree'], {
@@ -285,13 +306,7 @@ async function workspaceSnapshotCommit(workspace, config) {
     if (commitResult.exitCode !== 0) throw new Error('Could not create the task sandbox baseline commit.');
     const commit = String(commitResult.stdout || '').trim();
     if (!commit) throw new Error('Could not create the task sandbox baseline commit.');
-    return {
-      commit,
-      head,
-      branch,
-      excludedSensitive,
-      overlayFiles: [...new Set([...trackedFiles, ...safeUntracked])]
-    };
+    return { commit, head, branch, excludedSensitive, incremental, overlayFiles };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -306,7 +321,14 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
 
   await assertPromotionBranches(sourceWorkspace, entry, config);
   const sandboxWorkspace = resolveTaskSandboxWorkspace(config, entry.alias);
-  const sandboxSnapshot = await workspaceSnapshotCommit(sandboxWorkspace, config);
+  const changedPathHint = snapshotChangedPaths(options.changedFiles);
+  const sandboxSnapshot = changedPathHint.length
+    ? await workspaceSnapshotCommit(sandboxWorkspace, config, {
+        baselineCommit: entry.syncCommit,
+        changedPaths: changedPathHint,
+        branch: ''
+      })
+    : await workspaceSnapshotCommit(sandboxWorkspace, config);
   if (sandboxSnapshot.excludedSensitive.length) {
     throw promotionError(
       'TASK_SANDBOX_SENSITIVE_CHANGE',
@@ -319,6 +341,8 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
     throw promotionError('TASK_SANDBOX_SENSITIVE_CHANGE', 'Private task changes include sensitive paths that cannot be live-promoted automatically.');
   }
 
+  const sourceRevisionBefore = String(options.sourceRevision || '') || await workspaceRevision(sourceWorkspace, config);
+  const sourceUnchanged = Boolean(entry.sourceRevision && sourceRevisionBefore === entry.sourceRevision);
   let alreadyApplied = false;
   if (changedFiles.length) {
     const patchPath = await writeCommitDiff(config, entry.path, entry.syncCommit, sandboxSnapshot.commit);
@@ -351,23 +375,39 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
     }
   }
 
-  const sourceSnapshot = await workspaceSnapshotCommit(sourceWorkspace, config);
-  const synchronized = await synchronizeSandboxToSource(entry, sandboxSnapshot, sourceSnapshot, sourceWorkspace, config);
-  if (!synchronized) {
-    await removeSandboxEntry(entry, config);
-    return { promoted: changedFiles.length > 0, changedFiles, sandboxRetired: true };
+  let nextSyncCommit = sandboxSnapshot.commit;
+  let synchronization = 'incremental';
+  if (!sourceUnchanged) {
+    synchronization = 'reconciled';
+    const sourceSnapshot = await workspaceSnapshotCommit(sourceWorkspace, config);
+    const synchronized = await synchronizeSandboxToSource(entry, sandboxSnapshot, sourceSnapshot, sourceWorkspace, config);
+    if (!synchronized) {
+      await removeSandboxEntry(entry, config);
+      return { promoted: changedFiles.length > 0, changedFiles, sandboxRetired: true, synchronization };
+    }
+    nextSyncCommit = sourceSnapshot.commit;
   }
 
+  await advanceSandboxBaseline(entry, nextSyncCommit, config);
   const registry = readSandboxRegistry(config);
   const current = registry.sandboxes?.[entry.alias];
   if (current) {
-    current.syncCommit = sourceSnapshot.commit;
-    current.sourceRevision = options.sourceRevision || await workspaceRevision(sourceWorkspace, config);
+    current.syncCommit = nextSyncCommit;
+    current.sourceRevision = await workspaceRevision(sourceWorkspace, config);
     current.lastPromotedAt = new Date().toISOString();
     current.promotedFiles = [...new Set([...(current.promotedFiles || []), ...changedFiles])];
     writeSandboxRegistry(config, registry);
   }
-  return { promoted: changedFiles.length > 0, changedFiles, alreadyApplied };
+  return { promoted: changedFiles.length > 0, changedFiles, alreadyApplied, synchronization };
+}
+
+async function advanceSandboxBaseline(entry, commit, config) {
+  const result = await runProcess('git', ['reset', '--mixed', '--quiet', commit], {
+    cwd: entry.path, timeout: 30000
+  }, config);
+  if (result.exitCode !== 0) {
+    throw promotionError('TASK_SANDBOX_SYNC_FAILED', 'The private task changes were promoted, but its internal Git baseline could not be advanced safely. Retry with the same work_id to reconcile it.');
+  }
 }
 
 async function synchronizeSandboxToSource(entry, sandboxSnapshot, sourceSnapshot, sourceWorkspace, config) {
@@ -488,17 +528,23 @@ async function removeSandboxEntry(entry, config) {
   }
 }
 
-function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
-  for (const relativePath of files || []) {
-    if (isReusableDependencyPath(relativePath)) continue;
-    const source = path.join(sourceRoot, relativePath);
-    const target = path.join(targetRoot, relativePath);
-    let stat;
-    try { stat = fs.lstatSync(source); } catch { continue; }
-    if (!stat.isFile()) continue;
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.copyFileSync(source, target);
-  }
+async function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
+  const pending = [...new Set((files || []).filter(item => !isReusableDependencyPath(item)))];
+  let nextIndex = 0;
+  const copyNext = async () => {
+    while (nextIndex < pending.length) {
+      const relativePath = pending[nextIndex++];
+      const source = path.join(sourceRoot, relativePath);
+      const target = path.join(targetRoot, relativePath);
+      let stat;
+      try { stat = await fs.promises.lstat(source); } catch { continue; }
+      if (!stat.isFile()) continue;
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.copyFile(source, target, fs.constants.COPYFILE_FICLONE);
+    }
+  };
+  const workers = Math.min(12, pending.length);
+  await Promise.all(Array.from({ length: workers }, copyNext));
 }
 
 async function workspaceRevision(workspace, config) {
@@ -561,6 +607,13 @@ function unlinkReusableDependencies(targetRoot) {
       if (error?.code !== 'ENOENT') throw error;
     }
   }
+}
+
+function snapshotChangedPaths(value) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .map(item => String(item || '').trim().replaceAll('\\', '/').replace(/^\.\//, ''))
+    .filter(Boolean)
+    .filter(item => !isReusableDependencyPath(item)))];
 }
 
 function splitNullList(value) {
