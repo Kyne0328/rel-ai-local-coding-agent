@@ -10,6 +10,7 @@ const root = path.resolve(testDir, '..');
 
 const files = [
   'repository-staleness-unit.mjs',
+  'intelligence-audit-regressions-unit.mjs',
   'tunnel-credentials-unit.mjs',
   'secure-tunnel-runtime-unit.mjs',
   'secure-tunnel-packaging-contract-unit.mjs',

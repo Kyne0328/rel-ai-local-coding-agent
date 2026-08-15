@@ -22,6 +22,7 @@ import { discoverRepositoryTopology, packageForPath } from '../workflow/topology
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
+  scheduleIntelligenceWarmup(workspace, config);
   if (bootstrapMode === 'none') return task;
   const snapshot = await repoSnapshot(workspace, config, {
     maxEntries: bootstrapMode === 'full' ? undefined : 600,
@@ -29,7 +30,9 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
     instructionPath: args.instructionPath
   });
   const bootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
-  const cachedIntelligence = await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
+  const cachedIntelligence = bootstrapMode === 'full'
+    ? await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 })
+    : await repositoryIntelligence.cachedSummary(workspace, config);
   if (cachedIntelligence) bootstrap.repositoryIntelligence = cachedIntelligence;
   return {
     ...task,
@@ -62,7 +65,7 @@ const HANDLERS = Object.freeze({
   processStop: (config, args, context) => stopManagedProcess(config, args, context),
   processList: (config, args, context) => listManagedProcesses(config, args, context),
   ui: inWorkspace((workspace, config, args, context) => runUiAction(workspace, config, args, context)),
-  semanticSearch: inWorkspace((workspace, config, args, context) => relaiSemanticSearch(workspace, config, args, context)),
+  semanticSearch: inWorkspace((workspace, config, args, context) => relaiSemanticSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context)),
   diagnosticsRun: inWorkspace((workspace, config, args, context) => relaiDiagnosticsRun(workspace, config, args, context)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
   tidyRun: inWorkspace((workspace, config, args) => workspaceTidyRun(workspace, config, args)),
