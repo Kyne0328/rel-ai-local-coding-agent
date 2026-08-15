@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const MAX_DEPTH = 6;
-const MAX_MANIFESTS = 200;
+const MAX_MANIFESTS = 2000;
 const MANIFEST_NAMES = new Set(['package.json', 'pubspec.yaml', 'go.mod', 'Cargo.toml', 'pyproject.toml', 'requirements.txt', 'Makefile']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.turbo', '.cache', '.relai', '.rel-ai', 'state']);
 const cache = new Map();
@@ -14,43 +14,51 @@ function discoverRepositoryTopology(rootPath) {
   if (cached && probeManifestSignature(cached.manifests) === cached.signature) {
     return structuredClone(cached.value);
   }
-  const manifests = collectManifests(root);
+  const collection = collectManifests(root);
+  const manifests = collection.manifests;
   const signature = manifestSignature(manifests);
-  const packages = manifests.map(item => packageFromManifest(root, item)).filter(Boolean);
+  const packages = linkWorkspaceDependencies(manifests.map(item => packageFromManifest(root, item)).filter(Boolean));
   const value = {
-    version: 1,
+    version: 2,
     root,
     manifests: manifests.map(item => item.relative),
     packages,
+    manifestCount: manifests.length,
+    manifestLimit: MAX_MANIFESTS,
+    truncated: collection.truncated,
     fingerprint: crypto.createHash('sha256').update(signature).digest('hex')
   };
-  cache.set(root, { signature, manifests, value });
-  if (cache.size > 32) cache.delete(cache.keys().next().value);
+  if (collection.truncated) cache.delete(root);
+  else {
+    cache.set(root, { signature, manifests, value });
+    if (cache.size > 32) cache.delete(cache.keys().next().value);
+  }
   return structuredClone(value);
 }
 
 function collectManifests(root) {
   const found = [];
   const queue = [{ absolute: root, depth: 0 }];
-  while (queue.length && found.length < MAX_MANIFESTS) {
+  let truncated = false;
+  while (queue.length) {
     const current = queue.shift();
     let entries;
     try { entries = fs.readdirSync(current.absolute, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
-      if (found.length >= MAX_MANIFESTS) break;
       if (entry.isDirectory()) {
         if (current.depth >= MAX_DEPTH || SKIP_DIRS.has(entry.name) || looksSensitive(entry.name)) continue;
         queue.push({ absolute: path.join(current.absolute, entry.name), depth: current.depth + 1 });
         continue;
       }
       if (!entry.isFile() || !MANIFEST_NAMES.has(entry.name)) continue;
+      if (found.length >= MAX_MANIFESTS) { truncated = true; return { manifests: found.sort((a, b) => a.relative.localeCompare(b.relative)), truncated }; }
       const absolute = path.join(current.absolute, entry.name);
       let stat;
       try { stat = fs.statSync(absolute); } catch { continue; }
       found.push({ absolute, relative: normalize(path.relative(root, absolute)), size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs) });
     }
   }
-  return found.sort((a, b) => a.relative.localeCompare(b.relative));
+  return { manifests: found.sort((a, b) => a.relative.localeCompare(b.relative)), truncated };
 }
 
 function packageFromManifest(root, manifest) {
@@ -74,7 +82,10 @@ function packageFromManifest(root, manifest) {
 function npmPackage(root, manifest, packagePath) {
   let pkg = {};
   try { pkg = JSON.parse(fs.readFileSync(manifest.absolute, 'utf8')); } catch {}
-  const dependencies = Object.keys({ ...(object(pkg.dependencies)), ...(object(pkg.devDependencies)) }).sort();
+  const dependencies = Object.keys({
+    ...(object(pkg.dependencies)), ...(object(pkg.devDependencies)),
+    ...(object(pkg.peerDependencies)), ...(object(pkg.optionalDependencies))
+  }).sort();
   return {
     id: packageId('npm', packagePath), path: packagePath, ecosystem: 'npm', manifest: manifest.relative,
     name: String(pkg.name || (packagePath === '.' ? path.basename(root) : path.basename(packagePath))),
@@ -82,6 +93,14 @@ function npmPackage(root, manifest, packagePath) {
     sourceRoots: existingRoots(root, packagePath, ['src', 'lib', 'app']),
     testRoots: existingRoots(root, packagePath, ['test', 'tests', '__tests__']), dependencies, workspaceDependencies: []
   };
+}
+
+function linkWorkspaceDependencies(packages) {
+  const packageIdByName = new Map(packages.filter(item => item.name).map(item => [item.name, item.id]));
+  return packages.map(item => ({
+    ...item,
+    workspaceDependencies: [...new Set((item.dependencies || []).map(name => packageIdByName.get(name)).filter(Boolean))].sort()
+  }));
 }
 
 function invalidateRepositoryTopology(rootPath, changedFiles = []) {

@@ -43,10 +43,12 @@ function checkEvidenceReusable(receipt, current = {}) {
 }
 
 function repeatFailureCount(receipts = []) {
-  const failures = receipts.filter(item => item?.outcome === 'failed' && item.failureSignature).slice(-12);
+  const failures = receipts.filter(item => item?.outcome === 'failed' && item.failureSignature).slice(-24);
   if (!failures.length) return 0;
   const latest = failures.at(-1).failureSignature;
-  return failures.filter(item => item.failureSignature === latest).length;
+  const matching = failures.filter(item => item.failureSignature === latest);
+  const generations = new Set(matching.map(item => nonNegativeInt(item.mutationGeneration)));
+  return generations.size;
 }
 
 function failureSignature({ tool, action, commandId, command, cwd, result, target }) {

@@ -4,26 +4,12 @@ import path from 'node:path';
 import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
 import { boundedInteger } from './limits.js';
+import { COMPLEMENT, relationshipKey } from './relationshipPolicy.js';
 import { recordIntelligenceDiagnostic, repositoryFreshness } from './state.js';
 
 const DEFAULT_MAX_PEERS = 24;
 const DEFAULT_MAX_HINTS_PER_WORKSPACE = 1200;
 const DEFAULT_MAX_RELATIONSHIPS = 100;
-const COMPLEMENT = Object.freeze({
-  HTTP_CALLS: 'HANDLES',
-  HANDLES: 'HTTP_CALLS',
-  EMITS: 'LISTENS_ON',
-  LISTENS_ON: 'EMITS'
-});
-const GENERIC_PLATFORM_EVENTS = new Set([
-  'abort', 'aborted', 'beforeunload', 'blur', 'change', 'click', 'close', 'connect',
-  'connection', 'data', 'DOMContentLoaded', 'drain', 'end', 'error', 'finish', 'focus',
-  'hashchange', 'input', 'keydown', 'keypress', 'keyup', 'load', 'message', 'mousedown',
-  'mouseenter', 'mouseleave', 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'offline',
-  'online', 'open', 'pointerdown', 'pointermove', 'pointerup', 'popstate', 'ready', 'request',
-  'resize', 'response', 'scroll', 'storage', 'submit', 'timeout', 'touchend', 'touchmove',
-  'touchstart', 'unload', 'visibilitychange'
-].map(value => value.toLowerCase()));
 
 function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
   const configured = configuredPeers(workspace, config);
@@ -301,31 +287,6 @@ function packageDependencyConfidence(kind) {
   if (kind === 'optionalDependencies') return 0.88;
   if (kind === 'devDependencies') return 0.72;
   return 0.7;
-}
-
-function relationshipKey(type, targetName) {
-  const value = String(targetName || '').trim();
-  if (!value) return '';
-  if (type === 'HTTP_CALLS' || type === 'HANDLES') return canonicalHttpKey(value);
-  if (type === 'EMITS' || type === 'LISTENS_ON') {
-    const eventName = value.replace(/^event:/i, '').trim();
-    if (!eventName || GENERIC_PLATFORM_EVENTS.has(eventName.toLowerCase())) return '';
-    return `event:${eventName}`;
-  }
-  return value;
-}
-
-function canonicalHttpKey(value) {
-  const match = String(value || '').match(/^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(.+)$/i);
-  if (!match) return '';
-  let target = match[2].trim();
-  try {
-    if (/^https?:\/\//i.test(target)) target = new URL(target).pathname;
-  } catch { return ''; }
-  target = target.split(/[?#]/, 1)[0].replace(/\/{2,}/g, '/');
-  if (!target.startsWith('/')) return '';
-  if (target.length > 1) target = target.replace(/\/$/, '');
-  return `${match[1].toUpperCase()} ${target}`;
 }
 
 function peerHasStrongRelationshipEvidence(localPackage, localHints, peer) {

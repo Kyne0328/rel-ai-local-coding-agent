@@ -25,6 +25,24 @@ fs.writeFileSync(path.join(workspaceRoot, 'src', 'client.ts'), `
 export async function loadAccounts() {
   return fetch('/api/accounts');
 }
+export async function loadAccountsAbsolute() {
+  return fetch('https://api.example.test/api/accounts?limit=10');
+}
+`);
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'react.ts'), 'export const localReact = true;\n');
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'bare-import.ts'), "import React from 'react';\nexport const value = React;\n");
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'noise.ts'), `
+// router.get('/ghost', ghostHandler);
+// bus.emit('message', payload);
+const note = "import Ghost from 'fake-package'; router.get('/string-ghost', ghostHandler)";
+export const noise = note;
+`);
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'generic-listener.ts'), `
+export function onMessage() { return true; }
+bus.on('message', onMessage);
+`);
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'generic-emitter.ts'), `
+export function publishMessage() { bus.emit('message', { ok: true }); }
 `);
 fs.writeFileSync(path.join(workspaceRoot, 'src', 'listener.ts'), `
 export function onAccountSaved() { return true; }
@@ -71,10 +89,20 @@ try {
       && row.sourcePath === 'src/routes.ts' && row.targetName === 'GET /api/accounts' && row.sourceSymbol === 'getAccounts'));
     assert.ok(rows.some(row => row.type === 'HTTP_CALLS'
       && row.sourcePath === 'src/client.ts' && row.targetPath === 'src/routes.ts' && row.targetSymbol === 'getAccounts'));
+    assert.ok(rows.some(row => row.type === 'HTTP_CALLS'
+      && row.sourcePath === 'src/client.ts' && row.targetName === 'GET https://api.example.test/api/accounts'
+      && row.targetPath === 'src/routes.ts'), 'absolute HTTP URLs must canonicalize to the matching local route path');
     assert.ok(rows.some(row => row.type === 'LISTENS_ON'
       && row.sourcePath === 'src/listener.ts' && row.targetName === 'event:account:saved' && row.sourceSymbol === 'onAccountSaved'));
     assert.ok(rows.some(row => row.type === 'EMITS'
       && row.sourcePath === 'src/emitter.ts' && row.targetPath === 'src/listener.ts' && row.targetSymbol === 'onAccountSaved'));
+    assert.ok(rows.some(row => row.type === 'EMITS' && row.sourcePath === 'src/generic-emitter.ts' && row.targetName === 'event:message' && row.targetPath == null),
+      'generic local events may be retained as facts but must not create cross-file dependencies');
+
+    const fakeHints = db.prepare("SELECT type, target_name FROM relation_hints rh JOIN files f ON f.id=rh.source_file_id WHERE f.path='src/noise.ts'").all();
+    assert.equal(fakeHints.length, 0, 'comments and string literals must not create JS/TS relationship facts');
+    const bareImport = db.prepare("SELECT target_path FROM imports i JOIN files f ON f.id=i.source_file_id WHERE f.path='src/bare-import.ts' AND i.specifier='react'").get();
+    assert.equal(bareImport?.target_path ?? null, null, 'bare npm imports must not suffix-resolve to unrelated local files');
   } finally {
     db.close();
   }

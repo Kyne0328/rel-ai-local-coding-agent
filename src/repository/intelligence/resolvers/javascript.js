@@ -1,49 +1,83 @@
-const PROVIDER = 'resolver-js-ts-v1';
+import {
+  dedupeRelations, endpointRelation, fieldNode, httpKey, importBindingMap, namedChildren, nodeText,
+  nodesOfTypes, relation, simpleName, stripQuotes, symbolForNode
+} from './common.js';
+
+const PROVIDER = 'resolver-js-ts-v2';
 const CAPABILITIES = Object.freeze([
-  'import-bindings', 're-exports', 'inheritance', 'interfaces', 'constructor-types', 'typed-member-calls',
-  'http-routes', 'http-calls', 'events'
+  'ast-import-bindings', 'ast-re-exports', 'ast-inheritance', 'ast-interfaces', 'ast-constructor-types',
+  'ast-typed-member-calls', 'ast-http-routes', 'ast-http-calls', 'ast-events'
 ]);
+const CALL_TYPES = new Set(['call_expression', 'new_expression']);
+const STRING_TYPES = new Set(['string', 'string_fragment', 'template_string']);
 
 const javascriptTypeResolver = Object.freeze({
   id: PROVIDER,
   capabilities: CAPABILITIES,
-  enrich({ source, facts }) {
-    const text = String(source || '');
-    const imports = parseImports(text);
+  enrich({ root, facts }) {
+    const imports = parseImports(root);
     const bindings = importBindingMap(imports);
     const symbols = facts.symbols || [];
-    const relations = [
-      ...classRelations(text, symbols, bindings),
-      ...typedUsageRelations(text, symbols, bindings),
-      ...memberCallRelations(text, symbols, bindings),
-      ...httpRouteRelations(text, symbols),
-      ...httpCallRelations(text, symbols, bindings),
-      ...eventRelations(text, symbols)
-    ];
-    return { provider: PROVIDER, capabilities: CAPABILITIES, imports: imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.96 })), relations: dedupe(relations) };
+    const typed = typedBindings(root);
+    return {
+      provider: PROVIDER,
+      capabilities: CAPABILITIES,
+      imports: imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.98 })),
+      relations: dedupeRelations([
+        ...classRelations(root, symbols, bindings),
+        ...typedUsageRelations(root, symbols, bindings, typed),
+        ...memberCallRelations(root, symbols, bindings, typed),
+        ...boundaryRelations(root, symbols, bindings)
+      ])
+    };
   }
 });
 
-function parseImports(source) {
-  const items = [];
-  const importPattern = /\bimport\s+(?:type\s+)?([\s\S]*?)\s+from\s+['"`]([^'"`]+)['"`]/g;
-  for (const match of source.matchAll(importPattern)) items.push({ specifier: match[2], kind: 'import', bindings: parseClause(match[1]) });
-  const requirePattern = /(?:const|let|var)\s+([^=;]+?)\s*=\s*require\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
-  for (const match of source.matchAll(requirePattern)) items.push({ specifier: match[2], kind: 'require', bindings: parseRequireBinding(match[1]) });
-  const reExportPattern = /\bexport\s+(?:type\s+)?(?:\*|\{[\s\S]*?\})\s+from\s+['"`]([^'"`]+)['"`]/g;
-  for (const match of source.matchAll(reExportPattern)) items.push({ specifier: match[1], kind: 're-export', bindings: [] });
-  return items;
+function parseImports(root) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['import_statement'])) {
+    const source = importSource(node);
+    if (!source) continue;
+    result.push({ specifier: source, kind: 'import', bindings: parseImportClause(nodeText(node)) });
+  }
+  for (const node of nodesOfTypes(root, ['export_statement'])) {
+    const text = nodeText(node);
+    if (!/\bfrom\b/.test(text)) continue;
+    const source = importSource(node);
+    if (source) result.push({ specifier: source, kind: 're-export', bindings: [] });
+  }
+  for (const node of nodesOfTypes(root, ['variable_declarator'])) {
+    const name = fieldNode(node, 'name');
+    const value = fieldNode(node, 'value');
+    if (!name || !value || !CALL_TYPES.has(value.type)) continue;
+    const call = callParts(value);
+    if (call.functionText !== 'require') continue;
+    const specifier = stringArgument(call.arguments[0]);
+    if (!specifier) continue;
+    result.push({ specifier, kind: 'require', bindings: parseRequireBinding(nodeText(name)) });
+  }
+  return dedupeImports(result);
 }
 
-function parseClause(value) {
-  const clause = String(value || '').trim();
+function importSource(node) {
+  const field = fieldNode(node, 'source');
+  if (field) return staticString(field);
+  const strings = namedChildren(node).filter(child => isStringNode(child));
+  return strings.length ? staticString(strings.at(-1)) : '';
+}
+
+function parseImportClause(text) {
+  const statement = String(text || '').replace(/^\s*import\s+(?:type\s+)?/, '');
+  const fromIndex = statement.lastIndexOf(' from ');
+  if (fromIndex < 0) return [];
+  const clause = statement.slice(0, fromIndex).trim();
   const bindings = [];
   const namespace = clause.match(/\*\s+as\s+([A-Za-z_$][\w$]*)/);
   if (namespace) bindings.push({ local: namespace[1], imported: '*', kind: 'namespace' });
   const named = clause.match(/\{([\s\S]*?)\}/);
   if (named) {
-    for (const raw of named[1].split(',')) {
-      const clean = raw.trim().replace(/^type\s+/, '');
+    for (const part of named[1].split(',')) {
+      const clean = part.trim().replace(/^type\s+/, '');
       if (!clean) continue;
       const [left, right] = clean.split(/\s+as\s+/);
       const imported = identifier(left);
@@ -56,207 +90,156 @@ function parseClause(value) {
   return bindings;
 }
 
-function parseRequireBinding(value) {
-  const text = String(value || '').trim();
-  if (text.startsWith('{')) {
-    return text.replace(/[{}]/g, '').split(',').map(part => {
+function parseRequireBinding(text) {
+  const value = String(text || '').trim();
+  if (value.startsWith('{')) {
+    return value.replace(/[{}]/g, '').split(',').map(part => {
       const [left, right] = part.trim().split(/\s*:\s*/);
       return { local: identifier(right || left), imported: identifier(left), kind: 'named' };
     }).filter(item => item.local && item.imported);
   }
-  const local = identifier(text);
+  const local = identifier(value);
   return local ? [{ local, imported: '*', kind: 'namespace' }] : [];
 }
 
-function importBindingMap(imports) {
-  const map = new Map();
-  for (const item of imports) for (const binding of item.bindings || []) map.set(binding.local, { ...binding, specifier: item.specifier });
-  return map;
-}
-
-function classRelations(source, symbols, bindings) {
-  const relations = [];
-  const pattern = /\b(class|interface)\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([^{]+?))?(?:\s+implements\s+([^{]+?))?\s*\{/g;
-  for (const match of source.matchAll(pattern)) {
-    const kind = match[1];
-    const sourceSymbol = symbols.find(item => item.name === match[2] && (item.kind === kind || (kind === 'class' && item.kind === 'class')));
-    if (!sourceSymbol) continue;
-    for (const target of typeList(match[3])) relations.push(typeRelation('INHERITS', sourceSymbol.qualifiedName, target, bindings, 0.96));
-    for (const target of typeList(match[4])) relations.push(typeRelation('IMPLEMENTS', sourceSymbol.qualifiedName, target, bindings, 0.96));
+function classRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['class_declaration', 'class', 'interface_declaration'])) {
+    const owner = symbolForNode(node, symbols);
+    if (!owner) continue;
+    const text = nodeText(node).split('{', 1)[0];
+    const inherited = text.match(/\bextends\s+([^{]+?)(?=\s+implements\b|$)/)?.[1] || '';
+    const implemented = text.match(/\bimplements\s+([^{]+)$/)?.[1] || '';
+    for (const target of typeList(inherited)) result.push(relation(PROVIDER, 'INHERITS', owner, target, bindings, { confidence: 0.98 }));
+    for (const target of typeList(implemented)) result.push(relation(PROVIDER, 'IMPLEMENTS', owner, target, bindings, { confidence: 0.98 }));
   }
-  return relations;
+  return result;
 }
 
-function typedUsageRelations(source, symbols, bindings) {
-  const relations = [];
-  const pattern = /\b(?:const|let|var|public|private|protected|readonly)?\s*([A-Za-z_$][\w$]*)\s*(?::\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?))?\s*=\s*new\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/g;
-  for (const match of source.matchAll(pattern)) {
-    const target = match[2] || match[3];
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    relations.push(typeRelation('USES_TYPE', owner?.qualifiedName || null, target, bindings, 0.94, match[1]));
+function typedBindings(root) {
+  const result = new Map();
+  for (const node of nodesOfTypes(root, ['variable_declarator'])) {
+    const text = nodeText(node);
+    const match = text.match(/^\s*([A-Za-z_$][\w$]*)\s*(?::\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?))?\s*=\s*new\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/);
+    if (match) result.set(match[1], match[2] || match[3]);
   }
-  return relations;
+  return result;
 }
 
-function memberCallRelations(source, symbols, bindings) {
-  const relations = [];
-  const typed = new Map();
-  const declarationPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?))?\s*=\s*new\s+([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/g;
-  for (const match of source.matchAll(declarationPattern)) typed.set(match[1], match[2] || match[3]);
-  const callPattern = /\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*\(/g;
-  for (const match of source.matchAll(callPattern)) {
-    const receiver = match[1];
-    const method = match[2];
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    let typeName = typed.get(receiver) || null;
+function typedUsageRelations(root, symbols, bindings, typed) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['variable_declarator'])) {
+    const nameNode = fieldNode(node, 'name');
+    const name = identifier(nodeText(nameNode));
+    const target = typed.get(name);
+    if (!name || !target) continue;
+    result.push(relation(PROVIDER, 'USES_TYPE', symbolForNode(node, symbols), target, bindings, { sourceName: name, confidence: 0.97 }));
+  }
+  return result;
+}
+
+function memberCallRelations(root, symbols, bindings, typed) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['call_expression'])) {
+    const call = callParts(node);
+    const member = memberName(call.functionText);
+    if (!member) continue;
+    const [receiver, method] = member;
+    let typeName = typed.get(receiver) || '';
     let moduleSpecifier = null;
     const imported = bindings.get(receiver);
     if (!typeName && imported) {
       typeName = imported.imported === 'default' || imported.imported === '*' ? receiver : imported.imported;
       moduleSpecifier = imported.specifier;
     }
-    if (!typeName) continue;
-    const target = resolveType(typeName, bindings);
-    relations.push({ type: 'CALLS', sourceQualifiedName: owner?.qualifiedName || null, sourceName: method, targetName: method, targetQualifiedName: `${target.name}.${method}`, moduleSpecifier: moduleSpecifier || target.moduleSpecifier, provider: PROVIDER, confidence: 0.95 });
-  }
-  return relations;
-}
-
-function httpRouteRelations(source, symbols) {
-  const relations = [];
-  const pattern = /\b([A-Za-z_$][\w$]*)\.(get|post|put|patch|delete|head|options)\s*\(\s*(['"`])([^'"`]+)\3\s*,\s*([A-Za-z_$][\w$]*)?/gi;
-  for (const match of source.matchAll(pattern)) {
-    const receiver = match[1];
-    if (!isRouteReceiver(receiver)) continue;
-    const routeKey = httpKey(match[2], match[4]);
-    if (!routeKey) continue;
-    const handlerName = match[5] || '';
-    const handler = handlerName ? symbols.find(item => item.name === handlerName && ['function', 'method'].includes(item.kind)) : null;
-    const owner = handler || nearestSymbolByOffset(source, symbols, match.index || 0);
-    relations.push({
-      type: 'HANDLES', sourceQualifiedName: owner?.qualifiedName || null, sourceName: handler?.name || null,
-      targetName: routeKey, targetQualifiedName: null, moduleSpecifier: null, provider: PROVIDER,
-      confidence: handler ? 0.98 : 0.91
+    if (!typeName || isBoundaryCall(receiver, method, bindings)) continue;
+    const target = relation(PROVIDER, 'CALLS', symbolForNode(node, symbols), `${typeName}.${method}`, bindings, {
+      sourceName: method,
+      targetQualifiedName: `${simpleName(typeName)}.${method}`,
+      moduleSpecifier,
+      confidence: 0.97
     });
+    if (target) result.push(target);
   }
-  return relations;
+  return result;
 }
 
-function httpCallRelations(source, symbols, bindings) {
-  const relations = [];
-  const fetchPattern = /\bfetch\s*\(\s*(['"`])([^'"`]+)\1/g;
-  for (const match of source.matchAll(fetchPattern)) {
-    const tail = source.slice((match.index || 0) + match[0].length, (match.index || 0) + match[0].length + 400);
-    const methodMatch = tail.match(/\bmethod\s*:\s*['"`](get|post|put|patch|delete|head|options)['"`]/i);
-    const routeKey = httpKey(methodMatch?.[1] || 'GET', match[2]);
-    if (!routeKey) continue;
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    relations.push(endpointRelation('HTTP_CALLS', owner, routeKey, 0.97));
-  }
+function boundaryRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['call_expression'])) {
+    const call = callParts(node);
+    const member = memberName(call.functionText);
+    const owner = symbolForNode(node, symbols);
 
-  const clientPattern = /\b([A-Za-z_$][\w$]*)\.(get|post|put|patch|delete|head|options)\s*\(\s*(['"`])([^'"`]+)\3/g;
-  for (const match of source.matchAll(clientPattern)) {
-    const receiver = match[1];
-    if (!isHttpClient(receiver, bindings)) continue;
-    const routeKey = httpKey(match[2], match[4]);
-    if (!routeKey) continue;
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    relations.push(endpointRelation('HTTP_CALLS', owner, routeKey, 0.96));
+    if (member) {
+      const [receiver, method] = member;
+      if (isHttpMethod(method) && isRouteReceiver(receiver)) {
+        const route = httpKey(method, stringArgument(call.arguments[0]));
+        if (route) {
+          const handlerName = argumentIdentifier(call.arguments[1]);
+          const handler = handlerName ? symbols.find(item => item.name === handlerName && ['function', 'method'].includes(item.kind)) : null;
+          result.push(endpointRelation(PROVIDER, 'HANDLES', handler || owner, route, handler ? 0.99 : 0.94));
+        }
+      } else if (isHttpMethod(method) && isHttpClient(receiver, bindings)) {
+        const route = httpKey(method, stringArgument(call.arguments[0]));
+        if (route) result.push(endpointRelation(PROVIDER, 'HTTP_CALLS', owner, route, 0.98));
+      }
+
+      if (['on', 'once', 'addEventListener'].includes(method)) {
+        const event = stringArgument(call.arguments[0]);
+        if (event) {
+          const handlerName = argumentIdentifier(call.arguments[1]);
+          const handler = handlerName ? symbols.find(item => item.name === handlerName && ['function', 'method'].includes(item.kind)) : null;
+          result.push(endpointRelation(PROVIDER, 'LISTENS_ON', handler || owner, `event:${event}`, handler ? 0.99 : 0.94));
+        }
+      } else if (['emit', 'publish', 'dispatch'].includes(method)) {
+        const event = stringArgument(call.arguments[0]);
+        if (event) result.push(endpointRelation(PROVIDER, 'EMITS', owner, `event:${event}`, 0.98));
+      }
+    } else if (call.functionText === 'fetch') {
+      const target = stringArgument(call.arguments[0]);
+      const optionsText = nodeText(call.arguments[1]);
+      const method = optionsText.match(/\bmethod\s*:\s*['"`](get|post|put|patch|delete|head|options)['"`]/i)?.[1] || 'GET';
+      const route = httpKey(method, target);
+      if (route) result.push(endpointRelation(PROVIDER, 'HTTP_CALLS', owner, route, 0.99));
+    }
   }
-  return relations;
+  return result;
 }
 
-function eventRelations(source, symbols) {
-  const relations = [];
-  const listenPattern = /\b([A-Za-z_$][\w$]*)\.(on|once|addEventListener)\s*\(\s*(['"`])([^'"`]+)\3\s*,\s*([A-Za-z_$][\w$]*)?/g;
-  for (const match of source.matchAll(listenPattern)) {
-    const handlerName = match[5] || '';
-    const handler = handlerName ? symbols.find(item => item.name === handlerName && ['function', 'method'].includes(item.kind)) : null;
-    const owner = handler || nearestSymbolByOffset(source, symbols, match.index || 0);
-    relations.push(endpointRelation('LISTENS_ON', owner, `event:${match[4]}`, handler ? 0.98 : 0.91, handler?.name || null));
-  }
-
-  const emitPattern = /\b([A-Za-z_$][\w$]*)\.(emit|publish|dispatch)\s*\(\s*(['"`])([^'"`]+)\3/g;
-  for (const match of source.matchAll(emitPattern)) {
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    relations.push(endpointRelation('EMITS', owner, `event:${match[4]}`, 0.96));
-  }
-  return relations;
+function callParts(node) {
+  const fn = fieldNode(node, 'function', 'constructor') || namedChildren(node)[0] || null;
+  const argsNode = fieldNode(node, 'arguments') || namedChildren(node).find(child => child.type === 'arguments') || null;
+  return { functionText: nodeText(fn), arguments: namedChildren(argsNode) };
 }
 
-function endpointRelation(type, owner, targetName, confidence, sourceName = null) {
-  return {
-    type, sourceQualifiedName: owner?.qualifiedName || null, sourceName,
-    targetName, targetQualifiedName: null, moduleSpecifier: null, provider: PROVIDER, confidence
-  };
+function staticString(node) {
+  if (!node || !isStringNode(node)) return '';
+  const text = nodeText(node);
+  if (node.type === 'template_string' && text.includes('${')) return '';
+  return stripQuotes(text);
 }
-
-function isRouteReceiver(value) {
-  return /^(?:app|router|server|fastify|api|route)$/i.test(String(value || ''));
+function stringArgument(node) { return staticString(node); }
+function isStringNode(node) { return Boolean(node && (STRING_TYPES.has(node.type) || /string/.test(node.type))); }
+function argumentIdentifier(node) { const value = nodeText(node); return /^[A-Za-z_$][\w$]*$/.test(value) ? value : ''; }
+function memberName(value) { const match = String(value || '').match(/^([A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)$/); return match ? [match[1], match[2]] : null; }
+function isHttpMethod(value) { return /^(?:get|post|put|patch|delete|head|options)$/i.test(String(value || '')); }
+function isBoundaryCall(receiver, method, bindings) {
+  if (['on', 'once', 'addEventListener', 'emit', 'publish', 'dispatch'].includes(String(method || ''))) return true;
+  return isHttpMethod(method) && (isRouteReceiver(receiver) || isHttpClient(receiver, bindings));
 }
-
+function isRouteReceiver(value) { return /^(?:app|router|server|fastify|api|route)$/i.test(String(value || '')); }
 function isHttpClient(value, bindings) {
   const name = String(value || '');
   if (/^(?:axios|ky|got|request|httpClient|apiClient)$/i.test(name)) return true;
   const imported = bindings.get(name);
   return Boolean(imported && /^(?:axios|ky|got|node-fetch|undici|superagent)(?:\/|$)/i.test(imported.specifier));
 }
-
-function httpKey(method, value) {
-  const raw = String(value || '').trim();
-  if (!raw || raw.includes('${')) return '';
-  const upperMethod = String(method || 'GET').toUpperCase();
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      const parsed = new URL(raw);
-      return `${upperMethod} ${parsed.origin}${normalizeHttpPath(parsed.pathname)}`;
-    } catch {
-      return '';
-    }
-  }
-  const withoutQuery = raw.split(/[?#]/, 1)[0];
-  if (!withoutQuery.startsWith('/')) return '';
-  return `${upperMethod} ${normalizeHttpPath(withoutQuery)}`;
-}
-
-function normalizeHttpPath(value) {
-  const normalized = String(value || '/').replace(/\/{2,}/g, '/');
-  return normalized.length > 1 ? normalized.replace(/\/$/, '') : normalized;
-}
-function typeRelation(type, sourceQualifiedName, rawTarget, bindings, confidence, sourceName = null) {
-  const target = resolveType(rawTarget, bindings);
-  return { type, sourceQualifiedName, sourceName, targetName: target.name, targetQualifiedName: target.name, moduleSpecifier: target.moduleSpecifier, provider: PROVIDER, confidence };
-}
-
-function resolveType(raw, bindings) {
-  const name = identifier(String(raw || '').split('<', 1)[0].split('[', 1)[0]);
-  const imported = bindings.get(name);
-  if (!imported) return { name, moduleSpecifier: null };
-  return { name: imported.imported === 'default' || imported.imported === '*' ? name : imported.imported, moduleSpecifier: imported.specifier };
-}
-
-function nearestSymbolByOffset(source, symbols, offset) {
-  const line = source.slice(0, offset).split(/\r\n|\n|\r/).length;
-  return symbols.filter(item => item.startLine <= line && item.endLine >= line).sort((a, b) => (a.endLine - a.startLine) - (b.endLine - b.startLine))[0] || null;
-}
-
-function typeList(value) {
-  return String(value || '').split(',').map(identifier).filter(Boolean);
-}
-
-function identifier(value) {
-  const match = String(value || '').trim().match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?/);
-  return match?.[0] || '';
-}
-
-function dedupe(items) {
+function typeList(value) { return String(value || '').split(',').map(item => item.trim().split(/\s+/)[0]).map(simpleName).filter(Boolean); }
+function identifier(value) { return String(value || '').trim().match(/[A-Za-z_$][\w$]*/)?.[0] || ''; }
+function dedupeImports(items) {
   const seen = new Set();
-  return items.filter(item => {
-    const key = [item.type, item.sourceQualifiedName || '', item.sourceName || '', item.targetQualifiedName || '', item.targetName || '', item.moduleSpecifier || ''].join(':');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return items.filter(item => { const key = `${item.kind}:${item.specifier}`; if (seen.has(key)) return false; seen.add(key); return true; });
 }
 
 export { javascriptTypeResolver };
