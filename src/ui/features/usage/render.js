@@ -25,7 +25,7 @@ function analyticsMetrics(scope, previous) {
   return [
     metric('Tool calls', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
     metric('Reliability', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} classified calls` : 'Starts with newly classified calls', { rate: true, available: scope.reliabilityCalls > 0, spark: false }),
-    metric('Infra failures', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Classified calls only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
+    metric('System errors', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Rel.AI internal errors only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
     metric('Recoverable', 'recoverableFailures', integer(scope.recoverableFailures), 'Classified calls only', { inverse: true }),
     metric('Operation success', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'All completed calls, including legacy', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0 }),
     metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed call' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0 })
@@ -39,7 +39,7 @@ function metricHtml(metric) {
 }
 
 function timelineSection(scope) {
-  const switches = [['toolCalls', 'Tool calls'], ['infrastructureFailures', 'Infra failures'], ['operationSuccessRate', 'Operation success'], ['averageDuration', 'Avg tool time']];
+  const switches = [['toolCalls', 'Tool calls'], ['infrastructureFailures', 'System errors'], ['operationSuccessRate', 'Operation success'], ['averageDuration', 'Avg tool time']];
   return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><h3>Activity</h3><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}" aria-pressed="${i ? 'false' : 'true'}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')), 'Tool calls')}</div></section>`;
 }
 
