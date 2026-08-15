@@ -4,7 +4,7 @@ import path from 'node:path';
 import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
 import { boundedInteger } from './limits.js';
-import { COMPLEMENT, relationshipKey } from './relationshipPolicy.js';
+import { COMPLEMENT, GENERIC_PLATFORM_EVENT_NAMES, hasStrongComplementaryRelationshipEvidence, relationshipKey } from './relationshipPolicy.js';
 import { recordIntelligenceDiagnostic, repositoryFreshness } from './state.js';
 
 const DEFAULT_MAX_PEERS = 24;
@@ -71,7 +71,7 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
     })),
     skipped,
     truncated: allPeers.length > peers.length || combined.length >= maxRelationships,
-    policy: 'Peer workspaces are read cache-only. Graph matching requires complementary cross-boundary evidence; generic platform/browser events are ignored, and confidence reflects evidence quality, ambiguity, and freshness.'
+    policy: 'Peer workspaces are read cache-only. Graph matching requires complementary cross-boundary evidence; generic platform/browser events are excluded before hint budgets, and common HTTP endpoints require corroboration unless package evidence exists.'
   };
 }
 
@@ -186,20 +186,30 @@ function safeReadRelationshipHints(db, limit, workspace = null) {
 }
 
 function readRelationshipHints(db, limit) {
+  const genericPlaceholders = GENERIC_PLATFORM_EVENT_NAMES.map(() => '?').join(',');
   return db.prepare(`
     SELECT rh.type, rh.target_name, rh.source_qualified_name, rh.source_name, rh.provider, rh.confidence, f.path
     FROM relation_hints rh JOIN files f ON f.id=rh.source_file_id
     WHERE rh.type IN ('HTTP_CALLS','HANDLES','EMITS','LISTENS_ON')
+      AND rh.target_name IS NOT NULL
+      AND trim(rh.target_name) <> ''
+      AND (
+        rh.type IN ('HTTP_CALLS','HANDLES')
+        OR lower(trim(CASE
+          WHEN lower(trim(rh.target_name)) LIKE 'event:%' THEN substr(trim(rh.target_name), 7)
+          ELSE trim(rh.target_name)
+        END)) NOT IN (${genericPlaceholders})
+      )
     ORDER BY rh.id LIMIT ?
-  `).all(limit).map(row => ({
+  `).all(...GENERIC_PLATFORM_EVENT_NAMES, limit).map(row => ({
     type: String(row.type),
-    targetName: row.target_name == null ? '' : String(row.target_name),
+    targetName: String(row.target_name),
     sourceQualifiedName: row.source_qualified_name == null ? null : String(row.source_qualified_name),
     sourceName: row.source_name == null ? null : String(row.source_name),
     provider: row.provider == null ? '' : String(row.provider),
     confidence: Number(row.confidence || 0),
     path: String(row.path)
-  }));
+  })).filter(hint => Boolean(relationshipKey(hint.type, hint.targetName)));
 }
 
 function openPeerGraph(peer, config, statusOverride = null) {
@@ -295,15 +305,7 @@ function peerHasStrongRelationshipEvidence(localPackage, localHints, peer) {
     if (localPackage.dependencies.has(remotePackage.name)) return true;
     if (localPackage.name && remotePackage.dependencies.has(localPackage.name)) return true;
   }
-  const remoteKeys = new Set((peer?.hints || []).map(hint => {
-    const key = relationshipKey(hint.type, hint.targetName);
-    return key ? `${hint.type}\u0000${key}` : '';
-  }).filter(Boolean));
-  return (localHints || []).some(hint => {
-    const complement = COMPLEMENT[hint.type];
-    const key = relationshipKey(hint.type, hint.targetName);
-    return Boolean(complement && key && remoteKeys.has(`${complement}\u0000${key}`));
-  });
+  return hasStrongComplementaryRelationshipEvidence(localHints, peer?.hints || []);
 }
 
 function normalizedHintConfidence(hint) {

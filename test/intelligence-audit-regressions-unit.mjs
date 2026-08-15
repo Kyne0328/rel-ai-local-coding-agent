@@ -45,7 +45,17 @@ assert.equal(peerHasStrongRelationshipEvidence(
   { name: 'rel-ai-mcp', dependencies: new Set() },
   [{ type: 'HTTP_CALLS', targetName: 'POST https://example.test/api/tasks' }],
   httpPeer
-), true, 'matching HTTP boundaries are strong cross-workspace evidence');
+), false, 'one generic HTTP endpoint must not make unrelated workspaces graph peers');
+assert.equal(peerHasStrongRelationshipEvidence(
+  { name: 'rel-ai-mcp', dependencies: new Set() },
+  [{ type: 'HTTP_CALLS', targetName: 'POST /api/tasks/dispatch' }],
+  { packageInfo: { name: 'api-service', dependencies: new Set() }, hints: [{ type: 'HANDLES', targetName: 'POST /api/tasks/dispatch' }] }
+), true, 'a specific multi-segment HTTP contract is strong cross-workspace evidence');
+assert.equal(peerHasStrongRelationshipEvidence(
+  { name: 'rel-ai-mcp', dependencies: new Set() },
+  [{ type: 'HTTP_CALLS', targetName: 'POST /api/tasks' }, { type: 'HTTP_CALLS', targetName: 'GET /api/users' }],
+  { packageInfo: { name: 'api-service', dependencies: new Set() }, hints: [{ type: 'HANDLES', targetName: 'POST /api/tasks' }, { type: 'HANDLES', targetName: 'GET /api/users' }] }
+), true, 'two matching generic HTTP contracts provide enough corroboration');
 
 const sandboxPeers = configuredPeers(
   { alias: '__relai_sandbox_task', path: 'C:/tmp/sandbox', taskSandbox: true, sourceAlias: 'rel-ai-mcp' },
