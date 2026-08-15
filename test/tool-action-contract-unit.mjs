@@ -6,7 +6,7 @@ import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolMa
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = '25368512a74e3a370b06986e15f0b4c42dccc2e2a2ab8a3a1314f38d74292e44';
+const EXPECTED_HASH = 'a924d4aee935ead97b4b2d728c695862e2bbd5e81d53ce09ac95f35d424e6ff4';
 const rows = `
 relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
 relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden
@@ -86,6 +86,13 @@ assert.equal(hash, EXPECTED_HASH, 'public tool contract changed without an expli
 const editDefinition = definitions.find(definition => definition.name === "relai_edit");
 assert.ok(editDefinition, "relai_edit definition must exist");
 assert.match(editDefinition.description, /one logical updateText patch/i, "large repository-wide changes should stay together instead of being split into repeated edit batches");
+const scopedDiff = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'diff', scope: 'task' }, {});
+assert.equal(scopedDiff.operationArgs.scope, 'task', 'diff scope must be exposed by the public action contract');
+assert.throws(
+  () => resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'restore', paths: ['README.md'], scope: 'task' }, {}),
+  /Unsupported field 'scope'/,
+  'scope must remain diff-only'
+);
 
 const actualKeys = [];
 for (const expected of rows) {
