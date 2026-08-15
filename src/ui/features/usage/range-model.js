@@ -16,7 +16,9 @@ export const ANALYTICS_RANGES = Object.freeze([
   ['custom', 'Custom range']
 ]);
 
-const TOTAL_KEYS = Object.freeze(['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs']);
+const RELIABILITY_KEYS = Object.freeze(['reliabilityCalls', 'reliableCalls', 'infrastructureFailures', 'operationFailures', 'recoverableFailures', 'cancellations']);
+const TOTAL_KEYS = Object.freeze(['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', ...RELIABILITY_KEYS]);
+const GROUP_KEYS = Object.freeze(['toolCalls', 'successes', 'failures', 'executionMs', ...RELIABILITY_KEYS]);
 
 export function analyticsBounds(range = '24h', { now = new Date(), customStart = '', customEnd = '' } = {}) {
   const endNow = new Date(now);
@@ -133,7 +135,7 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
     deviceId,
     ...totals,
     completed: totals.successes + totals.failures,
-    successRate: totals.successes + totals.failures ? totals.successes / (totals.successes + totals.failures) * 100 : 0,
+    successRate: totals.reliabilityCalls ? totals.reliableCalls / totals.reliabilityCalls * 100 : 0,
     averageDuration: totals.successes + totals.failures ? totals.executionMs / (totals.successes + totals.failures) : 0,
     tools,
     devices,
@@ -171,22 +173,25 @@ export function workspaceOptions(models) {
 function normalizeTotals(value) {
   if (!value || typeof value !== 'object') throw new Error('Analytics unavailable: monthly totals were not returned.');
   const result = {};
-  for (const key of [...TOTAL_KEYS, 'activeDays']) result[key] = exactNumber(value[key], key);
-  return result;
+  for (const key of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) result[key] = exactNumber(value[key], key);
+  return { ...result, ...normalizeReliability(value, result.successes, result.failures, 'totals') };
 }
 
 function normalizeBreakdown(value, kind) {
   if (!Array.isArray(value)) return [];
   return value.map(item => {
     const row = item && typeof item === 'object' ? item : {};
+    const successes = exactNumber(row.successes, `${kind}.successes`);
+    const failures = exactNumber(row.failures, `${kind}.failures`);
     return {
       ...(kind.toLowerCase().includes('tool') ? { tool: String(row.tool || '') } : {}),
       ...(kind === 'device' || kind.includes('workspace') ? { deviceId: String(row.deviceId || ''), displayName: String(row.displayName || '') } : {}),
       ...(kind.includes('workspace') || kind === 'workspace' ? { workspace: String(row.workspace || '') } : {}),
       ...(row.workspaceKey ? { workspaceKey: String(row.workspaceKey) } : {}),
       toolCalls: exactNumber(row.toolCalls ?? row.calls, `${kind}.toolCalls`),
-      successes: exactNumber(row.successes, `${kind}.successes`),
-      failures: exactNumber(row.failures, `${kind}.failures`),
+      successes,
+      failures,
+      ...normalizeReliability(row, successes, failures, kind),
       executionMs: exactNumber(row.executionMs, `${kind}.executionMs`)
     };
   });
@@ -194,18 +199,23 @@ function normalizeBreakdown(value, kind) {
 
 function normalizeSeries(value, kind) {
   if (!Array.isArray(value)) return [];
-  return value.map(item => ({
-    hour: String(item?.hour || ''),
-    ...(kind.toLowerCase().includes('tool') ? { tool: String(item?.tool || '') } : {}),
-    ...(kind.includes('workspace') ? { deviceId: String(item?.deviceId || ''), workspace: String(item?.workspace || ''), workspaceKey: String(item?.workspaceKey || ''), displayName: String(item?.displayName || '') } : {}),
-    requests: exactNumber(item?.requests ?? 0, `${kind}.requests`),
-    toolCalls: exactNumber(item?.toolCalls ?? 0, `${kind}.toolCalls`),
-    successes: exactNumber(item?.successes ?? 0, `${kind}.successes`),
-    failures: exactNumber(item?.failures ?? 0, `${kind}.failures`),
-    requestBytes: exactNumber(item?.requestBytes ?? 0, `${kind}.requestBytes`),
-    resultBytes: exactNumber(item?.resultBytes ?? 0, `${kind}.resultBytes`),
-    executionMs: exactNumber(item?.executionMs ?? 0, `${kind}.executionMs`)
-  })).filter(row => hourTime(row.hour) !== null);
+  return value.map(item => {
+    const successes = exactNumber(item?.successes ?? 0, `${kind}.successes`);
+    const failures = exactNumber(item?.failures ?? 0, `${kind}.failures`);
+    return {
+      hour: String(item?.hour || ''),
+      ...(kind.toLowerCase().includes('tool') ? { tool: String(item?.tool || '') } : {}),
+      ...(kind.includes('workspace') ? { deviceId: String(item?.deviceId || ''), workspace: String(item?.workspace || ''), workspaceKey: String(item?.workspaceKey || ''), displayName: String(item?.displayName || '') } : {}),
+      requests: exactNumber(item?.requests ?? 0, `${kind}.requests`),
+      toolCalls: exactNumber(item?.toolCalls ?? 0, `${kind}.toolCalls`),
+      successes,
+      failures,
+      ...normalizeReliability(item, successes, failures, kind),
+      requestBytes: exactNumber(item?.requestBytes ?? 0, `${kind}.requestBytes`),
+      resultBytes: exactNumber(item?.resultBytes ?? 0, `${kind}.resultBytes`),
+      executionMs: exactNumber(item?.executionMs ?? 0, `${kind}.executionMs`)
+    };
+  }).filter(row => hourTime(row.hour) !== null);
 }
 
 function normalizeFailureRows(value, { workspace = false, series = false } = {}) {
@@ -238,12 +248,9 @@ function groupRows(rows, identity, kind, displayName = null) {
   for (const row of rows || []) {
     const key = identity(row);
     if (!key) continue;
-    if (!grouped.has(key)) grouped.set(key, { toolCalls: 0, successes: 0, failures: 0, executionMs: 0 });
+    if (!grouped.has(key)) grouped.set(key, Object.fromEntries(GROUP_KEYS.map(field => [field, 0])));
     const target = grouped.get(key);
-    target.toolCalls += row.toolCalls;
-    target.successes += row.successes;
-    target.failures += row.failures;
-    target.executionMs += row.executionMs;
+    for (const field of GROUP_KEYS) target[field] += Number(row[field] || 0);
   }
   return [...grouped.entries()].map(([key, totals]) => ({
     ...(kind === 'tool' ? { tool: key } : {}),
@@ -257,13 +264,13 @@ function bucketSeries(rows, start, end) {
   const duration = end.getTime() - start.getTime();
   const bucketMs = duration <= 48 * 60 * 60 * 1000 ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
   const count = Math.max(1, Math.ceil(duration / bucketMs));
-  const points = Array.from({ length: count }, (_, index) => ({ at: start.getTime() + index * bucketMs, requests: 0, toolCalls: 0, successes: 0, failures: 0, executionMs: 0 }));
+  const points = Array.from({ length: count }, (_, index) => ({ at: start.getTime() + index * bucketMs, ...Object.fromEntries(TOTAL_KEYS.map(key => [key, 0])) }));
   for (const row of rows || []) {
     const time = hourTime(row.hour);
     if (time === null) continue;
     const index = Math.floor((time - start.getTime()) / bucketMs);
     if (index < 0 || index >= points.length) continue;
-    for (const key of ['requests', 'toolCalls', 'successes', 'failures', 'executionMs']) points[index][key] += Number(row[key] || 0);
+    for (const key of TOTAL_KEYS) points[index][key] += Number(row[key] || 0);
   }
   return points;
 }
@@ -309,6 +316,24 @@ function monthKey(value) {
 function normalizeMonth(value) {
   const text = String(value || '').trim();
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(text) ? text : '';
+}
+
+function normalizeReliability(row, successes, failures, label) {
+  const legacyCompleted = successes + failures;
+  const reliabilityCalls = optionalNumber(row?.reliabilityCalls, legacyCompleted, `${label}.reliabilityCalls`);
+  const reliableCalls = optionalNumber(row?.reliableCalls, successes, `${label}.reliableCalls`);
+  return {
+    reliabilityCalls,
+    reliableCalls,
+    infrastructureFailures: optionalNumber(row?.infrastructureFailures, Math.max(0, reliabilityCalls - reliableCalls), `${label}.infrastructureFailures`),
+    operationFailures: optionalNumber(row?.operationFailures, 0, `${label}.operationFailures`),
+    recoverableFailures: optionalNumber(row?.recoverableFailures, 0, `${label}.recoverableFailures`),
+    cancellations: optionalNumber(row?.cancellations, 0, `${label}.cancellations`)
+  };
+}
+
+function optionalNumber(value, fallback, field) {
+  return value == null ? fallback : exactNumber(value, field);
 }
 
 function exactNumber(value, field) {

@@ -88,7 +88,7 @@ function sparkline(values, tone='') {
 
 function pointMetric(point,key) {
   const completed=point.successes+point.failures;
-  if(key==='successRate') return completed?point.successes/completed*100:0;
+  if(key==='successRate') return point.reliabilityCalls?point.reliableCalls/point.reliabilityCalls*100:0;
   if(key==='averageDuration') return completed?point.executionMs/completed:0;
   return Number(point[key]||0);
 }

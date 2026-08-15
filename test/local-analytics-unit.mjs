@@ -14,7 +14,12 @@ try {
 
   const snapshot = readLocalUsageSnapshot(config, '2026-08');
   assert.equal(snapshot.source, 'local');
-  assert.deepEqual(snapshot.totals, { requests: 3, toolCalls: 3, successes: 2, failures: 1, executionMs: 450, requestBytes: 0, resultBytes: 0, activeDays: 1 });
+  assert.deepEqual(snapshot.totals, {
+    requests: 3, toolCalls: 3, successes: 2, failures: 1,
+    reliabilityCalls: 3, reliableCalls: 3, infrastructureFailures: 0,
+    operationFailures: 1, recoverableFailures: 0, cancellations: 0,
+    executionMs: 450, requestBytes: 0, resultBytes: 0, activeDays: 1
+  });
   assert.equal(snapshot.series.length, 2);
   assert.deepEqual(snapshot.series.map(row => [row.hour, row.toolCalls]), [['2026-08-08T10', 1], ['2026-08-08T11', 2]]);
   assert.equal(snapshot.tools.find(row => row.tool === 'relai_inspect')?.toolCalls, 2);

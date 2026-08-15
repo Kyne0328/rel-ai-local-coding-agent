@@ -230,10 +230,12 @@ async function callTool(name, args = {}, context = {}) {
   } finally {
     recordLocalToolOutcome(config, {
       tool: name,
+      operationName,
       workspace: workspaceResolution?.alias || knownTask?.workspace || '',
       ok: activityResult.ok === true,
       durationMs: Date.now() - started,
-      errorCode: analyticsFailureCode
+      errorCode: analyticsFailureCode,
+      errorMessage: activityResult.error || ''
     });
     finishActivity?.(activityResult);
   }
