@@ -241,8 +241,11 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   }
   const statusAfter = await readGitStatusMap(workspace, config);
   const changed = changedStatusFiles(statusBefore, statusAfter);
+  const commandSucceeded = result.exitCode === 0 && result.timedOut !== true && result.cancelled !== true;
   return {
-    ok: result.exitCode === 0,
+    ok: true,
+    executed: true,
+    commandSucceeded,
     workspace: workspace.alias,
     command: displayCommand,
     commandSummary: redactCommandForAudit(displayCommand),

@@ -42,10 +42,12 @@ function compactRepositoryState(value, { includeWorkspace = true } = {}) {
 
 function compactCommandResult(result) {
   if (!result || typeof result !== 'object') return result;
-  const failed = result.ok === false || Number(result.exitCode || 0) !== 0;
+  const failed = result.commandSucceeded === false || result.ok === false || Number(result.exitCode || 0) !== 0;
   return pruneEmpty({
     command: result.command,
     ok: result.ok,
+    executed: result.executed,
+    commandSucceeded: result.commandSucceeded,
     exitCode: result.exitCode,
     durationMs: result.durationMs,
     stdout: failed ? result.stdout : undefined,
