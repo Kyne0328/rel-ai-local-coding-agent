@@ -117,8 +117,9 @@ function rankWithGraphDiffusion(db, baselineResults = [], options = {}) {
   return {
     results: results.slice(0, maxResults),
     analyzedEdgeCount,
-    candidateCount: baselineScoreById.size,
+    seedCandidateCount: baselineScoreById.size,
     expandedCandidateCount: results.filter(item => item.expanded).length,
+    totalCandidateCount: results.length,
     truncated: truncated || results.length > maxResults
   };
 }
@@ -225,5 +226,5 @@ function fileRow(row) {
   return { id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1 };
 }
 function normalizePath(value) { return String(value || '').trim().replaceAll('\\', '/').replace(/^\.\//, ''); }
-function emptyResult() { return { results: [], analyzedEdgeCount: 0, candidateCount: 0, expandedCandidateCount: 0, truncated: false }; }
+function emptyResult() { return { results: [], analyzedEdgeCount: 0, seedCandidateCount: 0, expandedCandidateCount: 0, totalCandidateCount: 0, truncated: false }; }
 export { isReliableDiffusionEdge, rankWithGraphDiffusion };

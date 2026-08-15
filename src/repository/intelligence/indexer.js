@@ -5,6 +5,7 @@ import { Worker } from 'node:worker_threads';
 import { collectOptionsFromWorkspace, createCollectionPathFilter, isPathInside, realRootOf } from '../../safety.js';
 import { repositoryIndexPath } from './database.js';
 import { DEFAULT_MAX_INDEX_FILES, MAX_INDEXED_FILE_BYTES, scanWorkspace } from './indexBuild.js';
+import { recentIntelligenceDiagnostics, recordIntelligenceDiagnostic } from './state.js';
 
 const FALLBACK_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const MAX_INCREMENTAL_PATHS = 1000;
@@ -77,7 +78,7 @@ function repositoryIndexStatus(workspace, config = {}) {
   const databaseFile = repositoryIndexPath(config, workspace);
   const state = runtimeStates.get(databaseFile);
   if (!state) {
-    return { status: 'idle', dirty: true, active: false, watching: false, pendingPathCount: 0, lastError: null, lastFullScanAt: null, lastReconciledAt: null, metadata: null };
+    return { status: 'idle', dirty: true, active: false, watching: false, pendingPathCount: 0, lastError: null, lastFullScanAt: null, lastReconciledAt: null, metadata: null, diagnostics: recentIntelligenceDiagnostics(workspace) };
   }
   return {
     status: state.status,
@@ -88,7 +89,8 @@ function repositoryIndexStatus(workspace, config = {}) {
     lastError: state.lastError,
     lastFullScanAt: isoTime(state.lastFullScanAt),
     lastReconciledAt: isoTime(state.lastReconciledAt),
-    metadata: state.metadata ? decorateMetadata(state, state.metadata) : null
+    metadata: state.metadata ? decorateMetadata(state, state.metadata) : null,
+    diagnostics: recentIntelligenceDiagnostics(workspace)
   };
 }
 
@@ -168,6 +170,7 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
     } else {
       state.status = 'degraded';
       state.lastError = boundedErrorMessage(error);
+      recordIntelligenceDiagnostic(workspace, 'index_refresh_failed', error);
     }
     throw error;
   }
@@ -343,12 +346,14 @@ function ensureWorkspaceWatcher(workspace, databaseFile, state) {
       state.dirty = true;
       state.fullScanRequired = true;
       state.lastError = boundedErrorMessage(error);
+      recordIntelligenceDiagnostic(workspace, 'index_watcher_failed', error);
       try { state.watcher?.close(); } catch {}
       state.watcher = null;
     });
   } catch (error) {
     state.watcher = null;
     state.lastError = boundedErrorMessage(error);
+    recordIntelligenceDiagnostic(workspace, 'index_watcher_unavailable', error);
   }
 }
 

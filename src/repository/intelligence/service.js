@@ -19,6 +19,7 @@ function createRepositoryIntelligenceService() {
     codeInspect: (workspace, config = {}, args = {}, options = {}) => indexedQuery('codeInspect', workspace, config, args, options),
     architecture: (workspace, config = {}, args = {}, options = {}) => indexedQuery('codeInspect', workspace, config, { ...args, action: 'architecture' }, options),
     cachedContext: (workspace, config = {}, options = {}) => runRepositoryQuery('cachedContext', workspace, config, {}, options),
+    cachedSummary: (workspace, config = {}, options = {}) => runRepositoryQuery('cachedSummary', workspace, config, {}, options),
     searchGraphContext: (workspace, config = {}, matches = [], options = {}) => runRepositoryQuery('searchGraphContext', workspace, config, { matches }, options),
     semanticSearch: (workspace, config = {}, args = {}, options = {}) => indexedQuery('semanticSearch', workspace, config, args, options),
     noteMutation: (workspace, config = {}, paths = []) => noteRepositoryMutation(workspace, config, paths),

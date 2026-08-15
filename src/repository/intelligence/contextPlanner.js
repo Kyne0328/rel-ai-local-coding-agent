@@ -2,9 +2,10 @@ import fs from 'node:fs';
 
 import { analyzeArchitecture } from './architecture.js';
 import { analyzeCrossWorkspace } from './crossWorkspace.js';
-import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
+import { currentGeneration, indexStats, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
 import { boundedInteger } from './limits.js';
+import { recentIntelligenceDiagnostics, recordIntelligenceDiagnostic, repositoryFreshness } from './state.js';
 
 const BOOTSTRAP_MAX_MODULES = 6;
 const BOOTSTRAP_MAX_ENTRY_POINTS = 8;
@@ -25,6 +26,35 @@ const SEARCH_EDGE_WEIGHT = Object.freeze({
   HANDLES: 2,
   LISTENS_ON: 2
 });
+
+function cachedRepositorySummary(workspace, config = {}, options = {}) {
+  const opened = openCachedIndex(workspace, config, options.repositoryStatuses?.[workspace.alias]);
+  if (!opened) return null;
+  const { db, generation, status } = opened;
+  try {
+    const stats = indexStats(db);
+    return {
+      available: true,
+      source: 'persistent-code-graph',
+      generation: Number(generation.id || 0),
+      fingerprint: `generation:${Number(generation.id || 0)}`,
+      freshness: repositoryFreshness(status, generation),
+      builtAt: generation.completed_at || generation.started_at || null,
+      sourceFileCount: stats.fileCount,
+      structuralFileCount: stats.structuralFileCount,
+      symbolCount: stats.symbolCount,
+      occurrenceCount: stats.occurrenceCount,
+      diagnostics: recentIntelligenceDiagnostics(workspace),
+      summaryOnly: true,
+      policy: 'Compact cached metadata avoids architecture traversal during task bootstrap; source remains authoritative and background reconciliation verifies freshness.'
+    };
+  } catch (error) {
+    recordIntelligenceDiagnostic(workspace, 'cached_summary_failed', error);
+    return null;
+  } finally {
+    db.close();
+  }
+}
 
 function cachedRepositoryContext(workspace, config = {}, options = {}) {
   const opened = openCachedIndex(workspace, config, options.repositoryStatuses?.[workspace.alias]);
@@ -69,7 +99,7 @@ function cachedRepositoryContext(workspace, config = {}, options = {}) {
       source: 'persistent-code-graph',
       generation: Number(generation.id || 0),
       fingerprint: `generation:${Number(generation.id || 0)}`,
-      freshness: cachedFreshness(status),
+      freshness: repositoryFreshness(status, generation),
       modules,
       entryPoints,
       hotspots,
@@ -77,9 +107,11 @@ function cachedRepositoryContext(workspace, config = {}, options = {}) {
       crossWorkspace,
       recommendedReadOrder,
       truncated: architecture.truncated,
+      diagnostics: recentIntelligenceDiagnostics(workspace),
       policy: 'Cached graph guidance narrows exploration; source files remain authoritative.'
     };
-  } catch {
+  } catch (error) {
+    recordIntelligenceDiagnostic(workspace, 'cached_context_failed', error);
     return null;
   } finally {
     db.close();
@@ -129,13 +161,14 @@ function cachedSearchGraphContext(workspace, config = {}, matches = [], options 
     return {
       available: true,
       generation: Number(generation.id || 0),
-      freshness: cachedFreshness(status),
+      freshness: repositoryFreshness(status, generation),
       pathScores: Object.fromEntries(rankedPaths.map(item => [item.path, item.score])),
       rankedPaths: rankedPaths.slice(0, 20),
       analyzedEdgeCount: edges.length,
       truncated: edges.length >= SEARCH_MAX_EDGES
     };
-  } catch {
+  } catch (error) {
+    recordIntelligenceDiagnostic(workspace, 'cached_search_context_failed', error);
     return null;
   } finally {
     db.close();
@@ -152,15 +185,11 @@ function openCachedIndex(workspace, config, statusOverride = null) {
     const generation = currentGeneration(db);
     if (!generation) { db.close(); return null; }
     return { db, generation, status: statusOverride || repositoryIndexStatus(workspace, config) };
-  } catch {
+  } catch (error) {
     try { db?.close(); } catch {}
+    recordIntelligenceDiagnostic(workspace, 'cached_index_open_failed', error);
     return null;
   }
-}
-
-function cachedFreshness(status = {}) {
-  if (status.metadata) return status.dirty ? 'stale' : 'current';
-  return 'cached-unverified';
 }
 
 function addSearchScore(path, score, type, scores, reasons) {
@@ -177,4 +206,4 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-export { cachedRepositoryContext, cachedSearchGraphContext };
+export { cachedRepositoryContext, cachedRepositorySummary, cachedSearchGraphContext };
