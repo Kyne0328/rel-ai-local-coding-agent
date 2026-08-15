@@ -99,12 +99,16 @@ function validateSkills(root, skillsPath, errors) {
       errors.push(`${label} name must use lowercase letters, numbers, and single hyphens with no leading or trailing hyphen.`);
     }
     if (description.length < 40 || description.length > 500) errors.push(`${label} description must be 40-500 characters.`);
+    const agentLabel = `skills/${directory}/agents/openai.yaml`;
     const agentPath = path.join(rootForSkill, 'agents', 'openai.yaml');
-    const agent = readText(agentPath, errors, `skills/${directory}/agents/openai.yaml`);
-    for (const field of ['display_name:', 'short_description:', 'default_prompt:']) {
-      if (!agent.includes(field)) errors.push(`skills/${directory}/agents/openai.yaml is missing ${field.slice(0, -1)}.`);
+    const agent = parseOpenAiAgentMetadata(readText(agentPath, errors, agentLabel), errors, agentLabel);
+    const skillInterface = agent?.interface;
+    for (const field of ['display_name', 'short_description', 'default_prompt']) {
+      if (typeof skillInterface?.[field] !== 'string' || !skillInterface[field].trim()) errors.push(`${agentLabel} interface.${field} must be a non-empty string.`);
     }
-    if (!agent.includes(`$${directory}`)) errors.push(`skills/${directory}/agents/openai.yaml default_prompt must reference $${directory}.`);
+    if (typeof skillInterface?.default_prompt === 'string' && !skillInterface.default_prompt.includes(`$${directory}`)) {
+      errors.push(`${agentLabel} interface.default_prompt must reference $${directory}.`);
+    }
     skills.push(name);
   }
   if (!skills.includes('rel-ai-workflow')) errors.push('Skill package must include rel-ai-workflow.');
@@ -130,6 +134,81 @@ function validateRelativePath(root, value, field, errors, directory) {
   }
   if (!fs.existsSync(target)) errors.push(`Plugin ${field} path does not exist: ${value}`);
   else if (directory && !fs.statSync(target).isDirectory()) errors.push(`Plugin ${field} must reference a directory.`);
+}
+
+function parseOpenAiAgentMetadata(source, errors, label) {
+  if (!source) return null;
+  const root = {};
+  let section = null;
+  const seenRoot = new Set();
+  const seenSection = new Set();
+  for (const [index, rawLine] of source.split('\n').entries()) {
+    if (!rawLine.trim() || rawLine.trimStart().startsWith('#')) continue;
+    if (rawLine.includes('\t')) {
+      errors.push(`${label} line ${index + 1} must use spaces, not tabs.`);
+      continue;
+    }
+    const indent = rawLine.length - rawLine.trimStart().length;
+    const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(rawLine.trim());
+    if (!match) {
+      errors.push(`${label} line ${index + 1} is not a supported YAML mapping entry.`);
+      continue;
+    }
+    const [, key, rawValue = ''] = match;
+    if (indent === 0) {
+      if (seenRoot.has(key)) errors.push(`${label} has duplicate root key '${key}'.`);
+      seenRoot.add(key);
+      if (rawValue.trim()) {
+        errors.push(`${label} root key '${key}' must contain a nested mapping.`);
+        section = null;
+        continue;
+      }
+      root[key] = {};
+      section = key;
+      seenSection.clear();
+      continue;
+    }
+    if (indent !== 2 || !section) {
+      errors.push(`${label} line ${index + 1} must be a two-space child of a root mapping.`);
+      continue;
+    }
+    if (seenSection.has(key)) errors.push(`${label} section '${section}' has duplicate key '${key}'.`);
+    seenSection.add(key);
+    root[section][key] = parseYamlScalar(rawValue, errors, `${label} line ${index + 1}`);
+  }
+  const rootKeys = Object.keys(root);
+  if (rootKeys.length !== 1 || rootKeys[0] !== 'interface') errors.push(`${label} must contain exactly one root mapping named interface.`);
+  const interfaceKeys = Object.keys(root.interface || {});
+  const allowedInterface = new Set(['display_name', 'short_description', 'default_prompt']);
+  for (const key of interfaceKeys) if (!allowedInterface.has(key)) errors.push(`${label} has unsupported interface field '${key}'.`);
+  return root;
+}
+
+function parseYamlScalar(rawValue, errors, label) {
+  const value = String(rawValue || '').trim();
+  if (!value) {
+    errors.push(`${label} requires a scalar value.`);
+    return '';
+  }
+  if (value.startsWith('"')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed !== 'string') throw new Error('quoted scalar is not a string');
+      return parsed;
+    } catch (error) {
+      errors.push(`${label} has invalid double-quoted YAML scalar: ${error.message}`);
+      return '';
+    }
+  }
+  if (value.startsWith("'")) {
+    if (!value.endsWith("'") || value.length < 2) {
+      errors.push(`${label} has an unterminated single-quoted YAML scalar.`);
+      return '';
+    }
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  const comment = value.search(/\s+#/);
+  return (comment >= 0 ? value.slice(0, comment) : value).trim();
 }
 
 function readJson(file, errors, label) {
