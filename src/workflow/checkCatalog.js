@@ -70,4 +70,4 @@ function selectChecksForPackages(catalog, packageIds, options = {}) {
     .filter(item => !allowedKinds || allowedKinds.has(item.kind));
 }
 
-export { buildCheckCatalog, selectChecksForPackages };
+export { buildCheckCatalog, classifyCheckKind, selectChecksForPackages };

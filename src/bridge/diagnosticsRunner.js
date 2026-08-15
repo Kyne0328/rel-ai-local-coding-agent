@@ -8,43 +8,66 @@ import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
+import { parallel, runPlan, sequence, step } from '../executionPlan.js';
+import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
 async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
   if (!commands.length) {
     return { ok: false, workspace: workspace.alias, commands: [], diagnostics: [], message: 'No diagnostic command was detected. Pass command or configure lint/typecheck/analyze/vet/clippy checks.' };
   }
   const timeout = clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 180000);
-  const results = [];
-  const diagnostics = [];
+  const indexedResults = new Array(commands.length);
+  const diagnosticsByIndex = new Array(commands.length);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
     context.signal
   );
-  publishDiagnosticsProgress(commands, results, '', 0, 'pending');
-  for (let index = 0; index < commands.length; index += 1) {
-    if (signal?.aborted) break;
-    const command = commands[index];
-    publishDiagnosticsProgress(commands, results, command, index + 1, 'running');
-    const result = await runSpan(config, 'relai.validation.diagnostics', {
-      'relai.workspace': workspace.alias,
-      'relai.diagnostics.command': command.slice(0, 300)
-    }, () => runProcess(command, [], {
-      cwd: workspace.path,
-      shell: true,
-      commandString: command,
-      timeout,
-      maxOutputBytes: Math.min(Number(args._transportMaxOutputBytes) || 8 * 1024 * 1024, 8 * 1024 * 1024),
-      signal
-    }, config));
-    const summary = summarizeCommand(result);
-    const parsed = parseDiagnostics(`${result.stdout || ''}\n${result.stderr || ''}`, command, workspace.path);
-    results.push({ command, ...summary, diagnostics: parsed.length });
-    diagnostics.push(...parsed);
-    publishDiagnosticsProgress(commands, results, command, index + 1, result.cancelled ? 'cancelled' : result.ok ? 'passed' : result.timedOut ? 'timed_out' : 'failed');
-    if (result.cancelled) break;
-    if (args.stopOnFailure !== false && result.exitCode !== 0) break;
-  }
+  const stopOnFailure = args.stopOnFailure !== false;
+  const units = commands.map(command => ({ command, scopeKey: 'repository' }));
+  const executionStages = buildCheckExecutionStages(units);
+  const visibleResults = () => indexedResults.filter(Boolean);
+
+  publishDiagnosticsProgress(commands, [], '', 0, 'pending');
+  const planStages = executionStages.map(stage => {
+    const nodes = stage.items.map(({ unit, index, policy }) => step(
+      `diagnostic ${index + 1}`,
+      async () => {
+        const command = unit.command;
+        publishDiagnosticsProgress(commands, visibleResults(), command, index + 1, 'running');
+        const result = await runSpan(config, 'relai.validation.diagnostics', {
+          'relai.workspace': workspace.alias,
+          'relai.diagnostics.command': command.slice(0, 300),
+          'relai.diagnostics.parallel_safe': policy.parallelSafe === true,
+          'relai.diagnostics.kind': policy.kind
+        }, () => runProcess(command, [], {
+          cwd: workspace.path,
+          shell: true,
+          commandString: command,
+          timeout,
+          maxOutputBytes: Math.min(Number(args._transportMaxOutputBytes) || 8 * 1024 * 1024, 8 * 1024 * 1024),
+          signal
+        }, config));
+        const summary = summarizeCommand(result);
+        const parsed = parseDiagnostics(`${result.stdout || ''}\n${result.stderr || ''}`, command, workspace.path);
+        const item = { command, ...summary, diagnostics: parsed.length };
+        indexedResults[index] = item;
+        diagnosticsByIndex[index] = parsed;
+        publishDiagnosticsProgress(commands, visibleResults(), command, index + 1, result.cancelled ? 'cancelled' : result.ok ? 'passed' : result.timedOut ? 'timed_out' : 'failed');
+        return item;
+      },
+      {
+        isSuccess: value => value?.ok === true,
+        metadata: { index, kind: policy.kind, parallelSafe: policy.parallelSafe, resourceKey: policy.resourceKey }
+      }
+    ));
+    return stage.parallel
+      ? parallel(nodes, { maxConcurrency: 3, stopOnFailure })
+      : sequence(nodes, { stopOnFailure });
+  });
+  const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
+  const results = visibleResults();
+  const diagnostics = diagnosticsByIndex.filter(Boolean).flat();
   const unique = deduplicateDiagnostics(diagnostics).slice(0, clampNumber(args.maxResults, 1, 5000, 500));
   const cancelled = signal?.aborted === true || results.some(item => item.cancelled === true);
   const ok = !cancelled && results.length === commands.length && results.every(item => item.ok);
@@ -58,6 +81,7 @@ async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
     diagnosticCount: diagnostics.length,
     completedUnits: results.filter(item => item.cancelled !== true).length,
     totalUnits: commands.length,
+    execution: execution.metrics,
     cancelled,
     truncated: diagnostics.length > unique.length
   };
