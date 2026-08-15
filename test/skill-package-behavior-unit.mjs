@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { validatePlugin } from '../scripts/validate-plugin.mjs';
+import { evaluateSkillBehavior } from '../scripts/evaluate-skill-behavior.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const expected = ['rel-ai-debugging', 'rel-ai-dev-process', 'rel-ai-investigation', 'rel-ai-planning', 'rel-ai-verification', 'rel-ai-workflow'];
@@ -91,12 +92,28 @@ for (const item of prompts) {
   if (item.skills.length) {
     assert.equal(item.skills[0], 'rel-ai-workflow');
     assert.equal(item.firstTool, 'relai_work');
+    assert.equal(item.firstAction, 'begin');
   } else {
     assert.equal(item.firstTool, null);
+    assert.equal(item.firstAction, null);
   }
 }
 
-console.log('Modular skill package, routing boundaries, negative triggers, and prompt contracts passed.');
+const recordedBaseline = prompts.map(item => ({
+  id: item.id,
+  prompt: item.prompt,
+  skills: item.skills,
+  firstTool: item.firstTool,
+  firstAction: item.firstAction,
+  tools: item.firstTool ? [item.firstTool] : []
+}));
+assert.equal(evaluateSkillBehavior(prompts, recordedBaseline).ok, true, 'skill behavior corpus must be executable by the provider-agnostic evaluator');
+const pressureIndex = prompts.findIndex(item => item.scenario === 'pressure');
+const overInvoked = structuredClone(recordedBaseline);
+overInvoked[pressureIndex].skills = expected;
+assert.equal(evaluateSkillBehavior(prompts, overInvoked).ok, false, 'skill release gate must reject pressure-driven specialist over-invocation');
+
+console.log('Modular skill package, routing boundaries, negative triggers, and executable behavior-eval contracts passed.');
 
 function read(relative) {
   return fs.readFileSync(path.join(root, relative), 'utf8').replaceAll('\r\n', '\n');
