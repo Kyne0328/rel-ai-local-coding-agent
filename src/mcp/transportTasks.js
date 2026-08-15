@@ -51,6 +51,10 @@ import { principalIdentity } from './principal.js';
 import { MCP_SERVER_INFO } from '../mcpServer.js';
 
 const TRANSPORT_CLEANUP_GRACE_MS = 5000;
+const TRANSPORT_TOOL_VALIDATORS = new Map(getToolSchemas().map(tool => [
+  tool.name,
+  fromJsonSchema(tool.inputSchema)['~standard']
+]));
 
 async function handleTransportTaskRequest(config, message, options = {}) {
   if (!isTransportTaskRequestCandidate(config, message)) return null;
@@ -215,10 +219,7 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
   }
 
   if (!started.reused && graceMs > 0) {
-    const settled = await Promise.race([
-      started.record.promise.then(value => ({ kind: 'settled', value })),
-      new Promise(resolve => setTimeout(() => resolve({ kind: 'pending' }), graceMs))
-    ]);
+    const settled = await waitForFallbackGrace(started.record.promise, graceMs);
     if (settled.kind === 'settled') {
       if (settled.value.ok) return successResponse(message.id, settled.value.result);
       return successResponse(message.id, toolResult({
@@ -238,6 +239,21 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
     message: `${name} is still running safely after this request returns.`,
     nextAction: `Call relai_work with action "status" and work_id "${workId}" to get the result.`
   }, false));
+}
+
+async function waitForFallbackGrace(execution, graceMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      execution.then(value => ({ kind: 'settled', value })),
+      new Promise(resolve => {
+        timer = setTimeout(() => resolve({ kind: 'pending' }), graceMs);
+        timer.unref?.();
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function handleTaskProtocolRequest(config, message, principal, capabilities) {
@@ -340,9 +356,9 @@ async function executeToolResult(config, name, args, options = {}) {
 async function validateToolArguments(config, name, value) {
   const args = value == null ? {} : value;
   if (!isPlainObject(args)) return { ok: false, error: `Invalid arguments for tool ${name}: arguments must be an object.` };
-  const schema = getToolSchemas(config).find(item => item.name === name)?.inputSchema;
-  if (!schema) return { ok: false, error: `Tool ${name} not found.` };
-  const result = await fromJsonSchema(schema)['~standard'].validate(args);
+  const validator = TRANSPORT_TOOL_VALIDATORS.get(name);
+  if (!validator) return { ok: false, error: `Tool ${name} not found.` };
+  const result = await validator.validate(args);
   if (result.issues) {
     return {
       ok: false,

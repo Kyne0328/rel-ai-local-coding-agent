@@ -32,9 +32,9 @@ const OPEN_WORLD_TOOLS = new Set([
   OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.UI,
   OP.VALIDATE_DIAGNOSTICS, OP.VALIDATE_CHECKS, OP.PUBLISH_PUSH
 ]);
-// These operations may use Native MCP Tasks only when the connected client explicitly
-// negotiates the Tasks capability. Clients without that capability use the same current
-// operations synchronously; no legacy operation names or fallback routes are retained.
+// These operations use Native MCP Tasks when the connected client explicitly negotiates
+// the Tasks capability. Clients without it keep the same public operations, but long work
+// can continue under work_id after the tool response returns; no legacy operation names are retained.
 /** @type {Set<string>} */
 const NATIVE_TASK_ELIGIBLE_TOOLS = new Set([
   OP.EXEC,
@@ -115,7 +115,7 @@ const PUBLIC_TOOL_VALUES = [
   {
     name: 'relai_work',
     title: 'Manage Repository Work',
-    description: 'Use when starting, inspecting, finishing, or cancelling one logical repository task. Do not use for file inspection or mutation itself.',
+    description: 'Use when starting, inspecting, finishing, or cancelling one logical repository task. Status also returns any long operation that continued after its connector request ended. Do not use for file inspection or mutation itself.',
     annotations: annotations(false, false, false, false),
     behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
     dashboard: { category: 'Workflow', capabilities: ['workflow'] }
@@ -145,7 +145,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_exec', title: 'Run Command',
-    description: 'Use for bounded one-shot workspace commands. Do not use for persistent services or watchers; prefer executable + argv and use command only when command-line syntax is required.',
+    description: 'Use for bounded one-shot workspace commands. If a long command outlives the connector request, it continues under work_id and relai_work status returns its result. Do not use for persistent services or watchers; prefer executable + argv and use command only when command-line syntax is required.',
     dashboard: { capabilities: ['execute'] }
   },
   {
@@ -161,7 +161,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_validate', title: 'Validate Repository',
-    description: 'Use for explicit checks, diagnostics, or HTTP validation. Do not rerun unchanged authoritative checks without a new mutation or reason.',
+    description: 'Use for explicit checks, diagnostics, or HTTP validation. If long checks outlive the connector request, they continue under work_id and relai_work status returns the result. Do not rerun unchanged authoritative checks without a new mutation or reason.',
     annotations: annotations(false, true, false, true), behavior: { longRunning: true },
     dashboard: { capabilities: ['validate'] }
   },
