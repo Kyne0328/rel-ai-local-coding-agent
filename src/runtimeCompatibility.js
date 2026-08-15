@@ -191,17 +191,6 @@ function runtimeCompatibility(config, options = {}) {
   };
 }
 
-function assertRuntimeCompatibility(config, toolName, args = {}, options = {}) {
-  // Runtime/repository drift is expected while Rel.AI edits its own checkout.
-  // Keep this comparison observable, but never let it revoke the tool surface
-  // that is needed to finish or repair the in-progress change.
-  return runtimeCompatibility(config, {
-    workspace: args.workspace,
-    activeTaskCount: options.activeTaskCount
-  });
-}
-
-
 function normalizeMetadata(value) {
   return {
     ...value,
@@ -239,4 +228,4 @@ function versionParts(value) {
 }
 
 
-export {  assessRuntimeCompatibility, assertRuntimeCompatibility, readRepositoryMetadata,  runtimeCompatibility, runtimeMetadata,  };
+export { assessRuntimeCompatibility, readRepositoryMetadata, runtimeCompatibility, runtimeMetadata };

@@ -24,7 +24,7 @@ try {
   git(['add', '.']);
   git(['commit', '-qm', 'base']);
 
-  await writeSessionPolicy(config, workspace.alias, { workspaceRoot: root });
+  await writeSessionPolicy(config, workspace.alias, { workspaceRoot: root, taskId: 'task-status' });
   fs.appendFileSync(path.join(root, 'space file.txt'), 'space changed\n');
   fs.appendFileSync(path.join(root, 'café.txt'), 'unicode changed\n');
   git(['mv', 'old name.txt', 'new café name.txt']);

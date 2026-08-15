@@ -5,7 +5,7 @@ Rel.AI MCP separates runtime dependency security from release-tool dependency se
 ## Required gates
 
 - `npm run audit:production` must pass with no high-severity production vulnerabilities in either package.
-- `npm run audit:packaging` is a blocking, fail-closed Electron build-tool audit with only the repository's documented temporary exception policy.
+- `npm run audit:packaging` is a blocking Electron build-tool audit; every high- or critical-severity finding fails publication.
 - Every packaged build must pass layout verification, packaged MCP acceptance, and Electron fuse verification.
 - Release artifacts are generated from a clean output directory.
 - Published Windows builds currently disable certificate auto-discovery and remain unsigned until a trusted Windows code-signing certificate is configured.
@@ -28,19 +28,13 @@ A malware or Trojan classification on any exact release candidate remains a publ
 
 See [ANTIVIRUS_FALSE_POSITIVES.md](ANTIVIRUS_FALSE_POSITIVES.md) for the release decision and submission procedure.
 
-## Known electron-builder v26 advisory cluster
-
-The release toolchain pins electron-builder 26.15.3. Its lockfile currently has a documented, expiry-bound build-tool advisory exception. `scripts/packaging-audit-policy.json` restricts that exception by advisory, package set, dependency role, and expiration date. A new advisory, new package, critical finding, runtime-reachable node, malformed policy, or expired policy fails publication.
-
-Production dependency audits remain separate and must report zero high-severity findings.
-
 ## Release controls
 
 The release pipeline relies on:
 
 - trusted repository inputs and lockfile-based dependency installation;
 - clean artifact directories;
-- an expiry-bound build-tool audit exception;
+- a fail-closed build-tool dependency audit with no advisory allowlist;
 - pinned OpenAI tunnel-client provenance and packaged hash verification;
 - hardened Electron fuses;
 - packaged-layout and bearer-authenticated MCP acceptance;

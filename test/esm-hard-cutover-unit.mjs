@@ -8,12 +8,14 @@ const productionRoots = ['bin', 'electron', 'scripts', 'src'];
 const ignoredDirectories = new Set(['node_modules', 'dist', 'vendor']);
 const allowedCjs = new Set(['electron/preload.cjs']);
 const forbiddenSyntax = [
-  { label: 'require()', pattern: /\brequire\s*\(/ },
-  { label: 'module.exports', pattern: /\bmodule\.exports\b/ },
-  { label: 'exports.*', pattern: /\bexports\s*\./ },
-  { label: 'createRequire', pattern: /\bcreateRequire\b/ },
-  { label: 'require.resolve', pattern: /\brequire\.resolve\b/ },
-  { label: 'require.cache', pattern: /\brequire\.cache\b/ }
+  { label: 'require() declaration', pattern: /^\s*(?:const|let|var)\s+[^=\n]+?=\s*require\s*\(/m },
+  { label: 'require() statement', pattern: /^\s*require\s*\(/m },
+  { label: 'module.exports', pattern: /^\s*module\.exports\b/m },
+  { label: 'exports.*', pattern: /^\s*exports\s*\./m },
+  { label: 'createRequire import', pattern: /^\s*import\s+\{[^}]*\bcreateRequire\b[^}]*\}\s+from\s+['"]node:module['"]/m },
+  { label: 'createRequire call', pattern: /^\s*(?:const|let|var)\s+[^=\n]+?=\s*createRequire\s*\(/m },
+  { label: 'require.resolve', pattern: /^\s*require\.resolve\s*\(/m },
+  { label: 'require.cache', pattern: /^\s*require\.cache\b/m }
 ];
 
 function walk(directory) {

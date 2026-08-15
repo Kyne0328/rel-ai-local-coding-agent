@@ -14,10 +14,9 @@ assert.match(transportSource, /async function observeRequestManifest\s*\(/, 'man
 assert.match(transportSource, /function runMcpRequestSpan\s*\(/, 'request telemetry must remain shared');
 assert.equal((transportSource.match(/getCoreNodeHandler\(\)\(ctx\.req, ctx\.res, message\)/g) || []).length, 2, 'modern and legacy SDK dispatch must each remain explicit');
 
-assert.match(policy, /Modern protocol:\s*`2026-07-28`/);
-assert.match(policy, /Legacy HTTP compatibility:\s*`2025-11-25`/);
-assert.match(policy, /chatgpt-local-compat-smoke\.mjs/);
-assert.match(policy, /mcp-stdio-legacy-rejection\.mjs/);
+assert.match(policy, /Modern MCP protocol:\s*`2026-07-28`/);
+assert.match(policy, /Stateless ChatGPT HTTP compatibility:\s*`2025-11-25`/);
+assert.match(policy, /stdio tests verify that stdio remains modern-only/i);
 assert.match(policy, /Removal condition:/);
 
 console.log('Legacy MCP compatibility is isolated behind one named adapter with shared security and observability boundaries.');
