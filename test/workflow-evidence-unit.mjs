@@ -29,10 +29,9 @@ assert.equal(checkEvidenceReusable(receipt, { commandId: 'npm:front-end:test', c
 
 const failures = [
   buildWorkflowEvidenceReceipt({ tool: 'relai_exec', args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry, repositoryFingerprint: 'x', commandId: 'npm:front-end:test' }),
-  buildWorkflowEvidenceReceipt({ tool: 'relai_exec', args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry, repositoryFingerprint: 'x', commandId: 'npm:front-end:test' })
+  buildWorkflowEvidenceReceipt({ tool: 'relai_exec', args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry: { ...auditEntry, taskMutationGeneration: 4 }, repositoryFingerprint: 'y', commandId: 'npm:front-end:test' })
 ];
-assert.equal(repeatFailureCount(failures, 3), 2);
-assert.equal(repeatFailureCount(failures, 4), 0, 'mutation generation resets retry epoch');
+assert.equal(repeatFailureCount(failures), 2, 'the same failure family must survive mutation-generation boundaries');
 
 const reviewReceipt = buildWorkflowEvidenceReceipt({
   tool: 'relai_changes',
@@ -44,4 +43,20 @@ const reviewReceipt = buildWorkflowEvidenceReceipt({
 assert.equal(reviewReceipt.kind, 'review');
 assert.equal(reviewReceipt.metadata.reviewHash, 'abc123');
 assert.equal(reviewReceipt.metadata.reviewScope, 'task');
+
+const uiReceipt = buildWorkflowEvidenceReceipt({
+  tool: 'relai_ui',
+  args: { action: 'console' },
+  result: { ok: true, action: 'console', sessionId: 'ui-1', route: '/settings', consoleErrorCount: 2, networkFailureCount: 1, evidenceId: 'shot-1' },
+  auditEntry,
+  repositoryFingerprint: 'fingerprint-a'
+});
+assert.equal(uiReceipt.kind, 'ui');
+assert.equal(uiReceipt.metadata.uiAction, 'console');
+assert.equal(uiReceipt.metadata.sessionId, 'ui-1');
+assert.equal(uiReceipt.metadata.route, '/settings');
+assert.equal(uiReceipt.metadata.consoleErrorCount, 2);
+assert.equal(uiReceipt.metadata.networkFailureCount, 1);
+assert.equal(uiReceipt.metadata.evidenceId, 'shot-1');
+
 console.log('Safe workflow evidence receipt and reuse tests passed.');

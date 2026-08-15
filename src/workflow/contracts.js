@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 
 const WORKFLOW_STAGES = Object.freeze(['understand', 'investigate', 'design', 'implement', 'verify', 'review', 'repair', 'complete', 'blocked']);
-const WORKFLOW_INTENTS = Object.freeze(['auto', 'investigation', 'bugfix', 'feature', 'refactor', 'migration', 'documentation', 'review', 'release']);
+const WORKFLOW_INTENTS = Object.freeze(['auto', 'investigation', 'bugfix', 'feature', 'refactor', 'migration', 'cleanup', 'documentation', 'performance', 'review', 'release', 'other']);
 const RISK_LEVELS = Object.freeze(['low', 'medium', 'high', 'critical']);
 const BOUNDARY_LEVELS = Object.freeze(['file', 'package', 'cross_package', 'repository', 'release']);
 const MAX_RECOMMENDED_ACTIONS = 5;
