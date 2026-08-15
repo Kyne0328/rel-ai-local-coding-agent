@@ -9,8 +9,10 @@ import { combineAbortSignals } from '../abortSignals.js';
 import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { parallel, runPlan, sequence, step } from '../executionPlan.js';
-import { createExecutionPlanObserver, recordExecutionPlanMetrics } from '../executionObservability.js';
+import { recordExecutionPlanMetrics } from '../executionObservability.js';
 import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
+import { buildCheckCatalog } from '../workflow/checkCatalog.js';
+import { discoverRepositoryTopology } from '../workflow/topology.js';
 async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
   if (!commands.length) {
@@ -25,36 +27,46 @@ async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
     context.signal
   );
   const stopOnFailure = args.stopOnFailure !== false;
-  const units = commands.map(command => ({ command, scopeKey: 'repository' }));
+  const catalog = buildCheckCatalog(discoverRepositoryTopology(workspace.path));
+  const units = commands.map(command => catalog.find(item => item.command === command) || { command, scopeKey: 'repository' });
   const executionStages = buildCheckExecutionStages(units);
   const visibleResults = () => indexedResults.filter(Boolean);
+  const activeDiagnostics = new Map();
+  const activeDiagnosticNames = () => [...activeDiagnostics.values()];
 
-  publishDiagnosticsProgress(commands, [], '', 0, 'pending');
+  publishDiagnosticsProgress(commands, [], '', 0, 'pending', false, []);
   const planStages = executionStages.map(stage => {
     const nodes = stage.items.map(({ unit, index, policy }) => step(
       `diagnostic ${index + 1}`,
       async () => {
         const command = unit.command;
-        publishDiagnosticsProgress(commands, visibleResults(), command, index + 1, 'running');
-        const result = await runSpan(config, 'relai.validation.diagnostics', {
+        const displayCommand = sanitizeDisplayText(command, 120) || `Diagnostic ${index + 1}`;
+        activeDiagnostics.set(index, displayCommand);
+        publishDiagnosticsProgress(commands, visibleResults(), command, index + 1, 'running', false, activeDiagnosticNames());
+        let result;
+        try {
+          result = await runSpan(config, 'relai.validation.diagnostics', {
           'relai.workspace': workspace.alias,
           'relai.diagnostics.command': command.slice(0, 300),
           'relai.diagnostics.parallel_safe': policy.parallelSafe === true,
           'relai.diagnostics.kind': policy.kind
         }, () => runProcess(command, [], {
-          cwd: workspace.path,
+          cwd: path.resolve(workspace.path, unit.cwd || '.'),
           shell: true,
           commandString: command,
           timeout,
           maxOutputBytes: Math.min(Number(args._transportMaxOutputBytes) || 8 * 1024 * 1024, 8 * 1024 * 1024),
           signal
         }, config));
+        } finally {
+          activeDiagnostics.delete(index);
+        }
         const summary = summarizeCommand(result);
         const parsed = parseDiagnostics(`${result.stdout || ''}\n${result.stderr || ''}`, command, workspace.path);
         const item = { command, ...summary, diagnostics: parsed.length };
         indexedResults[index] = item;
         diagnosticsByIndex[index] = parsed;
-        publishDiagnosticsProgress(commands, visibleResults(), command, index + 1, result.cancelled ? 'cancelled' : result.ok ? 'passed' : result.timedOut ? 'timed_out' : 'failed');
+        publishDiagnosticsProgress(commands, visibleResults(), command, index + 1, result.cancelled ? 'cancelled' : result.ok ? 'passed' : result.timedOut ? 'timed_out' : 'failed', false, activeDiagnosticNames());
         return item;
       },
       {
@@ -72,22 +84,14 @@ async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
       ? parallel(nodes, { maxConcurrency: 3, stopOnFailure })
       : sequence(nodes, { stopOnFailure });
   });
-  const execution = await runPlan(sequence(planStages, { stopOnFailure }), {
-    signal,
-    onEvent: createExecutionPlanObserver({
-      source: 'diagnostics',
-      title: 'Running repository diagnostics',
-      noun: 'diagnostics',
-      category: 'validation'
-    })
-  });
+  const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
   recordExecutionPlanMetrics('diagnostics', execution.metrics);
   const results = visibleResults();
   const diagnostics = diagnosticsByIndex.filter(Boolean).flat();
   const unique = deduplicateDiagnostics(diagnostics).slice(0, clampNumber(args.maxResults, 1, 5000, 500));
   const cancelled = signal?.aborted === true || results.some(item => item.cancelled === true);
   const ok = !cancelled && results.length === commands.length && results.every(item => item.ok);
-  publishDiagnosticsProgress(commands, results, results.at(-1)?.command || '', Math.min(results.length, commands.length), cancelled ? 'cancelled' : ok ? 'passed' : 'failed', true);
+  publishDiagnosticsProgress(commands, results, results.at(-1)?.command || '', Math.min(results.length, commands.length), cancelled ? 'cancelled' : ok ? 'passed' : 'failed', true, []);
   return {
     ok,
     workspace: workspace.alias,
@@ -103,25 +107,37 @@ async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
   };
 }
 
-function publishDiagnosticsProgress(commands, results, currentCommand, currentIndex, resultStatus, final = false) {
+function publishDiagnosticsProgress(commands, results, currentCommand, currentIndex, resultStatus, final = false, activeCommands = []) {
   const total = commands.length;
   const completed = results.filter(item => item.cancelled !== true).length;
   const current = sanitizeDisplayText(currentCommand, 300);
   const failed = results.filter(item => !item.ok && !item.cancelled).length;
+  const running = [...new Set(activeCommands.map(value => sanitizeDisplayText(value, 120)).filter(Boolean))].slice(0, 3);
+  const active = running.length;
+  const pending = Math.max(0, total - completed - active);
   const stage = resultStatus === 'cancelled'
     ? 'Diagnostics cancelled'
     : resultStatus === 'failed' || resultStatus === 'timed_out'
       ? 'Diagnostics failed'
       : final && resultStatus === 'passed'
         ? 'Diagnostics completed'
-        : currentIndex > 0
-          ? `Running diagnostic ${currentIndex} of ${total}`
-          : 'Preparing diagnostics';
+        : active > 1
+          ? `${active} diagnostics running in parallel`
+          : active === 1
+            ? 'Running diagnostic'
+            : currentIndex > 0
+              ? `Running diagnostic ${currentIndex} of ${total}`
+              : 'Preparing diagnostics';
+  const activity = active > 1
+    ? `${active} diagnostics running: ${running.join(', ')}`
+    : active === 1
+      ? `Running ${running[0]}`
+      : current || `${completed} of ${total} diagnostics completed`;
   updateCurrentToolActivity({
     status: 'validating',
     operation: currentIndex > 0 ? `Running diagnostic ${currentIndex}/${total}: ${current || 'check'}` : `Preparing ${total} diagnostic commands`,
     currentStage: stage,
-    currentActivity: current || `${completed} of ${total} diagnostics completed`,
+    currentActivity: activity,
     progress: {
       mode: 'determinate',
       completedUnits: completed,
@@ -134,7 +150,7 @@ function publishDiagnosticsProgress(commands, results, currentCommand, currentIn
       category: 'validation',
       status: 'running',
       title: 'Run normalized diagnostics',
-      summary: current || `${completed} of ${total} diagnostics completed`,
+      summary: activity,
       metadata: {
         checkCount: total,
         passedCount: results.filter(item => item.ok).length,
@@ -142,7 +158,11 @@ function publishDiagnosticsProgress(commands, results, currentCommand, currentIn
         currentCheck: current,
         currentIndex,
         resultStatus,
-        cancelled: resultStatus === 'cancelled'
+        cancelled: resultStatus === 'cancelled',
+        parallelActiveCount: active,
+        completedCount: completed,
+        pendingCount: pending,
+        running
       }
     }
   });

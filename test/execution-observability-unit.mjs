@@ -31,19 +31,19 @@ assert.deepEqual(latest.activity.metadata.running, ['Typecheck']);
 const attributes = executionMetricAttributes('validation', {
   stepCount: 4,
   parallelGroupCount: 1,
-  maxParallelism: 3,
+  maxConcurrentSteps: 3,
   wallTimeMs: 120,
   accumulatedStepTimeMs: 290,
-  parallelTimeSavedMs: 170
+  overlapTimeMs: 170
 });
 assert.deepEqual(attributes, {
   'relai.plan.kind': 'validation',
   'relai.plan.total_steps': 4,
   'relai.plan.parallel_groups': 1,
-  'relai.plan.max_parallelism': 3,
+  'relai.plan.max_concurrent_steps': 3,
   'relai.plan.wall_time_ms': 120,
   'relai.plan.accumulated_step_time_ms': 290,
-  'relai.plan.parallel_time_saved_ms': 170
+  'relai.plan.overlap_time_ms': 170
 });
 
 console.log('Execution observability tests passed.');

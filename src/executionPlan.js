@@ -52,8 +52,8 @@ async function runPlan(plan, options = {}) {
     metrics: {
       wallTimeMs: round(wallTimeMs),
       accumulatedStepTimeMs: round(state.stepDurationMs),
-      parallelTimeSavedMs: round(Math.max(0, state.stepDurationMs - wallTimeMs)),
-      maxParallelism: state.maxActive,
+      overlapTimeMs: round(Math.max(0, state.stepDurationMs - wallTimeMs)),
+      maxConcurrentSteps: state.maxActive,
       stepCount: state.total,
       parallelGroupCount: countGroups(plan, 'parallel'),
       completedStepCount: state.completed,

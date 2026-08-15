@@ -1,28 +1,54 @@
 import { updateCurrentToolActivity } from '../toolActivity.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 
-function publishValidationProgress({ checks, skippedChecks = [], results, currentCheck = '', currentIndex = 0, resultStatus = 'pending', final = false }) {
+function publishValidationProgress({
+  checks,
+  skippedChecks = [],
+  results,
+  currentCheck = '',
+  currentIndex = 0,
+  resultStatus = 'pending',
+  final = false,
+  activeChecks = []
+}) {
   const total = checks.length;
   const completed = Math.min(completedValidationUnits(results), total);
   const passed = results.filter(item => item.ok).length;
   const failed = results.filter(item => !item.ok && !item.cancelled).length;
   const cancelled = results.some(item => item.cancelled === true) || resultStatus === 'cancelled';
   const current = sanitizeDisplayText(currentCheck, 300);
+  const running = [...new Set(activeChecks.map(value => sanitizeDisplayText(value, 120)).filter(Boolean))].slice(0, 3);
+  const active = running.length;
+  const pending = Math.max(0, total - completed - active);
   const stage = resultStatus === 'cancelled'
     ? 'Validation cancelled'
     : resultStatus === 'failed' || resultStatus === 'timed_out'
       ? 'Validation failed'
       : final && resultStatus === 'passed'
         ? 'Validation completed'
-        : currentIndex > 0
-          ? `Validating check ${currentIndex} of ${total}`
-          : 'Preparing validation';
-  const activity = current
-    ? `${current}${resultStatus && resultStatus !== 'pending' ? ` - ${resultStatus.replaceAll('_', ' ')}` : ''}`
-    : `${completed} of ${total} checks completed`;
+        : active > 1
+          ? `${active} checks running in parallel`
+          : active === 1
+            ? 'Running validation check'
+            : currentIndex > 0
+              ? `Validating check ${currentIndex} of ${total}`
+              : 'Preparing validation';
+  const activity = active > 1
+    ? `${active} checks running: ${running.join(', ')}`
+    : active === 1
+      ? `Running ${running[0]}`
+      : current
+        ? `${current}${resultStatus && resultStatus !== 'pending' ? ` - ${resultStatus.replaceAll('_', ' ')}` : ''}`
+        : `${completed} of ${total} checks completed`;
   updateCurrentToolActivity({
     status: 'validating',
-    operation: currentIndex > 0 ? `Running validation ${currentIndex}/${total}: ${current || 'check'}` : `Preparing ${total} validation checks`,
+    operation: active > 1
+      ? `Running ${active} validation checks in parallel`
+      : active === 1
+        ? `Running validation: ${running[0]}`
+        : currentIndex > 0
+          ? `Validation ${currentIndex}/${total}: ${current || 'check'}`
+          : `Preparing ${total} validation checks`,
     detail: activity,
     currentStage: stage,
     currentActivity: activity,
@@ -48,7 +74,11 @@ function publishValidationProgress({ checks, skippedChecks = [], results, curren
         currentIndex,
         resultStatus,
         failedCheck: failed ? current : '',
-        cancelled
+        cancelled,
+        parallelActiveCount: active,
+        completedCount: completed,
+        pendingCount: pending,
+        running
       }
     }
   });

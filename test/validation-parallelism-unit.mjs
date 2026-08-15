@@ -34,9 +34,9 @@ try {
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.results.map(item => item.command), [lint.command, typecheck.command, build.command]);
-  assert.equal(result.execution.maxParallelism, 2, 'lint and typecheck should overlap while build remains a serial barrier');
+  assert.equal(result.execution.maxConcurrentSteps, 2, 'lint and typecheck should overlap while build remains a serial barrier');
   assert.equal(result.execution.stepCount, 3);
-  assert.ok(result.execution.parallelTimeSavedMs > 0, 'parallel validation should report saved wall time');
+  assert.ok(result.execution.overlapTimeMs > 0, 'parallel validation should report measured step overlap');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

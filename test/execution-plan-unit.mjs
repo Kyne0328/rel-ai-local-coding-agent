@@ -21,9 +21,9 @@ const parallelWallMs = performance.now() - started;
 assert.equal(parallelResult.ok, true);
 assert.deepEqual(parallelResult.results.map(item => item.value), [0, 1, 2, 3]);
 assert.equal(observedMax, 2, 'bounded execution should never exceed configured concurrency');
-assert.equal(parallelResult.metrics.maxParallelism, 2);
+assert.equal(parallelResult.metrics.maxConcurrentSteps, 2);
 assert.equal(parallelResult.metrics.parallelGroupCount, 1);
-assert.ok(parallelResult.metrics.parallelTimeSavedMs > 50, `expected useful overlap, got ${parallelResult.metrics.parallelTimeSavedMs}ms saved`);
+assert.ok(parallelResult.metrics.overlapTimeMs > 50, `expected measurable step overlap, got ${parallelResult.metrics.overlapTimeMs}ms`);
 assert.ok(parallelWallMs < 260, `four 70ms steps at concurrency 2 should overlap, got ${parallelWallMs}ms`);
 
 const sequenceStarted = performance.now();

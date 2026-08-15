@@ -10,11 +10,6 @@ import { runEnvOperation } from "./envOperations.js";
 import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES, BATCH_RESULT_COMPACT_THRESHOLD } from "./editLimits.js";
 import { classifyWorkflowRisk } from "./workflow/risk.js";
 import { discoverRepositoryTopology, packageForPath } from "./workflow/topology.js";
-import { createValidationPlan } from "./bridge/validationPlan.js";
-import { normalizeVerifyChecks } from "./bridge/validationChecks.js";
-import { checkExecutionPolicy } from "./workflow/checkExecution.js";
-import { parallel, runPlan, step } from "./executionPlan.js";
-import { createExecutionPlanObserver, recordExecutionPlanMetrics } from "./executionObservability.js";
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -188,8 +183,9 @@ function postActionRecommendation(workspace, changedFiles = []) {
   };
 }
 // Optional post-actions: validate and/or return a diff in the SAME call, so a
-// change-verify-review loop costs one approval instead of three. Diff may overlap
-// validation only when the selected validation plan contains known read-only checks.
+// change-verify-review loop costs one approval instead of three. When both are
+// requested, validation always finishes before diff capture so the returned diff
+// describes the final workspace even if a check creates or rewrites files.
 async function runPostActions(workspace, config, args, changedFiles = []) {
   const post = {};
   const wantsChecks = args.runChecks === true && !args.dryRun;
@@ -214,42 +210,13 @@ async function runPostActions(workspace, config, args, changedFiles = []) {
   };
 
   if (wantsChecks && wantsDiff) {
-    let prepared = null;
-    try {
-      prepared = await preparePostValidation(workspace, config, args, changedFiles);
-    } catch {}
-    if (prepared?.parallelSafe === true) {
-      const execution = await runPlan(parallel([
-        step('post-validation', () => runChecks({ planId: prepared.planId, planLevel: prepared.planSelection }), { metadata: { displayName: 'Validation' } }),
-        step('post-diff', runDiff, { metadata: { displayName: 'Diff review' } })
-      ], { maxConcurrency: 2, stopOnFailure: false }), {
-        onEvent: createExecutionPlanObserver({
-          source: 'edit-post-actions',
-          title: 'Finishing edit',
-          noun: 'post-actions',
-          category: 'edit'
-        })
-      });
-      recordExecutionPlanMetrics('edit-post-actions', execution.metrics);
-      post.checks = execution.results[0]?.value;
-      post.diff = execution.results[1]?.value;
-      post.execution = {
-        ...execution.metrics,
-        mode: 'parallel',
-        reason: 'Selected validation checks are known read-only, so validation and diff can overlap safely.'
-      };
-      return post;
-    }
-
-    post.checks = await runChecks(prepared ? { planId: prepared.planId, planLevel: prepared.planSelection } : {});
+    post.checks = await runChecks();
     post.diff = await runDiff();
     post.execution = {
       mode: 'serial',
-      maxParallelism: 1,
+      maxConcurrentSteps: 1,
       stepCount: 2,
-      reason: prepared
-        ? 'Validation includes a build, unknown, or mutation-capable check, so diff waits for validation.'
-        : 'Validation could not be safely preplanned, so post-actions remain serial.'
+      reason: 'Diff capture waits for validation so it always reflects validation side effects and the final workspace state.'
     };
     return post;
   }
@@ -259,26 +226,6 @@ async function runPostActions(workspace, config, args, changedFiles = []) {
   return post;
 }
 
-async function preparePostValidation(workspace, config, args, changedFiles) {
-  const plan = await createValidationPlan(workspace, config, {
-    release: String(args.level || '').toLowerCase() === 'release',
-    ...(Array.isArray(changedFiles) && changedFiles.length ? { changedFiles } : {})
-  });
-  const planSelection = String(args.level || plan.recommended || 'focused').toLowerCase();
-  const plannedChecks = plan.checks?.[planSelection];
-  if (!Array.isArray(plannedChecks)) throw new Error(`Validation plan has no '${planSelection}' check set.`);
-  const normalized = normalizeVerifyChecks(
-    { checks: plannedChecks },
-    workspace.path,
-    planSelection === 'focused' ? 'quick' : planSelection
-  );
-  return {
-    planId: plan.planId,
-    planSelection,
-    parallelSafe: normalized.checkUnits.length > 0
-      && normalized.checkUnits.every(unit => checkExecutionPolicy(unit).parallelSafe)
-  };
-}
 
 function attachPost(result, post) {
   if (post.checks) result.checks = post.checks;
