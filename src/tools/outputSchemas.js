@@ -97,6 +97,8 @@ const FIELD_SCHEMAS = Object.freeze({
   refused: ARRAY,
   skipped: ARRAY,
   changedFiles: STRING_ARRAY,
+  residualChangedFiles: STRING_ARRAY,
+  residualState: STRING,
   dryRun: BOOLEAN,
   addAll: BOOLEAN,
   add: OBJECT,
@@ -165,6 +167,7 @@ const FIELD_SCHEMAS = Object.freeze({
   validationLevel: STRING,
   validationLevelReason: STRING,
   validationFingerprint: STRING,
+  validationScope: STRING_ARRAY,
   validationAt: STRING_NULL,
   completionKnown: BOOLEAN,
   completionSource: STRING,
@@ -356,7 +359,7 @@ const TOOL_FIELDS = Object.freeze({
   [OP.VALIDATE_DIAGNOSTICS]: ['ok', 'workspace', 'work_id', 'commands', 'results', 'diagnostics', 'diagnosticCount', 'completedUnits', 'totalUnits', 'execution', 'cancelled', 'truncated', 'message'],
   [OP.CHANGES_TIDY_PLAN]: ['ok', 'workspace', 'work_id', 'operation', 'mode', 'planId', 'expiresAt', 'ttlSeconds', 'candidateCount', 'skippedCount', 'candidates', 'skipped', 'reason', 'message', 'next'],
   [OP.CHANGES_TIDY_RUN]: ['ok', 'workspace', 'work_id', 'operation', 'planId', 'changed', 'changedFiles', 'appliedCount', 'applied', 'refused', 'message'],
-  [OP.VALIDATE_CHECKS]: ['ok', 'workspace', 'work_id', 'duplicate', 'level', 'checks', 'commands', 'results', 'skippedChecks', 'completedUnits', 'executedUnits', 'reusedUnits', 'reusedChecks', 'totalUnits', 'execution', 'failedCheck', 'cancelled', 'summary', 'validated', 'validationStatus', 'validationLevel', 'validationLevelReason', 'validationFingerprint', 'validationAt', 'completionKnown', 'completionSource', 'endReason', 'planId', 'planSelection', 'planCreatedAt', 'fullOutput', 'changedFiles', 'aliasNormalizations', 'policy', 'message', 'nextAction'],
+  [OP.VALIDATE_CHECKS]: ['ok', 'workspace', 'work_id', 'duplicate', 'level', 'checks', 'commands', 'results', 'skippedChecks', 'completedUnits', 'executedUnits', 'reusedUnits', 'reusedChecks', 'totalUnits', 'execution', 'failedCheck', 'cancelled', 'summary', 'validated', 'validationStatus', 'validationLevel', 'validationLevelReason', 'validationFingerprint', 'validationScope', 'validationAt', 'completionKnown', 'completionSource', 'endReason', 'planId', 'planSelection', 'planCreatedAt', 'fullOutput', 'changedFiles', 'residualChangedFiles', 'residualState', 'aliasNormalizations', 'policy', 'message', 'nextAction'],
   [OP.VALIDATE_HTTP]: ['ok', 'workspace', 'work_id', 'route', 'reachable', 'statusCode', 'finalUrl', 'responseBytes', 'title', 'error'],
   [OP.CHANGES_DIFF]: ['ok', 'workspace', 'work_id', 'staged', 'redactSensitive', 'path', 'reviewScope', 'reviewedScope', 'reviewHash', 'reviewedFiles', 'excludedWorkspaceFiles', 'status', 'branch', 'aheadBehind', 'statusEntries', 'sessionChangedFiles', 'baselineChangedFiles', 'untrackedSessionFiles', 'untrackedBaselineFiles', 'baselineSource', 'diff', 'sensitiveReview', 'sensitiveValuesReturned', 'exitCode', 'stderr'],
   [OP.CHANGES_RESTORE]: ['ok', 'workspace', 'work_id', 'mode', 'paths', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error'],
@@ -367,7 +370,7 @@ const TOOL_FIELDS = Object.freeze({
   [OP.PUBLISH_DRAFT_PR]: ['ok', 'workspace', 'work_id', 'base', 'head', 'title', 'body', 'changedFiles', 'changedFileCount', 'emptyDiff', 'draftOnly', 'remoteChanged', 'warning', 'diff'],
   [OP.EDIT]: ['ok', 'workspace', 'work_id', 'dryRun', 'operationId', 'operation', 'path', 'changed', 'changedFiles', 'oldSha256', 'newSha256', 'shaMismatch', 'replacements', 'verified', 'bytes', 'plannerPath', 'plannerReason', 'result', 'writeId', 'chunks', 'cleared', 'staged', 'editCount', 'appliedCount', 'preflightAtomic', 'rollbackAtomic', 'batchInputBytes', 'replacementCount', 'snapshotBytes', 'resultDetailsCompacted', 'rollback', 'preflight', 'results', 'touchedPaths', 'patchBytes', 'sourceFormat', 'converted', 'verify', 'apply', 'check', 'diagnostics', 'checks', 'diff', 'execution', 'summary', 'validationStatus', 'error', 'next'],
   [OP.WORK_CANCEL]: ['ok', 'workspace', 'work_id', 'status', 'duplicate', 'endReason', 'terminalReason', 'endedAt', 'cancelledAt', 'progress'],
-  [OP.WORK_FINISH]: ['ok', 'workspace', 'work_id', 'duplicate', 'completionKnown', 'endReason', 'completionSource', 'summary', 'validationStatus', 'validationLevel', 'validationAt', 'validationFingerprint', 'changedFiles', 'message']
+  [OP.WORK_FINISH]: ['ok', 'workspace', 'work_id', 'duplicate', 'completionKnown', 'endReason', 'completionSource', 'summary', 'validationStatus', 'validationLevel', 'validationAt', 'validationFingerprint', 'changedFiles', 'residualChangedFiles', 'residualState', 'message']
 });
 
 const SUCCESS_REQUIRED_FIELDS = Object.freeze({

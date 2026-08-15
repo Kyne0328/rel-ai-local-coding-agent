@@ -164,6 +164,21 @@ try {
   assert.deepEqual(incremental.changedFiles, ['incremental.txt']);
   assert.equal(readText(path.join(workspacePath, 'incremental.txt')), 'incremental promotion\n');
 
+  await assert.rejects(
+    () => rawCallTool('relai_exec', {
+      workspace: 'app',
+      work_id: second.work_id,
+      executable: 'git',
+      argv: ['update-ref', 'refs/heads/relai-escape', 'HEAD']
+    }, context),
+    error => error?.code === 'TASK_SANDBOX_SHARED_REF_MUTATION_BLOCKED'
+  );
+  assert.deepEqual(
+    git('branch', '--format=%(refname:short)').split(/\r?\n/).filter(Boolean),
+    ['main'],
+    'a sandbox command must not be able to create or move shared source refs'
+  );
+
   const promotedAtBeforeRead = sandboxEntries(config)[0].lastPromotedAt;
   await rawCallTool('relai_read', {
     workspace: 'app', work_id: second.work_id, paths: ['beta.txt']

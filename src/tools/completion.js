@@ -2,7 +2,8 @@ import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
 import { finalizeTaskSandbox, findTaskSandbox, resolveTaskSandboxWorkspace } from '../parallelTaskSandbox.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
-import { readTaskIntegrity, readWorkspaceIntegrity } from '../taskIntegrity.js';
+import { readTaskIntegrity } from '../taskIntegrity.js';
+import { workspaceDirtyPaths } from '../repo/gitOps.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
@@ -69,28 +70,14 @@ async function completeTask(config, args = {}) {
   }
 
   if (authority.validationResult === 'passed') {
-    const workspaceState = readWorkspaceIntegrity(config, workspace.alias);
-    const validatedWorkspaceGeneration = Number(authority.validatedWorkspaceGeneration || 0);
-    if (Number(workspaceState.generation || 0) > validatedWorkspaceGeneration) {
-      const error = taskError(
-        'TASK_PERSISTENCE_CONFLICT',
-        'Work-session completion is paused because another work session changed the shared workspace after this work session was validated. Re-run validation for this work_id against the current workspace state.',
-        {
-          retryable: true,
-          allowedAlternatives: [
-            'Run relai_validate with action "checks" with complete:true, summary, and this work_id against the current workspace state.',
-            'Cancel this task only when it should not be completed against the shared workspace.'
-          ]
-        }
-      );
-      error.conflictingTaskCount = workspaceState.lastMutation?.taskId && workspaceState.lastMutation.taskId !== requestedTaskId ? 1 : 0;
-      throw error;
-    }
     const validatedFingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
     if (validatedFingerprint) {
       const sandbox = findTaskSandbox(config, workspace.alias, requestedTaskId);
       const validationWorkspace = sandbox ? resolveTaskSandboxWorkspace(config, sandbox.alias) : workspace;
-      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config);
+      const validationScope = Array.isArray(authority.validationScope)
+        ? authority.validationScope
+        : (authority.taskOwnedChangedFiles || []);
+      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config, { paths: validationScope });
       if (currentFingerprint.fingerprint !== validatedFingerprint) {
         throw taskError(
           'TASK_REVALIDATION_REQUIRED',
@@ -122,7 +109,7 @@ async function completeTask(config, args = {}) {
   });
 }
 
-function finalizeValidatedTask(config, workspace, options = {}) {
+async function finalizeValidatedTask(config, workspace, options = {}) {
   const summary = normalizeCompletionSummary(options.summary);
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
@@ -137,12 +124,16 @@ function finalizeValidatedTask(config, workspace, options = {}) {
     : changedFilesForTask(config, workspace.alias, taskId);
   const completionSource = String(options.completionSource || WORK_FINISH_SOURCE);
   const validationStatus = String(options.validationStatus || 'passed');
+  const residualChangedFiles = await workspaceDirtyPaths(workspace, config, changedFiles);
+  const residualState = residualChangedFiles.length ? 'preserved_uncommitted' : 'clean';
   const completion = requestCurrentTaskCompletion({
     summary,
     validationStatus,
     validationLevel: String(options.validationLevel || ''),
     validationAt: String(options.validationAt || ''),
-    changedFiles
+    changedFiles,
+    residualChangedFiles,
+    residualState
   });
   clearSessionPolicy(config, workspace.alias, taskId);
   return {
@@ -159,12 +150,14 @@ function finalizeValidatedTask(config, workspace, options = {}) {
     validationAt: String(options.validationAt || ''),
     validationFingerprint: String(options.validationFingerprint || ''),
     changedFiles,
-    message: completionMessage(completionSource, completion.duplicate === true)
+    residualChangedFiles,
+    residualState,
+    message: completionMessage(completionSource, completion.duplicate === true, residualChangedFiles)
   };
 }
 
-function finalizeValidationResult(config, workspace, validationResult, summary) {
-  const completion = finalizeValidatedTask(config, workspace, {
+async function finalizeValidationResult(config, workspace, validationResult, summary) {
+  const completion = await finalizeValidatedTask(config, workspace, {
     summary,
     validationStatus: 'passed',
     validationLevel: validationResult.validationLevel,
@@ -187,7 +180,9 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
     validationStatus: previous.validation || 'passed',
     validationLevel: previous.validationLevel || '',
     validationAt: previous.validationAt || previous.completedAt || '',
-    changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : []
+    changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : [],
+    residualChangedFiles: Array.isArray(previous.residualChangedFiles) ? previous.residualChangedFiles : [],
+    residualState: String(previous.residualState || (Array.isArray(previous.residualChangedFiles) && previous.residualChangedFiles.length ? 'preserved_uncommitted' : 'clean'))
   });
   clearSessionPolicy(config, workspace.alias, context.taskId);
   return {
@@ -203,6 +198,8 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
     validationLevel: previous.validationLevel || '',
     validationAt: previous.validationAt || previous.completedAt || '',
     changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : [],
+    residualChangedFiles: Array.isArray(previous.residualChangedFiles) ? previous.residualChangedFiles : [],
+    residualState: String(previous.residualState || (Array.isArray(previous.residualChangedFiles) && previous.residualChangedFiles.length ? 'preserved_uncommitted' : 'clean')),
     message: completion.duplicate === true
       ? 'Duplicate task completion request accepted; the task was already completing.'
       : 'Task was already completed. The original completion result is returned idempotently.'
@@ -220,12 +217,16 @@ function requireMatchingTaskContext(taskId) {
   return context;
 }
 
-function completionMessage(source, duplicate) {
+function completionMessage(source, duplicate, residualChangedFiles = []) {
   if (duplicate) return 'Duplicate work-session completion request accepted idempotently.';
+  const residualCount = Array.isArray(residualChangedFiles) ? residualChangedFiles.length : 0;
+  const residualNote = residualCount
+    ? ` ${residualCount} task-owned path${residualCount === 1 ? '' : 's'} remain as explicit preserved uncommitted work.`
+    : ' Task-owned paths are reconciled with the current commit.';
   if (source === VALIDATE_CHECKS_SOURCE) {
-    return 'Validation passed and this work session was completed in the same Rel.AI call. Other work sessions remain unchanged.';
+    return `Validation passed and this work session was completed in the same Rel.AI call. Other work sessions remain unchanged.${residualNote}`;
   }
-  return 'Work-session completion accepted for this work_id. Other work sessions remain active and unchanged.';
+  return `Work-session completion accepted for this work_id. Other work sessions remain active and unchanged.${residualNote}`;
 }
 
 function normalizeCompletionSummary(value) {

@@ -93,6 +93,37 @@ assert.ok(stagedAfterScopedCommit.includes('unrelated-staged.txt'), 'unrelated s
 git(['reset', 'HEAD', '--', 'unrelated-staged.txt'], { cwd: workspace.path, stdio: 'ignore' });
 fs.rmSync(path.join(workspace.path, 'unrelated-staged.txt'), { force: true });
 
+// A logical task commit with no explicit paths must default to its authoritative
+// task-owned paths instead of falling back to `git add -A` over a dirty workspace.
+fs.writeFileSync(path.join(workspace.path, 'task-owned.txt'), 'task owned\n');
+fs.writeFileSync(path.join(workspace.path, 'ambient-staged.txt'), 'ambient staged\n');
+git(['add', 'ambient-staged.txt'], { cwd: workspace.path });
+const taskScopedCommit = await relaiGitCommit(workspace, config, {
+  message: 'task owned default scope',
+  _taskOwnedPaths: ['task-owned.txt']
+});
+assert.equal(taskScopedCommit.ok, true);
+assert.equal(taskScopedCommit.addAll, false);
+assert.deepEqual(taskScopedCommit.paths, ['task-owned.txt']);
+const taskScopedCommitted = git(['show', '--name-only', '--format=', 'HEAD'], { cwd: workspace.path }).toString('utf8').split(/\r?\n/).filter(Boolean);
+assert.deepEqual(taskScopedCommitted, ['task-owned.txt'], 'task-scoped default commit must not absorb ambient staged files');
+assert.equal(git(['status', '--porcelain=v1', '--', 'task-owned.txt'], { cwd: workspace.path }).toString('utf8').trim(), '', 'committed task-owned paths must be clean in both index and worktree');
+assert.equal(git(['diff', '--cached', '--name-only', '--', 'task-owned.txt'], { cwd: workspace.path }).toString('utf8').trim(), '', 'committed task-owned paths must never remain reverse-staged');
+assert.equal(git(['diff', '--cached', '--name-only', '--', 'ambient-staged.txt'], { cwd: workspace.path }).toString('utf8').trim(), 'ambient-staged.txt', 'unrelated staged work must remain staged');
+git(['reset', 'HEAD', '--', 'ambient-staged.txt'], { cwd: workspace.path, stdio: 'ignore' });
+fs.rmSync(path.join(workspace.path, 'ambient-staged.txt'), { force: true });
+
+fs.writeFileSync(path.join(workspace.path, 'must-not-auto-commit.txt'), 'ambient only\n');
+const emptyTaskScope = await relaiGitCommit(workspace, config, {
+  message: 'must not fall back',
+  _taskOwnedPaths: []
+});
+assert.equal(emptyTaskScope.ok, false);
+assert.equal(emptyTaskScope.addAll, false);
+assert.match(emptyTaskScope.error, /will not fall back/i);
+assert.equal(git(['status', '--porcelain=v1', '--', 'must-not-auto-commit.txt'], { cwd: workspace.path }).toString('utf8').trim().startsWith('??'), true);
+fs.rmSync(path.join(workspace.path, 'must-not-auto-commit.txt'), { force: true });
+
 const pushDryRun = await relaiGitPush(workspace, config, { remote: 'origin', branch: 'main', dryRun: true });
 assert.equal(pushDryRun.ok, true);
 

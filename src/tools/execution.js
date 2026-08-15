@@ -13,7 +13,7 @@ import {
   shouldPromoteTaskSandbox
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
-import { getToolActivity, runWithToolActivity, updateCurrentToolActivity } from '../toolActivity.js';
+import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActivity } from '../toolActivity.js';
 import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
 import { finalizeValidationResult } from './completion.js';
 import { invalidateSessionCacheForCall, maybeStartSession } from './session.js';
@@ -69,6 +69,9 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         && executionName === OP.VALIDATE_CHECKS
         && effectiveArgs?.complete === true;
       const handlerArgs = deferSandboxCompletion ? { ...physicalArgs, complete: false } : physicalArgs;
+      if (executionWorkspace?.taskSandbox === true && executionName === OP.EXEC) {
+        assertSandboxExecDoesNotMutateSharedRefs(handlerArgs);
+      }
       const invokeHandler = async (args, baselineEntry = sandboxEntry) => {
         if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
         const handled = await definition.handler(config, args || {}, {
@@ -223,6 +226,58 @@ function isClearlyReadOnlyExec(args = {}) {
     return argv.slice(2).every(value => !String(value).startsWith('-'));
   }
   return false;
+}
+
+function assertSandboxExecDoesNotMutateSharedRefs(args = {}) {
+  const executable = path.basename(String(args.executable || '')).toLowerCase();
+  const argv = Array.isArray(args.argv) ? args.argv.map(value => String(value || '')) : [];
+  const directGit = executable === 'git' || executable === 'git.exe';
+  const shellCommand = String(args.command || '');
+  if ((directGit && mutatesSharedGitRefs(argv)) || (shellCommand && shellMutatesSharedGitRefs(shellCommand))) {
+    throw taskError(
+      'TASK_SANDBOX_SHARED_REF_MUTATION_BLOCKED',
+      'A private task sandbox cannot mutate shared Git branch, tag, or worktree refs. Use relai_publish for commits/publishing or perform an explicit branch change so Rel.AI can reconcile the visible workspace safely.',
+      { retryable: false }
+    );
+  }
+}
+
+function mutatesSharedGitRefs(argv = []) {
+  const tokens = argv.map(value => String(value || ''));
+  const lower = tokens.map(value => value.toLowerCase());
+  const updateRef = lower.indexOf('update-ref');
+  if (updateRef >= 0) return true;
+  const symbolicRef = lower.indexOf('symbolic-ref');
+  if (symbolicRef >= 0) {
+    const operands = tokens.slice(symbolicRef + 1).filter(value => !value.startsWith('-'));
+    if (operands.length >= 2) return true;
+  }
+  const branch = lower.indexOf('branch');
+  if (branch >= 0) {
+    const tail = lower.slice(branch + 1);
+    if (tail.some(value => ['-f', '--force', '-m', '-M', '-c', '-C', '-d', '-D', '--delete', '--move', '--copy'].includes(value))) return true;
+    const listMode = tail.some(value => ['--list', '-l', '--show-current', '-a', '--all', '-r', '--remotes'].includes(value));
+    if (!listMode && tail.some(value => value && !value.startsWith('-'))) return true;
+  }
+  const worktree = lower.indexOf('worktree');
+  if (worktree >= 0 && String(lower[worktree + 1] || '') !== 'list') return true;
+  const tag = lower.indexOf('tag');
+  if (tag >= 0) {
+    const tail = lower.slice(tag + 1);
+    const listMode = tail.length === 0 || tail.some(value => ['--list', '-l'].includes(value));
+    if (!listMode || tail.some(value => ['-d', '--delete', '-f', '--force'].includes(value))) return true;
+  }
+  return false;
+}
+
+function shellMutatesSharedGitRefs(command) {
+  const text = String(command || '');
+  if (!/\bgit(?:\.exe)?\b/i.test(text)) return false;
+  return /\bgit(?:\.exe)?\b[^\r\n;&|]*\bupdate-ref\b/i.test(text)
+    || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bsymbolic-ref\b[^\r\n;&|]+\s+refs\//i.test(text)
+    || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bbranch\b[^\r\n;&|]*(?:\s-f\b|\s--force\b|\s-[mMcCdD]\b|\s--(?:delete|move|copy)\b)/i.test(text)
+    || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bworktree\s+(?:add|remove|move|lock|unlock|prune|repair)\b/i.test(text)
+    || /\bgit(?:\.exe)?\b[^\r\n;&|]*\btag\b[^\r\n;&|]*(?:\s-d\b|\s--delete\b|\s-f\b|\s--force\b)/i.test(text);
 }
 
 function mapVisibleWorkspace(result, executionWorkspace, sourceWorkspace) {
