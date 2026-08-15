@@ -15,6 +15,7 @@ import {
 } from '../src/ui/task-identity.js';
 import { taskProgressHtml } from '../src/ui/components/task-progress.js';
 import { activeTaskList } from '../src/ui/features/home/index.js';
+import { sessionSummary } from '../src/ui/features/sessions/index.js';
 
 const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
 
@@ -192,6 +193,20 @@ const observableActiveSessions = activeTaskList({
 });
 assert.deepEqual(observableActiveSessions.map(task => task.id), ['open']);
 assert.deepEqual(activeTaskList({ tasks: [{ id: 'expired', status: 'expired', activeCalls: 1 }] }), []);
+
+assert.equal(sessionSummary([
+  { id: 'planning', status: 'planning', activeCalls: 0 },
+  { id: 'running', status: 'running', activeCalls: 2 },
+  { id: 'approval', status: 'waiting_for_approval', activeCalls: 0 },
+  { id: 'inactive', status: 'inactive', activeCalls: 0 },
+  { id: 'completed', status: 'completed', activeCalls: 0 },
+  { id: 'cancelled', status: 'cancelled', activeCalls: 0 },
+  { id: 'failed', status: 'failed', activeCalls: 0 }
+]), '1 active · 3 open · 1 need attention · 1 inactive · 1 completed · 1 cancelled · 1 failed', 'open must include all nonterminal, non-stale sessions while active counts only sessions executing calls');
+assert.equal(sessionSummary([
+  { id: 'planning', status: 'planning', activeCalls: 0 },
+  { id: 'waiting', status: 'waiting', activeCalls: 0 }
+]), '0 active · 2 open · 0 completed', 'non-executing work must remain open until it becomes inactive/stale');
 
 for (const status of ['completed', 'failed', 'cancelled', 'expired']) {
   const html = taskProgressHtml({}, status);
