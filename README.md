@@ -5,8 +5,8 @@
 <h1 align="center">Rel.AI MCP</h1>
 
 <p align="center">
-  <strong>Use ChatGPT web like a coding agent.</strong><br />
-  Rel.AI gives ordinary ChatGPT conversations a real local repository toolbelt: search, edit, run, inspect, validate, review, and Git.
+  <strong>Let ChatGPT work with your local code.</strong><br />
+  Rel.AI connects ChatGPT web to projects on your computer so it can find files, edit code, run commands and tests, review changes, and use Git.
 </p>
 
 <p align="center">
@@ -30,71 +30,72 @@
 
 ---
 
-Rel.AI MCP turns **ChatGPT web into a repository-capable coding agent** for repositories you explicitly configure as local workspaces. ChatGPT remains the conversational interface and reasoning model; Rel.AI supplies the local tools that let it inspect the checkout, change files, run the project, validate results, review diffs, and perform explicit Git work when asked.
+Rel.AI MCP connects **ChatGPT web to local projects you choose**. ChatGPT provides the conversation and reasoning. Rel.AI gives that conversation the tools to find files, edit code, run commands and tests, inspect the result, review changes, and use Git on your computer.
 
-It is not a hosted coding VM, a new model, or a generic remote shell. It is the local development bridge that gives normal ChatGPT conversations hands on real code.
+It is not a hosted coding computer, a new AI model, or an unrestricted remote shell. It is a local bridge between ChatGPT and the projects you explicitly add to Rel.AI.
 
-**The repository stays on your computer. The work stays attributable. The result stays reviewable.**
+**Your project stays local. Each task stays separate. You review the result.**
 
 ## Why Rel.AI exists
 
-Rel.AI is for developers who prefer the ChatGPT web conversation as their coding interface but still want a Codex-style repository workflow.
+Rel.AI is for developers who want to keep coding in the normal ChatGPT web conversation instead of moving every repository task into Codex.
 
-OpenAI currently documents three product behaviors that make this useful:
+OpenAI currently documents that [ChatGPT Apps use the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in), while [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits). Rel.AI uses the ChatGPT app/tool path, so working through Rel.AI does not draw from the Codex agentic allowance. Your normal ChatGPT plan limits still apply; Rel.AI does not claim unlimited usage.
 
-- [ChatGPT Apps follow the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in); Rel.AI does not add a separate per-tool quota.
-- [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits), so using Rel.AI through the ChatGPT app/tool path does not draw from the Codex agentic allowance.
-- [GPT-5.6 Sol powers Medium, High, and Extra High reasoning on eligible plans](https://help.openai.com/en/articles/20001354-gpt-5-6-in-chatgpt). ChatGPT Apps are available with all models except Pro models, so Rel.AI can use app-compatible GPT-5.6 Sol reasoning modes such as High, and Extra High where the plan exposes it, but not GPT-5.6 Sol Pro.
+ChatGPT supplies the model and reasoning. Rel.AI supplies the local coding tools. Model availability is controlled by ChatGPT and can change independently of Rel.AI.
 
-Rel.AI is not Codex and does not emulate Codex internals. The value is simpler: **use the ChatGPT web experience and reasoning modes you already have, then give that conversation a controlled local coding toolbelt.**
+### Can Rel.AI replace Codex?
 
-## The Rel.AI contract
+For many everyday repository tasks, yes. If you use Codex to read a project, edit files, run commands and tests, inspect the result, and use Git, Rel.AI provides that kind of workflow through normal ChatGPT. Rel.AI does not emulate Codex internals or claim to be the same product.
 
-Rel.AI is built around four product rules rather than a collection of unrelated coding tools.
+### Why is Rel.AI built specifically for ChatGPT?
+
+That focus is intentional. Rel.AI is designed around normal ChatGPT web usage plus the OpenAI Secure MCP Tunnel, so the desktop app, work sessions, workspace permissions, checks, recovery, and publishing rules can be built and tested as one complete workflow.
+
+Rel.AI does not currently support Claude, Cursor, Gemini, or other AI clients. Supporting another client would require a separate connection and compatibility contract rather than simply changing a provider setting.
+
+## How Rel.AI keeps work clear and controlled
 
 | | Rel.AI rule | What it means in practice |
 | --- | --- | --- |
-| **01** | **Workspace is authority** | ChatGPT works only inside repository roots you configured. Paths, commands, Git state, checks, and processes resolve from that workspace instead of from arbitrary machine access. |
-| **02** | **Work session owns the task** | Each independent objective receives its own `work_id`. Mutations, validation, review, cancellation, recovery, and completion stay attached to that objective rather than to a chat tab or transport connection. |
-| **03** | **Evidence beats progress** | A successful command or a 100% UI indicator is not proof that the change is valid. Rel.AI tracks current validation evidence against the files the task actually changed. |
-| **04** | **Publishing is separate** | Editing code does not silently become committing or pushing code. Review, commit, push, and PR-draft work remain explicit Git actions with repository policy around them. |
+| **01** | **Only added projects** | ChatGPT can work only inside folders you add as Rel.AI workspaces. It does not get open-ended access to your computer. |
+| **02** | **One task stays together** | Each new goal gets its own work session, so its edits, checks, review, recovery, and completion stay linked to the same task. |
+| **03** | **Checks confirm the result** | A command saying "done" is not enough. Rel.AI checks the current code before the task is considered complete. |
+| **04** | **Publishing is separate** | Editing code does not automatically commit, push, or prepare pull-request text. Those actions happen only when requested. |
 
-Those four rules are the reason Rel.AI behaves differently from a simple filesystem connector or open-ended command bridge.
+These rules are why Rel.AI is more than a file connector or unrestricted command bridge.
 
 ## One task, end to end
 
 ```text
-You describe the objective in ChatGPT
+You describe what you want in ChatGPT
                 │
                 ▼
-      Rel.AI begins one work session
+            Understand
+     find and read the relevant code
                 │
                 ▼
-      understand the repository
-   snapshot → search → code intelligence
+              Change
+       make focused edits in the project
                 │
                 ▼
-          change the workspace
-          edit → run → diagnose
+                Run
+       commands, tests, or local apps
                 │
                 ▼
-            prove the result
-       targeted checks → evidence
+               Check
+     confirm the latest changes work
                 │
                 ▼
-             review the work
-        task diff → activity → status
-                │
-                ▼
-        publish only when requested
-          commit → push → PR draft
+              Publish
+      commit or push only when asked
 ```
 
-The repository remains the source of truth throughout the task. If the workspace was already dirty, Rel.AI can distinguish pre-existing changes from task-owned mutations instead of pretending the task started from a clean checkout.
+Rel.AI also keeps track of what was already changed before the task and what the current task changed, so it does not need to pretend every project starts from a clean Git state.
 
 ## Start using Rel.AI
 
-Rel.AI uses one connection model: **OpenAI Secure MCP Tunnel**. Repository files and tool execution stay on the computer running Rel.AI; the tunnel provides the private transport ChatGPT uses to reach its local MCP service.
+Rel.AI uses one connection model: **OpenAI Secure MCP Tunnel**. Your project files and commands stay on the computer running Rel.AI. The tunnel is the private connection ChatGPT uses to reach the local Rel.AI service.
 
 1. **Install Rel.AI MCP** from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Current desktop packaging targets Windows, macOS (Intel and Apple Silicon), and Linux.
 2. **Create an OpenAI Secure MCP Tunnel** for this computer and create a runtime API key for that tunnel in OpenAI Platform.
@@ -106,22 +107,22 @@ Rel.AI uses one connection model: **OpenAI Secure MCP Tunnel**. Repository files
 A useful first request is intentionally read-only:
 
 ```text
-Use Rel.AI MCP on workspace "myapp". Start one work session, inspect the repository, and explain the relevant architecture before changing anything.
+Use Rel.AI MCP with workspace "myapp". Start one work session, read the project, and explain how the relevant parts work before changing anything.
 ```
 
 Then move into a real implementation loop:
 
 ```text
-Use Rel.AI MCP on workspace "myapp". Implement this change, run the smallest validation that proves it, review the task diff, and do not push unless I ask.
+Use Rel.AI MCP with workspace "myapp". Make this change, run the relevant checks, show me what changed, and do not commit or push unless I ask.
 ```
 
 See [One-click setup](docs/ONE_CLICK_SETUP.md) for the installed-app walkthrough and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) for tunnel setup, reconnects, and recovery.
 
-## What turns ChatGPT into a coding agent
+## What Rel.AI lets ChatGPT do
 
-### Repository intelligence before file dumping
+### Find the relevant code before changing it
 
-Rel.AI is designed to let ChatGPT discover a codebase progressively instead of reading large parts of the repository by default.
+Rel.AI helps ChatGPT narrow down a project before reading large amounts of code.
 
 - **Repository snapshots** surface structure, manifests, detected checks, and project hints.
 - **Bounded reads** target files and line ranges instead of returning unlimited content.
@@ -129,35 +130,33 @@ Rel.AI is designed to let ChatGPT discover a codebase progressively instead of r
 - **Code intelligence** follows symbols, references, calls, related files, imports, affected tests, and available diagnostics.
 - **Hybrid semantic search** combines lexical, path, symbol, and private local vector signals without sending source text to a hosted embedding service.
 
-The result is a local discovery layer that helps ChatGPT narrow the problem before it starts spending context on file contents.
+This helps ChatGPT spend its context on the files that matter instead of dumping large parts of the project into the conversation.
 
-### One edit surface for real repository changes
+### Make focused edits
 
-Rel.AI deliberately consolidates repository writes instead of exposing many overlapping mutation tools.
+Rel.AI uses one main editing surface instead of exposing many overlapping ways to change files.
 
 It supports exact replacements, multiple replacements in one file, full-file writes, patch-shaped updates, large staged changes, workspace containment, symlink protection, and optional SHA-256 stale-write checks. Large migrations can stay one logical task instead of being fragmented purely because one request is too large.
 
 Managed Git worktrees are available when isolated parallel work is appropriate, while ordinary tasks continue to use the repository you configured.
 
-### Commands with ownership, not just stdout
+### Run commands and local apps
 
-Rel.AI can execute one-shot project commands and own long-running local processes.
+Rel.AI can run one-shot project commands and manage long-running local processes such as development servers and watchers.
 
 One-shot execution returns bounded output, exit state, timing, and detected file changes. Managed processes have stable IDs, bounded persistent logs, interactive input when appropriate, workspace attribution, and controlled shutdown. This keeps development servers and watchers separate from one-off checks and builds.
 
-### Validation tied to the mutation that happened
+### Check the result
 
-Rel.AI treats tests as evidence, not ceremony.
+Rel.AI chooses checks based on what the task changed and can reuse a recent check when it still proves the current code. If a command changes files and then fails, Rel.AI still records that change. If a command succeeds but does not actually confirm the result, the task is not treated as complete just because the exit code was zero.
 
-Validation can be selected from the task-owned change scope, and fresh evidence can be reused when it still proves the current mutation generation. If a command changes files and then fails, the mutation is still recorded. If a command succeeds but does not satisfy final validation, Rel.AI does not call that task proven merely because the exit code was zero.
+### Use Git only when asked
 
-### Git actions that remain deliberate
+Rel.AI can review task changes, commit scoped work, push to an existing Git remote, and prepare pull-request draft text. Publishing stays separate from editing. Push targets must already exist in the repository, and sensitive staged paths require narrower authorization.
 
-Rel.AI can review task changes, commit scoped work, push to an existing Git remote, and prepare pull-request draft text. Publishing remains a separate decision from editing. Sensitive staged paths remain explicitly authorized, push targets must already exist in the repository, unsafe Git remote-helper transports are rejected, and pull-request base branches are detected from Git instead of workspace settings.
+## How ChatGPT connects to your computer
 
-## ChatGPT web is the interface. Local execution is the point
-
-OpenAI Secure MCP Tunnel gives ChatGPT a private route to the Rel.AI process without moving the development environment away from the computer that owns the repository.
+OpenAI Secure MCP Tunnel gives ChatGPT a private connection to Rel.AI while the project and its development environment stay on your computer.
 
 ```text
 ChatGPT
@@ -191,11 +190,9 @@ This distinction is central to the product: **being connected is not the same th
 
 See [Workflow reliability](docs/WORKFLOW_RELIABILITY.md) and [Task observability](docs/TASK_OBSERVABILITY.md) for the full state model.
 
-## The desktop is the control surface
+## The desktop shows what is happening
 
-Rel.AI's desktop app is where the local side of the system becomes visible to the user.
-
-It exposes the things that matter during real repository work:
+Rel.AI's desktop app shows the local side of the workflow and gives you one place to see what ChatGPT can access and what Rel.AI is doing:
 
 - **Workspaces** — which repositories ChatGPT is allowed to use, plus repository and validation details.
 - **Sessions** — active and historical objectives with task status and completion state.
@@ -207,9 +204,9 @@ It exposes the things that matter during real repository work:
 
 Rel.AI records observable tool activity and results. It does not claim access to ChatGPT's private reasoning.
 
-## Security is repository-shaped
+## Security starts with the projects you add
 
-Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. It assumes you deliberately gave ChatGPT web coding-agent authority over configured repositories and then constrains that authority at repository, task, process, Git, and desktop boundaries.
+Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. ChatGPT can work only with projects you explicitly add, and Rel.AI limits that access with workspace, task, process, Git, and desktop boundaries.
 
 Important controls include:
 
@@ -227,11 +224,11 @@ Only configure repositories you trust ChatGPT and Rel.AI to inspect, execute, an
 
 Read [Security](docs/SECURITY.md) for the detailed authentication, workspace, Electron, updater, and remaining trust boundaries.
 
-## One secure connection model
+## One supported ChatGPT connection
 
-Rel.AI intentionally has one supported ChatGPT transport: **OpenAI Secure MCP Tunnel**. There is no provider switch or fallback transport to keep synchronized.
+Rel.AI intentionally supports one ChatGPT connection: **OpenAI Secure MCP Tunnel**. There is no provider switch or second transport path to keep synchronized.
 
-The desktop owns the local MCP process, tunnel-client child process, tunnel health state, encrypted runtime key, and local bearer credential. ChatGPT owns the remote tunnel association. This keeps transport recovery separate from repository task ownership and makes connection behavior deterministic across restarts.
+The desktop owns the local MCP service, tunnel client, connection state, encrypted runtime key, and local bearer credential. ChatGPT owns the remote tunnel association. Keeping those responsibilities separate makes reconnects predictable without letting a connection change decide what happens to repository work.
 
 ## Small public tool surface, broad workflow
 

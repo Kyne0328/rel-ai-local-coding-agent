@@ -1,8 +1,8 @@
 # Security
 
-## Authentication and transport model
+## How the ChatGPT connection is secured
 
-Rel.AI supports one ChatGPT transport: **OpenAI Secure MCP Tunnel**.
+Rel.AI supports one ChatGPT connection: **OpenAI Secure MCP Tunnel**.
 
 The Electron desktop starts the private local MCP service and supervises the bundled OpenAI `tunnel-client`. Two credentials have separate responsibilities:
 
@@ -17,7 +17,9 @@ Rel.AI does not expose its previous local OAuth authorization server. `/register
 
 The desktop dashboard uses a short-lived bootstrap/session flow backed by the local Rel.AI token. Direct API access may use the same bearer token. Dashboard authorization is separate from Secure MCP Tunnel control-plane authentication.
 
-## Workspace protections
+## Project access protections
+
+ChatGPT can work only inside folders you explicitly add as Rel.AI workspaces. Rel.AI applies these protections around that access:
 
 - Workspace roots must be absolute project directories. System roots and common operating-system directories are rejected.
 - File operations resolve against the configured workspace root; traversal, absolute-path injection, and symlink escape are blocked.
@@ -33,11 +35,11 @@ The desktop dashboard uses a short-lived bootstrap/session flow backed by the lo
 - Cleanup revalidates file ownership, type, and hash before deletion.
 - Patch-shaped edits can require a clean worktree and create a tracked-change backup before application.
 
-## Work-session and execution boundaries
+## Work sessions stay separate from the connection
 
-A Secure MCP Tunnel connection carries MCP requests; it is not repository-work identity. Each independent objective receives an opaque `work_id` from `relai_work action=begin`. Mutations, validation evidence, review, recovery, and completion remain associated with that work session.
+The Secure MCP Tunnel carries requests between ChatGPT and Rel.AI, but the connection does not decide which repository task is active. Each new goal gets its own work session and internal `work_id`, keeping edits, checks, review, recovery, and completion attached to that task.
 
-Native MCP `taskId`, Rel.AI `work_id`, and managed-process `processId` are separate identifiers. Reconnecting the tunnel cannot infer, merge, replay, or complete repository work.
+Native MCP `taskId`, Rel.AI `work_id`, and managed-process `processId` are separate technical identifiers. Reconnecting the tunnel cannot merge tasks, repeat an uncertain change, or mark repository work complete.
 
 Validation commands, builds, analyzers, and repository scripts execute code on the configured computer. Only configure repositories you trust ChatGPT and Rel.AI to inspect, execute, and modify.
 
@@ -76,7 +78,7 @@ Tunnel-client upgrades are release changes. Rel.AI does not accept an arbitrary 
 - Installed Windows startup registration targets the packaged executable with `--background`; portable and development builds do not register startup entries.
 - Unclean-exit detection is diagnostic metadata only and never authorizes destructive repository recovery.
 
-## Remaining trust boundaries
+## What you still need to trust
 
 Rel.AI MCP is a trusted local coding bridge, not a sandbox.
 
@@ -97,4 +99,4 @@ recover:  relai_changes restore/reset/tidy actions
 publish:  relai_publish action=commit -> relai_publish action=push
 ```
 
-Keep workspace aliases pointed only at repositories you trust ChatGPT to inspect, execute, and modify.
+Only add projects you trust ChatGPT and Rel.AI to inspect, run, and modify.
