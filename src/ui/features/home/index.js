@@ -6,11 +6,15 @@ import { taskProgressHtml } from '../../components/task-progress.js';
 import { workSessionStateView } from '../../task-identity.js';
 import { completeDesktopSetup, createDesktopSetupChecklist, desktopSetupItems } from '../onboarding/index.js';
 import { routeMetadata } from '../../navigation-catalog.js';
+import { loadAnalyticsData } from '../usage/data.js';
+
+let homeAnalyticsGeneration = 0;
 
 export function mountHome(container, data) {
   container.innerHTML = '';
   const payload = data || {};
   container.appendChild(buildOverview(payload));
+  void hydrateHomeAnalytics(container, { workspace: getWorkspaceFilter() });
   void finalizeSetupChecklist(payload);
 }
 
@@ -21,8 +25,9 @@ export function updateHomeLiveState(container, data = {}) {
   const attention = buildAttention(state.workspaces, state.findings, state.effectiveEndpoint);
   syncHomeRegion(current, taskActivityCard(data.taskActivity, state.tasks[0]), '[data-home-live-activity]', '[data-home-live-connection]');
   syncHomeRegion(current, connectionHero(state.bridgeState), '[data-home-live-connection]', '.layout-grid');
-  syncHomeRegion(current, attention.length ? attentionCard(attention) : null, '[data-home-live-attention]', '.layout-grid');
+  syncHomeRegion(current, attention.length ? attentionCard(attention) : null, '[data-home-live-attention]', '[data-home-analytics]');
   syncHomeRegion(current, recentTasksCard(state.tasks), '[data-home-live-sessions]');
+  refreshHomeAnalyticsAfterTaskBoundary(current, data);
   return true;
 }
 
@@ -94,6 +99,7 @@ function buildOverview(data) {
 
   const attention = buildAttention(workspaces, findings, effectiveEndpoint);
   if (attention.length) root.appendChild(attentionCard(attention));
+  root.appendChild(homeAnalyticsShell(analyticsTaskBoundary(tasks)));
 
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
@@ -288,6 +294,148 @@ function attentionCard(items) {
     </div>`).join('');
   card.appendChild(body);
   return card;
+}
+
+function homeAnalyticsShell(taskBoundary = '') {
+  const card = document.createElement('section');
+  card.className = 'card home-analytics-card';
+  card.dataset.homeAnalytics = '';
+  card.dataset.taskBoundary = taskBoundary;
+  card.setAttribute('aria-busy', 'true');
+  card.innerHTML = `
+    <div class="card-head home-analytics-head">
+      <div><h3>Activity</h3><p>Loading activity…</p></div>
+      <a class="buttonlike secondary compact-button" href="${routeHref('usage')}">View analytics</a>
+    </div>
+    <div class="home-analytics-loading" aria-hidden="true"><span></span><span></span><span></span><span></span></div>`;
+  return card;
+}
+
+export async function hydrateHomeAnalytics(root, { desktop = globalThis.window?.relaiDesktop, now = new Date(), workspace = '' } = {}) {
+  const target = root?.querySelector?.('[data-home-analytics]');
+  if (!target) return false;
+  const generation = ++homeAnalyticsGeneration;
+  target.setAttribute?.('aria-busy', 'true');
+  try {
+    const { current } = await loadAnalyticsData({ desktop, range: '24h', now, workspace });
+    if (generation !== homeAnalyticsGeneration || (typeof target.isConnected === 'boolean' && !target.isConnected)) return false;
+    target.innerHTML = homeAnalyticsHtml(current);
+    target.setAttribute?.('aria-busy', 'false');
+    return true;
+  } catch {
+    if (generation !== homeAnalyticsGeneration || (typeof target.isConnected === 'boolean' && !target.isConnected)) return false;
+    target.innerHTML = homeAnalyticsUnavailableHtml(workspace);
+    target.setAttribute?.('aria-busy', 'false');
+    return false;
+  }
+}
+
+export function homeAnalyticsHtml(scope = {}) {
+  const completed = Number(scope.completed || 0);
+  const actions = Number(scope.toolCalls || 0);
+  const reliabilityCalls = Number(scope.reliabilityCalls || 0);
+  const systemErrors = Number(scope.infrastructureFailures || 0);
+  const workspaceScoped = scope.kind === 'workspace';
+  const activeProjects = (Array.isArray(scope.workspaces) ? scope.workspaces : []).filter(item => Number(item.toolCalls || 0) > 0).length;
+  const metricFour = workspaceScoped
+    ? homeAnalyticsMetric('Execution time', completed ? formatAnalyticsDuration(scope.executionMs) : '—')
+    : homeAnalyticsMetric('Active projects', formatInteger(activeProjects));
+  const heading = workspaceScoped ? `${scope.label} activity` : 'Activity';
+  const href = routeHref('usage', workspaceScoped ? { workspace: scope.workspace } : {});
+  const errorSummary = systemErrors
+    ? `${formatInteger(systemErrors)} system ${pluralLabel(systemErrors, 'error')}`
+    : 'No system errors';
+  const contextSummary = analyticsContextSummary(scope, actions);
+  return `
+    <div class="card-head home-analytics-head">
+      <div><div class="home-analytics-title-row"><h3>${esc(heading)}</h3><span>Last 24 hours</span></div></div>
+      <a class="buttonlike secondary compact-button" href="${href}">View analytics</a>
+    </div>
+    <div class="home-analytics-body">
+      <div class="home-analytics-metrics">
+        ${homeAnalyticsMetric('Actions', formatInteger(actions))}
+        ${homeAnalyticsMetric('Reliable actions', reliabilityCalls ? formatPercent(scope.reliabilityRate) : '—', reliabilityCalls ? `${formatInteger(reliabilityCalls)} measured` : 'Starts measuring with new actions')}
+        ${homeAnalyticsMetric('Average time', completed ? formatAnalyticsDuration(scope.averageDuration) : '—', completed ? 'Per completed action' : '')}
+        ${metricFour}
+      </div>
+      <div class="home-analytics-pulse">
+        <div class="home-analytics-pulse-head"><div><span>Hourly activity</span><strong>${esc(contextSummary)}</strong></div><small>UTC</small></div>
+        ${homeAnalyticsPulse(scope.points)}
+      </div>
+      <div class="home-analytics-foot"><span>${esc(errorSummary)}</span></div>
+    </div>`;
+}
+
+function homeAnalyticsUnavailableHtml(workspace = '') {
+  return `
+    <div class="card-head home-analytics-head">
+      <div><h3>Activity</h3><p>Activity could not be loaded.</p></div>
+      <a class="buttonlike secondary compact-button" href="${routeHref('usage', workspace ? { workspace } : {})}">Open analytics</a>
+    </div>`;
+}
+
+function homeAnalyticsMetric(label, value, detail = '') {
+  const detailHtml = detail ? `<small>${esc(detail)}</small>` : '';
+  return `<div class="home-analytics-metric"><span>${esc(label)}</span><strong>${esc(value)}</strong>${detailHtml}</div>`;
+}
+
+function homeAnalyticsPulse(points = []) {
+  const values = (Array.isArray(points) ? points : []).map(point => Number(point?.toolCalls || 0)).map(value => Number.isFinite(value) && value >= 0 ? value : 0);
+  if (!values.length || values.every(value => value === 0)) return '<div class="home-analytics-pulse-empty">No activity yet.</div>';
+  const width = 720;
+  const height = 112;
+  const baseline = height - 10;
+  const max = Math.max(...values, 1);
+  const pointsValue = values.map((value, index) => `${values.length === 1 ? width / 2 : index / (values.length - 1) * width},${baseline - value / max * (height - 28)}`).join(' ');
+  const area = `0,${baseline} ${pointsValue} ${width},${baseline}`;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const latest = values.at(-1) || 0;
+  const peak = Math.max(...values);
+  const peakIndex = values.indexOf(peak);
+  const hoursAgo = Math.max(0, values.length - 1 - peakIndex);
+  const trend = latest > values[0] ? 'increasing' : latest < values[0] ? 'decreasing' : 'steady';
+  const summary = `Action activity over the last 24 hours. ${formatInteger(total)} total actions. Peak ${formatInteger(peak)} ${pluralLabel(peak, 'action')} ${hoursAgo ? `${hoursAgo} ${pluralLabel(hoursAgo, 'hour')} ago` : 'in the latest hour'}. Latest hour ${formatInteger(latest)} ${pluralLabel(latest, 'action')}. Overall trend ${trend}.`;
+  return `<div class="home-analytics-chart"><svg class="home-analytics-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(summary)}"><line x1="0" y1="${height * .32}" x2="${width}" y2="${height * .32}" class="home-analytics-gridline"/><line x1="0" y1="${height * .62}" x2="${width}" y2="${height * .62}" class="home-analytics-gridline"/><polygon points="${area}" class="home-analytics-area"/><polyline points="${pointsValue}" class="home-analytics-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="home-analytics-scale"><span>24h ago</span><span>Now</span></div></div>`;
+}
+
+function analyticsContextSummary(scope = {}, actions = 0) {
+  const topProject = Array.isArray(scope.workspaces) ? scope.workspaces[0] : null;
+  if (!actions) return 'No activity';
+  if (scope.kind !== 'workspace' && topProject?.workspace) return `Most active project: ${topProject.workspace}`;
+  return `${formatInteger(actions)} ${pluralLabel(actions, 'action')} in the last 24 hours`;
+}
+
+function refreshHomeAnalyticsAfterTaskBoundary(root, data = {}) {
+  const target = root.querySelector?.('[data-home-analytics]');
+  if (!target) return;
+  const tasks = orderOverviewTasks(Array.isArray(data.tasks) ? data.tasks : []);
+  const boundary = analyticsTaskBoundary(tasks);
+  if (!boundary || target.dataset.taskBoundary === boundary) return;
+  target.dataset.taskBoundary = boundary;
+  void hydrateHomeAnalytics(root, { workspace: getWorkspaceFilter() });
+}
+
+function analyticsTaskBoundary(tasks = []) {
+  const task = tasks.find(item => item?.endedAt || item?.completedAt);
+  return String(task?.endedAt || task?.completedAt || '');
+}
+
+function formatInteger(value) {
+  return Math.floor(Number(value) || 0).toLocaleString();
+}
+
+function formatPercent(value) {
+  const number = Number(value) || 0;
+  return `${number.toFixed(number >= 10 ? 1 : 2)}%`;
+}
+
+function formatAnalyticsDuration(value) {
+  const milliseconds = Math.max(0, Number(value) || 0);
+  if (milliseconds < 1000) return `${Math.floor(milliseconds)} ms`;
+  const seconds = milliseconds / 1000;
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
+  const minutes = seconds / 60;
+  return `${minutes.toFixed(minutes >= 10 ? 1 : 2)} min`;
 }
 
 function workspaceSummaryCard(workspaces) {

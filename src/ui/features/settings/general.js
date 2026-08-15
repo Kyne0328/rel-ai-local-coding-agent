@@ -28,5 +28,5 @@ function renderAppearanceSettings(body) {
     { value: 'system', label: 'Follow system appearance' },
     { value: 'dark', label: 'Dark' },
     { value: 'light', label: 'Light' }
-  ], uiPreferences.theme, value => setThemePreference(value))));
+  ], uiPreferences.theme, value => setThemePreference(value)), 'Theme applies to the dashboard. Setup and recovery windows follow your system appearance.'));
 }

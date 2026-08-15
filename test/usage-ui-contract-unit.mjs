@@ -42,7 +42,7 @@ assert.match(usageRender, /setAttribute\('aria-pressed', String\(active\)\)/);
 assert.match(usageRender, /Overall trend \$\{trend\}/, 'Analytics charts must expose the computed trend to assistive technology');
 assert.match(usageRender, /Peak \$\{formatChartValue\(peak, metricLabel\)\}/, 'Analytics charts must expose the peak value to assistive technology');
 
-for (const label of ['Actions', 'Reliable calls', 'System errors', 'Average time']) {
+for (const label of ['Actions', 'Reliable calls', 'System errors', 'Retryable problems', 'Successful actions', 'Average time']) {
   assert.match(usageCombined, new RegExp(label), `Analytics must render ${label}.`);
 }
 for (const field of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) {
@@ -51,6 +51,8 @@ for (const field of ['requests', 'toolCalls', 'successes', 'failures', 'requestB
 assert.match(usageSource, /Analytics unavailable/);
 assert.match(usageSource, /Retry/);
 assert.match(usageSource, /Refresh/);
+assert.match(usageRender, /operationSuccessRate/);
+assert.match(usageRender, /recoverableFailures/);
 assert.match(usageCombined, /Failure categories/);
 assert.match(usageCombined, /Raw error messages are not stored/);
 assert.doesNotMatch(usageRender, /Retryable errors|Completed successfully/);

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { hydrateWorkspaceAnalytics, workspaceAnalyticsHtml } from '../src/ui/features/workspaces/analytics.js';
 
-const scope = { toolCalls: 9, completed: 8, successRate: 87.5, averageDuration: 125, points: [{ toolCalls: 1 }, { toolCalls: 4 }, { toolCalls: 2 }, { toolCalls: 2 }] };
+const scope = { toolCalls: 9, completed: 8, reliabilityCalls: 8, reliabilityRate: 87.5, averageDuration: 125, points: [{ toolCalls: 1 }, { toolCalls: 4 }, { toolCalls: 2 }, { toolCalls: 2 }] };
 const html = workspaceAnalyticsHtml(scope);
 assert.match(html, /Last 24 hours/);
 assert.doesNotMatch(html, /Local analytics/);
-assert.match(html, /Tool calls/);
+assert.match(html, /Actions/);
+assert.match(html, /Reliable/);
 assert.match(html, />9</);
 assert.match(html, /87\.5%/);
 assert.match(html, /125 ms/);
@@ -17,13 +18,13 @@ const snapshot = {
   ok: true,
   source: 'local',
   month: '2026-08',
-  totals: { requests: 1, toolCalls: 1, successes: 1, failures: 0, requestBytes: 1, resultBytes: 1, executionMs: 50, activeDays: 1 },
-  tools: [], devices: [], workspaces: [{ workspace: 'repo', toolCalls: 1, successes: 1, failures: 0, executionMs: 50 }],
-  workspaceDimensions: [{ deviceId: 'local', displayName: 'This device', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 1, successes: 1, failures: 0, executionMs: 50 }],
+  totals: { requests: 1, toolCalls: 1, successes: 1, failures: 0, requestBytes: 1, resultBytes: 1, executionMs: 50, activeDays: 1, reliabilityCalls: 1, reliableCalls: 1, infrastructureFailures: 0 },
+  tools: [], devices: [], workspaces: [{ workspace: 'repo', toolCalls: 1, successes: 1, failures: 0, executionMs: 50, reliabilityCalls: 1, reliableCalls: 1, infrastructureFailures: 0 }],
+  workspaceDimensions: [{ deviceId: 'local', displayName: 'This device', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 1, successes: 1, failures: 0, executionMs: 50, reliabilityCalls: 1, reliableCalls: 1, infrastructureFailures: 0 }],
   workspaceTools: [],
-  series: [{ hour: '2026-08-08T10', requests: 1, toolCalls: 1, successes: 1, failures: 0, requestBytes: 1, resultBytes: 1, executionMs: 50 }],
+  series: [{ hour: '2026-08-08T10', requests: 1, toolCalls: 1, successes: 1, failures: 0, requestBytes: 1, resultBytes: 1, executionMs: 50, reliabilityCalls: 1, reliableCalls: 1, infrastructureFailures: 0 }],
   toolSeries: [],
-  workspaceSeries: [{ hour: '2026-08-08T10', deviceId: 'local', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 1, successes: 1, failures: 0, executionMs: 50 }],
+  workspaceSeries: [{ hour: '2026-08-08T10', deviceId: 'local', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 1, successes: 1, failures: 0, executionMs: 50, reliabilityCalls: 1, reliableCalls: 1, infrastructureFailures: 0 }],
   workspaceToolSeries: []
 };
 
@@ -42,4 +43,4 @@ assert.equal(await hydrateWorkspaceAnalytics(failedRoot, ['repo'], {
   now: new Date('2026-08-08T12:00:00.000Z')
 }), false);
 
-console.log('Workspace local analytics hydration passed.');
+console.log('Workspace analytics preview hydration passed.');
