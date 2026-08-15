@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { approvalRequirement } from '../src/mcp/approval.js';
 import { requiredCapability } from '../src/mcp/authorizationPolicy.js';
 import {
-  ACTION_OPERATIONS,
+  ACTION_REGISTRY,
   catalogApprovalRequirement,
   getCatalogAction,
   getCatalogToolDefinitions,
@@ -46,7 +46,7 @@ assert.deepEqual(
 );
 
 for (const entry of catalog) {
-  assert.equal(ACTION_OPERATIONS[entry.publicTool][entry.action].operationName, entry.operationName);
+  assert.equal(ACTION_REGISTRY[entry.publicTool][entry.action].operationName, entry.operationName);
 
   const operation = getOperationDefinition(entry.operationName);
   assert.ok(operation, `${entry.operationName} must exist in the current internal registry`);
