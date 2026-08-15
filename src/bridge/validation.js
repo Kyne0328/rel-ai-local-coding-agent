@@ -13,6 +13,8 @@ import { finalizeValidationResult, normalizeCompletionSummary } from '../tools/c
 import { createValidationFingerprint, createValidationPlan, readValidationPlan } from './validationPlan.js';
 import { runSpan } from '../telemetry.js';
 import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
+import { parallel, runPlan, sequence, step } from '../executionPlan.js';
+import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
 import { noChecksValidationResult } from './validationNoChecks.js';
 import {
@@ -73,10 +75,10 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const stopOnFailure = args.stopOnFailure !== false;
   const fullOutput = Boolean(args.fullOutput);
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
-  const results = [];
+  const indexedResults = new Array(checks.length);
   const currentFingerprint = await createValidationFingerprint(workspace, config);
   const recentEvidence = currentTaskId ? readRecentWorkflowEvidence(config, currentTaskId, 100) : [];
-  const reusedChecks = [];
+  const reusedCheckIds = new Array(checks.length);
   let executedUnits = 0;
   let reusedUnits = 0;
   const signal = combineAbortSignals(
@@ -84,81 +86,117 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
     context.signal
   );
+  const effectiveUnits = checks.map((command, index) => checkUnits[index] || {
+    id: `explicit:${index}`,
+    command,
+    cwd: '.',
+    kind: 'other',
+    scopeKey: 'repository'
+  });
+  const executionStages = buildCheckExecutionStages(effectiveUnits);
+  const visibleResults = () => indexedResults.filter(Boolean);
 
-  publishValidationProgress({ checks, skippedChecks, results, currentIndex: 0, resultStatus: 'pending' });
-  for (let index = 0; index < checks.length; index += 1) {
-    if (signal?.aborted) break;
-    const unit = checkUnits[index] || { command: checks[index], cwd: '.' };
-    const command = unit.command;
-    const reusable = recentEvidence.find(receipt => checkEvidenceReusable(receipt, {
-      commandId: unit.id || `explicit:${index}`,
-      command,
-      cwd: unit.cwd || '.',
-      repositoryFingerprint: currentFingerprint.fingerprint
-    }));
-    if (reusable) {
-      const reusedSummary = { command, cwd: unit.cwd || '.', ok: true, reused: true };
-      results.push(reusedSummary);
-      reusedUnits += 1;
-      reusedChecks.push(unit.id || command);
-      publishValidationProgress({ checks, skippedChecks, results, currentCheck: sanitizeDisplayText(command, 300), currentIndex: index + 1, resultStatus: 'passed' });
-      continue;
-    }
-    const displayCommand = sanitizeDisplayText(command, 300) || `Check ${index + 1}`;
-    publishValidationProgress({
-      checks,
-      skippedChecks,
-      results,
-      currentCheck: displayCommand,
-      currentIndex: index + 1,
-      resultStatus: 'running'
-    });
-    const result = await runSpan(config, 'relai.validation.step', {
-      'relai.workspace': workspace.alias,
-      'relai.validation.command': displayCommand,
-      'relai.validation.index': index + 1,
-      'relai.validation.total': checks.length,
-      'relai.validation.plan_id': String(args.planId || '')
-    }, () => runProcess(command, [], {
-      cwd: path.resolve(workspace.path, unit.cwd || '.'),
-      shell: true,
-      commandString: command,
-      timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000),
-      signal,
-      ...(fullOutput ? { maxOutputBytes: 16 * 1024 * 1024 } : {})
-    }, config));
-    const summary = boundCheckOutput({ command, ...summarizeCommand(result) }, tailChars);
-    executedUnits += 1;
-    results.push(summary);
-    if (summary.ok && currentTaskId) {
-      const authority = readTaskIntegrity(config, currentTaskId, logicalWorkspaceAlias);
-      const workspaceIntegrity = readWorkspaceIntegrity(config, logicalWorkspaceAlias);
-      const receipt = buildWorkflowEvidenceReceipt({
-        tool: 'relai_validate',
-        args: { command, cwd: unit.cwd || '.' },
-        result: { ok: true, exitCode: summary.exitCode, durationMs: summary.durationMs, validationStatus: 'passed' },
-        auditEntry: {
-          ts: new Date().toISOString(),
-          taskMutationGeneration: authority?.mutationGeneration || 0,
-          taskWorkspaceGeneration: workspaceIntegrity?.generation || 0
-        },
-        repositoryFingerprint: currentFingerprint.fingerprint,
-        commandId: unit.id || `explicit:${index}`
-      });
-      if (receipt) recordWorkflowEvidence(config, currentTaskId, receipt, { defer: true });
-    }
-    const status = checkResultStatus(summary);
-    publishValidationProgress({
-      checks,
-      skippedChecks,
-      results,
-      currentCheck: displayCommand,
-      currentIndex: index + 1,
-      resultStatus: status
-    });
-    if (summary.cancelled) break;
-    if (!summary.ok && stopOnFailure) break;
-  }
+  publishValidationProgress({ checks, skippedChecks, results: [], currentIndex: 0, resultStatus: 'pending' });
+
+  const planStages = executionStages.map(stage => {
+    const nodes = stage.items.map(({ unit, index, policy: executionPolicy }) => step(
+      `validation ${index + 1}`,
+      async () => {
+        const command = unit.command;
+        const reusable = recentEvidence.find(receipt => checkEvidenceReusable(receipt, {
+          commandId: unit.id || `explicit:${index}`,
+          command,
+          cwd: unit.cwd || '.',
+          repositoryFingerprint: currentFingerprint.fingerprint
+        }));
+        if (reusable) {
+          const reusedSummary = { command, cwd: unit.cwd || '.', ok: true, reused: true };
+          indexedResults[index] = reusedSummary;
+          reusedUnits += 1;
+          reusedCheckIds[index] = unit.id || command;
+          publishValidationProgress({
+            checks,
+            skippedChecks,
+            results: visibleResults(),
+            currentCheck: sanitizeDisplayText(command, 300),
+            currentIndex: index + 1,
+            resultStatus: 'passed'
+          });
+          return reusedSummary;
+        }
+
+        const displayCommand = sanitizeDisplayText(command, 300) || `Check ${index + 1}`;
+        publishValidationProgress({
+          checks,
+          skippedChecks,
+          results: visibleResults(),
+          currentCheck: displayCommand,
+          currentIndex: index + 1,
+          resultStatus: 'running'
+        });
+        const result = await runSpan(config, 'relai.validation.step', {
+          'relai.workspace': workspace.alias,
+          'relai.validation.command': displayCommand,
+          'relai.validation.index': index + 1,
+          'relai.validation.total': checks.length,
+          'relai.validation.plan_id': String(args.planId || ''),
+          'relai.validation.parallel_safe': executionPolicy.parallelSafe === true,
+          'relai.validation.kind': executionPolicy.kind
+        }, () => runProcess(command, [], {
+          cwd: path.resolve(workspace.path, unit.cwd || '.'),
+          shell: true,
+          commandString: command,
+          timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000),
+          signal,
+          ...(fullOutput ? { maxOutputBytes: 16 * 1024 * 1024 } : {})
+        }, config));
+        const summary = boundCheckOutput({ command, cwd: unit.cwd || '.', ...summarizeCommand(result) }, tailChars);
+        executedUnits += 1;
+        indexedResults[index] = summary;
+        if (summary.ok && currentTaskId) {
+          const authority = readTaskIntegrity(config, currentTaskId, logicalWorkspaceAlias);
+          const workspaceIntegrity = readWorkspaceIntegrity(config, logicalWorkspaceAlias);
+          const receipt = buildWorkflowEvidenceReceipt({
+            tool: 'relai_validate',
+            args: { command, cwd: unit.cwd || '.' },
+            result: { ok: true, exitCode: summary.exitCode, durationMs: summary.durationMs, validationStatus: 'passed' },
+            auditEntry: {
+              ts: new Date().toISOString(),
+              taskMutationGeneration: authority?.mutationGeneration || 0,
+              taskWorkspaceGeneration: workspaceIntegrity?.generation || 0
+            },
+            repositoryFingerprint: currentFingerprint.fingerprint,
+            commandId: unit.id || `explicit:${index}`
+          });
+          if (receipt) recordWorkflowEvidence(config, currentTaskId, receipt, { defer: true });
+        }
+        publishValidationProgress({
+          checks,
+          skippedChecks,
+          results: visibleResults(),
+          currentCheck: displayCommand,
+          currentIndex: index + 1,
+          resultStatus: checkResultStatus(summary)
+        });
+        return summary;
+      },
+      {
+        isSuccess: value => value?.ok === true,
+        metadata: {
+          index,
+          kind: executionPolicy.kind,
+          parallelSafe: executionPolicy.parallelSafe,
+          resourceKey: executionPolicy.resourceKey
+        }
+      }
+    ));
+    return stage.parallel
+      ? parallel(nodes, { maxConcurrency: 3, stopOnFailure })
+      : sequence(nodes, { stopOnFailure });
+  });
+  const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
+  const results = visibleResults();
+  const reusedChecks = reusedCheckIds.filter(Boolean);
 
   const cancelled = signal?.aborted === true || results.some(item => item.cancelled === true);
   const ok = !cancelled && results.length === checks.length && results.every(item => item.ok);
@@ -202,6 +240,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     reusedUnits,
     reusedChecks,
     totalUnits: checks.length,
+    execution: execution.metrics,
     ...(failedCheck ? { failedCheck } : {}),
     nextAction,
     ...(validationPlan ? { planId: validationPlan.planId, planSelection, planCreatedAt: validationPlan.createdAt } : {}),
