@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { clearTaskHistory, getTaskHistoryDir, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent } from "../src/taskHistoryStore.js";
+import { clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
 import { writeSession } from '../src/taskHistoryStorage.js';
 import { principalFingerprint } from '../src/mcp/principal.js';
 import { assertKnownTask } from '../src/tools/task.js';
@@ -52,6 +52,17 @@ try {
   recordTaskHistoryEvent(config, currentEvent('exact-task', {
     ts: new Date(base + 301000).toISOString(), tool: 'work.finish', completionKnown: true, taskSummary: 'Completed exactly.'
   }));
+  assert.equal(recordWorkflowEvidenceBatch(config, 'exact-task', [
+    { kind: 'check', marker: 'durable-1' },
+    { kind: 'check', marker: 'durable-2' }
+  ]).length, 2);
+  recordVolatileWorkflowEvidence('exact-task', { kind: 'read', marker: 'volatile-1' });
+  assert.deepEqual(
+    readRecentWorkflowEvidence(config, 'exact-task', 3).map(item => item.marker),
+    ['durable-1', 'durable-2', 'volatile-1'],
+    'batched durable evidence and passive volatile evidence should share one read path'
+  );
+
   recordTaskHistoryEvent(config, currentEvent('separate-task', {
     ts: new Date(base + 302000).toISOString(), tool: 'work.finish', completionKnown: true,
     relatedTaskIds: ['exact-task'], taskSummary: 'Must remain separate.'

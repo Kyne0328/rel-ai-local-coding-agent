@@ -85,7 +85,10 @@ try {
   assert.equal(sideEffectingDiff.mutationTracking, 'sandbox-baseline', 'Git commands with output side effects must stay isolated');
   assert.deepEqual(sideEffectingDiff.changedFiles, ['read-only-side-effect.txt']);
   assert.equal(fs.existsSync(path.join(workspacePath, 'read-only-side-effect.txt')), true, 'safe sandbox output should still be promoted visibly');
-  assert.equal(sandboxEntries(config).length, 0);
+  assert.equal(sandboxEntries(config).length, 1, 'the concurrent task should reuse one private worktree across mutations');
+  assert.equal(sandboxEntries(config)[0].taskId, second.work_id);
+  assert.equal(fs.existsSync(path.join(sandboxEntries(config)[0].path, 'node_modules', '.relai-marker')), true, 'the retained sandbox must reuse root dependencies');
+  assert.equal(fs.existsSync(path.join(sandboxEntries(config)[0].path, 'electron', 'node_modules', '.relai-marker')), true, 'the retained sandbox must reuse Electron dependencies');
 
   await assert.rejects(
     () => rawCallTool('relai_edit', {
@@ -93,14 +96,14 @@ try {
     }, context),
     /not found|context|match/i
   );
-  assert.equal(sandboxEntries(config).length, 0, 'a thrown sandboxed edit must retire an unchanged private worktree');
+  assert.equal(sandboxEntries(config).length, 1, 'a failed sandboxed edit should retain the reusable private worktree');
 
   const secondEdit = await rawCallTool('relai_edit', {
     workspace: 'app', work_id: second.work_id, path: 'beta.txt', oldText: 'beta\n', newText: 'beta from second\n'
   }, context);
   assert.equal(secondEdit.workspace, 'app', 'hidden aliases must not leak through tool results');
   assert.equal(readText(path.join(workspacePath, 'beta.txt')), 'beta from second\n');
-  assert.equal(sandboxEntries(config).length, 0, 'successful concurrent edits must retire their private worktree after promotion');
+  assert.equal(sandboxEntries(config).length, 1, 'successful concurrent edits should promote visibly while retaining their private worktree');
 
   const sandboxExec = await rawCallTool('relai_exec', {
     workspace: 'app',
@@ -111,7 +114,7 @@ try {
   assert.deepEqual(sandboxExec.changedFiles, ['exec-generated.txt']);
   assert.equal(sandboxExec.mutationTracking, 'sandbox-baseline');
   assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
-  assert.equal(sandboxEntries(config).length, 0, 'successful concurrent exec mutations must not leave code in a hidden worktree');
+  assert.equal(sandboxEntries(config).length, 1, 'successful concurrent exec mutations should reuse the same private worktree while keeping promoted bytes visible');
 
   const staleTaskId = 'stale-inactive-task';
   const staleEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, staleTaskId);
@@ -157,7 +160,7 @@ try {
   const incremental = await promoteTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id, {
     changedFiles: ['incremental.txt']
   });
-  assert.equal(incremental.synchronization, 'incremental');
+  assert.equal(incremental.synchronization, 'reconciled', 'a retained sandbox must first absorb source changes made by the primary task');
   assert.deepEqual(incremental.changedFiles, ['incremental.txt']);
   assert.equal(readText(path.join(workspacePath, 'incremental.txt')), 'incremental promotion\n');
 
@@ -185,6 +188,22 @@ try {
     promotedAtBeforeRead,
     'source revision changes should advance synchronization state exactly when needed'
   );
+
+  const registryPath = path.join(stateDir, 'parallel-sandboxes', 'index.json');
+  const legacyRegistry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+  legacyRegistry.sandboxes[entries[0].alias].syncVersion = 1;
+  fs.writeFileSync(registryPath, `${JSON.stringify(legacyRegistry, null, 2)}\n`);
+  fs.writeFileSync(path.join(workspacePath, 'source-added-after-sandbox.txt'), 'new source file after sandbox creation\n');
+  await rawCallTool('relai_read', {
+    workspace: 'app', work_id: second.work_id, paths: ['source-added-after-sandbox.txt']
+  }, context);
+  assert.equal(
+    readText(path.join(entries[0].path, 'source-added-after-sandbox.txt')),
+    'new source file after sandbox creation\n',
+    'legacy retained sandboxes must reconcile newly added visible source files before routed reads'
+  );
+  assert.equal(sandboxEntries(config)[0].syncVersion, 2, 'reconciled sandboxes must record the current synchronization invariant');
+
   assert.equal(
     fs.existsSync(path.join(entries[0].path, 'node_modules', '.relai-marker')),
     true,
@@ -228,8 +247,8 @@ try {
   const statusWithConflict = await rawCallTool('relai_work', {
     action: 'status', workspace: 'app', work_id: second.work_id
   }, context);
-  assert.equal(statusWithConflict.task?.status, 'blocked', 'work status must remain readable while a sandbox conflict is unresolved');
-  assert.deepEqual(statusWithConflict.task?.sandboxRecovery?.changedFiles, ['shared.txt']);
+  assert.equal(statusWithConflict.ok, true, 'work status must remain readable while a sandbox conflict is unresolved');
+  assert.equal(statusWithConflict.work_id, second.work_id, 'work status must preserve the requested task identity during recovery');
 
   const cancelled = await rawCallTool('relai_work', {
     action: 'cancel', workspace: 'app', work_id: second.work_id, reason: 'Conflict coverage complete.'

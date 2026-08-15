@@ -1,6 +1,8 @@
 import { callTool as rawCallTool, getToolSchemas } from "../src/tools.js";
 import { readConfig } from "../src/config.js";
 import { readAudit } from "../src/audit.js";
+import { repositoryIntelligence } from "../src/repository/intelligence/service.js";
+import { isClearlyReadOnlyExec } from "../src/tools/execution.js";
 import * as sessionCache from "../src/sessionCache.js";
 import { resetToolActivity } from "../src/toolActivity.js";
 import assert from 'node:assert/strict';
@@ -119,6 +121,14 @@ try {
   assert.equal(direct.ok, true);
   assert.equal(direct.shell, 'Direct process');
   assert.equal(direct.stdout, literal);
+
+  assert.equal(
+    isClearlyReadOnlyExec({ executable: process.execPath, argv: ['--version'] }),
+    true,
+    'provably read-only direct exec must use the no-mutation-scan path'
+  );
+  const directReadOnly = await execCall({ executable: process.execPath, argv: ['--version'] });
+  assert.equal(directReadOnly.commandSucceeded, true);
 
   const directNpm = await execCall({ executable: 'npm', argv: ['--version'] });
   assert.equal(directNpm.commandSucceeded, true, 'direct npm mode must work without relying on Windows .cmd execution');
@@ -270,7 +280,12 @@ try {
 
   console.log('relai_exec unit and integration tests passed.');
 } finally {
+  repositoryIntelligence.shutdown();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
   fs.rmSync(temp, { recursive: true, force: true });
 }
+
+// Nested raw tool calls can leave Windows piped stdio referenced after app resources close.
+// Teardown above is complete, so exit explicitly to keep this isolated integration test deterministic.
+process.exit(0);

@@ -5,7 +5,7 @@ import { resolvePolicy } from '../policyResolver.js';
 import { clampNumber } from './limits.js';
 import { getCurrentTaskAbortSignal, getCurrentToolActivityContext } from '../toolActivity.js';
 import { readTaskIntegrity, readWorkspaceIntegrity, taskOwnedChangedFiles } from '../taskIntegrity.js';
-import { readRecentWorkflowEvidence, recordWorkflowEvidence } from '../taskHistoryStore.js';
+import { readRecentWorkflowEvidence, recordWorkflowEvidenceBatch } from '../taskHistoryStore.js';
 import { buildWorkflowEvidenceReceipt, checkEvidenceReusable } from '../workflow/evidence.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { combineAbortSignals } from '../abortSignals.js';
@@ -34,8 +34,16 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const suppliedChangedFiles = Array.isArray(args.changedFiles)
     ? [...new Set(args.changedFiles.map(file => String(file || '').trim()).filter(Boolean))]
     : [];
-  const ownedChangedFiles = currentTaskId ? taskOwnedChangedFiles(config, currentTaskId, logicalWorkspaceAlias) : [];
-  const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : (ownedChangedFiles.length ? ownedChangedFiles : undefined);  let effectiveArgs = args;
+  const requestIntegrity = currentTaskId && context.requestTaskContext?.taskId === currentTaskId
+    ? context.requestTaskContext.integrity
+    : null;
+  const ownedChangedFiles = currentTaskId
+    ? Array.isArray(requestIntegrity?.taskOwnedChangedFiles)
+      ? [...requestIntegrity.taskOwnedChangedFiles]
+      : taskOwnedChangedFiles(config, currentTaskId, logicalWorkspaceAlias)
+    : [];
+  const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : (ownedChangedFiles.length ? ownedChangedFiles : undefined);
+  let effectiveArgs = args;
   let validationPlan = null;
   let planSelection = '';
   let currentFingerprint = null;
@@ -84,6 +92,9 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const indexedResults = new Array(checks.length);
   if (!currentFingerprint) currentFingerprint = await createValidationFingerprint(workspace, config);
   const recentEvidence = currentTaskId ? readRecentWorkflowEvidence(config, currentTaskId, 100) : [];
+  const evidenceAuthority = currentTaskId ? (requestIntegrity || readTaskIntegrity(config, currentTaskId, logicalWorkspaceAlias)) : null;
+  const evidenceWorkspace = currentTaskId ? readWorkspaceIntegrity(config, logicalWorkspaceAlias) : null;
+  const evidenceReceipts = new Array(checks.length);
   const reusedCheckIds = new Array(checks.length);
   let executedUnits = 0;
   let reusedUnits = 0;
@@ -170,21 +181,19 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
         executedUnits += 1;
         indexedResults[index] = summary;
         if (summary.ok && currentTaskId) {
-          const authority = readTaskIntegrity(config, currentTaskId, logicalWorkspaceAlias);
-          const workspaceIntegrity = readWorkspaceIntegrity(config, logicalWorkspaceAlias);
           const receipt = buildWorkflowEvidenceReceipt({
             tool: OP.VALIDATE_CHECKS,
             args: { command, cwd: unit.cwd || '.' },
             result: { ok: true, exitCode: summary.exitCode, durationMs: summary.durationMs, validationStatus: 'passed' },
             auditEntry: {
               ts: new Date().toISOString(),
-              taskMutationGeneration: authority?.mutationGeneration || 0,
-              taskWorkspaceGeneration: workspaceIntegrity?.generation || 0
+              taskMutationGeneration: evidenceAuthority?.mutationGeneration || 0,
+              taskWorkspaceGeneration: evidenceWorkspace?.generation || 0
             },
             repositoryFingerprint: currentFingerprint.fingerprint,
             commandId: unit.id || `explicit:${index}`
           });
-          if (receipt) recordWorkflowEvidence(config, currentTaskId, receipt, { defer: true });
+          if (receipt) evidenceReceipts[index] = receipt;
         }
         publishValidationProgress({
           checks,
@@ -214,6 +223,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   });
   const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
   recordExecutionPlanMetrics('validation', execution.metrics);
+  if (currentTaskId) recordWorkflowEvidenceBatch(config, currentTaskId, evidenceReceipts.filter(Boolean), { defer: true });
   const results = visibleResults();
   const reusedChecks = reusedCheckIds.filter(Boolean);
 

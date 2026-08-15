@@ -9,6 +9,7 @@ import {
   readSessionPolicy,
   touchSessionPolicy,
   writeSessionPolicy,
+  POLICY_CACHE_RECHECK_MS,
   SESSION_TOUCH_PERSIST_INTERVAL_MS
 } from '../src/policyResolver.js';
 
@@ -41,6 +42,13 @@ try {
     'an active cached session must not recapture baseline state'
   );
   assert.equal(fs.readFileSync(file, 'utf8'), persistedBeforeTouch);
+
+  const externallyEdited = JSON.parse(persistedBeforeTouch);
+  externallyEdited.taskHint = 'external edit';
+  fs.writeFileSync(file, `${JSON.stringify(externallyEdited, null, 2)}\n`);
+  assert.equal(readSessionPolicy(config, alias, taskId)?.taskHint, 'cache test', 'the short hot-cache window should avoid an immediate stat');
+  await new Promise(resolve => setTimeout(resolve, POLICY_CACHE_RECHECK_MS + 20));
+  assert.equal(readSessionPolicy(config, alias, taskId)?.taskHint, 'external edit', 'external policy edits must be observed after the bounded recheck window');
 
   assert.equal(clearSessionPolicy(config, alias, taskId).cleared, true);
   assert.equal(fs.existsSync(file), false);
