@@ -110,7 +110,8 @@ try {
   renderUsage(content, { bounds, current: scope, previous: analyticsRangeScope([], bounds) });
   assert.match(content.innerHTML, />Reliability</);
   assert.match(content.innerHTML, />Operation success</);
-  assert.match(content.innerHTML, /Infra failures/);
+  assert.match(content.innerHTML, />System errors</);
+  assert.match(content.innerHTML, /Rel\.AI internal errors only/);
   assert.match(content.innerHTML, /Recoverable/);
   assert.match(content.innerHTML, /usage-side-by-side/);
   assert.ok(content.innerHTML.indexOf('Failure categories') < content.innerHTML.indexOf('Workspace activity'), 'failure categories should sit beside workspace activity in the compact final row');
