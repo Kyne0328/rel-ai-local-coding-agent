@@ -10,6 +10,10 @@ import { runEnvOperation } from "./envOperations.js";
 import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES, BATCH_RESULT_COMPACT_THRESHOLD } from "./editLimits.js";
 import { classifyWorkflowRisk } from "./workflow/risk.js";
 import { discoverRepositoryTopology, packageForPath } from "./workflow/topology.js";
+import { createValidationPlan } from "./bridge/validationPlan.js";
+import { normalizeVerifyChecks } from "./bridge/validationChecks.js";
+import { checkExecutionPolicy } from "./workflow/checkExecution.js";
+import { parallel, runPlan, step } from "./executionPlan.js";
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -183,32 +187,94 @@ function postActionRecommendation(workspace, changedFiles = []) {
   };
 }
 // Optional post-actions: validate and/or return a diff in the SAME call, so a
-// change-verify-review loop costs one approval instead of three.
+// change-verify-review loop costs one approval instead of three. Diff may overlap
+// validation only when the selected validation plan contains known read-only checks.
 async function runPostActions(workspace, config, args, changedFiles = []) {
   const post = {};
-  if (args.runChecks === true && !args.dryRun) {
+  const wantsChecks = args.runChecks === true && !args.dryRun;
+  const wantsDiff = args.returnDiff === true;
+  const validationArgs = {
+    level: args.level,
+    ...(Array.isArray(changedFiles) && changedFiles.length ? { changedFiles } : {})
+  };
+  const runChecks = async (extra = {}) => {
     try {
-      post.checks = await relaiVerify(workspace, config, {
-        level: args.level,
-        ...(Array.isArray(changedFiles) && changedFiles.length ? { changedFiles } : {})
-      });
+      return await relaiVerify(workspace, config, { ...validationArgs, ...extra });
     } catch (error) {
-      post.checks = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
-  }
-  if (args.returnDiff === true) {
+  };
+  const runDiff = async () => {
     try {
-      post.diff = await relaiDiff(workspace, config, { maxBytes: args.maxBytes });
+      return await relaiDiff(workspace, config, { maxBytes: args.maxBytes });
     } catch (error) {
-      post.diff = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
+  };
+
+  if (wantsChecks && wantsDiff) {
+    let prepared = null;
+    try {
+      prepared = await preparePostValidation(workspace, config, args, changedFiles);
+    } catch {}
+    if (prepared?.parallelSafe === true) {
+      const execution = await runPlan(parallel([
+        step('post-validation', () => runChecks({ planId: prepared.planId, planLevel: prepared.planSelection })),
+        step('post-diff', runDiff)
+      ], { maxConcurrency: 2, stopOnFailure: false }));
+      post.checks = execution.results[0]?.value;
+      post.diff = execution.results[1]?.value;
+      post.execution = {
+        ...execution.metrics,
+        mode: 'parallel',
+        reason: 'Selected validation checks are known read-only, so validation and diff can overlap safely.'
+      };
+      return post;
+    }
+
+    post.checks = await runChecks(prepared ? { planId: prepared.planId, planLevel: prepared.planSelection } : {});
+    post.diff = await runDiff();
+    post.execution = {
+      mode: 'serial',
+      maxParallelism: 1,
+      stepCount: 2,
+      reason: prepared
+        ? 'Validation includes a build, unknown, or mutation-capable check, so diff waits for validation.'
+        : 'Validation could not be safely preplanned, so post-actions remain serial.'
+    };
+    return post;
   }
+
+  if (wantsChecks) post.checks = await runChecks();
+  if (wantsDiff) post.diff = await runDiff();
   return post;
+}
+
+async function preparePostValidation(workspace, config, args, changedFiles) {
+  const plan = await createValidationPlan(workspace, config, {
+    release: String(args.level || '').toLowerCase() === 'release',
+    ...(Array.isArray(changedFiles) && changedFiles.length ? { changedFiles } : {})
+  });
+  const planSelection = String(args.level || plan.recommended || 'focused').toLowerCase();
+  const plannedChecks = plan.checks?.[planSelection];
+  if (!Array.isArray(plannedChecks)) throw new Error(`Validation plan has no '${planSelection}' check set.`);
+  const normalized = normalizeVerifyChecks(
+    { checks: plannedChecks },
+    workspace.path,
+    planSelection === 'focused' ? 'quick' : planSelection
+  );
+  return {
+    planId: plan.planId,
+    planSelection,
+    parallelSafe: normalized.checkUnits.length > 0
+      && normalized.checkUnits.every(unit => checkExecutionPolicy(unit).parallelSafe)
+  };
 }
 
 function attachPost(result, post) {
   if (post.checks) result.checks = post.checks;
   if (post.diff) result.diff = post.diff;
+  if (post.execution) result.execution = post.execution;
   // A failed post-check makes the whole call not-ok so callers do not treat a
   // broken build as a clean edit.
   if (post.checks?.ok === false) result.ok = false;
