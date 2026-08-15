@@ -109,7 +109,35 @@ function readJsonFile(target, options = {}) {
   }
 
   if (Object.hasOwn(options, 'fallback')) return cloneFallback(options.fallback);
-  throw new DurableStateError(
+  throw readFailure(file, primary, backup, backupReason);
+}
+
+async function readJsonFileAsync(target, options = {}) {
+  const file = path.resolve(String(target));
+  const primary = await parseJsonFileAsync(file, options.validate);
+  if (primary.ok) return primary.value;
+  if (primary.missing) return fallbackValue(options);
+
+  const backup = options.backup === true ? path.resolve(String(options.backupPath || `${file}.bak`)) : '';
+  let backupReason = '';
+  if (backup) {
+    const recovered = await parseJsonFileAsync(backup, options.validate);
+    backupReason = recovered.reason || '';
+    if (recovered.ok) {
+      if (options.restoreBackup !== false) {
+        await writeJsonAtomicAsync(file, recovered.value, { mode: options.mode ?? 0o600 });
+      }
+      options.onRecovery?.({ path: file, backupPath: backup, reason: primary.reason });
+      return recovered.value;
+    }
+  }
+
+  if (Object.hasOwn(options, 'fallback')) return cloneFallback(options.fallback);
+  throw readFailure(file, primary, backup, backupReason);
+}
+
+function readFailure(file, primary, backup, backupReason) {
+  return new DurableStateError(
     'DURABLE_STATE_READ_FAILED',
     `State file ${path.basename(file)} is unreadable or invalid.`,
     {
@@ -127,9 +155,27 @@ function parseJsonFile(file, validate) {
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (error) {
-    if (['ENOENT', 'ENOTDIR'].includes(error?.code)) return { ok: false, missing: true, reason: 'missing', error };
-    return { ok: false, missing: false, reason: 'read_failed', error };
+    return readParseFailure(error);
   }
+  return parseJsonText(text, validate);
+}
+
+async function parseJsonFileAsync(file, validate) {
+  let text;
+  try {
+    text = await fs.promises.readFile(file, 'utf8');
+  } catch (error) {
+    return readParseFailure(error);
+  }
+  return parseJsonText(text, validate);
+}
+
+function readParseFailure(error) {
+  if (['ENOENT', 'ENOTDIR'].includes(error?.code)) return { ok: false, missing: true, reason: 'missing', error };
+  return { ok: false, missing: false, reason: 'read_failed', error };
+}
+
+function parseJsonText(text, validate) {
   try {
     const value = JSON.parse(text);
     if (typeof validate === 'function' && validate(value) !== true) {
@@ -262,4 +308,4 @@ async function pathExistsAsync(file) {
   }
 }
 
-export { DurableStateError, readJsonFile, writeJsonAtomic, writeJsonAtomicAsync, writeTextAtomic, writeTextAtomicAsync };
+export { DurableStateError, readJsonFile, readJsonFileAsync, writeJsonAtomic, writeJsonAtomicAsync, writeTextAtomic, writeTextAtomicAsync };

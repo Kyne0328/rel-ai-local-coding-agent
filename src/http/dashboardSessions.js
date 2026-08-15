@@ -24,9 +24,24 @@ function consumeDashboardBootstrap(code, staticToken) {
   bootstraps.delete(String(code || ''));
   if (!record || record.expiresAt < Date.now()) return '';
   if (!safeEqual(record.tokenHash, hashToken(staticToken))) return '';
+  return createSession(record.tokenHash);
+}
+
+function createDashboardSession(providedToken, staticToken) {
+  const provided = String(providedToken || '');
+  const expected = String(staticToken || '');
+  if (!provided || !expected) return '';
+  const providedHash = hashToken(provided);
+  const expectedHash = hashToken(expected);
+  if (!safeEqual(providedHash, expectedHash)) return '';
+  prune();
+  return createSession(expectedHash);
+}
+
+function createSession(tokenHash) {
   const sessionId = crypto.randomBytes(32).toString('base64url');
   sessions.set(sessionId, {
-    tokenHash: record.tokenHash,
+    tokenHash,
     expiresAt: Date.now() + SESSION_TTL_MS
   });
   return sessionId;
@@ -78,4 +93,4 @@ function prune() {
   for (const [key, value] of sessions) if (value.expiresAt < now) sessions.delete(key);
 }
 
-export {  createDashboardBootstrap, consumeDashboardBootstrap, validateDashboardSession, setDashboardSessionCookie, clearDashboardSessions };
+export { createDashboardBootstrap, createDashboardSession, consumeDashboardBootstrap, validateDashboardSession, setDashboardSessionCookie, clearDashboardSessions };

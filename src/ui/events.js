@@ -3,7 +3,6 @@ let _es = null;
 let _sourceListeners = [];
 let _onEvent = null;
 let _onState = null;
-let _tokenFn = null;
 let _reconnectTimer = null;
 let _stopped = true;
 let _visibilityWired = false;
@@ -15,7 +14,8 @@ const LIVE_EVENT_TYPES = Object.freeze([
   'task.updated',
   'connection.updated',
   'workspace.updated',
-  'process.updated'
+  'process.updated',
+  'diagnostics.updated'
 ]);
 
 export function initEvents(onEvent, onState) {
@@ -26,8 +26,7 @@ export function initEvents(onEvent, onState) {
   document.addEventListener('visibilitychange', _handleVisibilityChange);
 }
 
-export function startSSE(tokenFn) {
-  _tokenFn = tokenFn || _tokenFn;
+export function startSSE() {
   _stopped = false;
   if (_es) return;
   _connect();
@@ -41,8 +40,7 @@ export function stopSSE(options = {}) {
   if (options.emit !== false) emitState('offline');
 }
 
-export function restartSSE(tokenFn) {
-  _tokenFn = tokenFn || _tokenFn;
+export function restartSSE() {
   stopSSE({ emit: false });
   _stopped = false;
   _retryCount = 0;
@@ -62,13 +60,8 @@ function _handleVisibilityChange() {
 function _connect() {
   if (_stopped || _es) return;
   const generation = ++_generation;
-  const token = _tokenFn ? _tokenFn() : '';
-  const params = new URLSearchParams();
-  if (token) params.set('token', token);
-  const query = params.toString();
-  const url = query ? `/events?${query}` : '/events';
   emitState(_retryCount ? 'reconnecting' : 'connecting');
-  const source = new EventSource(url, { withCredentials: true });
+  const source = new EventSource('/events', { withCredentials: true });
   _es = source;
 
   listenSource(source, 'open', () => markLive(source, generation));

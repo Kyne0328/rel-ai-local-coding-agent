@@ -52,6 +52,7 @@ function startHttpServer(options = {}) {
   const resetTaskActivity = typeof options.resetTaskActivity === "function" ? options.resetTaskActivity : null;
   const getRuntimeLogs = typeof options.getRuntimeLogs === "function" ? options.getRuntimeLogs : null;
   const clearRuntimeLogs = typeof options.clearRuntimeLogs === "function" ? options.clearRuntimeLogs : null;
+  const onRuntimeLogChange = typeof options.onRuntimeLogChange === "function" ? options.onRuntimeLogChange : null;
 
   ensureConfig();
   const runtimeConfig = readConfig();
@@ -78,7 +79,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, pickFolder, openFolder, getTaskActivity, getDesktopStatus, getRuntimeAccess, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, pickFolder, openFolder, getTaskActivity, getDesktopStatus, getRuntimeAccess, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs, onRuntimeLogChange });
     } catch (error) {
       const status = Number(error?.status || 500);
       const code = error?.errorCode || errorCodeForRequest(req);

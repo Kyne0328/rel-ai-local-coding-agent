@@ -205,7 +205,7 @@ try {
 
   win.bounds = { x: 0, y: 0, width: workArea.width, height: workArea.height };
   win.normalBounds = { x: 90, y: 54, width: 1080, height: 640 };
-  manager.close();
+  await manager.close();
   assert.equal(manager.getWindow(), null);
   const saved = JSON.parse(fs.readFileSync(path.join(sandbox, 'dashboard-window-state.json'), 'utf8'));
   assert.deepEqual(saved, {
@@ -222,7 +222,7 @@ try {
   assert.equal(reopened.options.y, 54);
   assert.equal(reopened.options.width, 1080);
   assert.equal(reopened.options.height, 640);
-  manager.close();
+  await manager.close();
 
   assert.deepEqual(
     restoreDashboardBounds({ x: 0, y: 0, width: 1240, height: 820 }, fakeScreen),

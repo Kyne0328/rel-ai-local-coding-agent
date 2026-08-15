@@ -3,18 +3,9 @@ import { toast } from './components/toast.js';
 
 const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-mcp/releases';
 
-function shouldShowUpdateModal(status, preferences, shownVersions) {
-  const version = cleanVersion(status?.availableVersion);
-  if (supportPolicyModalView(status?.supportPolicy)) return false;
-  if (status?.state !== 'available' || !version) return false;
-  if (preferences?.enabled !== true || preferences?.applicationUpdates !== true) return false;
-  if (cleanVersion(preferences?.ignoredUpdateVersion) === version) return false;
-  return !shownVersions?.has?.(version);
-}
-
 function supportPolicyModalView(policy) {
   const state = String(policy?.state || '');
-  if (!['recommended', 'deprecated', 'required', 'emergency_blocked'].includes(state)) return null;
+  if (!['deprecated', 'required', 'emergency_blocked'].includes(state)) return null;
   const currentVersion = cleanVersion(policy?.currentVersion);
   const minimumSupportedVersion = cleanVersion(policy?.minimumSupportedVersion);
   const minimumRecommendedVersion = cleanVersion(policy?.minimumRecommendedVersion || minimumSupportedVersion);
@@ -71,13 +62,9 @@ function supportPolicyModalView(policy) {
 
 function initUpdateAvailableModal(options = {}) {
   const bridge = options.bridge || window.relaiDesktop;
-  if (!bridge?.getUpdateStatus || !bridge?.getNotificationPreferences || !bridge?.setNotificationPreferences) {
-    return () => {};
-  }
+  if (!bridge?.getUpdateStatus) return () => {};
 
-  const shownVersions = new Set();
   const shownPolicyKeys = new Set();
-  let preferences = null;
   let latestStatus = null;
   let removeUpdateListener = null;
   let activePolicyKey = '';
@@ -107,28 +94,12 @@ function initUpdateAvailableModal(options = {}) {
       policyContent = null;
       closeModal();
     }
-    if (!shouldShowUpdateModal(latestStatus, preferences, shownVersions)) return;
-    const version = cleanVersion(latestStatus.availableVersion);
-    shownVersions.add(version);
-    showUpdateModal(version, latestStatus);
-  }
-
-  function receivePreferences(next) {
-    preferences = next?.preferences || next || preferences;
-    consider(latestStatus);
   }
 
   if (typeof bridge.onUpdateStatus === 'function') {
     removeUpdateListener = bridge.onUpdateStatus(status => consider(status));
   }
-  const onPreferenceChange = event => receivePreferences(event.detail);
-  document.addEventListener('relai:notification-preferences-change', onPreferenceChange);
-
-  void Promise.all([
-    bridge.getNotificationPreferences(),
-    bridge.getUpdateStatus()
-  ]).then(([preferenceResult, status]) => {
-    preferences = preferenceResult?.preferences || preferenceResult;
+  void bridge.getUpdateStatus().then(status => {
     latestStatus = status;
     consider(status);
   }).catch(() => {});
@@ -204,102 +175,7 @@ function initUpdateAvailableModal(options = {}) {
     }
   }
 
-  function showUpdateModal(version, status) {
-    const content = document.createElement('div');
-    const description = document.createElement('p');
-    description.textContent = `Rel.AI MCP ${version} is available. Downloading keeps the current app running and does not restart it.`;
-    const detail = document.createElement('p');
-    detail.className = 'muted';
-    detail.textContent = status?.releaseDate
-      ? `Release date: ${status.releaseDate}`
-      : 'You can download now, postpone until the next launch, or ignore only this version.';
-
-    content.append(description, detail);
-    appendReleaseNotes(content, status, version);
-
-    const actions = document.createElement('div');
-    actions.className = 'connection-actions';
-    const download = actionButton(`Download v${version}`, 'primary');
-    const later = actionButton('Later', 'secondary');
-    const ignore = actionButton('Ignore this version', 'secondary');
-    actions.append(download, later, ignore);
-    content.appendChild(actions);
-
-    download.addEventListener('click', () => {
-      void downloadUpdateFromModal(bridge);
-    });
-    later.addEventListener('click', closeModal);
-    ignore.addEventListener('click', async () => {
-      ignore.disabled = true;
-      ignore.setAttribute('aria-busy', 'true');
-      try {
-        const result = await bridge.setNotificationPreferences({ ignoredUpdateVersion: version });
-        if (result?.ok === false) throw new Error(result.error || 'The update could not be ignored.');
-        preferences = result?.preferences || { ...preferences, ignoredUpdateVersion: version };
-        document.dispatchEvent(new CustomEvent('relai:notification-preferences-change', { detail: preferences }));
-        closeModal();
-      } catch (error) {
-        toast(messageOf(error), { variant: 'error' });
-        ignore.disabled = false;
-        ignore.removeAttribute('aria-busy');
-      }
-    });
-
-    openModal({
-      title: `Update available: v${version}`,
-      content
-    });
-  }
-
-  return () => {
-    removeUpdateListener?.();
-    document.removeEventListener('relai:notification-preferences-change', onPreferenceChange);
-  };
-}
-
-async function downloadUpdateFromModal(bridge, options = {}) {
-  const close = options.close || closeModal;
-  const notify = options.notify || (message => toast(message, { variant: 'error' }));
-  close();
-  try {
-    const result = await bridge.downloadUpdate();
-    if (result?.ok === false) throw new Error(result.error || 'The update could not be downloaded.');
-    return result;
-  } catch (error) {
-    notify(messageOf(error));
-    return { ok: false, error: messageOf(error) };
-  }
-}
-
-function appendReleaseNotes(content, status, version) {
-  const notes = Array.isArray(status?.releaseNotes) ? status.releaseNotes : [];
-  if (!notes.length) return;
-  const details = document.createElement('details');
-  details.className = 'application-update-release-notes';
-  details.open = true;
-  const summary = document.createElement('summary');
-  summary.textContent = `What's new in v${version}`;
-  const body = document.createElement('div');
-  body.className = 'application-update-release-notes-body';
-  for (const entry of notes) {
-    const note = String(entry?.note || '').trim();
-    if (!note) continue;
-    const item = document.createElement('div');
-    item.className = 'application-update-release-note';
-    const noteVersion = cleanVersion(entry?.version);
-    if (noteVersion && noteVersion !== version) {
-      const heading = document.createElement('strong');
-      heading.textContent = `v${noteVersion}`;
-      item.appendChild(heading);
-    }
-    const copy = document.createElement('p');
-    copy.textContent = note;
-    item.appendChild(copy);
-    body.appendChild(item);
-  }
-  if (!body.childElementCount) return;
-  details.append(summary, body);
-  content.appendChild(details);
+  return () => removeUpdateListener?.();
 }
 
 function updateActionInProgress(status = {}) {
@@ -344,4 +220,4 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Application update action failed.');
 }
 
-export { downloadUpdateFromModal, initUpdateAvailableModal, shouldShowUpdateModal, supportPolicyModalView };
+export { initUpdateAvailableModal, supportPolicyModalView };

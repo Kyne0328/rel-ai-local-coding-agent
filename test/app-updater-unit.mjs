@@ -29,14 +29,14 @@ class FakeUpdater extends EventEmitter {
 }
 
 const roots = [];
-function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, checkFailures = [], downloadFailures = [], currentCompatibility = null } = {}) {
+function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-'));
   roots.push(temp);
   const fake = new FakeUpdater({ checkFailures, downloadFailures });
   const statuses = [];
   const logs = [];
   const timers = [];
-  const activity = { activeCalls };
+  const activity = { activeCalls, activeTaskCount, state: taskState, tasks };
   let beforeInstall = 0;
   const updater = createAppUpdater({
     app: {
@@ -54,7 +54,7 @@ function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, a
       return timer;
     },
     clearTimer: () => {},
-    getTaskActivity: () => ({ activeCalls: activity.activeCalls }),
+    getTaskActivity: () => ({ ...activity, tasks: [...activity.tasks] }),
     onStatusChange: status => statuses.push(status),
     onBeforeInstall: () => { beforeInstall += 1; },
     retryDelay: async () => {},
@@ -114,6 +114,7 @@ assert.equal(valid.updater.start().state, 'idle');
 assert.equal(valid.fake.autoDownload, false);
 assert.equal(valid.fake.autoInstallOnAppQuit, false);
 assert.equal(valid.fake.allowPrerelease, false);
+await new Promise(resolve => setImmediate(resolve));
 assert.equal(valid.timers[0].delay, AUTO_CHECK_DELAY_MS);
 
 const checkPromise = valid.updater.checkForUpdates();
@@ -121,6 +122,7 @@ assert.equal(valid.updater.getStatus().state, 'checking');
 assert.equal(valid.updater.getStatus().integrityVerified, false);
 await checkPromise;
 assert.equal(valid.fake.checkCalls, 1);
+await new Promise(resolve => setImmediate(resolve));
 assert.equal(valid.timers.at(-1).delay, AUTO_CHECK_INTERVAL_MS);
 
 const transientNetworkError = () => Object.assign(new Error('net::ERR_HTTP2_SERVER_REFUSED_STREAM'), { code: 'ERR_HTTP2_SERVER_REFUSED_STREAM' });
@@ -183,13 +185,26 @@ assert.equal(valid.updater.getStatus().integrityVerified, true);
 assert.equal(valid.updater.getStatus().canInstall, true);
 
 valid.activity.activeCalls = 2;
+valid.activity.activeTaskCount = 2;
+valid.activity.state = 'working';
 const blocked = valid.updater.installUpdate();
 assert.equal(blocked.ok, false);
 assert.equal(blocked.errorCode, 'update_install_blocked');
-assert.match(blocked.error, /2 active Rel\.AI tool calls/);
+assert.match(blocked.error, /2 active Rel\.AI tasks/);
 assert.equal(valid.updater.getStatus().state, 'downloaded');
 
 valid.activity.activeCalls = 0;
+valid.activity.activeTaskCount = 1;
+valid.activity.state = 'waiting';
+valid.activity.tasks = [{ taskId: 'waiting-task', status: 'waiting', activeCalls: 0 }];
+const waitingBlocked = valid.updater.installUpdate();
+assert.equal(waitingBlocked.ok, false, 'an open task must block restart even between connector calls');
+assert.match(waitingBlocked.error, /active Rel\.AI task/);
+assert.equal(valid.updater.getStatus().state, 'downloaded');
+
+valid.activity.activeTaskCount = 0;
+valid.activity.state = 'idle';
+valid.activity.tasks = [];
 const install = valid.updater.installUpdate();
 assert.equal(install.ok, true);
 assert.equal(valid.updater.getStatus().state, 'installing');

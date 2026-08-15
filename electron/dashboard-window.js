@@ -34,7 +34,7 @@ function createDashboardWindowManager(deps) {
     const requestedHash = routeHash ? normalizeRouteHash(routeHash) : '';
     if (requestedHash) target.hash = requestedHash;
     dashboardOrigin = target.origin;
-    const win = getOrCreateWindow();
+    const win = await getOrCreateWindow();
     const current = safeUrl(win.webContents.getURL());
     const { sameDashboard, authRefreshRequired } = planDashboardNavigation(current, target, { requestedHash, currentAuthGeneration: dashboardAuthGeneration, nextAuthGeneration: authGeneration });
     if (!sameDashboard || authRefreshRequired) {
@@ -64,9 +64,9 @@ function createDashboardWindowManager(deps) {
     await win.loadURL(current.href);
   }
 
-  function getOrCreateWindow() {
+  async function getOrCreateWindow() {
     if (dashboardWindow && !dashboardWindow.isDestroyed()) return dashboardWindow;
-    const bounds = readBounds();
+    const bounds = await readBounds();
     const chrome = dashboardWindowChrome(platform);
     dashboardWindow = new BrowserWindow({
       ...bounds,
@@ -88,7 +88,7 @@ function createDashboardWindowManager(deps) {
     dashboardWindow.on('move', schedulePersist);
     bindWindowState(dashboardWindow);
     dashboardWindow.on('close', event => {
-      persistBounds();
+      void persistBounds();
       if (isQuitting()) return;
       event.preventDefault();
       dashboardWindow.hide();
@@ -160,7 +160,8 @@ function createDashboardWindowManager(deps) {
 
   async function openFolder(folderPath) {
     const target = path.resolve(String(folderPath || ''));
-    if (!target || !fs.existsSync(target)) throw new Error(`Workspace folder does not exist: ${target}`);
+    try { await fs.promises.access(target); }
+    catch { throw new Error(`Workspace folder does not exist: ${target}`); }
     const error = await shell.openPath(target);
     if (error) throw new Error(error);
     return target;
@@ -201,22 +202,24 @@ function createDashboardWindowManager(deps) {
     }
   }
 
-  function persistBounds() {
+  async function persistBounds() {
     if (persistTimer) clearTimeout(persistTimer);
     persistTimer = null;
-    persistRevision += 1;
+    const revision = ++persistRevision;
     const win = getWindow();
     if (!win || typeof win.getBounds !== 'function') return;
+    const text = JSON.stringify(dashboardWindowState(win, screen), null, 2);
     try {
-      fs.mkdirSync(path.dirname(statePath), { recursive: true });
-      fs.writeFileSync(statePath, JSON.stringify(dashboardWindowState(win, screen), null, 2));
+      await fs.promises.mkdir(path.dirname(statePath), { recursive: true });
+      if (revision !== persistRevision) return;
+      await fs.promises.writeFile(statePath, text);
     } catch (error) {
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] dashboard bounds:', error);
     }
   }
 
-  function readBounds() {
-    try { return restoreDashboardBounds(JSON.parse(fs.readFileSync(statePath, 'utf8')), screen); }
+  async function readBounds() {
+    try { return restoreDashboardBounds(JSON.parse(await fs.promises.readFile(statePath, 'utf8')), screen); }
     catch { return restoreDashboardBounds(null, screen); }
   }
 
@@ -260,8 +263,8 @@ function createDashboardWindowManager(deps) {
     return { ok: true };
   }
 
-  function close() {
-    persistBounds();
+  async function close() {
+    await persistBounds();
     if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.destroy();
     dashboardWindow = null;
   }

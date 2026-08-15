@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { createTaskActivityRuntime } from '../electron/tool-sleep-blocker.js';
+import { createTaskActivityRuntime, taskActivityBlockReason } from '../electron/tool-sleep-blocker.js';
 
 let snapshotReads = 0;
 let listener = null;
@@ -29,6 +29,8 @@ const runtime = createTaskActivityRuntime({
 });
 
 assert.equal(snapshotReads, 1, 'runtime initialization may read one authoritative snapshot');
+assert.equal(taskActivityBlockReason({ state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [] }), '');
+assert.match(taskActivityBlockReason({ state: 'waiting', activeCalls: 0, activeTaskCount: 1, tasks: [{ taskId: 'task-a', status: 'waiting' }] }), /active Rel\.AI task/);
 const task = {
   id: 'task-a', taskId: 'task-a', workspace: 'repo', status: 'running', state: 'working',
   activeCalls: 1, calls: 1, failures: 0, startedAt: 100, lastTool: 'relai_read', operation: 'Read',

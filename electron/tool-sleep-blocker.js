@@ -204,4 +204,15 @@ function isTerminalTask(task, phase = '') {
   return ['completed', 'cancelled', 'failed', 'inactive'].includes(String(task?.status || phase || '').toLowerCase());
 }
 
-export { buildCompletionNotification, buildFailureNotification, cleanNotificationText, createToolSleepBlocker, createTaskActivityRuntime, truncateNotificationText };
+function taskActivityBlockReason(activity = {}, action = 'restarting Rel.AI') {
+  const tasks = Array.isArray(activity.tasks) ? activity.tasks.filter(task => !isTerminalTask(task)) : [];
+  const declaredTaskCount = Math.max(0, Number(activity.activeTaskCount || 0));
+  const activeCalls = Math.max(0, Number(activity.activeCalls || 0));
+  const activeState = ['working', 'waiting', 'settling'].includes(String(activity.state || '').toLowerCase());
+  const activeTaskCount = Math.max(declaredTaskCount, tasks.length, activeCalls > 0 || activeState ? 1 : 0);
+  if (!activeTaskCount) return '';
+  const subject = activeTaskCount === 1 ? 'the active Rel.AI task' : `${activeTaskCount} active Rel.AI tasks`;
+  return `Finish or cancel ${subject} before ${action}.`;
+}
+
+export { buildCompletionNotification, buildFailureNotification, cleanNotificationText, createToolSleepBlocker, createTaskActivityRuntime, taskActivityBlockReason, truncateNotificationText };
