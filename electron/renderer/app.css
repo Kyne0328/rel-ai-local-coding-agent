@@ -43,7 +43,7 @@ body.electron-page {
   padding: var(--space-4);
   overflow-x: hidden;
   color: var(--ui-text-primary);
-  background: var(--ui-electron-app-gradient), var(--ui-canvas);
+  background: var(--ui-canvas);
   font: var(--font-13)/1.5 var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
@@ -94,17 +94,17 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 [hidden] { display: none !important; }
 
 .app-card {
-  border: 1px solid var(--ui-border-default);
+  border: 1px solid var(--ui-border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--ui-electron-surface-gradient), var(--ui-surface-primary);
+  background: var(--ui-surface-primary);
   box-shadow: none;
 }
 .setup-card,
-.status-hero { box-shadow: var(--ui-electron-elevation2); }
+.status-hero { box-shadow: none; }
 .brand-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .brand-badge {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
   padding: 7px;
   border: 1px solid var(--ui-brand-mark-border);
@@ -148,16 +148,7 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 .status-badge.waiting::before, .status-badge.settling::before { background: var(--ui-status-info-foreground); }
 .status-badge.failed::before { background: var(--ui-status-danger-foreground); }
 .status-hero { padding: 20px; overflow: hidden; position: relative; }
-.status-hero::after {
-  content: "";
-  position: absolute;
-  width: 300px;
-  height: 180px;
-  right: -90px;
-  top: -90px;
-  background: radial-gradient(circle, var(--ui-hero-accent-soft), transparent 68%);
-  pointer-events: none;
-}
+.status-hero::after { display: none; }
 .status-copy { position: relative; z-index: 1; }
 .status-title { margin: 6px 0 0; font-size: var(--font-24); line-height: 1.12; letter-spacing: -.035em; }
 .status-description { margin: 8px 0 0; max-width: 500px; color: var(--ui-text-secondary); }
@@ -209,7 +200,7 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 .fallback-log-wrap pre { max-height: 220px; margin: 0; padding: var(--space-3); overflow: auto; border: 1px solid var(--ui-border-control); border-radius: var(--radius-md); color: var(--ui-text-secondary); background: var(--ui-surface-input); font: var(--font-11)/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .status-hero[data-state="connecting"], .status-hero[data-state="working"], .status-hero[data-state="waiting"], .status-hero[data-state="settling"] { border-color: var(--ui-status-info-border); }
-.status-hero[data-state="working"]::after { background: radial-gradient(circle, var(--ui-hero-accent-strong), transparent 68%); }
+.status-hero[data-state="working"]::after { display: none; }
 .task-meta {
   margin-top: var(--space-3);
   display: flex;
@@ -285,7 +276,7 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 .progress-step span { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--ui-border-default); border-radius: 50%; background: var(--ui-surface-secondary); font-size: var(--font-11); font-weight: var(--weight-bold); }
 .progress-step strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-11); font-weight: var(--weight-medium); }
 .progress-step.done, .progress-step.current { color: var(--ui-text-primary); }
-.progress-step.done::after, .progress-step.current::after { background: var(--ui-action-primary); box-shadow: var(--ui-electron-glow-accent); }
+.progress-step.done::after, .progress-step.current::after { background: var(--ui-action-primary); box-shadow: none; }
 .progress-step.done span { color: var(--ui-status-success-foreground); border-color: var(--ui-status-success-border); background: var(--ui-status-success-background); }
 .progress-step.current span { color: var(--ui-action-primary-foreground); border-color: var(--ui-action-primary); background: var(--ui-action-primary); }
 .content { padding: 20px; }

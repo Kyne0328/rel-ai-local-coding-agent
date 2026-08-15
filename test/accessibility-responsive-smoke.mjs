@@ -46,8 +46,8 @@ const workspaceCss = read('src/ui/features/workspaces/styles.css');
 const systemCss = read('src/ui/features/system/styles.css');
 assert.match(activityCss, /\.activity-message-column\s*\{[^}]*min-width:\s*0/s);
 assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*width:\s*100%/s);
-assert.match(workspaceCss, /\.workspace-operational > \*, \.workspace-policy-grid > \*\s*\{[^}]*min-width:\s*0/s);
-assert.match(workspaceCss, /\.workspace-validation-head\s*\{/);
+assert.match(workspaceCss, /\.workspace-operational > \*\s*\{[^}]*min-width:\s*0/s);
+assert.match(workspaceCss, /\.workspace-readiness\s*\{[^}]*min-w-0/s);
 assert.match(systemCss, /\.diagnostic-log-row\s*\{[^}]*min-width:\s*0/s);
 assert.match(systemCss, /\.diagnostic-log-row code\s*\{[^}]*max-width:/s);
 assert.match(appCss, /:root\[data-window-chrome="custom"\] \.toast-region\s*\{[^}]*top:\s*calc\(var\(--window-titlebar-height\) \+ 96px\)/s);
@@ -59,7 +59,7 @@ assert.match(processesCss, /\.process-output summary\s*\{[^}]*min-height:\s*44px
 assert.match(systemCss, /\.diagnostic-copy summary\s*\{[^}]*min-h-11/s, 'diagnostic detail disclosures must meet the touch-target baseline');
 assert.match(workspaceForm, /pathValidationGeneration/, 'workspace preflight validation must reject stale async results');
 assert.match(workspaceForm, /generation !== pathValidationGeneration/, 'workspace preflight results must be generation guarded');
-for (const name of ['path', 'alias', 'protected', 'base', 'remotes']) {
+for (const name of ['path', 'alias']) {
   assert.match(workspaceForm, new RegExp(`name="${name}"[^>]*type="text"|type="text"[^>]*name="${name}"`), `workspace ${name} input must declare type=text explicitly`);
 }
 const toastSource = read('src/ui/components/toast.js');

@@ -2,7 +2,7 @@
 
 `src/ui/colorTokens.mjs` is the build-time ESM owner of application colors. Dashboard and Electron setup/recovery surfaces consume generated CSS artifacts; runtime application modules do not import the manifest.
 
-The system preserves the Rel.AI lime-and-navy identity while enforcing WCAG 2.2 Level AA contrast, consistent operational meaning, and centralized maintenance. Lime owns brand identity and primary interaction; blue is reserved for informational and in-progress state.
+The system preserves the Rel.AI lime identity on a neutral carbon/graphite foundation while enforcing WCAG 2.2 Level AA contrast, consistent operational meaning, and centralized maintenance. Lime is deliberately reserved for brand identity, primary interaction, focus, and small active indicators; it is not used as an ambient background tint. Blue is reserved for informational and in-progress state.
 
 ## Generated artifacts
 
@@ -57,20 +57,20 @@ A component-specific color is permitted only when the component has a genuine pl
 
 | Role | Light | Dark |
 |---|---|---|
-| Canvas | `#EDF2F8` | `#070B13` |
-| Surface primary | `#FFFFFF` | `#0D1626` |
-| Surface secondary | `#F5F8FC` | `#131F34` |
-| Surface raised | `#E8EEF6` | `#1C2A45` |
-| Text primary | `#172033` | `#EDF3FC` |
-| Text secondary | `#526078` | `#A7B4C9` |
-| Text tertiary | `#647187` | `#8390A6` |
+| Canvas | `#EDF2F8` | `#0A0A0A` |
+| Surface primary | `#FFFFFF` | `#111111` |
+| Surface secondary | `#F5F8FC` | `#171717` |
+| Surface raised | `#E8EEF6` | `#1F1F1F` |
+| Text primary | `#172033` | `#F2F2F2` |
+| Text secondary | `#526078` | `#B2B2B2` |
+| Text tertiary | `#647187` | `#8F8F8F` |
 | Action primary | `#657F00` | `#D8FF74` |
-| Action foreground | `#FFFFFF` | `#07111F` |
+| Action foreground | `#FFFFFF` | `#0B0D0A` |
 | Success foreground | `#137A4C` | `#4FE09A` |
 | Warning foreground | `#7A4B00` | `#FFC24B` |
 | Danger foreground | `#BF3149` | `#FF6F88` |
 
-The dark action color uses the website's canonical `#D8FF74` lime. The light theme uses a darker brand-relative action value so white action text and focus indicators remain accessible. Information remains blue in both themes instead of sharing the primary-action role.
+The dark action color uses the website's canonical `#D8FF74` lime. The dark canvas and surface hierarchy are intentionally achromatic so lime reads as a deliberate action/focus signal instead of tinting the whole application. The light theme uses a darker brand-relative action value so white action text and focus indicators remain accessible. Information remains blue in both themes instead of sharing the primary-action role.
 
 The complete values, including backgrounds, borders, hover states, overlays, scrollbars, and shadows, are defined in the manifest rather than duplicated here.
 

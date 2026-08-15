@@ -1,7 +1,7 @@
 .settings-shell { min-width: 0; }
 .settings-rail { align-content: start; }
 .settings-nav-button { text-align: left; }
-.settings-nav-button.active { color: var(--ui-action-primary); background: var(--ui-selection-background); }
+.settings-nav-button.active { color: var(--ui-text-primary); background: var(--ui-surface-raised); }
 .settings-loading { padding: 24px; color: var(--ui-text-secondary); }
 .workspace-validation-preference-row {
   display: flex;
@@ -18,17 +18,17 @@
 }
 
 @layer components {
-.settings-rail { @apply flex flex-col gap-1 rounded-xl p-2; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.settings-rail { @apply flex flex-col gap-1 p-0; background: transparent; border: 0; }
 .settings-nav-button { @apply min-w-[118px] justify-start border-transparent bg-transparent; color: var(--ui-text-secondary); }
-.settings-nav-button.active { background: var(--ui-selection-background); border-color: color-mix(in srgb, var(--ui-action-primary) 36%, transparent); color: var(--ui-text-primary); }
+.settings-nav-button.active { background: var(--ui-surface-raised); border-color: var(--ui-border-subtle); color: var(--ui-text-primary); box-shadow: inset 2px 0 0 var(--ui-action-primary); }
 .settings-content { @apply flex min-w-0 flex-col gap-3; }
-.settings-panel-intro { @apply rounded-xl border-l-2 px-4 py-3; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); border-left-color: var(--ui-action-primary); }
+.settings-panel-intro { @apply rounded-lg px-3 py-2.5; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-subtle); }
 .settings-panel-intro h2 { @apply text-lg; }
 .settings-panel-intro p { @apply mt-1 text-[12px]; color: var(--ui-text-secondary); }
 .settings-grid { @apply grid gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.settings-save-row { @apply sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-xl px-4 py-3; background: color-mix(in srgb, var(--ui-surface-primary) 94%, transparent); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-window); backdrop-filter: blur(16px); }
+.settings-save-row { @apply sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-lg px-3 py-2.5; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-subtle); box-shadow: none; }
 .settings-save-actions { @apply flex gap-2; }
-.setting-row { @apply flex min-h-14 items-center justify-between gap-4 border-b py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
+.setting-row { @apply flex min-h-12 items-center justify-between gap-4 border-b py-2.5 last:border-b-0; border-color: var(--ui-border-subtle); }
 .setting-row-copy { @apply min-w-0; }
 .setting-row-copy strong { @apply block text-[12px]; }
 .setting-row-copy span { @apply mt-1 block text-[12px]; color: var(--ui-text-secondary); }
@@ -69,7 +69,7 @@
 .settings-history-copy { @apply flex flex-col gap-1.5; }
 .settings-history-copy span { @apply max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
 .settings-history-panel { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 24%, var(--ui-border-default)); }
-.settings-panel-intro { @apply grid gap-1 rounded-lg px-4 py-3; border: 1px solid var(--ui-border-default); border-left: 2px solid var(--ui-action-primary); background: var(--ui-surface-secondary); }
+.settings-panel-intro { @apply grid gap-1 rounded-lg px-3 py-2.5; border: 1px solid var(--ui-border-subtle); background: var(--ui-surface-secondary); }
 .settings-panel-intro strong { @apply text-[12px]; }
 .settings-panel-intro span { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
 .settings-fact-grid { @apply grid overflow-hidden rounded-xl; grid-template-columns: repeat(3,minmax(0,1fr)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }

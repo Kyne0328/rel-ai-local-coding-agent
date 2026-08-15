@@ -1,12 +1,12 @@
 @layer components {
-.tools-grid { @apply grid gap-3; grid-template-columns: repeat(auto-fit,minmax(380px,1fr)); }
-.tool-card { @apply flex flex-col p-4; }
-.tool-card:hover { border-color: color-mix(in srgb, var(--ui-action-primary) 36%, var(--ui-border-default)); }
+.tools-grid { @apply grid gap-2; grid-template-columns: repeat(auto-fit,minmax(340px,1fr)); }
+.tool-card { @apply flex flex-col p-3; }
+.tool-card:hover { border-color: var(--ui-border-control); background: var(--ui-surface-secondary); }
 .tool-card h3 { @apply text-[13px]; }
 .tool-card p { @apply mt-2 text-[11px] leading-5; color: var(--ui-text-secondary); }
 .tool-card-actions { @apply mt-auto pt-4; }
 
-.tool-card { @apply min-h-[190px] gap-3; }
+.tool-card { @apply gap-2; min-height: 0; }
 .tool-card-head { @apply flex items-center justify-between gap-3; }
 .tool-capability { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-secondary); }
 .tool-parameter-count { @apply text-[11px]; color: var(--ui-text-tertiary); }
