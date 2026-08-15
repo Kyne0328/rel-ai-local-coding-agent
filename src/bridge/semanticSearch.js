@@ -1,5 +1,13 @@
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
-import { compactBatchResult, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
+import {
+  compactBatchResult,
+  enforceBatchBudgets,
+  resolveBatchLimit,
+  resolveQueryTerms,
+  runQueryBatch,
+  splitBatchLimit,
+  summarizeBatchResults
+} from './queryBatch.js';
 
 async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
   const { batched, terms } = resolveQueryTerms(args, {
@@ -12,13 +20,15 @@ async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
     return repositoryIntelligence.semanticSearch(workspace, config, args, { signal: context.signal, watch: context.watch });
   }
 
-  const maxResults = splitBatchLimit(args.maxResults, {
+  const totalMaxResults = resolveBatchLimit(args.maxResults, { min: 1, max: 100, fallback: 40 });
+  const totalMaxBytes = resolveBatchLimit(args.maxBytes, { min: 1000, max: 393216, fallback: 393216 });
+  const maxResults = splitBatchLimit(totalMaxResults, {
     min: 1,
     max: 100,
     fallback: 40,
     count: terms.length
   });
-  const maxBytes = splitBatchLimit(args.maxBytes, {
+  const maxBytes = splitBatchLimit(totalMaxBytes, {
     min: 1000,
     max: 393216,
     fallback: 393216,
@@ -29,17 +39,25 @@ async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
     config,
     { ...args, query, queries: undefined, maxResults, maxBytes },
     { signal: context.signal, watch: context.watch }
-  ), { signal: context.signal, kind: 'search-semantic' });
-  const results = batch.results;
+  ), {
+    signal: context.signal,
+    kind: 'search-semantic',
+    // Repository Intelligence currently owns one query worker per index. Keep the
+    // plan serial until that worker itself supports concurrent read jobs; otherwise
+    // promise overlap would be mislabeled as execution parallelism.
+    maxConcurrency: 1
+  });
+  const results = enforceBatchBudgets(batch.results, { maxResults: totalMaxResults, maxBytes: totalMaxBytes });
   return {
     ok: true,
     workspace: workspace.alias,
     queries: terms,
     queryCount: terms.length,
+    maxBytes: totalMaxBytes,
     execution: batch.metrics,
     results: results.map(compactBatchResult),
     ...summarizeBatchResults(results),
-    strategy: 'batched-hybrid',
+    strategy: 'batched-hybrid-serial-worker',
     next: 'Batched semantic search completed in one call. Inspect only the strongest returned candidates before widening the search.'
   };
 }

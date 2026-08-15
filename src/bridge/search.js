@@ -8,7 +8,7 @@ import { clampNumber } from './limits.js';
 import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
-import { compactBatchResult, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
+import { compactBatchResult, enforceBatchBudgets, resolveBatchLimit, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 25_000;
@@ -17,7 +17,7 @@ const MAX_STDERR_BYTES = 64 * 1024;
 // Stream git grep output instead of buffering it through runProcess. Broad searches
 // can exceed the generic process-output cap; streaming preserves the earliest
 // matches and stops once maxResults + 1 visible matches prove the response is truncated.
-async function relaiSearchOne(workspace, config, args = {}) {
+async function relaiSearchOne(workspace, config, args = {}, context = {}) {
   const pattern = String(args.pattern || "");
   if (!pattern.trim()) throw new Error("relai_search requires a non-empty pattern.");
   if (pattern.length > 1000) throw new Error("relai_search pattern must be 1000 characters or fewer.");
@@ -28,7 +28,7 @@ async function relaiSearchOne(workspace, config, args = {}) {
   const glob = String(args.glob || "").trim();
   if (glob) gitArgs.push("--", glob);
 
-  const result = await runGitGrep(workspace, gitArgs, maxResults);
+  const result = await runGitGrep(workspace, gitArgs, maxResults, context.signal);
   // Exit 1 means "no matches" — a valid empty result. Anything else is a failure.
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     const stderr = String(result.stderr || result.error || "");
@@ -64,7 +64,7 @@ async function relaiSearchOne(workspace, config, args = {}) {
     };
   }
   const cachedGraph = searchPlan.requestedMode === "auto"
-    ? await repositoryIntelligence.searchGraphContext(workspace, config, result.matches)
+    ? await repositoryIntelligence.searchGraphContext(workspace, config, result.matches, { signal: context.signal })
     : null;
   const graphPrioritized = cachedGraph?.freshness === 'current' && Boolean(cachedGraph?.rankedPaths?.length);
   const workflowContext = {
@@ -92,22 +92,24 @@ async function relaiSearchOne(workspace, config, args = {}) {
   };
 }
 
-async function relaiSearch(workspace, config, args = {}) {
+async function relaiSearch(workspace, config, args = {}, context = {}) {
   const { batched, terms } = resolveQueryTerms(args, {
     singleField: 'pattern',
     label: 'relai_search',
     maxLength: 1000,
     maxItems: 4
   });
-  if (!batched) return relaiSearchOne(workspace, config, args);
+  if (!batched) return relaiSearchOne(workspace, config, args, context);
 
-  const maxResults = splitBatchLimit(args.maxResults, {
+  const totalMaxResults = resolveBatchLimit(args.maxResults, { min: 1, max: 1000, fallback: DEFAULT_MAX_RESULTS });
+  const totalMaxBytes = resolveBatchLimit(args.maxBytes, { min: 1000, max: 393216, fallback: 393216 });
+  const maxResults = splitBatchLimit(totalMaxResults, {
     min: 1,
     max: 1000,
     fallback: DEFAULT_MAX_RESULTS,
     count: terms.length
   });
-  const maxBytes = splitBatchLimit(args.maxBytes, {
+  const maxBytes = splitBatchLimit(totalMaxBytes, {
     min: 1000,
     max: 393216,
     fallback: 393216,
@@ -119,13 +121,14 @@ async function relaiSearch(workspace, config, args = {}) {
     queries: undefined,
     maxResults,
     maxBytes
-  }), { kind: 'search-text' });
-  const results = batch.results;
+  }, context), { signal: context.signal, kind: 'search-text' });
+  const results = enforceBatchBudgets(batch.results, { maxResults: totalMaxResults, maxBytes: totalMaxBytes });
   return {
     ok: true,
     workspace: workspace.alias,
     queries: terms,
     queryCount: terms.length,
+    maxBytes: totalMaxBytes,
     execution: batch.metrics,
     results: results.map(compactBatchResult),
     ...summarizeBatchResults(results),
@@ -133,8 +136,9 @@ async function relaiSearch(workspace, config, args = {}) {
   };
 }
 
-function runGitGrep(workspace, gitArgs, maxResults) {
-  return new Promise((resolve) => {
+function runGitGrep(workspace, gitArgs, maxResults, signal) {
+  if (signal?.aborted) return Promise.reject(searchAbortError(signal));
+  return new Promise((resolve, reject) => {
     const executable = resolveGitExecutable() || "git";
     const child = spawn(executable, gitArgs, {
       cwd: workspace.path,
@@ -148,6 +152,11 @@ function runGitGrep(workspace, gitArgs, maxResults) {
     let pending = "";
     let stderr = "";
     let settled = false;
+    const onAbort = () => {
+      killProcessTree(child);
+      fail(searchAbortError(signal));
+    };
+    signal?.addEventListener?.('abort', onAbort, { once: true });
 
     function consumeLine(rawLine) {
       const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
@@ -201,14 +210,26 @@ function runGitGrep(workspace, gitArgs, maxResults) {
     }, SEARCH_TIMEOUT_MS);
     if (typeof timer.unref === "function") timer.unref();
 
-    function finish(payload) {
-      if (settled) return;
-      settled = true;
+    function cleanup() {
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
+      signal?.removeEventListener?.('abort', onAbort);
+    }
+
+    function finish(payload) {
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolve(payload);
+    }
+
+    function fail(error) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
     }
 
     child.stdout.on("data", (chunk) => consumeChunk(decoder.write(chunk)));
@@ -230,6 +251,17 @@ function runGitGrep(workspace, gitArgs, maxResults) {
       });
     });
   });
+}
+
+function searchAbortError(signal) {
+  if (signal?.reason instanceof Error) {
+    const error = new Error(signal.reason.message);
+    error.name = 'AbortError';
+    return error;
+  }
+  const error = new Error('Repository search cancelled.');
+  error.name = 'AbortError';
+  return error;
 }
 
 function parseGitGrepLine(line) {

@@ -14,7 +14,7 @@ import { createValidationFingerprint, createValidationPlan, readValidationPlan }
 import { runSpan } from '../telemetry.js';
 import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { parallel, runPlan, sequence, step } from '../executionPlan.js';
-import { createExecutionPlanObserver, recordExecutionPlanMetrics } from '../executionObservability.js';
+import { recordExecutionPlanMetrics } from '../executionObservability.js';
 import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
 import { noChecksValidationResult } from './validationNoChecks.js';
@@ -96,8 +96,10 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   });
   const executionStages = buildCheckExecutionStages(effectiveUnits);
   const visibleResults = () => indexedResults.filter(Boolean);
+  const activeChecks = new Map();
+  const activeCheckNames = () => [...activeChecks.values()];
 
-  publishValidationProgress({ checks, skippedChecks, results: [], currentIndex: 0, resultStatus: 'pending' });
+  publishValidationProgress({ checks, skippedChecks, results: [], currentIndex: 0, resultStatus: 'pending', activeChecks: [] });
 
   const planStages = executionStages.map(stage => {
     const nodes = stage.items.map(({ unit, index, policy: executionPolicy }) => step(
@@ -121,21 +123,26 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
             results: visibleResults(),
             currentCheck: sanitizeDisplayText(command, 300),
             currentIndex: index + 1,
-            resultStatus: 'passed'
+            resultStatus: 'passed',
+            activeChecks: activeCheckNames()
           });
           return reusedSummary;
         }
 
         const displayCommand = sanitizeDisplayText(command, 300) || `Check ${index + 1}`;
+        activeChecks.set(index, displayCommand);
         publishValidationProgress({
           checks,
           skippedChecks,
           results: visibleResults(),
           currentCheck: displayCommand,
           currentIndex: index + 1,
-          resultStatus: 'running'
+          resultStatus: 'running',
+          activeChecks: activeCheckNames()
         });
-        const result = await runSpan(config, 'relai.validation.step', {
+        let result;
+        try {
+          result = await runSpan(config, 'relai.validation.step', {
           'relai.workspace': workspace.alias,
           'relai.validation.command': displayCommand,
           'relai.validation.index': index + 1,
@@ -151,6 +158,9 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
           signal,
           ...(fullOutput ? { maxOutputBytes: 16 * 1024 * 1024 } : {})
         }, config));
+        } finally {
+          activeChecks.delete(index);
+        }
         const summary = boundCheckOutput({ command, cwd: unit.cwd || '.', ...summarizeCommand(result) }, tailChars);
         executedUnits += 1;
         indexedResults[index] = summary;
@@ -177,7 +187,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
           results: visibleResults(),
           currentCheck: displayCommand,
           currentIndex: index + 1,
-          resultStatus: checkResultStatus(summary)
+          resultStatus: checkResultStatus(summary),
+          activeChecks: activeCheckNames()
         });
         return summary;
       },
@@ -196,15 +207,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
       ? parallel(nodes, { maxConcurrency: 3, stopOnFailure })
       : sequence(nodes, { stopOnFailure });
   });
-  const execution = await runPlan(sequence(planStages, { stopOnFailure }), {
-    signal,
-    onEvent: createExecutionPlanObserver({
-      source: 'validation',
-      title: 'Running repository validation',
-      noun: 'checks',
-      category: 'validation'
-    })
-  });
+  const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
   recordExecutionPlanMetrics('validation', execution.metrics);
   const results = visibleResults();
   const reusedChecks = reusedCheckIds.filter(Boolean);
@@ -220,7 +223,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     currentCheck: failedCheck ? sanitizeDisplayText(failedCheck, 300) : checks.at(-1),
     currentIndex: Math.min(results.length, checks.length),
     resultStatus: validationStatus,
-    final: true
+    final: true,
+    activeChecks: []
   });
 
   const nextAction = ok

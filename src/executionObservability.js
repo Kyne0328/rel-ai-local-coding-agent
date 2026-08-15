@@ -62,10 +62,10 @@ function executionMetricAttributes(kind, metrics = {}) {
     [`${prefix}.kind`]: sanitizeDisplayText(kind || 'execution', 80),
     [`${prefix}.total_steps`]: number(metrics.stepCount),
     [`${prefix}.parallel_groups`]: number(metrics.parallelGroupCount),
-    [`${prefix}.max_parallelism`]: number(metrics.maxParallelism),
+    [`${prefix}.max_concurrent_steps`]: number(metrics.maxConcurrentSteps),
     [`${prefix}.wall_time_ms`]: number(metrics.wallTimeMs),
     [`${prefix}.accumulated_step_time_ms`]: number(metrics.accumulatedStepTimeMs),
-    [`${prefix}.parallel_time_saved_ms`]: number(metrics.parallelTimeSavedMs)
+    [`${prefix}.overlap_time_ms`]: number(metrics.overlapTimeMs)
   };
 }
 

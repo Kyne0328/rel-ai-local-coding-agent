@@ -67,6 +67,38 @@ try {
   assert.equal(batch.results[2].matchCount, 0);
   assert.equal(batch.results.some(item => Object.hasOwn(item, 'workspace')), false, 'batch children should not repeat workspace metadata');
 
+  // Batch result and context budgets are aggregate limits, not per-query multipliers.
+  const aggregateCapped = await relaiSearch(workspace, config, {
+    queries: ['alphaThing', 'BETA', 'appears here'],
+    fixed: true,
+    maxResults: 1,
+    mode: 'compact'
+  });
+  assert.equal(aggregateCapped.resultCount, 1);
+  assert.equal(aggregateCapped.results.reduce((sum, item) => sum + (item.matches?.length || 0), 0), 1);
+
+  for (let index = 1; index <= 4; index += 1) {
+    const padding = 'x'.repeat(350);
+    fs.writeFileSync(path.join(wsRoot, 'docs', `budget-${index}.md`), `${padding}\nbudgetMarker${index}\n${padding}\n`);
+  }
+  const byteCapped = await relaiSearch(workspace, config, {
+    queries: ['budgetMarker1', 'budgetMarker2', 'budgetMarker3', 'budgetMarker4'],
+    fixed: true,
+    maxResults: 4,
+    maxBytes: 1000,
+    mode: 'context',
+    contextBefore: 1,
+    contextAfter: 1
+  });
+  assert.ok(byteCapped.returnedBytes <= 1000, `batch context must honor the aggregate byte cap, got ${byteCapped.returnedBytes}`);
+
+  const cancelledController = new AbortController();
+  cancelledController.abort(new Error('cancelled search batch'));
+  await assert.rejects(
+    () => relaiSearch(workspace, config, { queries: ['alphaThing', 'BETA'], fixed: true }, { signal: cancelledController.signal }),
+    /cancelled search batch/
+  );
+
   // No matches is a valid empty result, not an error.
   const none = await relaiSearch(workspace, config, { pattern: 'zzz_does_not_exist_zzz' });
   assert.equal(none.ok, true);

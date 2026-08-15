@@ -52,7 +52,7 @@ const HANDLERS = Object.freeze({
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
   search: inWorkspace((workspace, config, args, context) => {
     scheduleIntelligenceWarmup(workspace, config);
-    return relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context));
+    return relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context);
   }),
   codeInspect: inWorkspace((workspace, config, args, context) => relaiCodeInspect(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context)),
   exec: inWorkspace((workspace, config, args, context) => relaiExec(workspace, config, args, context)),

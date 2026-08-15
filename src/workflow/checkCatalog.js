@@ -8,10 +8,21 @@ function buildCheckCatalog(topology) {
 }
 
 function addNpmChecks(target, pkg) {
-  for (const scriptName of Object.keys(pkg.scripts || {}).sort()) {
-    const kind = classifyCheckKind(scriptName, pkg.scripts[scriptName]);
+  const scripts = pkg.scripts || {};
+  for (const scriptName of Object.keys(scripts).sort()) {
+    const scriptBody = String(scripts[scriptName] || '');
+    const kind = classifyCheckKind(scriptName, scriptBody);
     const command = scriptName === 'test' ? 'npm test' : `npm run ${scriptName}`;
-    target.push(unit(pkg, `${pkg.id}:${scriptName}`, command, kind, 'manifest'));
+    const scriptChain = npmScriptChain(scripts, scriptName).map(item => ({
+      ...item,
+      kind: classifyCheckKind(item.name, item.body)
+    }));
+    target.push(unit(pkg, `${pkg.id}:${scriptName}`, command, kind, 'manifest', {
+      ecosystem: 'npm',
+      scriptName,
+      scriptBody,
+      scriptChain
+    }));
   }
 }
 
@@ -24,13 +35,38 @@ function addDefaultChecks(target, pkg) {
   for (const [name, command, kind] of commands) target.push(unit(pkg, `${pkg.id}:${name}`, command, kind, 'manifest'));
 }
 
-function unit(pkg, id, command, kind, source) {
+function unit(pkg, id, command, kind, source, metadata = {}) {
   return {
     id, packageId: pkg.id, cwd: pkg.path === '.' ? '.' : pkg.path, command, kind,
     level: ['build', 'security', 'dead_code'].includes(kind) ? 'standard' : 'focused',
     estimatedCost: ['build', 'security', 'dead_code'].includes(kind) ? 'large' : kind === 'test' ? 'medium' : 'small',
-    source, scopeKey: `package:${pkg.id}`
+    source, scopeKey: `package:${pkg.id}`,
+    ...metadata
   };
+}
+
+function npmScriptChain(scripts, rootName) {
+  const output = [];
+  const visited = new Set();
+  const visit = (name) => {
+    if (!name || visited.has(name) || !Object.hasOwn(scripts, name)) return;
+    visited.add(name);
+    const body = String(scripts[name] || '');
+    output.push({ name, body });
+    for (const reference of npmScriptReferences(body)) visit(reference);
+  };
+  visit(rootName);
+  return output;
+}
+
+function npmScriptReferences(script) {
+  const references = [];
+  const expression = /\bnpm(?:\.cmd)?\s+(?:(?:run|run-script)\s+)?([A-Za-z0-9:_-]+)/g;
+  for (const match of String(script || '').matchAll(expression)) {
+    const name = String(match[1] || '');
+    if (name && name !== 'run' && name !== 'run-script') references.push(name);
+  }
+  return [...new Set(references)];
 }
 
 const NON_VALIDATION_KINDS = new Set([
@@ -50,14 +86,18 @@ function classifyCheckKind(name, command = '') {
   if (/^(?:generate|prepare)(?::|$)/.test(scriptName)) return 'generator';
   if (/^(?:dist|package|electron:dist)(?::|$)/.test(scriptName)) return 'package';
   if (/migrat|prisma\s+(?:migrate|db push)|sequelize.*db:migrate/.test(token)) return 'migration';
+  if (/^test(?::|$)|^(?:spec|smoke|acceptance)(?::|$)/.test(scriptName)) return 'test';
+  if (/^type.?check(?::|$)/.test(scriptName)) return 'typecheck';
+  if (/^lint(?::|$)/.test(scriptName)) return 'lint';
+  if (/^format(?::|$)/.test(scriptName)) return 'format';
+  if (/^check(?::|$)|^verify(?::|$)|^validate(?::|$)/.test(scriptName)) return 'verification';
   if (/dead.?code|\bknip\b|unused/.test(token)) return 'dead_code';
   if (/security|audit|snyk|semgrep/.test(token)) return 'security';
-  if (/type.?check|tsc(?:\s|$)/.test(token)) return 'typecheck';
-  if (/lint/.test(token)) return 'lint';
+  if (/type.?check|\btsc(?:\s|$)/.test(token)) return 'typecheck';
+  if (/\blint\b|\beslint\b|\bruff\s+check\b/.test(token)) return 'lint';
   if (/format|prettier/.test(token)) return 'format';
-  if (/^check(?::|$)|^verify(?::|$)|^validate(?::|$)/.test(scriptName)) return 'verification';
   if (/build|compile|bundle/.test(token)) return 'build';
-  if (/test|spec|smoke|acceptance/.test(token)) return 'test';
+  if (/\b(?:jest|vitest|mocha|pytest)\b|\b(?:cargo|go|flutter)\s+test\b/.test(token)) return 'test';
   return 'other';
 }
 

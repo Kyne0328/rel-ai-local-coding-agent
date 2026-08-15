@@ -77,6 +77,18 @@ try {
   assert.match(semantic.strategy, /graph-diffusion$/);
   assert.equal(semantic.results[0].path, 'src/attendanceService.js');
 
+  const batchedSemantic = await relaiSemanticSearch(workspace, config, {
+    queries: ['calculate attendance', 'theme accent'],
+    maxResults: 3,
+    maxBytes: 4000
+  });
+  assert.equal(batchedSemantic.ok, true);
+  assert.equal(batchedSemantic.execution.maxConcurrentSteps, 1,
+    'semantic batches must report the repository query worker\'s actual serial execution model');
+  assert.ok(batchedSemantic.resultCount <= 3, 'semantic batch maxResults must be an aggregate cap');
+  assert.ok(batchedSemantic.returnedBytes <= 4000, 'semantic batch maxBytes must be an aggregate cap');
+  assert.match(batchedSemantic.strategy, /serial-worker$/);
+
   const hiddenSemantic = await relaiSemanticSearch(workspace, config, { query: 'recover connection after socket failure', maxResults: 5 });
   const hiddenPaths = hiddenSemantic.results.map(item => item.path);
   assert.equal(hiddenPaths[0], 'src/socketObserver.js');
