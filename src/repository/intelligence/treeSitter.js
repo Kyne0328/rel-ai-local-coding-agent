@@ -57,8 +57,18 @@ async function parseSourceFile({ relativePath, source }) {
   const normalizedPath = String(relativePath || '').replaceAll('\\', '/');
   const text = String(source || '');
   const language = languageForPath(normalizedPath);
+  const parserAsset = parserForLanguage(language);
   const grammar = await loadLanguage(language);
-  if (!grammar) return lexicalOnlyResult(normalizedPath, language, text, 'lexical');
+  if (!grammar) {
+    return lexicalOnlyResult(
+      normalizedPath,
+      language,
+      text,
+      parserAsset ? 'lexical-unavailable' : 'lexical',
+      parserAsset ? 'unavailable' : 'unsupported',
+      parserAsset ? 'Tree-sitter grammar is unavailable for this supported language.' : ''
+    );
+  }
 
   const parser = new Parser();
   try {
@@ -73,6 +83,8 @@ async function parseSourceFile({ relativePath, source }) {
       language,
       parser: 'tree-sitter',
       parseError: typeof tree.rootNode.hasError === 'function' ? tree.rootNode.hasError() : Boolean(tree.rootNode.hasError),
+      structuralStatus: 'ok',
+      structuralError: '',
       symbols: facts.symbols,
       occurrences: facts.occurrences,
       imports,
@@ -80,19 +92,28 @@ async function parseSourceFile({ relativePath, source }) {
       resolver: enrichment ? { id: enrichment.provider, capabilities: enrichment.capabilities || [] } : null,
       searchText: lexicalSearchText(normalizedPath, text, facts.symbols)
     };
-  } catch {
-    return lexicalOnlyResult(normalizedPath, language, text, 'lexical-fallback');
+  } catch (error) {
+    return lexicalOnlyResult(
+      normalizedPath,
+      language,
+      text,
+      'lexical-fallback',
+      'failed',
+      String(error instanceof Error ? error.message : error || 'Tree-sitter parsing failed.').slice(0, 500)
+    );
   } finally {
     try { parser.delete(); } catch {}
   }
 }
 
-function lexicalOnlyResult(relativePath, language, source, parser = 'lexical') {
+function lexicalOnlyResult(relativePath, language, source, parser = 'lexical', structuralStatus = 'unsupported', structuralError = '') {
   return {
     path: relativePath,
     language,
     parser,
-    parseError: false,
+    parseError: structuralStatus === 'failed' || structuralStatus === 'unavailable',
+    structuralStatus,
+    structuralError,
     symbols: [],
     occurrences: [],
     imports: [],
