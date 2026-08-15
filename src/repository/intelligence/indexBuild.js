@@ -18,6 +18,7 @@ import {
 } from './database.js';
 import { enhancedResolverLanguages, isTestPath, languageForPath, PARSER_VERSION, structuralLanguages } from './languages.js';
 import { parseSourceFile } from './treeSitter.js';
+import { rebuildZoektIndex } from './zoekt.js';
 
 const DEFAULT_MAX_INDEX_FILES = 100000;
 const MAX_INDEXED_FILE_BYTES = 1024 * 1024;
@@ -87,7 +88,8 @@ async function refreshRepositoryIndex(job, signal) {
       ? manifest.filter(item => !scan.currentPaths.has(item.path)).map(item => item.path)
       : [...scan.missingPaths].filter(relativePath => manifestByPath.has(relativePath));
     if (!changed.length && !deleted.length && previousGeneration) {
-      return indexMetadata(db, previousGeneration, workspace, scan, checkedAt, true, 0, 0, 0);
+      const metadata = indexMetadata(db, previousGeneration, workspace, scan, checkedAt, true, 0, 0, 0);
+      return attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal);
     }
 
     const generationKind = previousGeneration ? normalizeGenerationKind(job?.kind) : 'build';
@@ -138,7 +140,8 @@ async function refreshRepositoryIndex(job, signal) {
       throw error;
     }
     try { db.exec('PRAGMA wal_checkpoint(PASSIVE)'); } catch {}
-    return indexMetadata(db, currentGeneration(db), workspace, scan, checkedAt, false, changed.length, deleted.length, skippedChangedFiles);
+    const metadata = indexMetadata(db, currentGeneration(db), workspace, scan, checkedAt, false, changed.length, deleted.length, skippedChangedFiles);
+    return attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal);
   } catch (error) {
     if (db && generationId != null) {
       try { finishGeneration(db, generationId, 'failed', processedFiles, boundedErrorMessage(error)); } catch {}
@@ -146,6 +149,31 @@ async function refreshRepositoryIndex(job, signal) {
     throw error;
   } finally {
     try { db?.close(); } catch {}
+  }
+}
+
+async function attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal) {
+  if (scan.mode !== 'full') return metadata;
+  try {
+    const zoekt = await rebuildZoektIndex(
+      workspace,
+      databaseFile,
+      job?.zoektSettings || {},
+      metadata,
+      scan.candidates,
+      { signal }
+    );
+    return { ...metadata, zoekt };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return {
+      ...metadata,
+      zoekt: {
+        available: false,
+        current: false,
+        reason: boundedErrorMessage(error)
+      }
+    };
   }
 }
 

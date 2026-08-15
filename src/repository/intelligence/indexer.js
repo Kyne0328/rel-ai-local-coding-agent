@@ -139,7 +139,8 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
         workspace: serializableWorkspace(workspace),
         databaseFile,
         maxFiles: boundedMaxFiles(options.maxFiles || config?.repositoryIntelligence?.maxFiles),
-        paths: selection.paths
+        paths: selection.paths,
+        zoektSettings: serializableZoektSettings(config)
       });
       state.currentCancel = execution.cancel;
       try {
@@ -368,6 +369,14 @@ function runtimeState(databaseFile) {
 function decorateMetadata(state, metadata) {
   if (!metadata) return metadata;
   return { ...metadata, runtimeStatus: state.status, pendingRefresh: state.dirty, lastError: state.lastError };
+}
+
+function serializableZoektSettings(config = {}) {
+  const settings = config?.repositoryIntelligence || {};
+  return {
+    zoektSearchExecutable: String(settings.zoektSearchExecutable || ''),
+    zoektIndexExecutable: String(settings.zoektIndexExecutable || '')
+  };
 }
 
 function serializableWorkspace(workspace) {
