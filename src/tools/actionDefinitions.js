@@ -220,7 +220,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_process',
     title: 'Manage Process',
-    description: 'Use for persistent services, watchers, or interactive programs. Do not use for one-shot commands; prefer executable + argv and use relai_exec or relai_validate instead.',
+    description: 'Use for persistent services, watchers, or interactive programs. Do not use for one-shot work; use relai_exec or relai_validate for one-shot work and prefer executable + argv.',
     inputSchema: {
       type: 'object',
       properties: {
