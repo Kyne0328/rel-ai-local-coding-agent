@@ -59,7 +59,7 @@ The native task lifecycle supports `working`, `input_required`, `completed`, `fa
 
 `tasks/update` is retry-safe. Unknown input keys and keys already satisfied are ignored. Newly supplied outstanding keys are validated and consumed, and an executor resumes at most once after all required input is satisfied.
 
-A finite command completes its native task when execution exits. A persistent process has an independent lifecycle; cancelling an already completed startup request does not stop the process. Use `relai_process_stop` for the running process.
+A finite command completes its native task when execution exits. A persistent process has an independent lifecycle; cancelling an already completed startup request does not stop the process. Use `relai_process` with action `stop` for the running process.
 
 Stdio uses a connection-scoped local principal. A server restart terminalizes active non-resumable stdio tasks as interrupted; a new stdio connection cannot adopt them. HTTP uses the complete stable authorization identity available from OAuth or the configured bearer mode.
 

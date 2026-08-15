@@ -7,7 +7,7 @@ const events = [];
 tracker.onToolActivity(event => events.push(event));
 
 const start = tracker.beginConnectorToolCall({
-  tool: 'relai_begin_work',
+  tool: 'relai_work', internalOperation: 'work.begin',
   workspace: 'repo',
   scopeId: 'lifecycle-activity',
   createTask: true,

@@ -8,7 +8,7 @@ import { readRecentWorkflowEvidence, readTaskHistorySession, recordTaskHistoryEv
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-workflow-evidence-history-'));
 const config = { stateDir: path.join(root, 'state') };
 try {
-  recordTaskHistoryEvent(config, { taskId: 'task-1', taskHistoryEligible: true, taskIdentityVersion: 2, taskIdExplicit: true, tool: 'relai_begin_work', workspace: 'repo', ok: true, ts: new Date().toISOString() });
+  recordTaskHistoryEvent(config, { taskId: 'task-1', taskHistoryEligible: true, taskIdentityVersion: 2, taskIdExplicit: true, tool: 'work.begin', workspace: 'repo', ok: true, ts: new Date().toISOString() });
   const receipt = { version: 1, key: 'check:a', kind: 'check', sourceTool: 'relai_exec', createdAt: new Date().toISOString(), commandId: 'npm:test', command: 'npm test', cwd: '.', outcome: 'passed', repositoryFingerprint: 'fp', mutationGeneration: 1, workspaceGeneration: 2, paths: [], metadata: { exitCode: 0 } };
   recordWorkflowEvidence(config, 'task-1', receipt);
   assert.deepEqual(readRecentWorkflowEvidence(config, 'task-1'), [receipt]);

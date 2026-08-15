@@ -10,7 +10,7 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });
   const startA = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     workspace: 'repo',
     scopeId: 'mcp:transport:shared',
     createTask: true
@@ -19,7 +19,7 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
   startA();
 
   const startB = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     workspace: 'repo',
     scopeId: 'mcp:transport:shared',
     createTask: true
@@ -62,10 +62,10 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
 // Completion locking is task-local: task A may complete while task B is active.
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });
-  const startA = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo-a', scopeId: 'shared', createTask: true });
+  const startA = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo-a', scopeId: 'shared', createTask: true });
   const taskA = startA.taskId;
   startA();
-  const startB = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo-b', scopeId: 'shared', createTask: true });
+  const startB = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo-b', scopeId: 'shared', createTask: true });
   const taskB = startB.taskId;
   startB();
 
@@ -82,7 +82,7 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
 // Concurrent completion retries for the same task must collapse into one idempotent transition.
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });
-  const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'shared', createTask: true });
+  const start = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'shared', createTask: true });
   const taskId = start.taskId;
   start();
   const first = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'shared', taskId });

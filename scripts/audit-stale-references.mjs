@@ -3,10 +3,13 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const FORBIDDEN_PUBLIC_NAMES = [
-  'relai_begin_work', 'relai_repo_snapshot', 'relai_code_inspect', 'relai_run_checks',
-  'relai_http_probe', 'relai_diff', 'relai_restore_paths', 'relai_reset_workspace',
-  'relai_status', 'relai_git_commit', 'relai_git_push', 'relai_git_draft_pr',
-  'relai_tidy_plan', 'relai_tidy_run', 'relai_finish_work'
+  'relai_begin_work', 'relai_repo_snapshot', 'relai_code_inspect',
+  'relai_process_start', 'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list',
+  'relai_semantic_search', 'relai_diagnostics_run', 'relai_run_checks', 'relai_http_probe',
+  'relai_diff', 'relai_restore_paths', 'relai_reset_workspace', 'relai_status',
+  'relai_git_commit', 'relai_git_push', 'relai_git_draft_pr',
+  'relai_tidy_plan', 'relai_tidy_run', 'relai_cancel_work', 'relai_finish_work',
+  'relai_worktree_create', 'relai_worktree_list', 'relai_worktree_remove'
 ];
 
 const PUBLIC_GUIDANCE_FILES = [
@@ -18,15 +21,31 @@ const PUBLIC_GUIDANCE_FILES = [
   /^\.agents\/.*\.md$/
 ];
 
-const IMMUTABLE_HISTORY = new Set([
-  'CHANGELOG.md'
-]);
+const IMMUTABLE_HISTORY = new Set(['CHANGELOG.md']);
 
 const TARGETED_RUNTIME_GUIDANCE = new Set([
   'src/bridge/codeIntelligence.js', 'src/bridge/search.js', 'src/bridge/validation.js',
   'src/bridge/validationPlan.js', 'src/bridge/writeGuidance.js', 'src/localRepoBridge.js',
   'src/processManager.js', 'src/release.js', 'src/toolActivity.js', 'src/tools/actionDefinitions.js',
   'src/tools/completion.js', 'src/tools/task.js', 'src/ui/features/onboarding/index.js'
+]);
+
+const SOURCE_INVARIANTS = Object.freeze([
+  ['src/tools/callTool.js', /assertRuntimeCompatibility/, 'no-op-runtime-compatibility-hot-path'],
+  ['src/runtimeCompatibility.js', /function\s+assertRuntimeCompatibility\b/, 'no-op-runtime-compatibility-wrapper'],
+  ['src/tools/connectorHelpers.js', /\b(?:deprecatedTool|replacementTool)\b|migration:\s*value\.migration/, 'removed-connector-compatibility-payload'],
+  ['src/ui/features/tools/index.js', /CURRENT_TOOL_CAPABILITY|lifecycleRank|category\s*===\s*['"]Compatibility['"]/, 'removed-tool-ui-compatibility-fallback'],
+  ['src/repo/gitStatus.js', /parseLegacyStatus/, 'removed-line-oriented-git-status-parser'],
+  ['src/bridge/checkDetection.js', /legacy:root|source:\s*['"]legacy['"]/, 'removed-validation-legacy-label'],
+  ['src/policyResolver.js', /legacySessionFilePath|legacy_session_file/, 'removed-unscoped-session-policy'],
+  ['types/boundaries.d.ts', /ToolLifecycleMetadata|lifecycle\?:\s*ToolLifecycleMetadata/, 'removed-tool-lifecycle-type'],
+  ['scripts/electron-size-baseline.json', /"electronVersion"\s*:/, 'decorative-package-baseline-version'],
+  ['scripts/electron-size-baseline-linux.json', /"electronVersion"\s*:/, 'decorative-package-baseline-version'],
+  ['test/mcp-legacy-adapter-unit.mjs', /chatgpt-local-compat-smoke\.mjs|Modern protocol:\\s\*/, 'stale-protocol-test-wording']
+]);
+
+const REMOVED_FILES = Object.freeze([
+  ['scripts/packaging-audit-policy.json', 'obsolete-packaging-audit-exception']
 ]);
 
 function trackedFiles(root) {
@@ -39,7 +58,7 @@ function auditRepositoryStaleness({ root = process.cwd() } = {}) {
   let scannedFiles = 0;
   for (const relative of trackedFiles(root)) {
     if (IMMUTABLE_HISTORY.has(relative)) continue;
-    const publicGuidance = PUBLIC_GUIDANCE_FILES.some((rule) => rule.test(relative));
+    const publicGuidance = PUBLIC_GUIDANCE_FILES.some(rule => rule.test(relative));
     const runtimeGuidance = TARGETED_RUNTIME_GUIDANCE.has(relative);
     if (!publicGuidance && !runtimeGuidance) continue;
     const absolute = path.join(root, relative);
@@ -59,11 +78,27 @@ function auditRepositoryStaleness({ root = process.cwd() } = {}) {
       }
     }
   }
-  return { findings, scannedFiles };
+
+  for (const [relative, pattern, rule] of SOURCE_INVARIANTS) {
+    const absolute = path.join(root, relative);
+    if (!fs.existsSync(absolute)) continue;
+    const text = fs.readFileSync(absolute, 'utf8');
+    const match = pattern.exec(text);
+    if (!match) continue;
+    const index = text.slice(0, match.index).split(/\r?\n/).length - 1;
+    const line = text.split(/\r?\n/)[index] || match[0];
+    findings.push(finding(relative, index, rule, line, match[0]));
+  }
+
+  for (const [relative, rule] of REMOVED_FILES) {
+    if (fs.existsSync(path.join(root, relative))) findings.push(finding(relative, 0, rule, relative));
+  }
+
+  return { findings, scannedFiles, invariantCount: SOURCE_INVARIANTS.length + REMOVED_FILES.length };
 }
 
 function finding(file, index, rule, text, match = '') {
-  return { file, line: index + 1, rule, match, text: text.trim() };
+  return { file, line: index + 1, rule, match, text: String(text || '').trim() };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
@@ -72,9 +107,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(im
     for (const item of result.findings) console.error(`${item.file}:${item.line} [${item.rule}] ${item.text}`);
     process.exitCode = 1;
   } else {
-    console.log(`Repository staleness audit passed across ${result.scannedFiles} tracked guidance files.`);
+    console.log(`Repository staleness audit passed across ${result.scannedFiles} tracked guidance files and ${result.invariantCount} source invariants.`);
   }
 }
 
 export { auditRepositoryStaleness, FORBIDDEN_PUBLIC_NAMES };
-

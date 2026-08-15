@@ -15,7 +15,7 @@ const config = { stateDir: root };
 try {
   const created = createNativeToolTask(config, {
     method: 'tools/call',
-    name: 'relai_run_checks',
+    name: 'relai_validate',
     workspace: 'app',
     logicalTaskId: 'logical-task',
     principal: 'client-a'

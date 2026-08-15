@@ -58,7 +58,7 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   fs.writeFileSync(path.join(repo, 'leftover.txt'), 'x\n');
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
-  await writeSessionPolicy(config, 'myapp', { taskHint: 'fix bug', workspaceRoot: repo });
+  await writeSessionPolicy(config, 'myapp', { taskHint: 'fix bug', workspaceRoot: repo, taskId: 'task-baseline-policy' });
   const policy = resolvePolicy({ alias: 'myapp', path: repo }, config);
   assert.equal(policy.sessionActive, true);
   assert.ok(Array.isArray(policy.baselineDirty), 'baselineDirty must be array');
@@ -72,15 +72,16 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
   // Seed session file with baseline
-  await writeSessionPolicy(config, 'myapp', { taskHint: 'x' });
-  // Manually inject baselineDirty into the session file
-  const sessionFile = path.join(stateDir, 'sessions', 'myapp-policy.json');
+  const taskId = 'task-ownership';
+  await writeSessionPolicy(config, 'myapp', { taskHint: 'x', taskId });
+  // Manually inject baselineDirty into the task-scoped session file.
+  const sessionFile = path.join(stateDir, 'sessions', `myapp--${taskId}-policy.json`);
   const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
   data.baselineDirty = ['old/generated.cmake', 'old/registrant.swift'];
   data.baselineCaptured = true;
   fs.writeFileSync(sessionFile, JSON.stringify(data));
 
-  const statusOutput = ' M old/generated.cmake\n M old/registrant.swift\n M lib/new_edit.dart\n?? new/untracked.dart\n';
+  const statusOutput = ' M old/generated.cmake\0 M old/registrant.swift\0 M lib/new_edit.dart\0?? new/untracked.dart\0';
   const workspace = { alias: 'myapp' };
   const { sessionChanged, baselineChanged, baselineSource } = classifyStatusOwnership(workspace, config, statusOutput);
   assert.deepEqual([...baselineChanged].sort((a, b) => a.localeCompare(b)), ['old/generated.cmake', 'old/registrant.swift']);
@@ -91,13 +92,13 @@ assert.deepEqual(await captureBaselineDirty(''), []);
 
 // 6. classifyStatusOwnership with no session: ownership is UNKNOWN, not session.
 // Claiming session ownership without a captured baseline is a safety bug: it let
-// relai_tidy_plan treat pre-existing untracked user files as disposable session
+// relai_changes tidy_plan treat pre-existing untracked user files as disposable session
 // artifacts. With no session the session-owned arrays must stay empty.
 {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
   const workspace = { alias: 'noses' };
-  const statusOutput = ' M a.txt\n M b.txt\n?? c.txt\n';
+  const statusOutput = ' M a.txt\0 M b.txt\0?? c.txt\0';
   const { sessionChanged, baselineChanged, untrackedSession, unknownChanged, untrackedUnknown, hasSession, baselineSource } = classifyStatusOwnership(workspace, config, statusOutput);
   assert.deepEqual(sessionChanged, []);
   assert.deepEqual(untrackedSession, []);
@@ -113,13 +114,14 @@ assert.deepEqual(await captureBaselineDirty(''), []);
 {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
-  await writeSessionPolicy(config, 'myapp', {});
-  const sessionFile = path.join(stateDir, 'sessions', 'myapp-policy.json');
+  const taskId = 'task-rename';
+  await writeSessionPolicy(config, 'myapp', { taskId });
+  const sessionFile = path.join(stateDir, 'sessions', `myapp--${taskId}-policy.json`);
   const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
   data.baselineDirty = ['lib/old/zone_validator.dart'];
   data.baselineCaptured = true;
   fs.writeFileSync(sessionFile, JSON.stringify(data));
-  const status = 'R  lib/old/zone_validator.dart -> lib/new/schedule_validator.dart\n';
+  const status = 'R  lib/new/schedule_validator.dart\0lib/old/zone_validator.dart\0';
   const { sessionChanged, baselineChanged } = classifyStatusOwnership({ alias: 'myapp' }, config, status);
   // Destination path is what shows in current worktree, so classify on destination
   assert.deepEqual(sessionChanged, ['lib/new/schedule_validator.dart']);

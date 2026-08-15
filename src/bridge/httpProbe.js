@@ -30,14 +30,14 @@ function localConnectionBaseUrl() {
 
 function resolveLocalRouteTarget(rawRoute) {
   const route = String(rawRoute || "").trim();
-  if (!route) throw new Error("relai_http_probe requires route.");
+  if (!route) throw new Error('relai_validate action "http" requires route.');
   if (!route.startsWith("/") || route.startsWith("//")) {
-    throw new Error("relai_http_probe route must be a local path beginning with one '/'; absolute and protocol-relative URLs are not accepted.");
+    throw new Error('relai_validate action "http" route must be a local path beginning with one \'/\'; absolute and protocol-relative URLs are not accepted.');
   }
   const base = new URL(localConnectionBaseUrl());
   const target = new URL(route, base);
   if (target.origin !== base.origin) {
-    throw new Error("relai_http_probe route must resolve to the configured local Rel.AI origin.");
+    throw new Error('relai_validate action "http" route must resolve to the configured local Rel.AI origin.');
   }
   return target.toString();
 }

@@ -97,7 +97,7 @@ try {
   assert.deepEqual(snapshot.projectInstructions.sources, ['AGENTS.override.md']);
   assert.match(snapshot.projectInstructions.content, /Snapshot instruction/);
 
-  const compact = compactForConnector('relai_repo_snapshot', snapshot, {});
+  const compact = compactForConnector('snapshot', snapshot, {});
   assert.deepEqual(compact.projectInstructions, snapshot.projectInstructions, 'connector compaction must retain project instructions');
 
   const inspect = workspaceInspect(config, { workspace: 'app', maxEntries: 10 });

@@ -147,7 +147,7 @@ async function workspaceTidyPlan(workspace, config, args = {}) {
     skippedCount: skipped.length,
     candidates,
     skipped,
-    next: candidates.length ? "Call relai_tidy_run with this planId to apply this bounded tidy plan." : "No session-owned untracked files were found."
+    next: candidates.length ? 'Call relai_changes with action "tidy_run" and this planId to apply this bounded tidy plan.' : 'No session-owned untracked files were found.'
   };
 }
 

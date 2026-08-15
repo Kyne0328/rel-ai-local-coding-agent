@@ -4,7 +4,7 @@
 // commands constitute "quick", "standard", or "release" validation for that project.
 //
 // Split out of validation.js so that file stays focused on *running* checks. The
-// detection side is also called from relai_code_inspect diagnostics (three levels in
+// detection side is also called from relai_inspect diagnostics (three levels in
 // one call) and from the dashboard summary on every poll, which is why it caches.
 
 import * as fs from "node:fs";
@@ -45,12 +45,12 @@ function detectVerifyCheckUnits(root, level) {
   if (!hasNested) {
     return detectVerifyChecks(root, level).map((command, index) => {
       const matched = catalog.find(unit => unit.command === command && unit.cwd === '.');
-      return matched || { id: `legacy:root:${index}`, packageId: '', cwd: '.', command, kind: 'other', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'legacy', scopeKey: 'repository' };
+      return matched || { id: `detected:root:${index}`, packageId: '', cwd: '.', command, kind: 'other', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'detected', scopeKey: 'repository' };
     });
   }
   const rootUnits = detectVerifyChecks(root, level).map((command, index) => {
     const matched = catalog.find(unit => unit.command === command && unit.cwd === '.');
-    return matched || { id: `legacy:root:${index}`, packageId: '', cwd: '.', command, kind: 'verification', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'legacy', scopeKey: 'repository' };
+    return matched || { id: `detected:root:${index}`, packageId: '', cwd: '.', command, kind: 'verification', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'detected', scopeKey: 'repository' };
   });
   const nested = minimalNestedChecks(catalog.filter(unit => unit.cwd !== '.'), level);
   return [...rootUnits, ...nested];

@@ -45,7 +45,7 @@ const runtime = createTaskActivityRuntime({
 
 function startTask(workspace, scopeId) {
   const finish = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     operation: 'Starting task',
     workspace,
     scopeId,
@@ -99,7 +99,7 @@ assert.equal(notifications.length, 0, 'inactivity must not generate a false task
 
 const failedTask = startTask('repo', 'conversation-c');
 const finishFailed = tracker.beginConnectorToolCall({
-  tool: 'relai_run_checks',
+  tool: 'relai_validate', internalOperation: 'validate.checks',
   operation: 'Running validation 1/2: npm run check',
   workspace: 'repo',
   scopeId: 'conversation-c',
@@ -122,7 +122,7 @@ assert.equal(runtime.getStatus().lastTask.failures, 1);
 
 const completedTask = startTask('repo', 'conversation-completed');
 const finishCompleted = tracker.beginConnectorToolCall({
-  tool: 'relai_finish_work',
+  tool: 'relai_work', internalOperation: 'work.finish',
   operation: 'Reporting task completion',
   workspace: 'repo',
   scopeId: 'conversation-completed',

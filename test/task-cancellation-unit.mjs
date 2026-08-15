@@ -8,11 +8,11 @@ let now = 1000;
 const phases = [];
 const tracker = createToolActivityTracker({ idleMs: 60_000, now: () => now });
 tracker.onToolActivity(event => phases.push(event.phase));
-const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', createTask: true });
+const start = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', createTask: true });
 const taskId = start.taskId;
 start({ ok: true });
 now = 2000;
-const active = tracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo', taskId });
+const active = tracker.beginConnectorToolCall({ tool: 'relai_validate', internalOperation: 'validate.checks', workspace: 'repo', taskId });
 active.update({
   status: 'validating',
   currentStage: 'Validating 1 of 3',

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { compactForConnector, policySentence } from "../src/tools.js";
 
-const idleStatus = compactForConnector('relai_status', {
+const idleStatus = compactForConnector('work.status', {
   ok: true,
   version: '0.17.1',
   toolSurface: {
@@ -10,8 +10,7 @@ const idleStatus = compactForConnector('relai_status', {
     toolSurfaceVersion: 12,
     toolCount: 20,
     tools: [{ name: 'relai_read', state: 'active' }],
-    deprecations: [],
-    compatibilityAliases: {}
+    deprecations: []
   },
   tools: ['relai_read', 'relai_edit'],
   toolGroups: { workspace: [], git: [], audit: [], cleanup: [], internal: ['relai_set_policy'] },
@@ -48,13 +47,13 @@ assert.equal(idleStatus.version, '0.17.1');
 assert.equal(idleStatus.toolSurface.toolSurfaceVersion, 12);
 assert.equal(idleStatus.toolSurface.toolCount, 20);
 assert.deepEqual(idleStatus.toolSurface.deprecations, []);
-assert.deepEqual(idleStatus.toolSurface.compatibilityAliases, {});
+assert.equal(Object.hasOwn(idleStatus.toolSurface, 'compatibilityAliases'), false);
 assert.equal(idleStatus.toolSurface.tools, undefined, 'compact status must not duplicate the full per-tool manifest');
 assert.equal(idleStatus.workspaceCount, 2);
 assert.deepEqual(idleStatus.workspaceAliases, ['app', 'worker'], 'compact status must retain configured aliases');
-console.log('1. idle relai_status compacted: OK');
+console.log('1. idle work.status compacted: OK');
 
-const activeStatus = compactForConnector('relai_status', {
+const activeStatus = compactForConnector('work.status', {
   ok: true, version: '0.17.1', workspaceCount: 2, workspaceAliases: ['app', 'worker'],
   workspace: {
     alias: 'app', root: '/repo',
@@ -64,14 +63,14 @@ const activeStatus = compactForConnector('relai_status', {
 assert.match(activeStatus.state, /Session active: add login/);
 assert.match(activeStatus.state, /1 pre-existing dirty file/);
 assert.deepEqual(activeStatus.workspaceAliases, ['app', 'worker']);
-console.log('2. active relai_status compacted: OK');
+console.log('2. active work.status compacted: OK');
 
 assert.equal(policySentence(null), null);
 assert.equal(policySentence({ sessionActive: false }), null);
 assert.equal(policySentence({ sessionActive: true }), 'Session active.');
 console.log('3. policy sentence: OK');
 
-const checksCompact = compactForConnector('relai_run_checks', {
+const checksCompact = compactForConnector('validate.checks', {
   ok: true, workspace: 'app', level: 'standard',
   checks: ['npm run check'], commands: ['npm run check'],
   results: [{ command: 'npm run check', ok: true, exitCode: 0, durationMs: 50, stdout: 'success noise', stderr: '', stdoutBytes: 13, stderrBytes: 0 }],
@@ -85,25 +84,25 @@ assert.equal(checksCompact.policy, undefined, 'default policy dropped');
 assert.deepEqual(checksCompact.checks, ['npm run check']);
 assert.equal(checksCompact.results[0].stdout, undefined, 'successful check output must be omitted');
 assert.equal(checksCompact.results[0].durationMs, 50);
-const failedChecksCompact = compactForConnector('relai_run_checks', {
+const failedChecksCompact = compactForConnector('validate.checks', {
   ok: false,
   results: [{ command: 'npm test', ok: false, exitCode: 1, stderr: 'failure details', stderrBytes: 15 }]
 }, {});
 assert.equal(failedChecksCompact.results[0].stderr, 'failure details', 'failed check diagnostics must remain actionable');
-const completedChecksCompact = compactForConnector('relai_run_checks', {
+const completedChecksCompact = compactForConnector('validate.checks', {
   ok: true, workspace: 'app', level: 'standard', checks: ['npm test'], results: [{ command: 'npm test', ok: true }],
   validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion',
-  completionSource: 'relai_run_checks', summary: 'Validated and completed.', validationAt: '2026-07-26T08:00:00.000Z',
+  completionSource: 'relai_validate:checks', summary: 'Validated and completed.', validationAt: '2026-07-26T08:00:00.000Z',
   changedFiles: ['src/app.js'],
   message: 'Validation passed and task completion was accepted.', nextAction: 'No more calls.'
 }, {});
 assert.equal(completedChecksCompact.completionKnown, true);
-assert.equal(completedChecksCompact.completionSource, 'relai_run_checks');
+assert.equal(completedChecksCompact.completionSource, 'relai_validate:checks');
 assert.equal(completedChecksCompact.summary, 'Validated and completed.');
 assert.deepEqual(completedChecksCompact.changedFiles, ['src/app.js']);
-console.log('4. relai_run_checks compacted: OK');
+console.log('4. validate.checks compacted: OK');
 
-const execCompact = compactForConnector('relai_exec', {
+const execCompact = compactForConnector('exec', {
   ok: false,
   workspace: 'app',
   command: 'npm test',
@@ -129,7 +128,7 @@ assert.equal(execCompact.exitCode, 2);
 assert.equal(execCompact.stderr, 'test failed');
 assert.deepEqual(execCompact.changedFiles, ['package-lock.json']);
 assert.deepEqual(execCompact.environmentKeys, ['CI']);
-const execSuccessCompact = compactForConnector('relai_exec', {
+const execSuccessCompact = compactForConnector('exec', {
   ok: true,
   workspace: 'app',
   command: 'node --check src/index.js',
@@ -149,13 +148,13 @@ const execSuccessCompact = compactForConnector('relai_exec', {
   mutationTracking: 'git'
 }, {});
 assert.equal(execSuccessCompact.cwd, undefined);
-assert.equal(execSuccessCompact.shell, undefined);
+assert.equal(execSuccessCompact.shell, 'PowerShell 7');
 assert.equal(execSuccessCompact.stdout, undefined);
 assert.equal(execSuccessCompact.changedFiles, undefined);
 assert.ok(Buffer.byteLength(JSON.stringify(execSuccessCompact)) < 1000);
 console.log('5. relai_exec compacted: OK');
 
-const snapshotCompact = compactForConnector('relai_repo_snapshot', {
+const snapshotCompact = compactForConnector('snapshot', {
   ok: true, workspace: 'app', root: '/repo',
   toolMode: 'chatgpt_local_repo', trustedLocalAgent: true,
   flow: { mode: 'standard', prepared: {} },
@@ -184,7 +183,7 @@ assert.deepEqual(snapshotCompact.projectInstructions, { sources: ['AGENTS.md'], 
 assert.equal(snapshotCompact.skipped, undefined, 'skipped entry list dropped on connector');
 assert.equal(snapshotCompact.skippedCount, 1, 'skipped list replaced by a count');
 assert.deepEqual(snapshotCompact.git, { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] }, 'git summary passes through compaction');
-const largeSnapshot = compactForConnector('relai_repo_snapshot', {
+const largeSnapshot = compactForConnector('snapshot', {
   ok: true,
   workspace: 'app',
   fileCount: 2000,
@@ -196,7 +195,7 @@ assert.equal(typeof largeSnapshot.returnedFileCount, 'number');
 assert.ok(Buffer.byteLength(JSON.stringify(largeSnapshot)) < 16000);
 console.log('6. repo snapshot compacted: OK');
 
-const readCompact = compactForConnector('relai_read', {
+const readCompact = compactForConnector('read', {
   ok: true, workspace: 'app',
   items: [
     { type: 'file', path: 'small.js', bytes: 40, content: 'export const x = 1;', cacheHit: false,
@@ -213,7 +212,7 @@ assert.equal(readCompact.items[1].writeGuidance, undefined, 'nested guidance dro
 assert.match(readCompact.items[1].writeHint, /oldText\/newText/, 'large file gets a compact hint');
 assert.equal(readCompact.items[1].content, '...', 'file content preserved');
 
-const fullRead = compactForConnector('relai_read', {
+const fullRead = compactForConnector('read', {
   ok: true,
   items: [{ path: 'big.dart', cacheHit: true, writeGuidance: { recommendedMode: 'exact-replace' } }]
 }, { guidanceMode: 'full' });
@@ -221,7 +220,7 @@ assert.equal(fullRead.items[0].cacheHit, undefined, 'cache metadata stays hidden
 assert.deepEqual(fullRead.items[0].writeGuidance, { recommendedMode: 'exact-replace' });
 console.log('7. relai_read compacted: OK');
 
-const processList = compactForConnector('relai_process_list', {
+const processList = compactForConnector('process.list', {
   ok: true,
   count: 1,
   processes: [{
@@ -247,14 +246,14 @@ const processList = compactForConnector('relai_process_list', {
 assert.equal(processList.processes[0].commandSummary, undefined);
 assert.equal(processList.processes[0].workspaceId, undefined);
 assert.equal(processList.processes[0].kind, 'service');
-const emptyProcessList = compactForConnector('relai_process_list', {
+const emptyProcessList = compactForConnector('process.list', {
   ok: true,
   count: 0,
   processes: []
 }, {});
 assert.deepEqual(emptyProcessList.processes, [], 'empty process lists must preserve the required processes array');
 assert.equal(emptyProcessList.count, 0);
-const processDelta = compactForConnector('relai_process_read', {
+const processDelta = compactForConnector('process.read', {
   ok: true,
   processId: 'proc_example',
   status: 'running',

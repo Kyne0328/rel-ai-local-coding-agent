@@ -7,6 +7,7 @@ import {
 } from './taskObservability.js';
 import { isTerminalTaskStatus, normalizeHistoricalTaskStatus } from './taskState.js';
 import { eventIdentityKey, eventTimestampMs, operationForTool, timestampMs, unique } from './taskEvents.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const TASK_LIFECYCLE_VERSION = 1;
 const MAX_SESSION_EVENTS = 200;
@@ -60,8 +61,8 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
   const current = canonicalTaskSnapshot(session);
   const timestamp = timestampMs(event.ts || event.timestamp) || Date.now();
   const ended = timestamp + Math.max(0, Number(event.ms || event.durationMs || 0));
-  const completion = event.ok !== false && (event.completionKnown === true || event.tool === 'relai_finish_work');
-  const cancellation = event.ok !== false && event.tool === 'relai_cancel_work';
+  const completion = event.ok !== false && (event.completionKnown === true || event.tool === OP.WORK_FINISH);
+  const cancellation = event.ok !== false && event.tool === OP.WORK_CANCEL;
   const changedFiles = unique([
     ...(current.changedFiles || []),
     ...(Array.isArray(event.taskOwnedChangedFiles) ? event.taskOwnedChangedFiles : []),
@@ -72,7 +73,7 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
     ? (current.events || []).findIndex(item => item?.eventId === eventId || item?.operationId === eventId)
     : -1;
   const represented = lifecycleIndex >= 0;
-  const recoverableValidationFailure = event.tool === 'relai_run_checks' && ['failed', 'not_run'].includes(String(event.validationStatus || ''));
+  const recoverableValidationFailure = event.tool === OP.VALIDATE_CHECKS && ['failed', 'not_run'].includes(String(event.validationStatus || ''));
   const failures = Math.max(Number(current.failures || 0), Number(current.failedToolCallCount || 0))
     + (event.ok === false && !represented && !recoverableValidationFailure ? 1 : 0);
   const calls = Number(current.calls || 0) + (represented ? 0 : 1);
@@ -97,7 +98,7 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
   const updatedAt = new Date(Math.max(ended, timestampMs(current.updatedAt), timestampMs(current.endedAt))).toISOString();
   const validation = event.validationStatus === 'not_required'
     ? 'not_required'
-    : event.tool === 'relai_run_checks'
+    : event.tool === OP.VALIDATE_CHECKS
       ? validationState(event)
       : current.validation || 'not_run';
   return canonicalTaskSnapshot({
@@ -129,9 +130,9 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
     changedFiles,
     changedFileCount: changedFiles.length,
     validation,
-    committed: Boolean(current.committed || (event.tool === 'relai_git_commit' && event.ok !== false)),
-    pushed: Boolean(current.pushed || (event.tool === 'relai_git_push' && event.ok !== false)),
-    prDrafted: Boolean(current.prDrafted || (event.tool === 'relai_git_draft_pr' && event.ok !== false)),
+    committed: Boolean(current.committed || (event.tool === OP.PUBLISH_COMMIT && event.ok !== false)),
+    pushed: Boolean(current.pushed || (event.tool === OP.PUBLISH_PUSH && event.ok !== false)),
+    prDrafted: Boolean(current.prDrafted || (event.tool === OP.PUBLISH_DRAFT_PR && event.ok !== false)),
     lastTool: event.tool || current.lastTool || '',
     operation: event.operation || current.operation || operationForTool(event.tool),
     lastOutcome: event.ok === false ? 'failed' : 'succeeded',

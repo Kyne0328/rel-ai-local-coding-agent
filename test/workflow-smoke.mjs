@@ -188,7 +188,7 @@ try {
     summary: 'Completed and validated the public workflow smoke task.'
   });
   const completed = structuredContentOf(await client.waitFor(31));
-  if (!completed.ok || completed.completionKnown !== true || completed.completionSource !== 'relai_run_checks') {
+  if (!completed.ok || completed.completionKnown !== true || completed.completionSource !== 'relai_validate:checks') {
     throw new Error(`Atomic workflow completion failed: ${JSON.stringify(completed)}`);
   }
   if (completed.summary !== 'Completed and validated the public workflow smoke task.') throw new Error('Atomic workflow completion lost its summary.');

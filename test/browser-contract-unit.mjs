@@ -63,7 +63,7 @@ try {
     /configured local Rel\.AI origin/,
     'backslash-normalized routes must not escape the local origin'
   );
-  console.log('HTTP probing contract passed. Named package scripts execute through relai_run_checks.');
+  console.log('HTTP probing contract passed. Named package scripts execute through relai_validate action checks.');
 } finally {
   if (previousStateDir == null) delete process.env.REL_AI_MCP_STATE_DIR;
   else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;

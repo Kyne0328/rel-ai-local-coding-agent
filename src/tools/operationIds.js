@@ -1,0 +1,34 @@
+const OPERATION_IDS = Object.freeze({
+  WORK_BEGIN: 'work.begin',
+  WORK_STATUS: 'work.status',
+  WORK_FINISH: 'work.finish',
+  WORK_CANCEL: 'work.cancel',
+  SNAPSHOT: 'snapshot',
+  READ: 'read',
+  SEARCH_TEXT: 'search.text',
+  SEARCH_SEMANTIC: 'search.semantic',
+  INSPECT: 'inspect',
+  EDIT: 'edit',
+  EXEC: 'exec',
+  PROCESS_START: 'process.start',
+  PROCESS_READ: 'process.read',
+  PROCESS_WRITE: 'process.write',
+  PROCESS_STOP: 'process.stop',
+  PROCESS_LIST: 'process.list',
+  UI: 'ui',
+  VALIDATE_CHECKS: 'validate.checks',
+  VALIDATE_DIAGNOSTICS: 'validate.diagnostics',
+  VALIDATE_HTTP: 'validate.http',
+  CHANGES_DIFF: 'changes.diff',
+  CHANGES_RESTORE: 'changes.restore',
+  CHANGES_RESET: 'changes.reset',
+  CHANGES_TIDY_PLAN: 'changes.tidy_plan',
+  CHANGES_TIDY_RUN: 'changes.tidy_run',
+  PUBLISH_COMMIT: 'publish.commit',
+  PUBLISH_PUSH: 'publish.push',
+  PUBLISH_DRAFT_PR: 'publish.draft_pr'
+});
+
+const OPERATION_ID_VALUES = Object.freeze(Object.values(OPERATION_IDS));
+
+export { OPERATION_IDS, OPERATION_ID_VALUES };

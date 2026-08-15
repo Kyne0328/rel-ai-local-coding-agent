@@ -35,7 +35,7 @@ const execSuccess = compactForConnector('relai_exec', {
   exitCode: 0, durationMs: 50, stdout: '', stderr: '', stdoutBytes: 0, stderrBytes: 0,
   stdoutTruncated: false, stderrTruncated: false, timedOut: false, changedFiles: [], changedFilesTruncated: false
 });
-const snapshot = compactForConnector('relai_repo_snapshot', {
+const snapshot = compactForConnector('snapshot', {
   ok: true, workspace: 'repo', fileCount: 2000,
   files: Array.from({ length: 2000 }, (_, index) => `src/generated/path-${String(index).padStart(4, '0')}.js`),
   manifests: ['package.json'], recommendedFlow: ['relai_search', 'relai_read']

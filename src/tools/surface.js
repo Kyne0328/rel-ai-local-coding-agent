@@ -48,8 +48,7 @@ function getToolSurfaceManifest() {
     toolSurfaceVersion: TOOL_SURFACE_VERSION,
     toolCount: manifestTools.length,
     tools: manifestTools,
-    deprecations: [],
-    compatibilityAliases: {}
+    deprecations: []
   };
 }
 
@@ -58,7 +57,6 @@ function actionMetadata(tool) {
     .filter(entry => entry.action !== 'default')
     .map(entry => ({
       action: entry.action,
-      operation: entry.operationName,
       fields: [...entry.fields],
       required: [...entry.required],
       executionClass: entry.behavior?.executionClass || 'bounded_synchronous',

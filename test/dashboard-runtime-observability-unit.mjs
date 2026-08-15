@@ -128,7 +128,7 @@ assert.equal(unknownStatusTask.canCancel, false);
 const completedTask = nativeTaskView({
   taskId: 'task-startup',
   status: 'completed',
-  origin: { name: 'relai_process_start', logicalTaskId: 'work-session-1' },
+  origin: { name: 'relai_process', logicalTaskId: 'work-session-1' },
   result: { processId: 'proc-persistent' }
 });
 assert.equal(completedTask.canCancel, false);

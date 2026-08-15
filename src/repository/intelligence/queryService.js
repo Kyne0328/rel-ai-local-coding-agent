@@ -26,7 +26,7 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
 async function executeCodeInspectQuery(workspace, config, args = {}, index = {}, options = {}) {
   const action = String(args.action || '').trim().toLowerCase();
   if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture'].includes(action)) {
-    throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, trace, diagnostics, architecture.');
+    throw new Error('relai_inspect action must be one of: symbol, references, related, impact, trace, diagnostics, architecture.');
   }
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 1000, DEFAULT_MAX_RESULTS));
   const sourceCache = new Map();
@@ -48,7 +48,7 @@ async function executeCodeInspectQuery(workspace, config, args = {}, index = {},
     if (action === 'diagnostics') return { ...base, ...diagnosticReadiness(workspace, db) };
     if (action === 'related') {
       const query = String(args.query || args.symbol || '').trim();
-      if (!query) throw new Error('relai_code_inspect related requires query or symbol.');
+      if (!query) throw new Error('relai_inspect action "related" requires query or symbol.');
       const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 10);
       const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
       const fallback = zoekt.available && zoekt.current ? [] : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
@@ -58,7 +58,7 @@ async function executeCodeInspectQuery(workspace, config, args = {}, index = {},
     const symbol = String(args.symbol || '').trim();
     const requestedPaths = Array.isArray(args.paths) ? args.paths.filter(Boolean) : [];
     const pathOnlyImpact = action === 'impact' && !symbol && requestedPaths.length > 0;
-    if (!symbol && !pathOnlyImpact) throw new Error(`relai_code_inspect ${action} requires symbol${action === 'impact' ? ' or paths' : ''}.`);
+    if (!symbol && !pathOnlyImpact) throw new Error(`relai_inspect action "${action}" requires symbol${action === 'impact' ? ' or paths' : ''}.`);
     if (symbol && !/^[A-Za-z_$][A-Za-z0-9_$.:#-]{0,255}$/.test(symbol)) throw new Error('symbol must be a simple code identifier or qualified identifier.');
 
     const definitions = symbol ? findDefinitions(workspace, db, symbol, maxResults, sourceCache) : [];
@@ -93,7 +93,7 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
 
 async function executeSemanticSearchQuery(workspace, config, args = {}, index = {}, options = {}) {
   const query = String(args.query || '').trim();
-  if (!query) throw new Error('relai_semantic_search requires query.');
+  if (!query) throw new Error('relai_search action "semantic" requires query.');
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 100, 20));
   const maxBytes = args.maxBytes == null ? 0 : Math.floor(clampNumber(args.maxBytes, 1000, 393216, 393216));
   const sourceCache = new Map();

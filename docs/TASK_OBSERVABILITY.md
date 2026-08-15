@@ -113,7 +113,7 @@ Historical records that used `inactive`, `expired`, or `endReason: inactivity_wi
 
 ## Explicit cancellation
 
-`relai_cancel_work` targets the exact supplied `work_id`.
+`relai_work` with action `cancel` targets the exact supplied `work_id`.
 
 Cancellation:
 

@@ -5,8 +5,9 @@ import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { principalFingerprint } from '../mcp/principal.js';
 import { isTerminalTaskStatus } from '../taskState.js';
 import { classifyTaskIntent } from '../workflow/intent.js';
+import { OPERATION_IDS as OP } from './operationIds.js';
 
-const TERMINAL_REFERENCE_OPERATIONS = new Set(['relai_process_list', 'relai_process_read', 'relai_status']);
+const TERMINAL_REFERENCE_OPERATIONS = new Set([OP.PROCESS_LIST, OP.PROCESS_READ, OP.WORK_STATUS]);
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
@@ -63,8 +64,8 @@ function assertKnownTask(config, taskId, workspace, toolName, principal) {
   if (!expectedPrincipal || !safeEqual(expectedPrincipal, actualPrincipal)) {
     throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_work action "begin".');
   }
-  if (session.status === 'cancelled' && toolName === 'relai_cancel_work') return session;
-  if (session.status === 'completed' && toolName === 'relai_finish_work') return session;
+  if (session.status === 'cancelled' && toolName === OP.WORK_CANCEL) return session;
+  if (session.status === 'completed' && toolName === OP.WORK_FINISH) return session;
   if (isTerminalTaskReference(session, toolName)) return session;
   if (isTerminalTaskStatus(session.status)) {
     throw taskError('INVALID_TASK_STATE', `This work session is already ${session.status}. Start a new work session instead of reusing its work_id.`);
@@ -92,10 +93,10 @@ function safeEqual(left, right) {
 }
 
 function taskAuditContext(context, activity, requestedTaskId, toolName, ok, value = null) {
-  const duplicateCompletion = toolName === 'relai_finish_work' && value?.duplicate === true;
-  const duplicateCancellation = toolName === 'relai_cancel_work' && value?.duplicate === true;
+  const duplicateCompletion = toolName === OP.WORK_FINISH && value?.duplicate === true;
+  const duplicateCancellation = toolName === OP.WORK_CANCEL && value?.duplicate === true;
   const taskId = activity?.taskId || requestedTaskId || '';
-  const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === 'relai_begin_work'));
+  const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === OP.WORK_BEGIN));
   return {
     taskId,
     scopeId: activity?.scopeId || '',
@@ -111,11 +112,11 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
     taskIdExplicit: taskHistoryEligible,
     taskHistoryEligible,
     duplicateRequest: duplicateCompletion || duplicateCancellation,
-    eventType: toolName === 'relai_begin_work'
+    eventType: toolName === OP.WORK_BEGIN
       ? (ok ? 'task.started' : 'task.start.rejected')
-      : toolName === 'relai_finish_work'
+      : toolName === OP.WORK_FINISH
         ? (ok ? (duplicateCompletion ? 'task.completion.duplicate' : 'task.completion.committed') : 'task.completion.rejected')
-        : toolName === 'relai_cancel_work'
+        : toolName === OP.WORK_CANCEL
           ? (ok ? (duplicateCancellation ? 'task.cancellation.duplicate' : 'task.cancellation.committed') : 'task.cancellation.rejected')
           : 'tool.call.completed'
   };

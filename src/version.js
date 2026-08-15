@@ -3,13 +3,13 @@ import * as fs from "node:fs";
 
 // Single source of truth for the human-facing product version. Read it straight
 // from CHANGELOG.md (the first "## [version] — date" heading) so every surface —
-// /health, relai_status, release readiness — reports the
+// /health, relai_work status, release readiness — reports the
 // same value the release notes advertise. package.json is only a last-resort fallback
 // (e.g. CHANGELOG missing from a partial bundle).
 let _pkgVersion = "";
 try { _pkgVersion = packageMetadata.version || ""; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package version:', error); }
 
-// CHANGELOG.md is ~112 KB and getVersion() is called on /health, relai_status and
+// CHANGELOG.md is ~112 KB and getVersion() is called on /health, relai_work status and
 // every MCP response, so cache the parse and re-read only when the file changes.
 let _changelogCache = { mtimeMs: -1, size: -1, version: "" };
 

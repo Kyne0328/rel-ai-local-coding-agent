@@ -4,7 +4,8 @@ import { fromJsonSchema } from '@modelcontextprotocol/server';
 
 import { connectorInstructions } from '../src/mcpServer.js';
 import { getToolDefinitions } from '../src/tools.js';
-import { resolveToolOperation } from '../src/tools/actionCatalog.js';
+import { getOperationDefinitions, resolveToolOperation } from '../src/tools/actionCatalog.js';
+import { OPERATION_IDS as OP, OPERATION_ID_VALUES } from '../src/tools/operationIds.js';
 import { validateExecutableOperationInput } from '../src/tools/runtimeRegistry.js';
 import {
   TOOL_NAMES, getPublicToolSchemas,
@@ -53,8 +54,11 @@ assert.equal(Object.hasOwn(manifest, 'profile'), false);
 assert.equal(manifest.toolCount, TOOL_NAMES.length);
 assert.deepEqual(manifest.tools.map(item => item.name), [...TOOL_NAMES]);
 assert.deepEqual(manifest.deprecations, []);
-assert.deepEqual(manifest.compatibilityAliases, {});
+assert.equal(Object.hasOwn(manifest, 'compatibilityAliases'), false, 'hard cutover must not advertise compatibility aliases');
 assert.equal(Object.hasOwn(manifest, 'migration'), false);
+assert.ok(manifest.tools.flatMap(item => item.actions || []).every(action => !Object.hasOwn(action, 'operation')), 'public manifest actions must not leak internal operation IDs');
+assert.deepEqual(getOperationDefinitions().map(item => item.name).sort(), [...OPERATION_ID_VALUES].sort(), 'internal operation registry must use only canonical hard-cut IDs');
+assert.ok(getOperationDefinitions().every(item => !item.name.startsWith('relai_')), 'internal operation IDs must not masquerade as public MCP tool names');
 
 for (const schema of schemas) {
   assert.equal(ToolSchema.safeParse(schema).success, true, `${schema.name} must satisfy ToolSchema`);
@@ -221,19 +225,19 @@ await publicInvalid('relai_edit', { work_id: 'work', path: 'README.md' });
 await publicInvalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', oldText: 'before', newText: 'after' });
 
 // Internal/direct invocation gets the same canonical validation before a handler runs.
-await validateExecutableOperationInput('relai_search', { workspace: 'repo', work_id: 'work', pattern: 'needle', maxFiles: 200 });
-await assert.rejects(() => validateExecutableOperationInput('relai_search', { workspace: 'repo', pattern: 'needle', maxFiles: 201 }), /Input validation error for relai_search/);
-await assert.rejects(() => validateExecutableOperationInput('relai_semantic_search', { workspace: 'repo', query: 'needle', maxResults: 101 }), /Input validation error for relai_semantic_search/);
-await assert.rejects(() => validateExecutableOperationInput('relai_http_probe', { workspace: 'repo', route: '/health', timeoutMs: 600001 }), /Input validation error for relai_http_probe/);
-await assert.rejects(() => validateExecutableOperationInput('relai_exec', { workspace: 'repo' }), /Input validation error for relai_exec/);
-await assert.rejects(() => validateExecutableOperationInput('relai_edit', { workspace: 'repo', path: 'README.md' }), /Input validation error for relai_edit/);
+await validateExecutableOperationInput(OP.SEARCH_TEXT, { workspace: 'repo', work_id: 'work', pattern: 'needle', maxFiles: 200 });
+await assert.rejects(() => validateExecutableOperationInput(OP.SEARCH_TEXT, { workspace: 'repo', pattern: 'needle', maxFiles: 201 }), /Input validation error for search\.text/);
+await assert.rejects(() => validateExecutableOperationInput(OP.SEARCH_SEMANTIC, { workspace: 'repo', query: 'needle', maxResults: 101 }), /Input validation error for search\.semantic/);
+await assert.rejects(() => validateExecutableOperationInput(OP.VALIDATE_HTTP, { workspace: 'repo', route: '/health', timeoutMs: 600001 }), /Input validation error for validate\.http/);
+await assert.rejects(() => validateExecutableOperationInput(OP.EXEC, { workspace: 'repo' }), /Input validation error for exec/);
+await assert.rejects(() => validateExecutableOperationInput(OP.EDIT, { workspace: 'repo', path: 'README.md' }), /Input validation error for edit/);
 
 assert.equal(resolveToolOperation('relai_work', { action: 'begin', workspace: 'repo', work_id: 'irrelevant' }).operationArgs.work_id, undefined);
 assert.equal(resolveToolOperation('relai_work', { action: 'status', title: 'irrelevant' }).operationArgs.title, undefined);
 assert.equal(resolveToolOperation('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'irrelevant' }).operationArgs.command, undefined);
 assert.throws(() => resolveToolOperation('relai_process', { action: 'read', work_id: 'work', processId: 'p', unknown: true }), /Unsupported field 'unknown'/);
-assert.equal(resolveToolOperation('relai_validate', { action: 'checks', work_id: 'work' }).operationName, 'relai_run_checks');
-assert.equal(resolveToolOperation('relai_validate', { action: 'http', work_id: 'work', route: '/health' }).operationName, 'relai_http_probe');
+assert.equal(resolveToolOperation('relai_validate', { action: 'checks', work_id: 'work' }).operationName, OP.VALIDATE_CHECKS);
+assert.equal(resolveToolOperation('relai_validate', { action: 'http', work_id: 'work', route: '/health' }).operationName, OP.VALIDATE_HTTP);
 
 const metadata = getToolMetadata(config);
 const validateMetadata = metadata.find(item => item.name === 'relai_validate');

@@ -9,7 +9,7 @@ let currentStatus = {
   taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', operation: '', completionKnown: false, startedAt: null, lastTask: null }
 };
 let previousAnnouncementKey = '';
-let notificationsEnabled = localStorage.getItem('relai_status_notifications') !== 'off';
+let notificationsEnabled = localStorage.getItem('relai_activity_notifications') !== 'off';
 let clockTimer = null;
 const serviceLogs = [];
 
@@ -107,11 +107,10 @@ function pluralize(count, singular) {
 
 function toolLabel(tool) {
   if (tool === 'relai_exec') return 'Running a project command';
-  if (tool === 'relai_run_checks' || tool === 'relai_http_probe') return 'Checking changes';
-  if (tool === 'relai_diff') return 'Reviewing changes';
-  if (tool === 'relai_git_draft_pr') return 'Preparing pull request text';
-  if (tool === 'relai_git_commit' || tool === 'relai_git_push') return 'Publishing changes';
-  if (tool === 'relai_edit' || tool === 'relai_tidy_run' || tool === 'relai_restore_paths' || tool === 'relai_reset_workspace') return 'Applying changes';
+  if (tool === 'relai_validate') return 'Checking changes';
+  if (tool === 'relai_changes') return 'Reviewing or applying changes';
+  if (tool === 'relai_publish') return 'Publishing changes';
+  if (tool === 'relai_edit') return 'Applying changes';
   return 'Looking through the project';
 }
 
@@ -307,7 +306,7 @@ async function loadNotificationPreference() {
   try {
     const result = await window.electronAPI.getNotificationsEnabled();
     notificationsEnabled = result?.enabled !== false;
-    localStorage.setItem('relai_status_notifications', notificationsEnabled ? 'on' : 'off');
+    localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
     updateNotificationButton();
   } catch {
     // The fallback remains usable if the preference cannot be loaded.
@@ -324,7 +323,7 @@ async function syncNotificationPreference() {
 
 function toggleNotifications() {
   notificationsEnabled = !notificationsEnabled;
-  localStorage.setItem('relai_status_notifications', notificationsEnabled ? 'on' : 'off');
+  localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
   updateNotificationButton();
   runAsync(syncNotificationPreference());
 }
@@ -402,7 +401,7 @@ async function copyWithFeedback(button, text, successText = 'Copied') {
 
 function initDisclosures() {
   for (const details of document.querySelectorAll('[data-disclosure]')) {
-    const key = `relai_status_disclosure_${details.dataset.disclosure}`;
+    const key = `relai_activity_disclosure_${details.dataset.disclosure}`;
     const saved = localStorage.getItem(key);
     if (saved) details.open = saved === 'open';
     details.addEventListener('toggle', () => {
