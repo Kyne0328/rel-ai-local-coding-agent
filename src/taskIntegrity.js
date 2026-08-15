@@ -183,6 +183,9 @@ function applyValidationState(authority, workspaceState, event, timestamp) {
   authority.validationAt = timestamp;
   authority.validationLevel = clean(event.validationLevel);
   authority.validationFingerprint = clean(event.validationFingerprint);
+  authority.validationScope = Array.isArray(event.validationScope)
+    ? unique(event.validationScope.map(normalizePath).filter(Boolean)).slice(0, 1000)
+    : authority.validationScope || [];
   if (authority.validationResult !== 'passed') return;
   authority.hasPassedValidation = true;
   authority.latestPassedValidationAt = timestamp;
@@ -214,6 +217,7 @@ function createAuthority(taskId, workspace, event, baseline) {
     validationAt: '',
     validationLevel: '',
     validationFingerprint: '',
+    validationScope: [],
     validatedRepositoryFingerprint: '',
     conflictingExternalMutations: [],
     finalCompletionGeneration: null,

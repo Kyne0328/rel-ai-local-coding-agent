@@ -25,19 +25,22 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   scheduleIntelligenceWarmup(workspace, config);
   if (bootstrapMode === 'none') return task;
   const snapshot = await repoSnapshot(workspace, config, {
-    maxEntries: bootstrapMode === 'full' ? undefined : 600,
-    includeFiles: true,
+    maxEntries: bootstrapMode === 'full' ? undefined : 64,
+    includeFiles: bootstrapMode === 'full',
     instructionPath: args.instructionPath
   });
   const bootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
-  const cachedIntelligence = bootstrapMode === 'full'
-    ? await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 })
-    : await repositoryIntelligence.cachedSummary(workspace, config);
-  if (cachedIntelligence) bootstrap.repositoryIntelligence = cachedIntelligence;
-  return {
-    ...task,
-    bootstrap
-  };
+  if (bootstrapMode === 'full') {
+    let cachedIntelligence = null;
+    try {
+      cachedIntelligence = await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
+    } catch {}
+    return {
+      ...task,
+      bootstrap: cachedIntelligence ? { ...bootstrap, repositoryIntelligence: cachedIntelligence } : bootstrap
+    };
+  }
+  return { ...task, bootstrap };
 });
 
 function scheduleIntelligenceWarmup(workspace, config) {
@@ -86,23 +89,30 @@ const HANDLERS = Object.freeze({
 function withWorkflowTaskContext(config, workspace, args, context = {}) {
   const taskId = String(context.taskId || args.work_id || '').trim();
   if (!taskId) return args;
-  let owned = [];
+  const requestState = requestTaskState(context, taskId);
+  let owned = Array.isArray(requestState?.integrity?.taskOwnedChangedFiles)
+    ? [...requestState.integrity.taskOwnedChangedFiles]
+    : [];
   let packagePaths = [];
   let impactedPaths = [];
   let readEvidence = [];
   try {
-    owned = taskOwnedChangedFiles(config, taskId, workspace.alias);
-    const topology = discoverRepositoryTopology(workspace.path);
+    if (!requestState?.integrity) owned = taskOwnedChangedFiles(config, taskId, workspace.alias);
+    const topology = requestState?.topology || discoverRepositoryTopology(workspace.path);
+    if (requestState && !requestState.topology) requestState.topology = topology;
     packagePaths = [...new Set(owned.map(file => packageForPath(topology, file)?.path).filter(value => value && value !== '.'))];
   } catch {}
   try {
-    const session = readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false });
+    const session = requestState?.session || readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false });
+    if (requestState && !requestState.session) requestState.session = session;
     impactedPaths = Array.isArray(session?.workflow?.boundary?.impactedPaths)
       ? session.workflow.boundary.impactedPaths
       : Array.isArray(session?.workflow?.impactedPaths) ? session.workflow.impactedPaths : [];
   } catch {}
   try {
-    readEvidence = readRecentWorkflowEvidence(config, taskId, 30)
+    const evidence = requestState?.workflowContextEvidence || readRecentWorkflowEvidence(config, taskId, 30);
+    if (requestState && !requestState.workflowContextEvidence) requestState.workflowContextEvidence = evidence;
+    readEvidence = evidence
       .flatMap(receipt => Array.isArray(receipt?.metadata?.reads) ? receipt.metadata.reads : [])
       .slice(-100);
   } catch {}
@@ -112,10 +122,16 @@ function withWorkflowTaskContext(config, workspace, args, context = {}) {
 function withTaskOwnedReviewContext(config, workspace, args, context = {}) {
   const taskId = String(context.taskId || args.work_id || '').trim();
   if (!taskId) return args;
-  return {
-    ...args,
-    _taskOwnedPaths: taskOwnedChangedFiles(config, taskId, workspace.alias)
-  };
+  const requestState = requestTaskState(context, taskId);
+  const owned = Array.isArray(requestState?.integrity?.taskOwnedChangedFiles)
+    ? [...requestState.integrity.taskOwnedChangedFiles]
+    : taskOwnedChangedFiles(config, taskId, workspace.alias);
+  return { ...args, _taskOwnedPaths: owned };
+}
+
+function requestTaskState(context, taskId) {
+  const state = context?.requestTaskContext;
+  return state && state.taskId === taskId ? state : null;
 }
 /**
  * @param {(workspace: any, config: Record<string, any>, args: Record<string, any>, context: { connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }) => any} handler

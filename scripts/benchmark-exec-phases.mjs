@@ -40,7 +40,10 @@ try {
   resetToolActivity();
 
   const context = { principal: 'local:trusted', publicHttpOnly: true, transportType: 'benchmark' };
-  const task = await rawCallTool('relai_work', { action: 'begin', workspace: 'bench', bootstrap: 'none' }, context);
+  const beginStart = performance.now();
+  const task = await rawCallTool('relai_work', { action: 'begin', workspace: 'bench', bootstrap: 'compact' }, context);
+  const beginWallMs = performance.now() - beginStart;
+  const beginResponseBytes = Buffer.byteLength(JSON.stringify(task), 'utf8');
   const workId = task.work_id;
 
   // Warm shell resolution, module caches, task state, and Git process lookup before sampling.
@@ -68,21 +71,42 @@ try {
     const callToolWallMs = performance.now() - callStart;
     if (!throughTool.ok) throw new Error(throughTool.stderr || throughTool.error || 'callTool exec benchmark failed');
 
+    let operationStart = performance.now();
+    const read = await rawCallTool('relai_read', {
+      workspace: 'bench', work_id: workId, paths: ['README.md'], guidanceMode: 'none'
+    }, context);
+    const readCallMs = performance.now() - operationStart;
+    operationStart = performance.now();
+    const search = await rawCallTool('relai_search', {
+      action: 'text', workspace: 'bench', work_id: workId, pattern: 'benchmark', fixed: true, mode: 'compact', maxResults: 5
+    }, context);
+    const searchCallMs = performance.now() - operationStart;
+
     rows.push({
       statusMs,
       commandMs: Number(direct.durationMs || 0),
       relaiExecWallMs,
       callToolWallMs,
       executorOverheadMs: Math.max(0, relaiExecWallMs - Number(direct.durationMs || 0)),
-      orchestrationOverheadMs: Math.max(0, callToolWallMs - relaiExecWallMs)
+      orchestrationOverheadMs: Math.max(0, callToolWallMs - relaiExecWallMs),
+      readCallMs,
+      searchCallMs,
+      readResponseBytes: Buffer.byteLength(JSON.stringify(read), 'utf8'),
+      searchResponseBytes: Buffer.byteLength(JSON.stringify(search), 'utf8')
     });
   }
 
-  const medians = Object.fromEntries(Object.keys(rows[0]).map(key => [key, round(median(rows.map(row => row[key]))) ]));
+  const medians = Object.fromEntries(Object.keys(rows[0]).map(key => [key, round(percentile(rows.map(row => row[key]), 0.5)) ]));
+  const percentiles = Object.fromEntries(Object.keys(rows[0]).map(key => [key, {
+    p50: round(percentile(rows.map(row => row[key]), 0.5)),
+    p95: round(percentile(rows.map(row => row[key]), 0.95))
+  }]));
   const result = {
     samples,
     environment: { platform: process.platform, node: process.version },
+    workBegin: { wallMs: round(beginWallMs), responseBytes: beginResponseBytes },
     medians,
+    percentiles,
     ranges: Object.fromEntries(Object.keys(rows[0]).map(key => {
       const values = rows.map(row => row[key]);
       return [key, { min: round(Math.min(...values)), max: round(Math.max(...values)) }];
@@ -96,10 +120,11 @@ try {
   fs.rmSync(temp, { recursive: true, force: true });
 }
 
-function median(values) {
+function percentile(values, quantile) {
   const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  if (!sorted.length) return 0;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * quantile) - 1));
+  return sorted[index];
 }
 
 function round(value) {

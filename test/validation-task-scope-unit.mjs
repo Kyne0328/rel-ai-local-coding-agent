@@ -66,12 +66,54 @@ try {
   }, context);
   assert.equal(validation.ok, true);
   assert.equal(validation.planSelection, 'focused', 'pre-existing dirty files must not broaden a one-file task validation plan');
-
   const plan = readValidationPlan(readConfig(), validation.planId, { alias: 'app', path: workspacePath });
   assert.deepEqual(plan.changedFiles, ['src/task-owned.js']);
+  assert.equal(plan.validationScope.includes('src/task-owned.js'), true);
+  assert.equal(plan.validationScope.includes('package.json'), true, 'validation configuration must stay inside the task fingerprint');
+  assert.equal(plan.validationScope.some(file => file.startsWith('ambient/')), false, 'ambient dirty files must stay outside the task fingerprint');
   assert.equal(plan.recommended, 'focused');
   assert.equal(repositoryIntelligence.status({ alias: 'app', path: workspacePath }, readConfig()).watching, false,
     'validation impact analysis must not start a live repository watcher');
+
+  const unrelated = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none' }, context);
+  await callTool('relai_edit', {
+    workspace: 'app',
+    work_id: unrelated.work_id,
+    path: 'ambient/concurrent-task.txt',
+    content: 'unrelated concurrent task\n'
+  }, context);
+  const completion = await callTool('relai_work', {
+    action: 'finish',
+    workspace: 'app',
+    work_id: task.work_id,
+    summary: 'Task-scoped validation remains current after an unrelated concurrent change.'
+  }, context);
+  assert.equal(completion.ok, true, 'unrelated task mutations must not invalidate task-scoped validation');
+  await callTool('relai_work', {
+    action: 'cancel', workspace: 'app', work_id: unrelated.work_id, reason: 'Concurrent scope coverage complete.'
+  }, context);
+
+  const configTask = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none' }, context);
+  await callTool('relai_edit', {
+    workspace: 'app', work_id: configTask.work_id, path: 'src/config-owned.js', content: 'export const configOwned = true;\n'
+  }, context);
+  await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: configTask.work_id }, context);
+  const packagePath = path.join(workspacePath, 'package.json');
+  const packageBefore = fs.readFileSync(packagePath, 'utf8');
+  const packageJson = JSON.parse(packageBefore);
+  packageJson.description = 'validation config changed after checks';
+  fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+  await assert.rejects(
+    () => callTool('relai_work', {
+      action: 'finish', workspace: 'app', work_id: configTask.work_id,
+      summary: 'Validation configuration changes must invalidate completion.'
+    }, context),
+    error => error?.code === 'TASK_REVALIDATION_REQUIRED'
+  );
+  fs.writeFileSync(packagePath, packageBefore);
+  await callTool('relai_work', {
+    action: 'cancel', workspace: 'app', work_id: configTask.work_id, reason: 'Configuration invalidation coverage complete.'
+  }, context);
 } finally {
   repositoryIntelligence.shutdown();
   resetToolActivity();

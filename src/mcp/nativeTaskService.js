@@ -142,6 +142,7 @@ function updateNativeTask(config, taskId, patch = {}, options = {}) {
     const task = requireTaskUnlocked(config, taskId, options);
     reconcileTaskUnlocked(config, task, options.now);
     assertActiveTask(task);
+    const before = stableJson([task.status, task.statusMessage, task.pollIntervalMs, task.ttlMs, task.internal]);
     if (patch.status != null) {
       const nextStatus = normalizeStatus(patch.status);
       if (isTerminalNativeTaskStatus(nextStatus)) {
@@ -170,6 +171,9 @@ function updateNativeTask(config, taskId, patch = {}, options = {}) {
         { redact: true }
       );
     }
+    if (stableJson([task.status, task.statusMessage, task.pollIntervalMs, task.ttlMs, task.internal]) === before) {
+      return detailedTask(task);
+    }
     touchTask(task, options.now);
     persistTask(config, task);
     return detailedTask(task);
@@ -181,7 +185,9 @@ function updateNativeTaskRecovery(config, taskId, recovery, options = {}) {
     const task = requireTaskUnlocked(config, taskId, options);
     reconcileTaskUnlocked(config, task, options.now);
     assertActiveTask(task);
-    task.recovery = normalizeBoundedJson(recovery || null, MAX_INTERNAL_BYTES, 'Task recovery metadata', { redact: true });
+    const normalizedRecovery = normalizeBoundedJson(recovery || null, MAX_INTERNAL_BYTES, 'Task recovery metadata', { redact: true });
+    if (stableJson(task.recovery) === stableJson(normalizedRecovery)) return detailedTask(task);
+    task.recovery = normalizedRecovery;
     touchTask(task, options.now);
     persistTask(config, task);
     return detailedTask(task);

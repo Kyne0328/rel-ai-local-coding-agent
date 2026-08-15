@@ -10,15 +10,21 @@ const clients = new Map();
 
 function runRepositoryQuery(kind, workspace, config = {}, payload = {}, options = {}) {
   const key = repositoryIndexPath(config, workspace);
+  const includePeerState = needsPeerRepositoryState(kind, payload);
   const job = {
     kind,
     workspace: serializableWorkspace(workspace),
-    config: serializableConfig(config),
-    repositoryStatuses: repositoryStatusSnapshot(workspace, config),
+    config: serializableConfig(config, { includeWorkspaces: includePeerState }),
+    ...(includePeerState ? { repositoryStatuses: repositoryStatusSnapshot(workspace, config) } : {}),
     ...payload,
     options: serializableOptions(options)
   };
   return queryWorkerClient(key).run(job, options.signal);
+}
+
+function needsPeerRepositoryState(kind, payload = {}) {
+  if (kind === 'cachedContext' || kind === 'cachedSummary') return true;
+  return kind === 'codeInspect' && String(payload?.args?.action || '').toLowerCase() === 'architecture';
 }
 
 function queryWorkerClient(key) {
@@ -100,7 +106,6 @@ function queryWorkerClient(key) {
     }
     slot.worker = null;
     disposeWorker(worker);
-    if (!client.closed) slot.worker = createWorker(slot);
     pump();
   }
 
@@ -108,7 +113,11 @@ function queryWorkerClient(key) {
     if (client.closed) return;
     clearIdleTimer();
     while (queue.length) {
-      const slot = slots.find(item => !item.active);
+      let slot = slots.find(item => !item.active && item.worker);
+      if (!slot) {
+        slot = slots.find(item => !item.active && !item.worker);
+        if (slot) slot.worker = createWorker(slot);
+      }
       if (!slot) break;
       const entry = queue.shift();
       if (entry.signal?.aborted) {
@@ -170,9 +179,7 @@ function queryWorkerClient(key) {
   }
 
   for (let index = 0; index < QUERY_WORKER_COUNT; index += 1) {
-    const slot = { index, worker: null, active: null };
-    slot.worker = createWorker(slot);
-    slots.push(slot);
+    slots.push({ index, worker: null, active: null });
   }
 
   clients.set(key, client);
@@ -209,13 +216,15 @@ function serializableWorkspace(workspace = {}) {
   };
 }
 
-function serializableConfig(config = {}) {
+function serializableConfig(config = {}, options = {}) {
   const workspaces = {};
-  for (const [alias, workspace] of Object.entries(config.workspaces || {})) workspaces[alias] = serializableWorkspace({ alias, ...workspace });
+  if (options.includeWorkspaces === true) {
+    for (const [alias, workspace] of Object.entries(config.workspaces || {})) workspaces[alias] = serializableWorkspace({ alias, ...workspace });
+  }
   return {
     ...(config.stateDir ? { stateDir: String(config.stateDir) } : {}),
     repositoryIntelligence: plainObject(config.repositoryIntelligence),
-    workspaces
+    ...(options.includeWorkspaces === true ? { workspaces } : {})
   };
 }
 

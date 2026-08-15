@@ -63,7 +63,7 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
           : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
     };
   }
-  const cachedGraph = searchPlan.requestedMode === "auto"
+  const cachedGraph = shouldUseGraphContext(searchPlan, workspace, config)
     ? await repositoryIntelligence.searchGraphContext(workspace, config, result.matches, { signal: context.signal })
     : null;
   const graphPrioritized = cachedGraph?.freshness === 'current' && Boolean(cachedGraph?.rankedPaths?.length);
@@ -90,6 +90,16 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
           : "Context is included. Use relai_read only when a wider range or complete file is needed."
         : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
   };
+}
+
+function shouldUseGraphContext(searchPlan, workspace, config) {
+  if (searchPlan.requestedMode !== 'auto' || searchPlan.autoTier === 'focused') return false;
+  try {
+    const status = repositoryIntelligence.status(workspace, config);
+    return status.dirty !== true && status.metadata?.freshness === 'current';
+  } catch {
+    return false;
+  }
 }
 
 async function relaiSearch(workspace, config, args = {}, context = {}) {
