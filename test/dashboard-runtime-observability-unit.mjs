@@ -216,22 +216,19 @@ const connectorSource = fs.readFileSync(path.join(root, 'src/ui/features/setting
 const cssSource = fs.readFileSync(path.join(root, 'src/ui/styles/app.css'), 'utf8');
 const sessionCssSource = fs.readFileSync(path.join(root, 'src/ui/features/sessions/styles.css'), 'utf8');
 
-assert.match(sessionsSource, /Recent sessions/, 'Sessions surface must use the compact user-facing heading');
+assert.match(sessionsSource, /Recent (?:sessions|tasks)/, 'Tasks surface must use a compact user-facing heading');
 assert.match(sessionsSource, /Work session ID/);
 assert.match(sessionsSource, /Process ID/);
 assert.match(sessionsSource, /aria-label="Copy \$\{esc\(label\)\}/);
 assert.doesNotMatch(sessionsSource, /Client task capability|Native MCP tasks|Native task ID/);
 assert.doesNotMatch(sessionsSource, /nativeTasksCard|nativeTaskRow|data-cancel-native-task|bindNativeTaskActions/);
-assert.match(processesSource, /Stop process/);
 assert.match(processesSource, /data-stop-process/);
-assert.match(processesSource, /Startup task completed; process still running/);
-assert.match(processesSource, /Use Stop process here rather than cancelling the completed native task/);
+assert.match(processesSource, />Stop<\/button>/);
+assert.doesNotMatch(processesSource, /Startup task completed; process still running|Native task ID|Process ID|Saved output|process-detail-grid|process-relationship/);
 assert.doesNotMatch(processesSource, /Cancel task|data-cancel-native-task/);
 assert.match(processesSource, /aria-label="Recent \$\{stream\} output"/);
 assert.match(taskIdentitySource, /Required backend fields: stdoutTail and stderrTail/);
-assert.match(processesSource, /Output observed/);
-assert.match(connectorSource, /Native MCP Tasks/);
-assert.match(connectorSource, /Execution mode/);
+assert.doesNotMatch(connectorSource, /Native MCP Tasks|Execution mode|connector-technical-details/);
 assert.doesNotMatch(cssSource, /\.native-task-row|\.runtime-activity-spinner|\.runtime-capability-row/);
 assert.match(sessionCssSource, /\.task-progress\.static\.terminal\.cancelled[\s\S]*--ui-status-neutral-background/);
 assert.match(sessionCssSource, /@media \(prefers-reduced-motion: reduce\)/);

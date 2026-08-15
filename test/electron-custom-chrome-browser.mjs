@@ -48,14 +48,14 @@ try {
   assert.equal(result.measurements.length, 3);
   for (const measurement of result.measurements) {
     assert.equal(measurement.chrome, 'custom');
-    assert.equal(measurement.density, 'compact');
+    assert.equal(measurement.density, '', 'Legacy interface-density preferences must no longer affect the dashboard.');
     assert.equal(measurement.shellClear, true, `${measurement.route} shell overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.mainClear, true, `${measurement.route} main scroller overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.topbarClear, true, `${measurement.route} topbar overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.titleVisible, true, `${measurement.route} title is clipped under the custom title bar: ${JSON.stringify(measurement)}`);
     if (measurement.route === '#usage') {
-      assert.equal(measurement.localAnalyticsLoaded, true, 'Analytics must render from the local desktop bridge.');
-      assert.equal(measurement.inlineUsageError, false, 'Local Analytics must not show an unavailable error in the browser probe.');
+      assert.equal(measurement.localAnalyticsLoaded, true, 'Usage must render from the local desktop bridge.');
+      assert.equal(measurement.inlineUsageError, false, 'Local Usage must not show an unavailable error in the browser probe.');
     }
     if (measurement.route === '#tools') {
       assert.equal(measurement.toolCategories.relai_exec, 'Execute');

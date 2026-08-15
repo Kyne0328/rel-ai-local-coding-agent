@@ -26,8 +26,6 @@ function analyticsMetrics(scope, previous) {
     metric('Tool calls', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
     metric('Reliability', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} classified calls` : 'Starts with newly classified calls', { rate: true, available: scope.reliabilityCalls > 0, spark: false }),
     metric('System errors', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Rel.AI internal errors only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
-    metric('Recoverable', 'recoverableFailures', integer(scope.recoverableFailures), 'Classified calls only', { inverse: true }),
-    metric('Operation success', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'All completed calls, including legacy', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0 }),
     metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed call' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0 })
   ];
 }
@@ -39,7 +37,7 @@ function metricHtml(metric) {
 }
 
 function timelineSection(scope) {
-  const switches = [['toolCalls', 'Tool calls'], ['infrastructureFailures', 'System errors'], ['operationSuccessRate', 'Operation success'], ['averageDuration', 'Avg tool time']];
+  const switches = [['toolCalls', 'Tool calls'], ['infrastructureFailures', 'System errors'], ['averageDuration', 'Avg tool time']];
   return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><h3>Activity</h3><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}" aria-pressed="${i ? 'false' : 'true'}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')), 'Tool calls')}</div></section>`;
 }
 
@@ -110,7 +108,7 @@ function bar(row,key,max){const label=key==='workspace'?(row.workspace||'Unattri
 function breakdownSection(title,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Tool calls</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
 function breakdownRow(row,key){const label=key==='device'?(row.displayName||shortId(row.deviceId)||'Unknown device'):(row[key]||'Unknown');return `<tr><th scope="row">${esc(label)}</th><td>${integer(row.toolCalls)}</td><td>${integer(row.successes)}</td><td>${integer(row.failures)}</td><td>${duration(row.executionMs)}</td></tr>`;}
 function formatChartValue(value, metricLabel) {
-  if (metricLabel === 'Reliability' || metricLabel === 'Operation success' || metricLabel === 'Success rate') return percent(value);
+  if (metricLabel === 'Reliability' || metricLabel === 'Success rate') return percent(value);
   if (/duration|tool time/i.test(metricLabel)) return duration(value);
   return integer(value);
 }

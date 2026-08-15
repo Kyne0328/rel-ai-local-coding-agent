@@ -28,14 +28,6 @@ export function desktopStartupPanel(lifecycle) {
       : launchAtLogin.reason || 'This build cannot register itself for Windows sign-in.'
   ));
 
-  const facts = document.createElement('div');
-  facts.className = 'desktop-lifecycle-facts';
-  facts.innerHTML = `
-    <div><span>Current version</span><strong>v${escapeHtml(lifecycle.currentVersion || 'unknown')}</strong></div>
-    <div><span>Launch count</span><strong>${Math.max(0, Number(lifecycle.launchCount || 0))}</strong></div>
-    <div><span>Last clean exit</span><strong>${escapeHtml(formatTime(lifecycle.lastCleanExitAt))}</strong></div>`;
-  startup.body.appendChild(facts);
-
   if (lifecycle.updated) {
     startup.body.appendChild(notice(
       'ok',
@@ -92,13 +84,6 @@ function notice(tone, title, text) {
   element.className = `connection-notice ${tone} desktop-lifecycle-notice`;
   element.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p>`;
   return element;
-}
-
-function formatTime(value) {
-  if (!value) return 'Not recorded yet';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Not recorded yet';
-  return date.toLocaleString();
 }
 
 function messageOf(error) {

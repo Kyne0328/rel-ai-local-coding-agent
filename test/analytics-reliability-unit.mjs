@@ -58,8 +58,8 @@ try {
     querySelectorAll: () => []
   };
   renderUsage(legacyContent, { bounds, current: legacyScope, previous: analyticsRangeScope([], bounds) });
-  assert.match(legacyContent.innerHTML, /Starts with newly classified calls/);
-  assert.match(legacyContent.innerHTML, /Operation success/);
+  assert.match(legacyContent.innerHTML, /Starts (?:with newly classified calls|measuring with new actions)/);
+  assert.doesNotMatch(legacyContent.innerHTML, /Operation success/);
 
   const legacyStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-reliability-v1-'));
   try {
@@ -108,13 +108,15 @@ try {
     querySelectorAll: () => []
   };
   renderUsage(content, { bounds, current: scope, previous: analyticsRangeScope([], bounds) });
-  assert.match(content.innerHTML, />Reliability</);
-  assert.match(content.innerHTML, />Operation success</);
+  assert.match(content.innerHTML, />Reliable (?:calls|actions)</);
+  assert.doesNotMatch(content.innerHTML, />Operation success</);
   assert.match(content.innerHTML, />System errors</);
   assert.match(content.innerHTML, /Rel\.AI internal errors only/);
-  assert.match(content.innerHTML, /Recoverable/);
+  assert.doesNotMatch(content.innerHTML, />Retryable errors</);
   assert.match(content.innerHTML, /usage-side-by-side/);
-  assert.ok(content.innerHTML.indexOf('Failure categories') < content.innerHTML.indexOf('Workspace activity'), 'failure categories should sit beside workspace activity in the compact final row');
+  const failureHeading = content.innerHTML.includes('What went wrong') ? 'What went wrong' : 'Failure categories';
+  const projectHeading = content.innerHTML.includes('Project activity') ? 'Project activity' : 'Workspace activity';
+  assert.ok(content.innerHTML.indexOf(failureHeading) < content.innerHTML.indexOf(projectHeading), 'failure categories should sit beside project activity in the compact final row');
 
   await flushLocalAnalytics(config);
   const persisted = fs.readFileSync(path.join(stateDir, 'analytics', 'local', '2026-08.json'), 'utf8');
