@@ -20,32 +20,32 @@ function route(id, label, path, description, group) {
 }
 
 export const WORK_NAV_ITEMS = Object.freeze([
-  route('home', 'Overview', 'home', 'Connection readiness, workspace state, and recent work sessions.', 'Work'),
-  route('tasks', 'Sessions', 'tasks', 'Review active and completed repository work sessions.', 'Work'),
-  route('workspaces', 'Workspaces', 'workspaces', 'Manage the repositories Rel.AI may inspect and update.', 'Work'),
-  route('activity', 'Tool Activity', 'activity', 'Inspect individual Rel.AI tool calls and recorded output.', 'Work')
+  route('home', 'Overview', 'home', 'Connection status, projects, and recent tasks.', 'Work'),
+  route('tasks', 'Tasks', 'tasks', 'See what Rel.AI is working on and what it finished.', 'Work'),
+  route('workspaces', 'Projects', 'workspaces', 'Choose which project folders Rel.AI can use.', 'Work'),
+  route('activity', 'Activity', 'activity', 'See what Rel.AI did and whether it worked.', 'Work')
 ]);
 
 export const SYSTEM_NAV_ITEMS = Object.freeze([
-  route('connection', 'Connection', 'connection', 'Manage endpoint readiness, authorization, and connection recovery.', 'System'),
-  route('processes', 'Processes', 'processes', 'Inspect managed processes and bounded output.', 'System'),
-  route('diagnostics', 'Diagnostics', 'diagnostics', 'Review findings, service logs, export, and recovery controls.', 'System'),
-  route('tools', 'Tools', 'tools', 'Browse the MCP tools available to ChatGPT.', 'System'),
-  route('usage', 'Analytics', 'usage', 'Review local activity, tool usage, and workspace trends.', 'System')
+  route('connection', 'Connection', 'connection', 'Set up ChatGPT and fix connection problems.', 'System'),
+  route('processes', 'Running commands', 'processes', 'See and stop long-running commands started by Rel.AI.', 'System'),
+  route('diagnostics', 'Troubleshooting', 'diagnostics', 'Find and fix problems, view logs, or export support info.', 'System'),
+  route('tools', 'ChatGPT tools', 'tools', 'See the actions ChatGPT can ask Rel.AI to perform.', 'System'),
+  route('usage', 'Usage', 'usage', 'See how Rel.AI is used and where problems happen.', 'System')
 ]);
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
-  route('system', 'System', 'connection', 'Manage connection, runtime processes, diagnostics, tools, and analytics.', 'Application'),
-  route('settings', 'Settings', 'settings', 'Configure preferences and application behavior.', 'Application')
+  route('system', 'Advanced', 'connection', 'Connection, running commands, troubleshooting, tools, and usage.', 'Application'),
+  route('settings', 'Settings', 'settings', 'Change how Rel.AI looks and behaves.', 'Application')
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
 export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
-  route('preferences', 'Preferences', 'settings', 'Change appearance and desktop notifications.', 'Settings'),
-  route('application', 'Application', 'settings/application', 'Manage startup, recovery, and application updates.', 'Settings'),
-  route('about', 'About', 'settings/about', 'View application, developer, repository, and license information.', 'Settings')
+  route('preferences', 'General', 'settings', 'Change appearance and desktop notifications.', 'Settings'),
+  route('application', 'App', 'settings/application', 'Choose startup behavior and manage app updates.', 'Settings'),
+  route('about', 'About', 'settings/about', 'View app, developer, source code, and license information.', 'Settings')
 ]);
 
 const ROUTES = new Map([...DESKTOP_NAV_ITEMS, ...SYSTEM_NAV_ITEMS, ...SETTINGS_NAV_ITEMS].map(item => [item.path, item]));

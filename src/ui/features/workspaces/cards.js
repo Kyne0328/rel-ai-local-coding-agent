@@ -25,11 +25,11 @@ function buildWorkspaces(data) {
   root.className = 'section';
   root.innerHTML = `
     <div class="feature-toolbar workspace-toolbar">
-      <p>Common status and actions stay visible. Repository details show live Git state and recent workspace activity when available.</p>
+      <p>See each project’s status and common actions. Open Project details when you need more technical information.</p>
       <div class="section-head-actions">
-        ${workspaceFilter ? `<span class="workspace-focus-label" title="Focused workspace: ${esc(workspaceFilter)}">Focused: ${esc(workspaceFilter)}</span><a class="buttonlike secondary compact-button" href="#workspaces">Clear focus</a>` : ''}
-        <span class="feature-count">${allWorkspaces.length} configured</span>
-        <button class="primary" type="button" data-add-workspace>Add workspace</button>
+        ${workspaceFilter ? `<span class="workspace-focus-label" title="Selected project: ${esc(workspaceFilter)}">Selected: ${esc(workspaceFilter)}</span><a class="buttonlike secondary compact-button" href="#workspaces">Show all</a>` : ''}
+        <span class="feature-count">${allWorkspaces.length} project${allWorkspaces.length === 1 ? '' : 's'}</span>
+        <button class="primary" type="button" data-add-workspace>Add project</button>
       </div>
     </div>`;
 
@@ -61,8 +61,8 @@ function buildWorkspaces(data) {
 function recentWorkspaces(aliases) {
   const section = document.createElement('section');
   section.className = 'workspace-recents';
-  section.setAttribute('aria-label', 'Recent workspaces');
-  section.innerHTML = `<span>Recent workspaces</span><div>${aliases.map(alias => `<button class="secondary workspace-recent-chip" type="button" data-open-recent-workspace="${esc(alias)}">${esc(alias)}</button>`).join('')}</div>`;
+  section.setAttribute('aria-label', 'Recent projects');
+  section.innerHTML = `<span>Recent projects</span><div>${aliases.map(alias => `<button class="secondary workspace-recent-chip" type="button" data-open-recent-workspace="${esc(alias)}">${esc(alias)}</button>`).join('')}</div>`;
   return section;
 }
 
@@ -71,9 +71,9 @@ function emptyWorkspaceState() {
   empty.className = 'workspace-empty-state';
   empty.innerHTML = `
     <div class="workspace-empty-mark" aria-hidden="true">+</div>
-    <strong>Add your first workspace</strong>
-    <p>Select a project folder and give it a short name. Rel.AI will detect its repository and validation setup automatically.</p>
-    <button class="primary" type="button" data-add-workspace>Add workspace</button>`;
+    <strong>Add your first project</strong>
+    <p>Select a project folder and give it a short name. Rel.AI will find Git and any available checks automatically.</p>
+    <button class="primary" type="button" data-add-workspace>Add project</button>`;
   return empty;
 }
 
@@ -99,7 +99,7 @@ function workspaceCard(view) {
 function workspaceCardView(workspace, health) {
   const operational = workspace.operational || {};
   const commands = validationCommands(workspace);
-  const healthWarning = health?.ok === false ? health.error || 'Workspace unavailable' : '';
+  const healthWarning = health?.ok === false ? health.error || 'Project unavailable' : '';
   const available = !healthWarning && operational.exists !== false;
   const active = Boolean(operational.currentActivity || workspace.sessionPolicy?.sessionActive);
   return {
@@ -131,7 +131,7 @@ function workspaceStatusPill(view) {
 
 function workspaceHealthHtml(view) {
   if (!view.healthWarning) return '';
-  return `<div class="workspace-warning"><span>${esc(view.healthWarning)}</span><button class="secondary" type="button" data-repair-workspace="${view.aliasAttr}">Repair path</button></div>`;
+  return `<div class="workspace-warning"><span>${esc(view.healthWarning)}</span><button class="secondary" type="button" data-repair-workspace="${view.aliasAttr}">Fix folder</button></div>`;
 }
 
 function workspaceReadinessHtml(view) {
@@ -142,20 +142,20 @@ function workspaceReadinessHtml(view) {
     : 'No checks detected';
   const accessTitle = view.available ? 'Ready for ChatGPT' : 'Project folder unavailable';
   const accessDescription = view.available
-    ? 'Rel.AI can inspect and update this workspace when you approve a tool call.'
-    : 'Repair the configured folder before using this workspace.';
-  return `<section class="workspace-readiness ${view.available ? 'good' : 'bad'}" aria-label="Workspace readiness">
+    ? 'Rel.AI can read and update this project when ChatGPT asks it to.'
+    : 'Fix the project folder before using this project.';
+  return `<section class="workspace-readiness ${view.available ? 'good' : 'bad'}" aria-label="Project status">
     <div class="workspace-access-summary">
       <span class="workspace-readiness-icon" aria-hidden="true">${view.available ? '✓' : '!'}</span>
       <div class="workspace-readiness-copy">
-        <span class="workspace-readiness-kicker">Workspace access</span>
+        <span class="workspace-readiness-kicker">Project access</span>
         <strong>${esc(accessTitle)}</strong>
         <p>${esc(accessDescription)}</p>
       </div>
     </div>
     <dl class="workspace-readiness-facts">
-      ${readinessFact('Repository', repository.label, repository.description, repository.tone)}
-      ${readinessFact('Validation', validationValue, validationReady ? 'Run checks before reviewing changes.' : 'This workspace is usable; checks can be added later.', validationReady ? 'good' : 'neutral')}
+      ${readinessFact('Git', repository.label, repository.description, repository.tone)}
+      ${readinessFact('Checks', validationValue, validationReady ? 'Run these checks before reviewing changes.' : 'This project works without checks; you can add them later.', validationReady ? 'good' : 'neutral')}
     </dl>
   </section>`;
 }
@@ -168,10 +168,10 @@ function readinessFact(label, value, description, tone) {
 }
 
 function repositorySummary(operational) {
-  if (operational.exists === false) return { label: 'Path unavailable', description: 'The configured folder cannot be found.', tone: 'bad' };
-  if (!operational.isGit) return { label: 'Git not initialized', description: 'Git-only actions are unavailable; file tools still work.', tone: 'neutral' };
+  if (operational.exists === false) return { label: 'Folder missing', description: 'Rel.AI cannot find this project folder.', tone: 'bad' };
+  if (!operational.isGit) return { label: 'Git not set up', description: 'You can still work with files, but Git actions are unavailable.', tone: 'neutral' };
   const branch = branchSummary(operational);
-  const changes = operational.dirty ? `${Number(operational.changedFileCount || 0)} changed file${Number(operational.changedFileCount || 0) === 1 ? '' : 's'}` : 'Clean worktree';
+  const changes = operational.dirty ? `${Number(operational.changedFileCount || 0)} changed file${Number(operational.changedFileCount || 0) === 1 ? '' : 's'}` : 'No uncommitted changes';
   return { label: branch, description: changes, tone: operational.dirty ? 'warn' : 'good' };
 }
 
@@ -188,9 +188,9 @@ function workspacePrimaryActions(view) {
     ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>`
     : '';
   return `
-    <button type="button" data-edit-workspace="${view.aliasAttr}">Edit workspace</button>
-    <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run validation</button>
-    <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Repository details</button>
+    <button type="button" data-edit-workspace="${view.aliasAttr}">Edit project</button>
+    <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run checks</button>
+    <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Project details</button>
     <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>
     ${openFolder}`;
 }
@@ -198,7 +198,7 @@ function workspacePrimaryActions(view) {
 function healthFindingsCard(findings) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = '<div class="card-head"><h3>Needs attention</h3><a class="section-action" href="#diagnostics">Open diagnostics</a></div>';
+  card.innerHTML = '<div class="card-head"><h3>Needs attention</h3><a class="section-action" href="#diagnostics">Troubleshoot</a></div>';
   const body = document.createElement('div');
   body.className = 'card-body list';
   body.innerHTML = findings.map(findingRow).join('');
@@ -211,7 +211,7 @@ function findingRow(finding) {
   const actionable = finding.code === 'workspace_unavailable' && alias;
   const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div class="finding-main"><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div>`;
   if (actionable) {
-    return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-repair="${esc(alias)}">Repair path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
+    return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-repair="${esc(alias)}">Fix folder</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
   }
   return `<a class="list-item finding-link" href="#diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }

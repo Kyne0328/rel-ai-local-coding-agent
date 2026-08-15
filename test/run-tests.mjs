@@ -2,7 +2,7 @@
 // available through their named npm scripts and direct `node test/<file>` runs,
 // but they do not block every release by default.
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
@@ -59,20 +59,50 @@ const files = [
 const failures = [];
 for (const name of files) {
   const started = Date.now();
-  const res = spawnSync(process.execPath, [path.join(testDir, name)], {
-    cwd: root,
-    encoding: 'utf8',
-    timeout: 5 * 60 * 1000
-  });
+  console.log(`RUN ${name}`);
+  const result = await runTest(name);
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
-  if (res.status === 0) {
+  if (result.exitCode === 0) {
     console.log(`PASS ${name} (${seconds}s)`);
   } else {
     failures.push(name);
     console.error(`FAIL ${name} (${seconds}s)`);
-    if (res.stdout) console.error(res.stdout.trim());
-    if (res.stderr) console.error(res.stderr.trim());
+    if (result.error) console.error(result.error.message);
+    if (result.stdout) console.error(result.stdout.trim());
+    if (result.stderr) console.error(result.stderr.trim());
   }
+}
+
+function runTest(name) {
+  return new Promise(resolve => {
+    let child;
+    try {
+      child = spawn(process.execPath, [path.join(testDir, name)], {
+        cwd: root,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 5 * 60 * 1000
+      });
+    } catch (error) {
+      resolve({ exitCode: null, stdout: '', stderr: '', error });
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    let error = null;
+    let settled = false;
+    const finish = exitCode => {
+      if (settled) return;
+      settled = true;
+      resolve({ exitCode, stdout, stderr, error });
+    };
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.once('error', value => { error = value; });
+    child.once('close', finish);
+  });
 }
 
 console.log(`\n${files.length - failures.length}/${files.length} test files passed.`);

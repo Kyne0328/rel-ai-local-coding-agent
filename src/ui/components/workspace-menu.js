@@ -7,16 +7,16 @@ let documentListenerBound = false;
 export function workspaceMenuHtml(workspaces = [], selected = '', options = {}) {
   const items = orderWorkspacesAlphabetically(workspaces);
   const id = String(options.id || 'workspaceMenu');
-  const label = selected || 'All workspaces';
+  const label = selected || 'All projects';
   const optionsHtml = [
-    workspaceOption('', 'All workspaces', selected === ''),
+    workspaceOption('', 'All projects', selected === ''),
     ...items.map(workspace => {
       const alias = String(workspace?.alias || '').trim();
       return alias ? workspaceOption(alias, alias, alias === selected) : '';
     })
   ].join('');
   return `<div class="workspace-menu" data-workspace-menu>
-    <button class="secondary workspace-menu-trigger" id="${esc(id)}Button" type="button" aria-label="Workspace scope: ${esc(label)}" title="Workspace scope" aria-haspopup="listbox" aria-expanded="false" aria-controls="${esc(id)}List">
+    <button class="secondary workspace-menu-trigger" id="${esc(id)}Button" type="button" aria-label="Project filter: ${esc(label)}" title="Project filter" aria-haspopup="listbox" aria-expanded="false" aria-controls="${esc(id)}List">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" /></svg>
       <span>${esc(label)}</span>
       <svg class="workspace-menu-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>

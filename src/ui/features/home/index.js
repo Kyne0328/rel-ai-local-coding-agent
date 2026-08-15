@@ -182,20 +182,20 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
   const waiting = activeCalls === 0;
   const location = activeTaskLocation(activeTasks);
   const operation = task.currentActivity || task.operation || taskAction(task.lastTool || task.tool);
-  let title = task.title || (waiting ? 'Work session open.' : operation);
-  if (!task.title && !waiting && sessionCount > 1) title = `${activeCalls} Rel.AI tool calls are running.`;
+  let title = task.title || (waiting ? 'Task is ready.' : operation);
+  if (!task.title && !waiting && sessionCount > 1) title = `${activeCalls} Rel.AI actions are running.`;
   let description = waiting
-    ? `${esc(task.currentStage || 'Planning next step')} · no Rel.AI tool call is executing now.`
+    ? `${esc(task.currentStage || 'Planning next step')} · Rel.AI is not running an action right now.`
     : `${esc(task.currentStage || operation)} in <strong>${esc(task.workspace || location)}</strong>.`;
-  if (!waiting && sessionCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active tool call')} across ${location}.`;
+  if (!waiting && sessionCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active action')} across ${location}.`;
   const activityLabel = waiting
-    ? `${statusLabel(task.status)} · no active call`
+    ? `${statusLabel(task.status)} · waiting`
     : `${activeCalls} ${pluralLabel(activeCalls, 'active call')}`;
   card.className = `card task-overview ${waiting ? 'waiting' : 'active'}`;
   card.innerHTML = `
     <div class="task-overview-mark" aria-hidden="true">${waiting ? '…' : '<span class="task-overview-spinner"></span>'}</div>
     <div class="task-overview-copy">
-      <div class="overview-kicker">Observed Rel.AI activity</div>
+      <div class="overview-kicker">Current task</div>
       <h3>${esc(title)}</h3>
       <p>${description}</p>
       ${taskProgressHtml(task.progress, task.status, { compact: true })}
@@ -212,32 +212,32 @@ function renderInactiveSessionCard(card, task) {
   const failed = Number(task.failures || 0);
   const callCount = Number(task.calls || 0);
   let mark = '•';
-  let title = 'Last work session is inactive';
+  let title = 'Last task is inactive';
   if (attention) {
     mark = '!';
     title = task.status === 'blocked'
-      ? 'Last work session was blocked'
+      ? 'Last task was blocked'
       : task.status === 'validation_failed'
-        ? 'Last work session needs repair'
-        : 'Last work session failed';
+        ? 'Last task needs attention'
+        : 'Last task failed';
   } else if (completed) {
     mark = '✓';
-    title = 'Work-session completion reported';
+    title = 'Task completed';
   }
   const failureText = failed
     ? completed
       ? ` · ${failed} warning${failed === 1 ? '' : 's'}`
       : ` · ${failed} failed`
     : '';
-  let completionText = ' · overall ChatGPT completion not reported';
-  if (completed) completionText = ` · ${esc(task.summary || 'final validation passed')}`;
+  let completionText = ' · ChatGPT did not report a final result';
+  if (completed) completionText = ` · ${esc(task.summary || 'final checks passed')}`;
   card.className = `card task-overview ${attention ? 'attention' : completed ? 'completed' : 'waiting'}`;
   card.innerHTML = `
     <div class="task-overview-mark" aria-hidden="true">${mark}</div>
     <div class="task-overview-copy">
-      <div class="overview-kicker">Previous work session</div>
+      <div class="overview-kicker">Previous task</div>
       <h3>${esc(task.title || title)}</h3>
-      <p>${esc(task.workspace || 'workspace')} · ${callCount} ${pluralLabel(callCount, 'tool call')}${failureText}${completionText}</p>
+      <p>${esc(task.workspace || 'project')} · ${callCount} ${pluralLabel(callCount, 'action')}${failureText}${completionText}</p>
       ${taskProgressHtml(task.progress, task.status, { compact: true })}
     </div>
     <div class="task-overview-meta"><span data-clock-relative="${esc(task.endedAt || task.completedAt || '')}">${esc(timeAgo(task.endedAt || task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
@@ -246,8 +246,8 @@ function renderInactiveSessionCard(card, task) {
 function activeTaskLocation(tasks) {
   const workspaces = [...new Set(tasks.map(item => item.workspace).filter(Boolean))];
   if (workspaces.length === 1) return esc(workspaces[0]);
-  if (workspaces.length > 1) return `${workspaces.length} workspaces`;
-  return 'configured workspaces';
+  if (workspaces.length > 1) return `${workspaces.length} projects`;
+  return 'your projects';
 }
 
 function pluralLabel(count, singular) {
@@ -256,22 +256,22 @@ function pluralLabel(count, singular) {
 
 function taskAction(tool) {
   const value = String(tool || '');
-  if (/run_checks|browser/.test(value)) return 'Validating changes';
+  if (/run_checks|browser/.test(value)) return 'Checking changes';
   if (/diff|git_status/.test(value)) return 'Reviewing changes';
   if (/git_draft_pr|git_create_pr/.test(value)) return 'Preparing pull request text';
   if (/git_commit|git_push/.test(value)) return 'Publishing changes';
   if (/edit|write|replace|tidy_run|restore|reset_workspace/.test(value)) return 'Applying changes';
-  return 'Inspecting the workspace';
+  return 'Looking through the project';
 }
 
 export function buildAttention(workspaces, findings, _endpoint) {
   const items = [];
   const missingValidation = workspaces.filter(workspace => !hasValidation(workspace));
   if (missingValidation.length) {
-    items.push({ priority: 2, tone: 'warn', title: 'Validation is incomplete', copy: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: routeMetadata('workspaces').href, cta: 'Review validation' });
+    items.push({ priority: 2, tone: 'warn', title: 'Checks are not set up', copy: `${missingValidation.length} project${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: routeMetadata('workspaces').href, cta: 'Review checks' });
   }
   if (findings.length) {
-    items.push({ priority: 0, tone: 'bad', title: 'Diagnostics need review', copy: `${findings.length} actionable finding${findings.length === 1 ? '' : 's'} may affect workspace access or reliability.`, href: routeMetadata('diagnostics').href, cta: 'Open diagnostics' });
+    items.push({ priority: 0, tone: 'bad', title: 'Problems need attention', copy: `${findings.length} problem${findings.length === 1 ? '' : 's'} may affect project access or reliability.`, href: routeMetadata('diagnostics').href, cta: 'Troubleshoot' });
   }
   return items
     .sort((left, right) => left.priority - right.priority || left.title.localeCompare(right.title, 'en-US', { sensitivity: 'base' }))
@@ -441,16 +441,16 @@ function formatAnalyticsDuration(value) {
 function workspaceSummaryCard(workspaces) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Workspaces</h3><a class="section-action" href="${routeMetadata('workspaces').href}">Manage</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Projects</h3><a class="section-action" href="${routeMetadata('workspaces').href}">Manage</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body compact-workspace-list';
   body.innerHTML = workspaces.length
     ? workspaces.slice(0, 6).map(ws => `
       <div class="compact-workspace">
-        <div><strong>${esc(ws.alias || 'workspace')}</strong><div class="compact-workspace-path">${esc(ws.path || '')}</div></div>
+        <div><strong>${esc(ws.alias || 'project')}</strong><div class="compact-workspace-path">${esc(ws.path || '')}</div></div>
         ${pillHtml(hasValidation(ws) ? 'ready' : 'not configured')}
       </div>`).join('')
-    : `<div class="empty">No workspaces configured. <a class="buttonlike secondary compact-button" href="${routeMetadata('workspaces').href}">Add your first repository</a></div>`;
+    : `<div class="empty">No projects added yet. <a class="buttonlike secondary compact-button" href="${routeMetadata('workspaces').href}">Add your first project</a></div>`;
   card.appendChild(body);
   return card;
 }
@@ -459,7 +459,7 @@ function recentTasksCard(tasks) {
   const card = document.createElement('section');
   card.dataset.homeLiveSessions = '';
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Latest work sessions</h3><a class="section-action" href="${routeHref('tasks')}">Open session history</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Latest tasks</h3><a class="section-action" href="${routeHref('tasks')}">See all tasks</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body';
   body.innerHTML = tasks.slice(0, 5).map(task => {
@@ -470,8 +470,8 @@ function recentTasksCard(tasks) {
     const operation = task.operation || taskAction(task.lastTool);
     const warnings = task.status === 'completed' ? Number(task.failedToolCallCount ?? task.failures ?? 0) : 0;
     const warningText = warnings ? ` · ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
-    return `<div class="activity-row"><span class="activity-time" ${timeClock}>${esc(time)}</span><span class="activity-name truncate"><strong>${esc(task.title || operation)}</strong> · ${esc(task.workspace || 'workspace')} · ${esc(task.toolCallCount ?? task.calls ?? 0)} calls${warningText}</span>${status}</div>`;
-  }).join('') || '<div class="empty">Work sessions appear after ChatGPT or the local dashboard starts an explicit repository objective.</div>';
+    return `<div class="activity-row"><span class="activity-time" ${timeClock}>${esc(time)}</span><span class="activity-name truncate"><strong>${esc(task.title || operation)}</strong> · ${esc(task.workspace || 'project')} · ${esc(task.toolCallCount ?? task.calls ?? 0)} actions${warningText}</span>${status}</div>`;
+  }).join('') || '<div class="empty">Tasks will appear here after ChatGPT starts using Rel.AI on a project.</div>';
   card.appendChild(body);
   return card;
 }

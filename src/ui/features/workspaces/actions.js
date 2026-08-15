@@ -59,16 +59,16 @@ async function runValidationFromTrigger(trigger) {
   const alias = trigger.dataset.runValidation || '';
   recordRecentWorkspace(alias);
   const result = await runButtonAction(trigger, {
-    idleText: 'Run validation',
-    loadingText: 'Validating…',
-    successText: 'Validation complete',
-    errorText: 'Validation failed'
+    idleText: 'Run checks',
+    loadingText: 'Running checks…',
+    successText: 'Checks complete',
+    errorText: 'Checks failed'
   }, () => postJson('/api/workspace/checks', { workspace: alias }, { timeout: 0 }));
 
   if (result?.ok === false) {
-    toast(`Validation failed for ${alias}: ${result.error || result.message || 'review the task details'}`, { variant: 'error' });
+    toast(`Checks failed for ${alias}: ${result.error || result.message || 'review the task details'}`, { variant: 'error' });
   } else {
-    toast(`Validation completed for ${alias}.`, { variant: 'success' });
+    toast(`Checks completed for ${alias}.`, { variant: 'success' });
   }
   requestDashboardRefresh({ structural: true });
 }
@@ -81,7 +81,7 @@ function openRepositoryDetails(trigger) {
   if (!source) return;
   const content = source.cloneNode(true);
   for (const link of content.querySelectorAll('a[href^="#"]')) link.addEventListener('click', closeModal);
-  openModal({ title: alias ? `Repository details · ${alias}` : 'Repository details', content });
+  openModal({ title: alias ? `Project details · ${alias}` : 'Project details', content });
 }
 
 async function openFolderFromTrigger(trigger) {
@@ -98,21 +98,21 @@ async function openFolderFromTrigger(trigger) {
 
 async function removeWorkspaceFlow(alias) {
   const confirmed = await confirmAction({
-    title: 'Remove workspace',
+    title: 'Remove project',
     message: `Remove '${alias}' from Rel.AI?`,
-    detail: 'The repository and all files on disk will remain unchanged.',
-    confirmLabel: 'Remove workspace',
+    detail: 'The project folder and all files on your computer will stay unchanged.',
+    confirmLabel: 'Remove project',
     danger: true
   });
   if (!confirmed) return;
   const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
   if (result?.ok) {
     removeRecentWorkspace(alias);
-    toast(`Workspace removed: ${alias}`, { variant: 'success' });
+    toast(`Project removed: ${alias}`, { variant: 'success' });
     if (getWorkspaceFilter() === alias) setWorkspaceFilter('');
     else requestDashboardRefresh({ structural: true });
   } else {
-    toast(`Could not remove workspace: ${result?.error || 'unknown error'}`, { variant: 'error' });
+    toast(`Could not remove project: ${result?.error || 'unknown error'}`, { variant: 'error' });
   }
 }
 
@@ -121,6 +121,6 @@ async function loadWorkspace(alias) {
   const workspace = Array.isArray(dashboard?.config?.workspaces)
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;
-  if (!workspace) toast(`Workspace not found: ${alias}`, { variant: 'error' });
+  if (!workspace) toast(`Project not found: ${alias}`, { variant: 'error' });
   return workspace;
 }

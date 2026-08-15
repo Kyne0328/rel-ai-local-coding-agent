@@ -7,9 +7,9 @@ function workspaceDetailsHtml(view) {
     <div class="workspace-details-body">
       ${workspaceOperationalHtml(view)}
       <div class="workspace-secondary-actions">
-        <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">View sessions</a>
+        <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">View tasks</a>
         <a class="buttonlike secondary" href="${routeHref('activity', { workspace: view.alias })}">View activity</a>
-        <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Remove workspace</button>
+        <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Remove project</button>
       </div>
     </div>
   </div>`;
@@ -26,7 +26,7 @@ function workspaceOperationalHtml(view) {
   if (!state.isGit) {
     return `<div class="workspace-operational">
       ${operationalItem('Git', 'Not initialized')}
-      ${operationalItem('Last validation', validation)}
+      ${operationalItem('Last checks', validation)}
       ${operationalItem('Last activity', activity)}
     </div>`;
   }
@@ -35,8 +35,8 @@ function workspaceOperationalHtml(view) {
     : 'Clean';
   return `<div class="workspace-operational">
     ${operationalItem('Branch', branchSummary(state))}
-    ${operationalItem('Worktree', worktree)}
-    ${operationalItem('Last validation', validation)}
+    ${operationalItem('File changes', worktree)}
+    ${operationalItem('Last checks', validation)}
     ${operationalItem('Last activity', activity)}
   </div>`;
 }

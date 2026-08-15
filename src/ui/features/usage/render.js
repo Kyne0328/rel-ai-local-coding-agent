@@ -11,10 +11,10 @@ export function renderUsage(content, { bounds, current, previous }) {
       <div class="usage-metrics">${analyticsMetrics(current, previous).map(metricHtml).join('')}</div>
     </section>
     ${timelineSection(current)}
-    ${activityBarsSection('Tool usage', current.tools, 'tool')}
+    ${activityBarsSection('Action usage', current.tools, 'tool')}
     ${current.kind === 'workspace'
       ? `${failureCategoriesSection(current.failureCategories, current.failures)}${breakdownSection('Devices', current.devices, 'device')}`
-      : `<div class="usage-side-by-side">${failureCategoriesSection(current.failureCategories, current.failures)}${activityBarsSection('Workspace activity', current.workspaces, 'workspace')}</div>`}`;
+      : `<div class="usage-side-by-side">${failureCategoriesSection(current.failureCategories, current.failures)}${activityBarsSection('Project activity', current.workspaces, 'workspace')}</div>`}`;
   wireTimeline(content, current);
 }
 
@@ -23,12 +23,12 @@ function analyticsMetrics(scope, previous) {
   const compare = (key, options = {}) => scope.usedMonthlyFallback || options.available === false ? null : deltaFor(scope, previous, key, options);
   const metric = (label, key, value, detail = '', options = {}) => ({ label, value, detail, delta: compare(key, options), values: options.spark === false ? [] : values(options.sparkKey || key), tone: options.metricTone || '' });
   return [
-    metric('Tool calls', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
-    metric('Reliability', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} classified calls` : 'Starts with newly classified calls', { rate: true, available: scope.reliabilityCalls > 0, spark: false }),
+    metric('Actions', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
+    metric('Reliable actions', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} measured actions` : 'Starts measuring with new actions', { rate: true, available: scope.reliabilityCalls > 0, spark: false }),
     metric('System errors', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Rel.AI internal errors only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
     metric('Retryable problems', 'recoverableFailures', integer(scope.recoverableFailures), 'Usually fixed by retrying or refreshing context', { inverse: true }),
     metric('Successful actions', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'Whether the command or check itself succeeded', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0 }),
-    metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed call' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0 })
+    metric('Average time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed action' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0 })
   ];
 }
 
@@ -39,8 +39,8 @@ function metricHtml(metric) {
 }
 
 function timelineSection(scope) {
-  const switches = [['toolCalls', 'Tool calls'], ['infrastructureFailures', 'System errors'], ['operationSuccessRate', 'Successful actions'], ['averageDuration', 'Avg tool time']];
-  return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><h3>Activity</h3><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}" aria-pressed="${i ? 'false' : 'true'}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')), 'Tool calls')}</div></section>`;
+  const switches = [['toolCalls', 'Actions'], ['infrastructureFailures', 'System errors'], ['operationSuccessRate', 'Successful actions'], ['averageDuration', 'Average time']];
+  return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><h3>Activity</h3><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}" aria-pressed="${i ? 'false' : 'true'}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')), 'Actions')}</div></section>`;
 }
 
 function wireTimeline(content, scope) {
@@ -55,7 +55,7 @@ function wireTimeline(content, scope) {
   }));
 }
 
-function timeline(values, metricLabel = 'Tool calls') {
+function timeline(values, metricLabel = 'Actions') {
   const data = finite(values); const width = 720; const height = 180; const baseline = height - 12;
   if (!data.length || data.every(value => value === 0)) return '<div class="usage-chart-empty">No activity in this range.</div>';
   const max = Math.max(...data, 1);
@@ -92,7 +92,7 @@ function failureCategoriesSection(rows, totalFailures = 0) {
   const body = visible.length
     ? `<div class="usage-bar-list">${visible.map(row => failureCategoryRow(row, max)).join('')}</div>`
     : `<div class="usage-breakdown-empty">${Number(totalFailures || 0) > 0 ? 'Failure categories are unavailable for older data.' : 'No failures in this range.'}</div>`;
-  return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><div><h3>Failure categories</h3><p>Raw error messages are not stored.</p></div></div><div class="card-body">${body}</div></section>`;
+  return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><div><h3>What went wrong</h3><p>Detailed error messages are not stored.</p></div></div><div class="card-body">${body}</div></section>`;
 }
 
 function failureCategoryRow(row, max) {
@@ -102,16 +102,16 @@ function failureCategoryRow(row, max) {
 }
 
 function failureCategoryLabel(category) {
-  return ({ cancelled: 'Cancelled', timeout: 'Timeout', authorization: 'Authorization', capacity: 'Capacity', transport: 'Transport', policy: 'Policy / safety', workspace: 'Workspace / path', git: 'Git', process: 'Process / command', validation: 'Validation / input', runtime: 'Runtime' })[String(category || '').toLowerCase()] || 'Runtime';
+  return ({ cancelled: 'Cancelled', timeout: 'Timed out', authorization: 'Sign-in', capacity: 'Busy', transport: 'Connection', policy: 'Safety rule', workspace: 'Project folder', git: 'Git', process: 'Command', validation: 'Input or check', runtime: 'App' })[String(category || '').toLowerCase()] || 'App';
 }
 
 function activityBarsSection(title,rows,key){const visible=[...rows].sort((a,b)=>b.toolCalls-a.toolCalls).slice(0,10);const max=Math.max(1,...visible.map(row=>row.toolCalls));const body=visible.length?`<div class="usage-bar-list">${visible.map(row=>bar(row,key,max)).join('')}</div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
 function bar(row,key,max){const label=key==='workspace'?(row.workspace||'Unattributed'):(row.tool||'Unknown tool');const inner=`<span class="usage-bar-label" title="${esc(label)}">${esc(label)}</span><progress max="${max}" value="${row.toolCalls}">${integer(row.toolCalls)}</progress><strong>${integer(row.toolCalls)}</strong>`;return key==='workspace'&&row.workspace?`<a class="usage-bar-row usage-bar-link" href="${routeHref('usage',{workspace:row.workspace})}">${inner}</a>`:`<div class="usage-bar-row">${inner}</div>`;}
-function breakdownSection(title,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Tool calls</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
+function breakdownSection(title,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Actions</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
 function breakdownRow(row,key){const label=key==='device'?(row.displayName||shortId(row.deviceId)||'Unknown device'):(row[key]||'Unknown');return `<tr><th scope="row">${esc(label)}</th><td>${integer(row.toolCalls)}</td><td>${integer(row.successes)}</td><td>${integer(row.failures)}</td><td>${duration(row.executionMs)}</td></tr>`;}
 function formatChartValue(value, metricLabel) {
-  if (metricLabel === 'Reliability' || metricLabel === 'Successful actions' || metricLabel === 'Success rate') return percent(value);
-  if (/duration|tool time/i.test(metricLabel)) return duration(value);
+  if (metricLabel === 'Reliable actions' || metricLabel === 'Successful actions' || metricLabel === 'Success rate') return percent(value);
+  if (/duration|tool time|average time/i.test(metricLabel)) return duration(value);
   return integer(value);
 }
 function finite(values){return (values||[]).map(Number).map(value=>Number.isFinite(value)&&value>=0?value:0);}

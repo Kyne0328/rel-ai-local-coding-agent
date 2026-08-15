@@ -28,15 +28,15 @@ export function mountDiagnostics(container) {
   container.innerHTML = `
     <div class="diagnostic-page">
       <div class="section-head diagnostic-page-head">
-        <div><h2>Diagnostics</h2><p>Filter current findings, follow sanitized service logs, export state, and manage local diagnostic data.</p></div>
+        <div><h2>Troubleshooting</h2><p>Find problems, view app logs with sensitive values removed, and export support information.</p></div>
         <div class="section-head-actions diagnostic-page-actions">
           <button class="secondary" type="button" data-copy-report disabled>Copy report</button>
-          <button class="secondary" type="button" data-export-report disabled>Export state</button>
-          <button class="secondary" type="button" data-open-diagnostics-folder>Open diagnostics folder</button>
+          <button class="secondary" type="button" data-export-report disabled>Export support info</button>
+          <button class="secondary" type="button" data-open-diagnostics-folder>Open support folder</button>
         </div>
       </div>
       <div id="diagnosticFilterHost"></div>
-      <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading diagnostics…</div></div>
+      <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading troubleshooting info…</div></div>
     </div>`;
   bindHeaderActions(container);
   renderDiagnosticFilterBar(container);
@@ -53,7 +53,7 @@ async function loadDiagnostics(container, options = {}) {
     if (options.silent) {
       stopLiveTail();
       updateLiveTailButton(container);
-      toast(report?.error || 'Live diagnostics could not be refreshed.', { variant: 'error' });
+      toast(report?.error || 'Troubleshooting info could not be refreshed.', { variant: 'error' });
       return;
     }
     currentReport = null;
@@ -150,7 +150,7 @@ function bindHeaderActions(container) {
   const exportButton = container.querySelector('[data-export-report]');
   exportButton.onclick = async () => {
     const result = await runButtonAction(exportButton, {
-      idleText: 'Export state', loadingText: 'Exporting state…', successText: 'State exported', errorText: 'Export failed'
+      idleText: 'Export support info', loadingText: 'Exporting…', successText: 'Support info exported', errorText: 'Export failed'
     }, async () => {
       if (!currentReport) return { ok: false, error: 'No diagnostic state is available.' };
       if (typeof window.relaiDesktop?.exportDiagnosticState === 'function') {
@@ -165,13 +165,13 @@ function bindHeaderActions(container) {
   const folderButton = container.querySelector('[data-open-diagnostics-folder]');
   const canOpenFolder = typeof window.relaiDesktop?.openDiagnosticsFolder === 'function';
   folderButton.disabled = !canOpenFolder;
-  if (!canOpenFolder) folderButton.title = 'The diagnostics folder is available in the installed desktop app.';
+  if (!canOpenFolder) folderButton.title = 'The support folder is available in the installed desktop app.';
   folderButton.onclick = async () => {
     if (!canOpenFolder) return;
     const result = await runButtonAction(folderButton, {
-      idleText: 'Open diagnostics folder', loadingText: 'Opening folder…', successText: 'Folder opened', errorText: 'Open failed'
+      idleText: 'Open support folder', loadingText: 'Opening folder…', successText: 'Folder opened', errorText: 'Open failed'
     }, () => window.relaiDesktop.openDiagnosticsFolder());
-    toast(result?.ok ? 'Diagnostics folder opened.' : result?.error || 'Could not open the diagnostics folder.', { variant: result?.ok ? 'success' : 'error' });
+    toast(result?.ok ? 'Support folder opened.' : result?.error || 'Could not open the support folder.', { variant: result?.ok ? 'success' : 'error' });
   };
 }
 
@@ -194,8 +194,8 @@ function renderDiagnosticFilterBar(container) {
   const view = currentReport ? filteredDiagnosticView(currentReport) : null;
   host.replaceChildren(createFilterBar({
     search: {
-      label: 'Search diagnostics',
-      placeholder: 'Search code, source, message, or workspace',
+      label: 'Search troubleshooting',
+      placeholder: 'Search code, source, message, or project',
       value: filters.search,
       onInput: value => {
         window.clearTimeout(searchTimer);
@@ -261,7 +261,7 @@ function openDiagnosticFilters(container) {
         options: [
           { value: 'all', label: 'Everything' },
           { value: 'findings', label: 'Findings' },
-          { value: 'service', label: 'Service log' },
+          { value: 'service', label: 'App log' },
           { value: 'failed', label: 'Failed activity' }
         ],
         onChange: value => {
@@ -308,7 +308,7 @@ function hasDiagnosticFilters() {
 }
 
 function scopeLabel(value) {
-  return { findings: 'Findings', service: 'Service log', failed: 'Failed activity' }[value] || 'Everything';
+  return { findings: 'Findings', service: 'App log', failed: 'Failed activity' }[value] || 'Everything';
 }
 
 function severityLabel(value) {
@@ -377,10 +377,10 @@ async function resetDiagnosticData(button, container) {
   const target = button.dataset.resetTarget;
   const history = target === 'history';
   const confirmed = await confirmAction({
-    title: history ? 'Clear history' : 'Clear service log',
-    message: history ? 'Clear session and activity history?' : 'Clear the persistent service log?',
-    detail: 'This diagnostic data cannot be restored. Workspace and connection configuration will not change.',
-    confirmLabel: history ? 'Clear history' : 'Clear service log',
+    title: history ? 'Clear history' : 'Clear app log',
+    message: history ? 'Clear task and activity history?' : 'Clear the saved app log?',
+    detail: 'This troubleshooting data cannot be restored. Project and connection settings will not change.',
+    confirmLabel: history ? 'Clear history' : 'Clear app log',
     danger: true
   });
   if (!confirmed) return;
@@ -409,8 +409,8 @@ function openFullResetDialog(container) {
   form.className = 'diagnostic-reset-form';
   form.innerHTML = `
     <div class="diagnostic-reset-warning">
-      <strong>Clear all diagnostic data?</strong>
-      <span>This removes stored Sessions and Activity history plus the persistent sanitized service log. Workspace configuration, repositories, connection settings, and tunnel credentials are not changed.</span>
+      <strong>Clear all troubleshooting data?</strong>
+      <span>This removes saved Tasks and Activity history plus the saved app log. Project settings, project files, connection settings, and tunnel keys are not changed.</span>
     </div>
     <label for="diagnosticResetConfirmation">Type RESET to continue</label>
     <input id="diagnosticResetConfirmation" name="confirmation" autocomplete="off" spellcheck="false" placeholder="RESET">
@@ -539,9 +539,9 @@ function findingContext(entries) {
 
 function logsHtml(logs, view) {
   const runtime = logs.runtime || { available: false, entries: [] };
-  const runtimeEmpty = runtime.available ? 'No service messages match the current filters.' : 'Service logs are available in the desktop app.';
+  const runtimeEmpty = runtime.available ? 'No app messages match the current filters.' : 'App logs are available in the desktop app.';
   return `<div class="diagnostic-log-grid" data-diagnostic-region="logs">
-    ${logPanel('Service log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? 'Persistent sanitized log' : '')}
+    ${logPanel('App log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? 'Saved locally with sensitive values removed' : '')}
     ${logPanel('Failed activity', view.failed, 'No failed activity matches the current filters.', true, '')}
   </div>`;
 }
@@ -570,10 +570,10 @@ function logRow(entry) {
 
 function maintenanceHtml(maintenance) {
   return `<section class="card diagnostic-maintenance" data-diagnostic-region="maintenance">
-    <div class="card-head"><div><h3>Local diagnostic data</h3><p>Clear only the data no longer needed for troubleshooting. Repository files and connection credentials are never removed here.</p></div></div>
+    <div class="card-head"><div><h3>Saved troubleshooting data</h3><p>Clear troubleshooting data you no longer need. Project files and connection keys are never removed here.</p></div></div>
     <div class="card-body diagnostic-maintenance-list">
-      ${maintenanceRow('Session and activity history', 'Removes stored Sessions and Activity entries. Active tool calls are protected.', 'history', maintenance.history, 'Clear history')}
-      ${maintenanceRow('Persistent service log', 'Clears the in-memory and on-disk sanitized service log.', 'runtime_logs', maintenance.runtimeLogs, 'Clear service log')}
+      ${maintenanceRow('Task and activity history', 'Removes saved Tasks and Activity entries. Running actions are protected.', 'history', maintenance.history, 'Clear history')}
+      ${maintenanceRow('Saved app log', 'Clears the saved app log and the copy currently held in memory.', 'runtime_logs', maintenance.runtimeLogs, 'Clear app log')}
       ${fullResetRow(maintenance.all)}
     </div>
   </section>`;
@@ -590,7 +590,7 @@ function maintenanceRow(title, description, target, state = {}, buttonLabel) {
 function fullResetRow(state = {}) {
   const disabled = state.available === false || state.blocked === true;
   return `<div class="diagnostic-maintenance-row diagnostic-full-reset-row">
-    <div><strong>All diagnostic data</strong><span>${esc(state.reason || 'Clears session history, activity history, and the persistent service log after typed confirmation.')}</span></div>
+    <div><strong>All troubleshooting data</strong><span>${esc(state.reason || 'Clears task history, activity history, and the saved app log after typed confirmation.')}</span></div>
     <button class="danger" type="button" data-reset-all ${disabled ? 'disabled' : ''}>Clear all data</button>
   </div>`;
 }
@@ -621,8 +621,8 @@ function downloadDiagnosticState(report) {
 }
 
 function unavailableHtml(report) {
-  const title = report?.title || 'Diagnostics unavailable';
-  const message = report?.error || 'The Rel.AI connection service did not return a diagnostic report.';
+  const title = report?.title || 'Troubleshooting info unavailable';
+  const message = report?.error || 'Rel.AI could not load troubleshooting information.';
   const recovery = report?.recovery?.message || 'Refresh the dashboard or restart the Rel.AI connection.';
   const href = report?.recovery?.href || '#connection';
   return `<div class="diagnostic-clear diagnostic-unavailable">

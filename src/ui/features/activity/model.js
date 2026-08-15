@@ -89,7 +89,7 @@ export function activitySessionView(entry, sessionIndex = new Map()) {
   const shortId = id.slice(0, 8);
   return {
     id,
-    title: session?.title || (shortId ? `Session ${shortId}` : 'Unlinked activity'),
+    title: session?.title || (shortId ? `Task ${shortId}` : 'Unlinked activity'),
     workspace: session?.workspace || entry?.workspace || '',
     shortId,
     linked: Boolean(session)

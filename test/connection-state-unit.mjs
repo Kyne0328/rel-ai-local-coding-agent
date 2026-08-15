@@ -64,7 +64,7 @@ assert.equal(connectionSummary(unavailable).label, 'Needs attention');
 assert.deepEqual(connectionLayerViews(recent).map(layer => layer.title), [
   'Local MCP service',
   'OpenAI Secure MCP Tunnel',
-  'ChatGPT transport',
+  'Ready for ChatGPT',
   'MCP activity',
   'Dashboard updates'
 ]);

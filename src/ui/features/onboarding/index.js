@@ -19,26 +19,26 @@ export function desktopSetupSteps({
   return [
     {
       id: 'workspace',
-      title: 'Add a workspace',
-      description: 'Choose the local repository Rel.AI may expose to ChatGPT and give it a short workspace alias.',
+      title: 'Add a project',
+      description: 'Choose the project folder ChatGPT can work with and give it a short name.',
       href: routeMetadata('workspaces').href,
-      action: hasWorkspace ? 'Workspace added' : 'Add workspace',
+      action: hasWorkspace ? 'Project added' : 'Add project',
       complete: hasWorkspace,
       locked: false
     },
     {
       id: 'connection',
       title: 'Connect this computer',
-      description: 'In OpenAI Platform, get the Tunnel ID from Organization settings → Tunnels and a restricted runtime key from Organization settings → API Keys, then start the secure connection.',
+      description: 'In OpenAI Platform, copy your Secure MCP Tunnel ID and create its runtime API key, then save them here.',
       href: routeMetadata('connection').href,
-      action: 'Set up secure tunnel',
+      action: 'Set up connection',
       complete: endpointReady,
       locked: !hasWorkspace
     },
     {
       id: 'chatgpt',
       title: 'Add Rel.AI to ChatGPT',
-      description: 'Create or reconnect Rel.AI MCP with Connection set to Tunnel, select this computer’s tunnel, and set Authentication to No authentication — not OAuth.',
+      description: 'In ChatGPT, add Rel.AI MCP, choose Tunnel, select this computer’s tunnel, and choose No authentication.',
       href: routeMetadata('connection').href,
       action: 'Connect ChatGPT',
       complete: chatgptReady,
@@ -47,7 +47,7 @@ export function desktopSetupSteps({
     {
       id: 'first-request',
       title: 'Send your first Rel.AI request',
-      description: 'Open ChatGPT, select Rel.AI MCP, and send the safe request below. This confirms ChatGPT can actually reach your local workspace.',
+      description: 'Open ChatGPT, select Rel.AI MCP, and send the request below to make sure ChatGPT can reach your project.',
       action: 'Copy first request',
       actionType: 'copy',
       complete: requestUnlocked && firstRequestObserved,

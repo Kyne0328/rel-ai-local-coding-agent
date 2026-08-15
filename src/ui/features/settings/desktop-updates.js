@@ -9,7 +9,7 @@ const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-mcp/releases';
 let removeUpdateListener = null;
 
 export function applicationUpdatesPanel() {
-  const updates = panel('Application updates');
+  const updates = panel('App updates');
   updates.el.classList.add('application-update-panel');
   updates.body.setAttribute('aria-live', 'polite');
   updates.body.innerHTML = '<div class="settings-loading">Loading update status…</div>';
@@ -68,7 +68,7 @@ function renderStatus(container, status = {}, installedReleaseNotes = null) {
       ${view.action ? `<button class="${view.action.className}" type="button" data-update-action="${view.action.id}">${escapeHtml(view.action.label)}</button>` : ''}
       ${view.secondary ? `<button class="secondary" type="button" data-update-action="${view.secondary.id}">${escapeHtml(view.secondary.label)}</button>` : ''}
       <a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">GitHub Releases</a>
-      ${state === 'error' ? '<a class="buttonlike secondary" href="#diagnostics">Open Diagnostics</a>' : ''}
+      ${state === 'error' ? '<a class="buttonlike secondary" href="#diagnostics">Troubleshoot</a>' : ''}
     </div>`;
   wireActions(container);
 }
@@ -80,7 +80,7 @@ function updateView(state, status, currentVersion, availableVersion) {
       description: status.supportReason || 'This build must be updated manually from GitHub Releases.'
     };
   }
-  if (state === 'checking') return { label: 'Checking', tone: 'working', description: 'Checking GitHub Releases for a newer installed-app version.' };
+  if (state === 'checking') return { label: 'Checking', tone: 'working', description: 'Checking for a newer version of Rel.AI.' };
   if (state === 'up_to_date') {
     return {
       label: 'Up to date', tone: 'ok',
@@ -99,13 +99,13 @@ function updateView(state, status, currentVersion, availableVersion) {
   if (state === 'downloading') {
     return {
       label: 'Downloading', tone: 'working',
-      description: `Downloading ${availableVersion || 'the update'}. Rel.AI remains available while the installer is prepared.`
+      description: `Downloading ${availableVersion || 'the update'}. You can keep using Rel.AI while it downloads.`
     };
   }
   if (state === 'downloaded') {
     return {
       label: 'Ready to install', tone: 'ok',
-      description: `${availableVersion || 'The update'} is downloaded and its SHA-512 release metadata was verified. Restart only when no Rel.AI tool call is active.`,
+      description: `${availableVersion || 'The update'} is ready. Restart when Rel.AI is not working on a task.`,
       action: { id: 'install', label: 'Restart and install', className: 'primary' }
     };
   }
@@ -149,7 +149,7 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
     headline ? `<p class="application-update-release-headline">${escapeHtml(headline)}</p>` : '',
     bullets.length ? `<ul>${bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''
   ].join('');
-  return `<details class="application-update-release-notes"><summary>Changelog · v${escapeHtml(version)}</summary><div class="application-update-release-notes-body">${body}</div></details>`;
+  return `<details class="application-update-release-notes"><summary>What changed · v${escapeHtml(version)}</summary><div class="application-update-release-notes-body">${body}</div></details>`;
 }
 
 function supportPolicyHtml(policy) {

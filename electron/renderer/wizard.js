@@ -64,15 +64,15 @@ async function connect() {
   setError();
   clearValidationErrors();
   if (!validTunnelId(tunnelId)) {
-    setFieldError('tunnelIdInput', 'tunnelIdError', 'Paste a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.');
+    setFieldError('tunnelIdInput', 'tunnelIdError', 'Paste a valid Secure MCP Tunnel ID beginning with tunnel_.');
     return;
   }
   if (!tunnelApiKey && !runtimeKeyConfigured) {
-    setFieldError('tunnelApiKeyInput', 'runtimeKeyError', 'Paste the restricted runtime API key you created in this Platform organization.');
+    setFieldError('tunnelApiKeyInput', 'runtimeKeyError', 'Paste the API key you created for this tunnel in the same OpenAI organization.');
     return;
   }
   if (tunnelApiKey && !validRuntimeKey(tunnelApiKey)) {
-    setFieldError('tunnelApiKeyInput', 'runtimeKeyError', 'Paste a valid OpenAI tunnel runtime API key with no spaces.');
+    setFieldError('tunnelApiKeyInput', 'runtimeKeyError', 'Paste a valid runtime API key with no spaces.');
     return;
   }
   if (!validPort(port)) {
@@ -82,16 +82,16 @@ async function connect() {
 
   const button = $('connectBtn');
   button.disabled = true;
-  button.textContent = 'Starting secure connection…';
+  button.textContent = 'Connecting…';
   try {
     const result = await window.electronAPI.wizardDone({ tunnelId, tunnelApiKey, port, restart: recoveryMode });
     if (!result?.ok || !result?.status?.serverRunning || result.status.tunnelStatus !== 'running') {
-      throw new Error(result?.status?.error || 'OpenAI Secure MCP Tunnel did not become ready.');
+      throw new Error(result?.status?.error || 'The ChatGPT connection did not become ready.');
     }
   } catch (error) {
     setError(messageOf(error));
     button.disabled = false;
-    button.textContent = 'Start secure connection';
+    button.textContent = 'Connect to ChatGPT';
   }
 }
 

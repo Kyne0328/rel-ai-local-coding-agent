@@ -13,22 +13,22 @@ const CATEGORY_FIELDS = [
   {
     key: 'taskCompleted',
     label: 'Task completed',
-    help: 'Show a desktop alert after Rel.AI explicitly completes a work session.'
+    help: 'Show a desktop alert after Rel.AI completes a task.'
   },
   {
     key: 'errors',
-    label: 'Errors and failed operations',
-    help: 'Show failed workspace actions, service and tunnel failures, and application update errors.'
+    label: 'Errors',
+    help: 'Show alerts when a project action, connection, or app update fails.'
   },
   {
     key: 'connectionStatus',
-    label: 'Connection and service status',
-    help: 'Show alerts when the ChatGPT connection becomes ready, stops, or needs authorization.'
+    label: 'Connection status',
+    help: 'Show alerts when ChatGPT connects, disconnects, or needs you to reconnect it.'
   },
   {
     key: 'applicationUpdates',
-    label: 'Application updates',
-    help: 'Show update desktop alerts and the update-available modal.'
+    label: 'App updates',
+    help: 'Show desktop alerts when an app update is available.'
   }
 ];
 
@@ -53,7 +53,7 @@ export function desktopNotificationsPanel(initialState = null) {
     section.body.appendChild(field(
       'Desktop notifications',
       master,
-      'Master control for all categories below, including the update-available modal. Category choices are preserved while this is off.'
+      'Turn all desktop notifications on or off. Your choices below are kept while notifications are off.'
     ));
 
     for (const item of CATEGORY_FIELDS) {
@@ -84,7 +84,7 @@ export function desktopNotificationsPanel(initialState = null) {
     });
     control.append(value, reset);
     return field(
-      'Ignored update version',
+      'Skipped update',
       control,
       'Only this exact version is ignored. Newer versions can still notify you.'
     );
