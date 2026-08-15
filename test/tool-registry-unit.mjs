@@ -237,8 +237,9 @@ assert.equal(resolveToolOperation('relai_validate', { action: 'http', work_id: '
 
 const metadata = getToolMetadata(config);
 const validateMetadata = metadata.find(item => item.name === 'relai_validate');
-assert.equal(validateMetadata.taskSupport, 'forbidden');
-assert.equal(validateMetadata.actions.find(item => item.action === 'checks').taskSupport, 'forbidden');
+assert.equal(validateMetadata.taskSupport, 'optional');
+assert.equal(validateMetadata.actions.find(item => item.action === 'checks').taskSupport, 'optional');
+assert.equal(validateMetadata.actions.find(item => item.action === 'diagnostics').taskSupport, 'optional');
 assert.equal(validateMetadata.actions.find(item => item.action === 'http').taskSupport, 'forbidden');
 assert.equal(validateMetadata.actions.find(item => item.action === 'http').executionClass, 'bounded_synchronous');
 assert.ok(validateMetadata.actions.find(item => item.action === 'http').fields.includes('route'));

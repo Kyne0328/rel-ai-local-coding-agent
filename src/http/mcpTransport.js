@@ -37,6 +37,9 @@ function getCoreNodeHandler() {
       return createRelaiMcpServer({
         publicHttpOnly: true,
         transportType: 'streamable-http',
+        // Native Tasks are intentionally advertised only on the modern MCP route.
+        // Legacy ChatGPT compatibility remains synchronous. Do not replace this with
+        // client-name detection: capability negotiation must be what activates Tasks.
         nativeTasks: context.era === 'modern',
         legacyCompatibility: context.era === 'legacy',
         principal: createHttpTaskPrincipal(authInfo, authMode)

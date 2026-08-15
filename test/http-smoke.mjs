@@ -148,8 +148,8 @@ try {
     arguments: { work_id: workId }
   });
   assert.equal(missingExecMode.response.status, 200, JSON.stringify(missingExecMode.body));
-  assert.equal(missingExecMode.body.result?.isError, true, JSON.stringify(missingExecMode.body));
-  assert.match(JSON.stringify(missingExecMode.body.result || {}), /command|executable/i, 'public schema validation must reject a missing relai_exec mode before runtime dispatch');
+  assert.equal(missingExecMode.body.error?.code, -32602, JSON.stringify(missingExecMode.body));
+  assert.match(missingExecMode.body.error?.message || '', /command|executable/i, 'task-aware preflight validation must reject a missing relai_exec mode before runtime dispatch');
   const cancelled = await client.request('tools/call', {
     name: 'relai_work',
     arguments: { action: 'cancel', work_id: workId, reason: 'HTTP begin regression completed.' }
@@ -192,12 +192,13 @@ try {
   assert.equal(manifest.toolCount, activeToolCount);
   assert.equal(manifest.toolCount, manifest.tools.length);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
-  assert.equal(surfaceByName.get('relai_exec').executionClass, 'bounded_synchronous');
-  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'forbidden');
+  assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
+  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
   assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
   assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
   const validateActions = new Map(surfaceByName.get('relai_validate').actions.map(item => [item.action, item]));
-  assert.equal(validateActions.get('checks').taskSupport, 'forbidden');
+  assert.equal(validateActions.get('checks').taskSupport, 'optional');
+  assert.equal(validateActions.get('diagnostics').taskSupport, 'optional');
   assert.equal(validateActions.get('http').taskSupport, 'forbidden');
   assert.equal(validateActions.get('http').executionClass, 'bounded_synchronous');
   assert.equal(manifest.cache.cacheScope, 'private');
