@@ -43,13 +43,147 @@ export function applyLiveEvent(type, payload = {}) {
 }
 
 function applyTaskDelta(payload) {
-  if (payload.taskActivity) _state.taskActivity = payload.taskActivity;
+  if (payload.taskActivity) _state.taskActivity = { ...(_state.taskActivity || {}), ...payload.taskActivity };
   if (Array.isArray(payload.tasks)) _state.tasks = payload.tasks;
+  if (Array.isArray(payload.taskUpdates)) {
+    mergeTaskUpdates(payload.taskUpdates);
+    mergeActiveTaskUpdates(payload.taskUpdates);
+  }
   if (payload.auditTail) _state.auditTail = payload.auditTail;
+  if (Array.isArray(payload.activityEntries)) mergeActivityEntries(payload.activityEntries);
   if (payload.workspaceStates) {
     _state.workspaceStates = payload.workspaceStates;
     syncWorkspaceOperationalStates(payload.workspaceStates);
+  } else if (payload.taskActivity || Array.isArray(payload.taskUpdates)) {
+    syncTaskWorkspaceStates(_state.taskActivity || {}, payload.taskUpdates || []);
   }
+}
+
+function mergeTaskUpdates(updates) {
+  const byId = new Map();
+  for (const task of Array.isArray(_state.tasks) ? _state.tasks : []) {
+    const id = taskIdentity(task);
+    if (id) byId.set(id, task);
+  }
+  for (const task of updates) {
+    const id = taskIdentity(task);
+    if (id) byId.set(id, { ...(byId.get(id) || {}), ...task });
+  }
+  _state.tasks = [...byId.values()].sort((left, right) => taskTime(right) - taskTime(left)).slice(0, 500);
+}
+
+function mergeActiveTaskUpdates(updates) {
+  const activity = _state.taskActivity || {};
+  const byId = new Map();
+  for (const task of Array.isArray(activity.tasks) ? activity.tasks : []) {
+    const id = taskIdentity(task);
+    if (id) byId.set(id, task);
+  }
+  for (const task of updates) {
+    const id = taskIdentity(task);
+    if (!id) continue;
+    if (isTerminalTask(task)) {
+      byId.delete(id);
+      activity.lastTask = task;
+    } else {
+      byId.set(id, { ...(byId.get(id) || {}), ...task });
+    }
+  }
+  if (Number(activity.activeTaskCount || 0) === 0) byId.clear();
+  activity.tasks = [...byId.values()].sort((left, right) => taskTime(left) - taskTime(right));
+  activity.activeTaskCount = activity.tasks.length;
+  activity.state = Number(activity.activeCalls || 0) > 0 ? 'working' : activity.tasks.length ? 'waiting' : 'idle';
+  const primary = activity.tasks.find(task => Number(task.activeCalls || 0) > 0) || activity.tasks[0] || null;
+  activity.taskId = taskIdentity(primary) || taskIdentity(activity.lastTask);
+  activity.workspace = activity.tasks.length === 1 ? String(primary?.workspace || '') : '';
+  activity.tool = String(primary?.lastTool || primary?.tool || '');
+  activity.operation = String(primary?.operation || primary?.lastOperation || '');
+  activity.startedAt = primary?.startedAt || null;
+  _state.taskActivity = activity;
+}
+
+function isTerminalTask(task) {
+  return ['completed', 'cancelled', 'failed', 'inactive'].includes(String(task?.status || '').toLowerCase());
+}
+
+function mergeActivityEntries(updates) {
+  const current = Array.isArray(_state.auditTail?.entries) ? _state.auditTail.entries : [];
+  const byId = new Map();
+  for (const entry of [...current, ...updates]) {
+    const id = String(entry?.eventId || entry?.id || entry?.operationId || '');
+    if (!id) continue;
+    const existing = byId.get(id) || {};
+    const merged = { ...existing, ...entry };
+    for (const key of ['summary', 'message', 'currentActivity', 'title', 'operation', 'path']) {
+      if (!displayText(entry?.[key]) && displayText(existing?.[key])) merged[key] = existing[key];
+    }
+    byId.set(id, merged);
+  }
+  const limit = Math.max(1, Math.min(200, Number(_state.auditTail?.entries?.length || 200)));
+  _state.auditTail = {
+    ...(_state.auditTail || {}),
+    entries: [...byId.values()].sort((left, right) => activityTime(left) - activityTime(right)).slice(-limit)
+  };
+}
+
+function syncTaskWorkspaceStates(activity, updates) {
+  const states = { ...(_state.workspaceStates || {}) };
+  for (const workspace of Array.isArray(_state.config?.workspaces) ? _state.config.workspaces : []) {
+    const alias = String(workspace?.alias || '');
+    if (alias && !states[alias]) states[alias] = { ...(workspace.operational || {}) };
+  }
+  const activeTasks = Array.isArray(activity?.tasks) ? activity.tasks : [];
+  const activeByWorkspace = new Map(activeTasks.map(task => [String(task.workspace || ''), task]).filter(([alias]) => alias));
+  for (const [alias, state] of Object.entries(states)) {
+    const task = activeByWorkspace.get(alias);
+    if (!task && !state?.currentActivity) continue;
+    states[alias] = {
+      ...state,
+      currentActivity: task ? {
+        state: task.state,
+        tool: task.lastTool || task.tool,
+        startedAt: task.startedAt,
+        activeCalls: Number(task.activeCalls || 0),
+        taskId: taskIdentity(task)
+      } : null
+    };
+  }
+  for (const task of updates) {
+    const alias = String(task?.workspace || '');
+    if (!alias || !states[alias]) continue;
+    const state = states[alias];
+    const lastTask = !state.lastTask || taskTime(task) >= taskTime(state.lastTask) ? task : state.lastTask;
+    const validation = String(task?.validation || task?.validationStatus || '');
+    states[alias] = {
+      ...state,
+      lastTask,
+      ...(validation && validation !== 'not_run' ? { lastValidation: { status: validation, completedAt: task.completedAt || task.updatedAt || null } } : {})
+    };
+  }
+  _state.workspaceStates = states;
+  syncWorkspaceOperationalStates(states);
+}
+
+function taskIdentity(task) {
+  return String(task?.id || task?.taskId || task?.sessionId || '');
+}
+
+function taskTime(task) {
+  return timestamp(task?.updatedAt || task?.completedAt || task?.endedAt || task?.startedAt);
+}
+
+function activityTime(entry) {
+  return timestamp(entry?.ts || entry?.timestamp || entry?.completedAt || entry?.startedAt);
+}
+
+function timestamp(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function displayText(value) {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function applyConnectionDelta(payload) {

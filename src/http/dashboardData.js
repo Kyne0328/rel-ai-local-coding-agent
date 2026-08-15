@@ -71,6 +71,53 @@ function buildDashboardTaskProjection(config, options = {}, activityOverride = n
   };
 }
 
+function buildDashboardTaskDelta(_options = {}, activities = []) {
+  const batch = Array.isArray(activities) ? activities : [activities];
+  const taskUpdates = new Map();
+  const activityEntries = new Map();
+  let latest = null;
+  for (const activity of batch) {
+    if (!activity || typeof activity !== 'object') continue;
+    if (!latest || Number(activity.revision || 0) >= Number(latest.revision || 0)) latest = activity;
+    const task = activity.task;
+    const taskId = String(task?.taskId || task?.id || activity.taskId || '').trim();
+    if (task && taskId) {
+      const existing = taskUpdates.get(taskId);
+      if (!existing || Number(activity.revision || 0) >= existing.revision) {
+        taskUpdates.set(taskId, { revision: Number(activity.revision || 0), task: summarizeDashboardTask(task) });
+      }
+    }
+    if (!activity.activityEvent) continue;
+    const normalized = normalizeDashboardActivity({
+      ...activity.activityEvent,
+      workspace: activity.activityEvent.workspace || activity.workspace || task?.workspace || '',
+      taskId: activity.activityEvent.taskId || taskId,
+      sessionId: activity.activityEvent.sessionId || taskId
+    });
+    const key = eventIdentityKey(normalized, activityEntries.size, { preferId: true });
+    const existing = activityEntries.get(key);
+    activityEntries.set(key, existing ? mergeDashboardActivityEntry(existing, normalized) : normalized);
+  }
+  return {
+    taskActivity: liveTaskActivityDelta(latest),
+    taskUpdates: [...taskUpdates.values()].map(item => item.task),
+    activityEntries: [...activityEntries.values()].sort((left, right) => eventTimestampMs(left) - eventTimestampMs(right))
+  };
+}
+
+function liveTaskActivityDelta(activity) {
+  if (!activity) return emptyTaskActivity();
+  const activeCalls = Math.max(0, Number(activity.activeCalls || 0));
+  const activeTaskCount = Math.max(0, Number(activity.activeTaskCount || 0));
+  return {
+    state: activeCalls > 0 ? 'working' : activeTaskCount > 0 ? 'waiting' : 'idle',
+    revision: Math.max(0, Number(activity.revision || 0)),
+    activeConnectorCalls: Math.max(0, Number(activity.activeConnectorCalls || 0)),
+    activeCalls,
+    activeTaskCount
+  };
+}
+
 function buildDashboardConnectionProjection(_config, options = {}, mcpOverride = null) {
   const profile = connection.readConnectionProfile();
   const desktopStatus = typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null;
@@ -165,11 +212,10 @@ function normalizeDashboardActivity(entry) {
 }
 
 function summarizeDashboardTask(task) {
-  const projected = sanitizeTaskRecordForProjection(task);
-  if (!projected || typeof projected !== "object") return projected;
-  const summary = { ...projected };
-  delete summary.events;
-  return summary;
+  if (!task || typeof task !== 'object') return task;
+  const { events: _events, ...withoutEvents } = task;
+  const projected = sanitizeTaskRecordForProjection(withoutEvents);
+  return projected && typeof projected === 'object' ? { ...projected } : projected;
 }
 
 function sanitizeTaskActivity(activity = {}) {
@@ -180,4 +226,4 @@ function sanitizeTaskActivity(activity = {}) {
   };
 }
 
-export { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskProjection, mergeDashboardActivity, summarizeDashboardTask };
+export { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskDelta, buildDashboardTaskProjection, mergeDashboardActivity, summarizeDashboardTask };

@@ -124,7 +124,7 @@ const toolActivityRuntime = createTaskActivityRuntime({
   powerSaveBlocker,
   notify: desktopNotifications.show,
   onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
-  onStatusChange: taskActivity => setStatus({ taskActivity })
+  onStatusChange: setTaskActivityStatus
 });
 serviceRuntime = createDesktopServiceRuntime({
   app,
@@ -266,6 +266,11 @@ function pushStatus(options = {}) {
   const dashboardWindow = dashboardWindowManager.getWindow();
   if (options.dashboard !== false && dashboardWindow) dashboardWindow.webContents.send('server:status', currentStatus);
   desktopTray.update();
+}
+
+function setTaskActivityStatus(taskActivity) {
+  currentStatus = normalizeDesktopStatus({ ...currentStatus, taskActivity });
+  recoveryWindowManager.sendStatus(currentStatus);
 }
 
 function combinedUpdateStatus(baseStatus = appUpdater?.getStatus()) {

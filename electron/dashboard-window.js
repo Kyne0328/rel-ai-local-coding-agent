@@ -77,8 +77,7 @@ function createDashboardWindowManager(deps) {
       title: 'Rel.AI MCP Dashboard',
       backgroundColor: STARTUP_BACKGROUND_COLOR,
       webPreferences: {
-        ...localWindowWebPreferences(dashboardPreloadPath, 'relai-dashboard', 'dashboard'),
-        backgroundThrottling: false
+        ...localWindowWebPreferences(dashboardPreloadPath, 'relai-dashboard', 'dashboard')
       }
     });
     secureSession(dashboardWindow.webContents.session);

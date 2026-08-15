@@ -81,13 +81,15 @@ function createTaskActivityRuntime(options) {
     onStatusChange = () => {}
   } = options;
   const blocker = createToolSleepBlocker(powerSaveBlocker);
+  let status = normalizeActivityStatus(toolActivity.getToolActivity?.() || {});
 
   const unsubscribe = toolActivity.onToolActivity(handleActivity);
-  syncBlocker();
+  syncBlocker(status);
   emitStatus();
 
-  function handleActivity(event) {
-    syncBlocker();
+  function handleActivity(event = {}) {
+    status = reduceActivityStatus(status, event);
+    syncBlocker(status, event);
     if (event.phase === 'finished' && event.ok === false) notify('errors', buildFailureNotification(event));
     if (event.phase === 'completed' && event.task?.completionKnown === true) {
       notify('taskCompleted', buildCompletionNotification(event.task));
@@ -96,34 +98,18 @@ function createTaskActivityRuntime(options) {
     emitStatus();
   }
 
-  function syncBlocker() {
-    const activity = toolActivity.getToolActivity?.() || {};
-    const activeCalls = Number(Object.hasOwn(activity, 'activeConnectorCalls')
-      ? activity.activeConnectorCalls
+  function syncBlocker(activity = status, event = {}) {
+    const connectorCalls = Number(Object.hasOwn(event, 'activeConnectorCalls')
+      ? event.activeConnectorCalls
       : activity.activeCalls || 0);
-    const reportedTaskCount = Number(activity.activeTaskCount);
-    const activeTasks = Number.isFinite(reportedTaskCount)
-      ? reportedTaskCount
-      : Array.isArray(activity.tasks) ? activity.tasks.length : 0;
-    blocker.update(Math.max(activeCalls, activeTasks));
+    blocker.update(Math.max(connectorCalls, Number(activity.activeTaskCount || 0)));
   }
 
   function currentStatus() {
-    const activity = toolActivity.getToolActivity?.() || {};
     return {
-      state: activity.state || 'idle',
-      activeCalls: Number(activity.activeCalls || 0),
-      activeTaskCount: Number(activity.activeTaskCount || activity.tasks?.length || 0),
-      completionKnown: activity.completionKnown === true,
-      tasks: Array.isArray(activity.tasks) ? activity.tasks : [],
-      taskId: activity.taskId || '',
-      calls: Number(activity.calls || 0),
-      failures: Number(activity.failures || 0),
-      workspace: activity.workspace || '',
-      tool: activity.tool || '',
-      operation: activity.operation || '',
-      startedAt: activity.startedAt || null,
-      lastTask: activity.lastTask || null
+      ...status,
+      tasks: status.tasks.map(task => ({ ...task })),
+      lastTask: status.lastTask ? { ...status.lastTask } : null
     };
   }
 
@@ -132,12 +118,12 @@ function createTaskActivityRuntime(options) {
   }
 
   function resetHistory() {
-    const activity = toolActivity.getToolActivity?.() || {};
-    if (Number(activity.activeCalls || 0) > 0) {
+    if (Number(status.activeCalls || 0) > 0) {
       return { ok: false, error: 'Cannot clear session history while a Rel.AI tool call is running.' };
     }
     toolActivity.resetToolActivity?.();
-    syncBlocker();
+    status = normalizeActivityStatus(toolActivity.getToolActivity?.() || {});
+    syncBlocker(status);
     emitStatus();
     return { ok: true };
   }
@@ -152,6 +138,70 @@ function createTaskActivityRuntime(options) {
     resetHistory,
     stop
   };
+}
+
+function normalizeActivityStatus(activity = {}) {
+  const tasks = (Array.isArray(activity.tasks) ? activity.tasks : []).map(lightweightTask);
+  const primary = tasks.find(task => Number(task.activeCalls || 0) > 0) || tasks[0] || null;
+  return {
+    state: activity.state || (Number(activity.activeCalls || 0) > 0 ? 'working' : tasks.length ? 'waiting' : 'idle'),
+    activeCalls: Math.max(0, Number(activity.activeCalls || 0)),
+    activeTaskCount: Math.max(0, Number(activity.activeTaskCount ?? tasks.length)),
+    completionKnown: activity.completionKnown === true,
+    tasks,
+    taskId: activity.taskId || taskId(primary) || taskId(activity.lastTask),
+    calls: Number(activity.calls ?? primary?.calls ?? 0),
+    failures: Number(activity.failures ?? primary?.failures ?? 0),
+    workspace: activity.workspace || (tasks.length === 1 ? primary?.workspace || '' : ''),
+    tool: activity.tool || primary?.lastTool || primary?.tool || '',
+    operation: activity.operation || primary?.operation || primary?.lastOperation || '',
+    startedAt: activity.startedAt || primary?.startedAt || null,
+    lastTask: activity.lastTask ? lightweightTask(activity.lastTask) : null
+  };
+}
+
+function reduceActivityStatus(current, event) {
+  const tasks = new Map(current.tasks.map(task => [taskId(task), task]).filter(([id]) => id));
+  const changedTask = event.task ? lightweightTask(event.task) : null;
+  const id = taskId(changedTask) || String(event.taskId || '').trim();
+  if (changedTask && id) {
+    if (isTerminalTask(changedTask, event.phase)) tasks.delete(id);
+    else tasks.set(id, { ...(tasks.get(id) || {}), ...changedTask });
+  }
+  const activeCalls = Math.max(0, Number(event.activeCalls ?? current.activeCalls ?? 0));
+  const taskList = [...tasks.values()].sort((left, right) => Number(left.startedAt || 0) - Number(right.startedAt || 0));
+  const activeTaskCount = taskList.length;
+  const primary = taskList.find(task => Number(task.activeCalls || 0) > 0) || taskList[0] || null;
+  const lastTask = changedTask && isTerminalTask(changedTask, event.phase) ? changedTask : current.lastTask;
+  return {
+    state: activeCalls > 0 ? 'working' : activeTaskCount > 0 ? 'waiting' : 'idle',
+    activeCalls,
+    activeTaskCount,
+    completionKnown: false,
+    tasks: taskList,
+    taskId: taskId(primary) || taskId(lastTask),
+    calls: Number(primary?.calls || 0),
+    failures: Number(primary?.failures || 0),
+    workspace: taskList.length === 1 ? primary?.workspace || '' : '',
+    tool: primary?.lastTool || primary?.tool || '',
+    operation: primary?.operation || primary?.lastOperation || '',
+    startedAt: primary?.startedAt || null,
+    lastTask
+  };
+}
+
+function lightweightTask(task = {}) {
+  if (!task || typeof task !== 'object') return {};
+  const { events: _events, currentOperations: _currentOperations, principalFingerprint: _principalFingerprint, ...summary } = task;
+  return { ...summary };
+}
+
+function taskId(task) {
+  return String(task?.taskId || task?.id || task?.sessionId || '').trim();
+}
+
+function isTerminalTask(task, phase = '') {
+  return ['completed', 'cancelled', 'failed', 'inactive'].includes(String(task?.status || phase || '').toLowerCase());
 }
 
 export { buildCompletionNotification, buildFailureNotification, cleanNotificationText, createToolSleepBlocker, createTaskActivityRuntime, truncateNotificationText };
