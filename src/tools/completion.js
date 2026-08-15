@@ -2,7 +2,7 @@ import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
 import { finalizeTaskSandbox, findTaskSandbox, resolveTaskSandboxWorkspace } from '../parallelTaskSandbox.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
-import { readTaskIntegrity } from '../taskIntegrity.js';
+import { readTaskIntegrity, readWorkspaceIntegrity } from '../taskIntegrity.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
@@ -69,14 +69,28 @@ async function completeTask(config, args = {}) {
   }
 
   if (authority.validationResult === 'passed') {
+    const workspaceState = readWorkspaceIntegrity(config, workspace.alias);
+    const validatedWorkspaceGeneration = Number(authority.validatedWorkspaceGeneration || 0);
+    if (Number(workspaceState.generation || 0) > validatedWorkspaceGeneration) {
+      const error = taskError(
+        'TASK_PERSISTENCE_CONFLICT',
+        'Work-session completion is paused because another work session changed the shared workspace after this work session was validated. Re-run validation for this work_id against the current workspace state.',
+        {
+          retryable: true,
+          allowedAlternatives: [
+            'Run relai_validate with action "checks" with complete:true, summary, and this work_id against the current workspace state.',
+            'Cancel this task only when it should not be completed against the shared workspace.'
+          ]
+        }
+      );
+      error.conflictingTaskCount = workspaceState.lastMutation?.taskId && workspaceState.lastMutation.taskId !== requestedTaskId ? 1 : 0;
+      throw error;
+    }
     const validatedFingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
     if (validatedFingerprint) {
       const sandbox = findTaskSandbox(config, workspace.alias, requestedTaskId);
       const validationWorkspace = sandbox ? resolveTaskSandboxWorkspace(config, sandbox.alias) : workspace;
-      const validationScope = Array.isArray(authority.validationScope)
-        ? authority.validationScope
-        : (authority.taskOwnedChangedFiles || []);
-      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config, { paths: validationScope });
+      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config);
       if (currentFingerprint.fingerprint !== validatedFingerprint) {
         throw taskError(
           'TASK_REVALIDATION_REQUIRED',
