@@ -72,6 +72,10 @@ const config = {
 try {
   const semantic = await relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 }, { watch: false });
   assert.equal(semantic.ok, true);
+  assert.match(String(semantic.fingerprint || ''), /^generation:/);
+  const indexStatus = repositoryIntelligence.status(workspace, config);
+  assert.match(String(indexStatus.metadata?.producerVersion || ''), /^[A-Za-z0-9_-]{24}$/);
+  assert.equal(indexStatus.metadata?.runtimeStale, false);
   assert.equal(semantic.privacy.includes('No source text'), true);
   assert.equal(semantic.neuralEmbeddings, false);
   assert.match(semantic.strategy, /graph-diffusion$/);

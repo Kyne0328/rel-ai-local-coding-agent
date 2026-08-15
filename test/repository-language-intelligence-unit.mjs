@@ -56,7 +56,7 @@ try {
     assert.equal(files.get('src/script.lua').language, 'lua');
     assert.deepEqual(files.get('infra/config.hcl'), { language: 'hcl', parser: 'tree-sitter' });
     assert.deepEqual(files.get('infra/main.tf'), { language: 'terraform', parser: 'tree-sitter' });
-    const edges = db.prepare("SELECT type, provider, target_name FROM edges WHERE provider='resolver-js-ts-v1' ORDER BY type, target_name").all();
+    const edges = db.prepare("SELECT type, provider, target_name FROM edges WHERE provider='resolver-js-ts-v2' ORDER BY type, target_name").all();
     assert.ok(edges.some(edge => edge.type === 'INHERITS' && edge.target_name === 'BaseService'));
     assert.ok(edges.some(edge => edge.type === 'IMPLEMENTS' && edge.target_name === 'Persistable'));
     assert.ok(edges.some(edge => edge.type === 'USES_TYPE' && edge.target_name === 'AccountService'));

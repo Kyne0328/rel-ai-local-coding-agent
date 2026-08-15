@@ -29,7 +29,7 @@ async function executeCodeInspectQuery(workspace, config, args = {}, index = {},
   try {
     const base = { ok: true, workspace: workspace.alias, action, index };
     if (action === 'architecture') {
-      const architecture = analyzeArchitecture(db, { maxResults });
+      const architecture = analyzeArchitecture(db, { maxResults, workspaceRoot: workspace.path });
       const crossWorkspace = analyzeCrossWorkspace(workspace, config, db, {
         maxRelationships: Math.min(100, maxResults),
         repositoryStatuses: options.repositoryStatuses
@@ -121,12 +121,22 @@ async function executeSemanticSearchQuery(workspace, config, args = {}, index = 
   }
 }
 
-function shouldDiffuseSemanticResults(related, query, maxResults) {
-  if (!related?.files?.length) return false;
-  if (related.files.length >= Math.min(maxResults, 8)) return true;
-  const terms = queryTerms(query, 20);
-  if (terms.length > 3) return true;
-  return !related.files.some(item => (item.reasons || []).some(reason => reason.startsWith('exact-symbol:') || reason.startsWith('path:')));
+function shouldDiffuseSemanticResults(related, _query, maxResults) {
+  const files = related?.files || [];
+  if (!files.length) return false;
+  if (files.length >= Math.min(maxResults, 8)) return true;
+  const top = files.slice(0, 3);
+  const coverages = top.flatMap(item => (item.reasons || []).map(reason => {
+    const match = String(reason).match(/^query-coverage:(\d+(?:\.\d+)?)$/);
+    return match ? Number(match[1]) : null;
+  }).filter(Number.isFinite));
+  const bestCoverage = coverages.length ? Math.max(...coverages) : 0;
+  const scoreGap = files.length > 1 ? Number(files[0].score || 0) - Number(files[1].score || 0) : Number(files[0].score || 0);
+  const hasExactSymbol = top.some(item => (item.reasons || []).some(reason => reason.startsWith('exact-symbol:')));
+  if (hasExactSymbol && bestCoverage >= 0.75) return false;
+  const hasPathEvidence = top.some(item => (item.reasons || []).some(reason => reason.startsWith('path:')));
+  if (hasPathEvidence && bestCoverage >= 0.9 && scoreGap >= 0.03) return false;
+  return files.length < 3 || bestCoverage < 0.9 || scoreGap < 0.03;
 }
 
 function boundSemanticResults(results, maxBytes) {
