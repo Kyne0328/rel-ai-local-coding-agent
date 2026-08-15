@@ -23,6 +23,7 @@ import { deterministicActionId } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
 import { buildWorkflowSnapshot } from '../workflow/runtime.js';
+import { invalidateRepositoryTopology } from '../workflow/topology.js';
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
@@ -339,7 +340,9 @@ function signalRepositoryIntelligenceMutation(config, operationName, args, value
   if (!broadMutation && !targetedMutation && !restoreMutation.length) return;
   try {
     const workspace = resolveWorkspace(config, alias);
-    repositoryIntelligence.noteMutation(workspace, config, broadMutation ? [] : (changedFiles.length ? changedFiles : restoreMutation));
+    const mutationPaths = broadMutation ? [] : (changedFiles.length ? changedFiles : restoreMutation);
+    repositoryIntelligence.noteMutation(workspace, config, mutationPaths);
+    invalidateRepositoryTopology(workspace.path, mutationPaths);
   } catch {}
 }
 

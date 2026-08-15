@@ -4,7 +4,6 @@ import * as path from 'node:path';
 
 const MAX_DEPTH = 6;
 const MAX_MANIFESTS = 200;
-const CACHE_RECHECK_MS = 2_000;
 const MANIFEST_NAMES = new Set(['package.json', 'pubspec.yaml', 'go.mod', 'Cargo.toml', 'pyproject.toml', 'requirements.txt', 'Makefile']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.turbo', '.cache', '.relai', '.rel-ai', 'state']);
 const cache = new Map();
@@ -12,13 +11,11 @@ const cache = new Map();
 function discoverRepositoryTopology(rootPath) {
   const root = path.resolve(String(rootPath || '.'));
   const cached = cache.get(root);
-  if (cached && Date.now() - cached.checkedAt < CACHE_RECHECK_MS) return structuredClone(cached.value);
-  const manifests = collectManifests(root);
-  const signature = manifests.map(item => `${item.relative}:${item.size}:${item.mtimeMs}`).join('|');
-  if (cached?.signature === signature) {
-    cached.checkedAt = Date.now();
+  if (cached && probeManifestSignature(cached.manifests) === cached.signature) {
     return structuredClone(cached.value);
   }
+  const manifests = collectManifests(root);
+  const signature = manifestSignature(manifests);
   const packages = manifests.map(item => packageFromManifest(root, item)).filter(Boolean);
   const value = {
     version: 1,
@@ -27,7 +24,7 @@ function discoverRepositoryTopology(rootPath) {
     packages,
     fingerprint: crypto.createHash('sha256').update(signature).digest('hex')
   };
-  cache.set(root, { signature, value, checkedAt: Date.now() });
+  cache.set(root, { signature, manifests, value });
   if (cache.size > 32) cache.delete(cache.keys().next().value);
   return structuredClone(value);
 }
@@ -87,6 +84,50 @@ function npmPackage(root, manifest, packagePath) {
   };
 }
 
+function invalidateRepositoryTopology(rootPath, changedFiles = []) {
+  const root = path.resolve(String(rootPath || '.'));
+  const cached = cache.get(root);
+  if (!cached) return false;
+  const normalized = [...new Set((changedFiles || []).map(normalize).filter(Boolean))];
+  if (!normalized.length || normalized.some(isManifestPath) || normalized.some(file => changesPackageRootShape(root, cached.value, file))) {
+    cache.delete(root);
+    return true;
+  }
+  return false;
+}
+
+function manifestSignature(manifests) {
+  return manifests.map(item => `${item.relative}:${item.size}:${item.mtimeMs}`).join('|');
+}
+
+function probeManifestSignature(manifests = []) {
+  const current = [];
+  for (const manifest of manifests) {
+    let stat;
+    try { stat = fs.statSync(manifest.absolute); } catch { return null; }
+    current.push({ ...manifest, size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs) });
+  }
+  return manifestSignature(current);
+}
+
+function isManifestPath(filePath) {
+  return MANIFEST_NAMES.has(path.basename(normalize(filePath)));
+}
+
+function changesPackageRootShape(root, topology, filePath) {
+  for (const pkg of topology?.packages || []) {
+    for (const name of ['src', 'lib', 'app', 'test', 'tests', '__tests__']) {
+      const candidate = normalize(pkg.path === '.' ? name : `${pkg.path}/${name}`);
+      if (filePath !== candidate && !filePath.startsWith(`${candidate}/`)) continue;
+      const known = (pkg.sourceRoots || []).includes(candidate) || (pkg.testRoots || []).includes(candidate);
+      let exists = false;
+      try { exists = fs.statSync(path.join(root, candidate)).isDirectory(); } catch {}
+      if (known !== exists) return true;
+    }
+  }
+  return false;
+}
+
 function packageForPath(topology, filePath) {
   const target = normalize(filePath);
   return [...(topology?.packages || [])]
@@ -104,4 +145,4 @@ function normalize(value) { return String(value || '').replaceAll('\\', '/').rep
 function object(value) { return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; }
 function clearTopologyCache() { cache.clear(); }
 
-export { clearTopologyCache, discoverRepositoryTopology, packageForPath };
+export { clearTopologyCache, discoverRepositoryTopology, invalidateRepositoryTopology, packageForPath };
