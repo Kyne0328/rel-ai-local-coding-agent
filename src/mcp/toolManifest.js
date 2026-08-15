@@ -3,8 +3,10 @@ import { getPublicToolSchemas, getToolDefinitions, getToolSurfaceManifest } from
 import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from './serverInstructions.js';
 
 const MCP_SCHEMA_VERSION = 7;
+let cachedToolManifest = null;
 
 function buildToolManifest(config = {}) {
+  if (cachedToolManifest) return cachedToolManifest;
   const surface = getToolSurfaceManifest(config);
   const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
   const definitionByName = new Map(getToolDefinitions().map(definition => [definition.name, definition]));
@@ -18,7 +20,7 @@ function buildToolManifest(config = {}) {
     tools
   };
   const hash = crypto.createHash('sha256').update(stableJson(canonical)).digest('base64url');
-  return Object.freeze({
+  cachedToolManifest = Object.freeze({
     ...canonical,
     hash,
     version: hash.slice(0, 24),
@@ -27,6 +29,7 @@ function buildToolManifest(config = {}) {
     filteredToolCount: 0,
     externallyVisibleToolCount: tools.length
   });
+  return cachedToolManifest;
 }
 
 function canonicalTool(tool, definition, surfaceTool) {

@@ -89,6 +89,34 @@ async function snapshotGitSummary(workspace, config) {
 }
 
 function relaiRead(workspace, config, args = {}, context = {}) {
+  const request = prepareReadRequest(workspace, config, args, context);
+  const results = request.paths.map(requested => readSingleItem(
+    workspace,
+    config,
+    requested,
+    request.sessionActive,
+    request.maxBytes,
+    args,
+    readOptions(request, requested)
+  ));
+  return collectReadResults(workspace, results);
+}
+
+async function relaiReadAsync(workspace, config, args = {}, context = {}) {
+  const request = prepareReadRequest(workspace, config, args, context);
+  const results = await Promise.all(request.paths.map(requested => readSingleItemAsync(
+    workspace,
+    config,
+    requested,
+    request.sessionActive,
+    request.maxBytes,
+    args,
+    readOptions(request, requested)
+  )));
+  return collectReadResults(workspace, results);
+}
+
+function prepareReadRequest(workspace, config, args, context) {
   const rangePaths = Array.isArray(args.ranges) ? args.ranges.map(entry => entry?.path).filter(Boolean) : [];
   const paths = Array.isArray(args.paths) && args.paths.length > 0 ? args.paths : rangePaths;
   if (paths.length === 0) throw new Error("relai_read requires paths or ranges.");
@@ -96,18 +124,27 @@ function relaiRead(workspace, config, args = {}, context = {}) {
   const sessionActive = policy?.sessionActive === true;
   const baseReadBytes = context.connector ? DEFAULT_CONNECTOR_READ_BYTES : DEFAULT_MAX_READ_BYTES;
   const defaultMaxBytes = resolveBudget(baseReadBytes, policy, config || {});
-  const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
-  const lineRange = normalizeReadLineRange(args);
-  const rangesByPath = normalizeReadRanges(args.ranges);
-  const guidanceMode = normalizeReadGuidanceMode(args.guidanceMode, context.connector ? "compact" : "full");
+  return {
+    paths,
+    sessionActive,
+    maxBytes: clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes),
+    lineRange: normalizeReadLineRange(args),
+    rangesByPath: normalizeReadRanges(args.ranges),
+    guidanceMode: normalizeReadGuidanceMode(args.guidanceMode, context.connector ? "compact" : "full")
+  };
+}
+
+function readOptions(request, requested) {
+  return {
+    lineRange: request.rangesByPath.get(readRangeKey(requested)) || request.lineRange,
+    guidanceMode: request.guidanceMode
+  };
+}
+
+function collectReadResults(workspace, results) {
   const items = [];
   const skipped = [];
-  for (const requested of paths) {
-    const perPathRange = rangesByPath.get(readRangeKey(requested));
-    const result = readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, {
-      lineRange: perPathRange || lineRange,
-      guidanceMode
-    });
+  for (const result of results) {
     if (result.item) items.push(result.item);
     if (result.skipped) skipped.push(result.skipped);
   }
@@ -149,12 +186,36 @@ function readSingleItem(workspace, config, requested, sessionActive, maxBytes, a
         ? { item: readDirectory(workspace, safe.relativePath, args) }
         : { skipped: { path: String(requested), reason: "not a file or directory" } };
     }
-    const { data, text, cacheHit, sha256 } = readTextContent(workspace, safe, stat, sessionActive);
-    if (data === null && !cacheHit) {
-      return { skipped: { path: safe.relativePath, reason: "binary-looking file" } };
+    return readFileResult(workspace, safe, stat, sessionActive, maxBytes, options, readTextContent(workspace, safe, stat, sessionActive));
+  } catch (error) {
+    return { skipped: { path: String(requested), reason: error instanceof Error ? error.message : String(error) } };
+  }
+}
+
+async function readSingleItemAsync(workspace, config, requested, sessionActive, maxBytes, args, options) {
+  try {
+    const safe = resolveSafePath(workspace.path, requested, { operation: "read" });
+    const stat = await fs.promises.stat(safe.absolutePath);
+    if (!stat.isFile()) {
+      return stat.isDirectory()
+        ? { item: readDirectory(workspace, safe.relativePath, args) }
+        : { skipped: { path: String(requested), reason: "not a file or directory" } };
     }
-    const selection = selectReadContent(text, options.lineRange, maxBytes);
-    const item = {
+    const content = await readTextContentAsync(workspace, safe, stat, sessionActive);
+    return readFileResult(workspace, safe, stat, sessionActive, maxBytes, options, content);
+  } catch (error) {
+    return { skipped: { path: String(requested), reason: error instanceof Error ? error.message : String(error) } };
+  }
+}
+
+function readFileResult(workspace, safe, stat, sessionActive, maxBytes, options, content) {
+  const { data, text, cacheHit, sha256 } = content;
+  if (data === null && !cacheHit) {
+    return { skipped: { path: safe.relativePath, reason: "binary-looking file" } };
+  }
+  const selection = selectReadContent(text, options.lineRange, maxBytes);
+  return {
+    item: {
       type: "file",
       path: safe.relativePath,
       sha256,
@@ -167,26 +228,23 @@ function readSingleItem(workspace, config, requested, sessionActive, maxBytes, a
       ...readGuidanceFields(options.guidanceMode, safe.relativePath, text),
       content: selection.content,
       ...(sessionActive ? { cacheHit } : {})
-    };
-    return { item };
-  } catch (error) {
-    return { skipped: { path: String(requested), reason: error instanceof Error ? error.message : String(error) } };
-  }
+    }
+  };
 }
 
-function readTextContent(workspace, safe, stat, sessionActive) {
-  if (sessionActive) {
-    const cached = sessionCache.getCachedReadEntry(workspace.alias, safe.absolutePath, stat.mtimeMs);
-    if (cached !== null) {
-      return {
-        data: null,
-        text: cached.content,
-        cacheHit: true,
-        sha256: cached.sha256 || sha256Text(cached.content)
-      };
-    }
-  }
-  const data = fs.readFileSync(safe.absolutePath);
+function cachedReadContent(workspace, safe, stat, sessionActive) {
+  if (!sessionActive) return null;
+  const cached = sessionCache.getCachedReadEntry(workspace.alias, safe.absolutePath, stat.mtimeMs);
+  if (cached === null) return null;
+  return {
+    data: null,
+    text: cached.content,
+    cacheHit: true,
+    sha256: cached.sha256 || sha256Text(cached.content)
+  };
+}
+
+function finalizeReadContent(workspace, safe, stat, sessionActive, data) {
   if (looksBinary(data)) return { data: null, text: "", cacheHit: false, sha256: null };
   const text = data.toString("utf8");
   const sha256 = sha256Buffer(data);
@@ -194,6 +252,19 @@ function readTextContent(workspace, safe, stat, sessionActive) {
     sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text, { sha256, bytes: data.length });
   }
   return { data, text, cacheHit: false, sha256 };
+}
+
+function readTextContent(workspace, safe, stat, sessionActive) {
+  const cached = cachedReadContent(workspace, safe, stat, sessionActive);
+  if (cached) return cached;
+  return finalizeReadContent(workspace, safe, stat, sessionActive, fs.readFileSync(safe.absolutePath));
+}
+
+async function readTextContentAsync(workspace, safe, stat, sessionActive) {
+  const cached = cachedReadContent(workspace, safe, stat, sessionActive);
+  if (cached) return cached;
+  const data = await fs.promises.readFile(safe.absolutePath);
+  return finalizeReadContent(workspace, safe, stat, sessionActive, data);
 }
 
 function normalizeReadLineRange(args = {}) {
@@ -223,38 +294,47 @@ function normalizeReadGuidanceMode(value, fallback) {
 }
 
 function selectReadContent(text, requestedRange, maxBytes) {
-  const totalLines = countLines(text);
+  let totalLines;
   let selected = text;
   let lineRange = null;
   if (requestedRange) {
+    const starts = lineStartOffsets(text);
+    totalLines = text === "" ? 0 : starts.length;
     const startLine = requestedRange.startLine || 1;
     const requestedEndLine = requestedRange.endLine || totalLines;
     const endLine = Math.min(requestedEndLine, totalLines);
-    selected = sliceLines(text, startLine, endLine, totalLines);
+    selected = sliceLines(text, starts, startLine, endLine, totalLines);
     lineRange = {
       startLine,
       endLine: startLine <= endLine ? endLine : startLine - 1,
       totalLines
     };
+  } else {
+    totalLines = countLines(text);
   }
   const selectedBytes = Buffer.byteLength(selected, "utf8");
   const truncated = selectedBytes > maxBytes;
   const content = truncated ? truncateUtf8(selected, maxBytes) : selected;
   return {
     content,
-    returnedBytes: Buffer.byteLength(content, "utf8"),
+    returnedBytes: truncated ? Buffer.byteLength(content, "utf8") : selectedBytes,
     totalLines,
     truncated,
     lineRange
   };
 }
 
-function sliceLines(text, startLine, endLine, totalLines) {
-  if (!text || totalLines === 0 || startLine > totalLines || endLine < startLine) return "";
+function lineStartOffsets(text) {
+  if (!text) return [];
   const starts = [0];
   for (let index = 0; index < text.length; index += 1) {
     if (text.charCodeAt(index) === 10) starts.push(index + 1);
   }
+  return starts;
+}
+
+function sliceLines(text, starts, startLine, endLine, totalLines) {
+  if (!text || totalLines === 0 || startLine > totalLines || endLine < startLine) return "";
   const startOffset = starts[startLine - 1];
   const endOffset = endLine < totalLines ? starts[endLine] : text.length;
   return text.slice(startOffset, endOffset);
@@ -875,7 +955,11 @@ function countMatches(text, pattern) {
 
 function countLines(text) {
   if (text === "") return 0;
-  return String(text).split(/\r?\n/).length;
+  let lines = 1;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10) lines += 1;
+  }
+  return lines;
 }
 
 function sha256Buffer(buffer) {
@@ -886,4 +970,4 @@ function sha256Text(text) {
   return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
-export { repoSnapshot, relaiRead, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, createStagedPayload, appendStagedPayload, writeStagedMetadata, readStagedPayload, readStagedContent, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };
+export { repoSnapshot, relaiRead, relaiReadAsync, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, createStagedPayload, appendStagedPayload, writeStagedMetadata, readStagedPayload, readStagedContent, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };

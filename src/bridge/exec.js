@@ -195,12 +195,14 @@ function redactCommandForAudit(value) {
 }
 
 async function readGitStatusMap(workspace, config) {
-  // Keep the branch record first so runProcess's outer whitespace normalization can
-  // never strip the leading status column from a tracked-worktree record such as " M".
-  const result = await runProcess('git', gitStatusArgs(), {
+  // Mutation tracking only needs status records, not branch/ahead metadata. Preserve
+  // Git's leading status column explicitly so branch output is no longer needed as a
+  // whitespace sentinel for records such as " M file.js".
+  const result = await runProcess('git', gitStatusArgs({ branch: false }), {
     cwd: workspace.path,
     timeout: 30000,
-    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES,
+    preserveOutputWhitespace: true
   }, config);
   if (result.exitCode !== 0 || result.stdoutTruncated) return null;
   return statusMutationSnapshot(workspace, result.stdout);

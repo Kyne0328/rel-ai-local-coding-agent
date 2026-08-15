@@ -37,19 +37,23 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : (ownedChangedFiles.length ? ownedChangedFiles : undefined);  let effectiveArgs = args;
   let validationPlan = null;
   let planSelection = '';
+  let currentFingerprint = null;
   if (!args.planId && !hasRequestedChecks(args)) {
     validationPlan = await createValidationPlan(workspace, config, {
       release: String(args.level || '').toLowerCase() === 'release',
       ...(validationScope ? { changedFiles: validationScope } : {})
     });
+    currentFingerprint = validationPlan.workspaceFingerprint
+      ? { fingerprint: validationPlan.workspaceFingerprint }
+      : null;
     planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
     const plannedChecks = validationPlan.checks?.[planSelection];
     if (!Array.isArray(plannedChecks)) throw new Error(`Validation plan has no '${planSelection}' check set.`);
     effectiveArgs = { ...args, checks: plannedChecks };
   } else if (args.planId) {
     validationPlan = readValidationPlan(config, args.planId, workspace);
-    const current = await createValidationFingerprint(workspace, config);
-    if (!validationPlan.workspaceFingerprint || validationPlan.workspaceFingerprint !== current.fingerprint) {
+    currentFingerprint = await createValidationFingerprint(workspace, config);
+    if (!validationPlan.workspaceFingerprint || validationPlan.workspaceFingerprint !== currentFingerprint.fingerprint) {
       throw new Error('Validation plan is stale because relevant workspace content changed. Run relai_validate with action "checks" again to generate a current internal plan.');
     }
     planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
@@ -77,7 +81,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const fullOutput = Boolean(args.fullOutput);
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const indexedResults = new Array(checks.length);
-  const currentFingerprint = await createValidationFingerprint(workspace, config);
+  if (!currentFingerprint) currentFingerprint = await createValidationFingerprint(workspace, config);
   const recentEvidence = currentTaskId ? readRecentWorkflowEvidence(config, currentTaskId, 100) : [];
   const reusedCheckIds = new Array(checks.length);
   let executedUnits = 0;

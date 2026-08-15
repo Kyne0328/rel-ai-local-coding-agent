@@ -5,14 +5,18 @@ import { compactPublicInputSchema, compactPublicOutputSchema } from './publicSch
 const toolDefinitions = getCatalogToolDefinitions();
 const catalogToolByName = new Map(getCatalogTools().map(tool => [tool.definition.name, tool]));
 const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.name));
-const toolSchemas = toolDefinitions.map(buildToolSchema);
+// Keep schema object identity stable for the lifetime of the process. The MCP SDK
+// caches JSON-schema adapters by object identity, so rebuilding equivalent objects
+// on every stateless request defeats that cache and adds tens of milliseconds.
+const toolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildToolSchema(definition))));
+const publicToolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildPublicToolSchema(definition))));
 
 function getToolSchemas() {
-  return toolDefinitions.map(buildToolSchema);
+  return toolSchemas;
 }
 
 function getPublicToolSchemas() {
-  return toolDefinitions.map(buildPublicToolSchema);
+  return publicToolSchemas;
 }
 
 function buildPublicToolSchema(definition) {

@@ -1,11 +1,18 @@
 import { fromJsonSchema } from '@modelcontextprotocol/server';
-import { resolveToolOperation } from './actionCatalog.js';
+import { getOperationDefinitions, resolveToolOperation } from './actionCatalog.js';
+
+const OPERATION_OUTPUT_VALIDATORS = new Map(getOperationDefinitions().map(definition => [
+  definition.name,
+  fromJsonSchema(definition.outputSchema)['~standard']
+]));
 
 async function validateToolOutput(_config, name, args, output) {
   const resolution = resolveToolOperation(name, args || {});
   const schema = resolution?.definition?.outputSchema;
   if (!schema) return;
-  const result = await fromJsonSchema(schema)['~standard'].validate(output);
+  const validator = OPERATION_OUTPUT_VALIDATORS.get(resolution.operationName);
+  if (!validator) throw new Error(`Output validator is unavailable for ${resolution.operationName}.`);
+  const result = await validator.validate(output);
   if (!result.issues) return;
 
   const details = result.issues.map(issue => {

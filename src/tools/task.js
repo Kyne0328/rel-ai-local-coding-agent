@@ -69,12 +69,16 @@ function assertKnownTask(config, taskId, workspace, toolName, principal) {
   if (isTerminalTaskStatus(session.status)) {
     throw taskError('INVALID_TASK_STATE', `This work session is already ${session.status}. Start a new work session instead of reusing its work_id.`);
   }
+  assertTaskWorkspaceOwnership(session, workspace);
+  return session;
+}
+
+function assertTaskWorkspaceOwnership(session, workspace) {
   const requestedWorkspace = String(workspace || '').trim();
-  const ownedWorkspace = String(session.workspace || '').trim();
+  const ownedWorkspace = String(session?.workspace || '').trim();
   if (requestedWorkspace && ownedWorkspace && requestedWorkspace !== ownedWorkspace) {
     throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied work_id belongs to a different workspace.');
   }
-  return session;
 }
 
 function isTerminalTaskReference(session, toolName) {
@@ -124,4 +128,4 @@ function withTaskIdentity(value, taskId) {
   return { ok: true, value, work_id: identity };
 }
 
-export { startTask, taskBootstrapFromSnapshot, assertKnownTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity };
+export { startTask, taskBootstrapFromSnapshot, assertKnownTask, assertTaskWorkspaceOwnership, isTerminalTaskReference, taskAuditContext, withTaskIdentity };
