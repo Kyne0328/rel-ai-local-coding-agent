@@ -8,7 +8,7 @@ import { clampNumber } from './limits.js';
 import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
-import { compactBatchResult, resolveQueryTerms, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
+import { compactBatchResult, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 25_000;
@@ -113,18 +113,20 @@ async function relaiSearch(workspace, config, args = {}) {
     fallback: 393216,
     count: terms.length
   });
-  const results = await Promise.all(terms.map(pattern => relaiSearchOne(workspace, config, {
+  const batch = await runQueryBatch(terms, pattern => relaiSearchOne(workspace, config, {
     ...args,
     pattern,
     queries: undefined,
     maxResults,
     maxBytes
-  })));
+  }));
+  const results = batch.results;
   return {
     ok: true,
     workspace: workspace.alias,
     queries: terms,
     queryCount: terms.length,
+    execution: batch.metrics,
     results: results.map(compactBatchResult),
     ...summarizeBatchResults(results),
     next: 'Batched search completed in one call. Read only the most relevant returned ranges or refine the smallest query that still needs more evidence.'

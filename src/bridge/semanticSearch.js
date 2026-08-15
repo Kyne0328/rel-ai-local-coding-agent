@@ -1,5 +1,5 @@
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
-import { compactBatchResult, resolveQueryTerms, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
+import { compactBatchResult, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
 
 async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
   const { batched, terms } = resolveQueryTerms(args, {
@@ -24,17 +24,19 @@ async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
     fallback: 393216,
     count: terms.length
   });
-  const results = await Promise.all(terms.map(query => repositoryIntelligence.semanticSearch(
+  const batch = await runQueryBatch(terms, query => repositoryIntelligence.semanticSearch(
     workspace,
     config,
     { ...args, query, queries: undefined, maxResults, maxBytes },
     { signal: context.signal, watch: context.watch }
-  )));
+  ), { signal: context.signal });
+  const results = batch.results;
   return {
     ok: true,
     workspace: workspace.alias,
     queries: terms,
     queryCount: terms.length,
+    execution: batch.metrics,
     results: results.map(compactBatchResult),
     ...summarizeBatchResults(results),
     strategy: 'batched-hybrid',
