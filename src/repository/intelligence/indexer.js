@@ -155,12 +155,13 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
       state.lastReconciledAt = Date.now();
       if (metadata.scanMode === 'full') state.lastFullScanAt = state.lastReconciledAt;
       const changedDuringBuild = state.changeRevision !== revisionAtStart;
-      state.dirty = changedDuringBuild;
+      const needsReconcile = metadata?.needsReconcile === true;
+      state.dirty = changedDuringBuild || needsReconcile;
       if (!changedDuringBuild) break;
       mode = 'refresh';
     }
     state.status = 'ready';
-    if (state.dirty && metadata) metadata = { ...metadata, freshness: 'stale' };
+    if (state.dirty && metadata && metadata.freshness !== 'partial') metadata = { ...metadata, freshness: 'stale' };
     state.metadata = metadata;
     return decorateMetadata(state, metadata);
   } catch (error) {
