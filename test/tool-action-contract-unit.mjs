@@ -6,7 +6,7 @@ import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolMa
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = 'a924d4aee935ead97b4b2d728c695862e2bbd5e81d53ce09ac95f35d424e6ff4';
+const EXPECTED_HASH = 'a84c38f815bb164548a1e5a634a50553a47982eb2daa207911f196ba5e6f70f7';
 const rows = `
 relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
 relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden
@@ -85,7 +85,9 @@ assert.equal(rows.length, 43);
 assert.equal(hash, EXPECTED_HASH, 'public tool contract changed without an explicit baseline update');
 const editDefinition = definitions.find(definition => definition.name === "relai_edit");
 assert.ok(editDefinition, "relai_edit definition must exist");
-assert.match(editDefinition.description, /one logical updateText patch/i, "large repository-wide changes should stay together instead of being split into repeated edit batches");
+assert.match(editDefinition.description, /one logical updateText (?:patch|operation)/i, "large repository-wide changes should stay together instead of being split into repeated edit batches");
+const semanticWithMaxBytes = resolveExecutableToolCall('relai_search', { workspace: 'fixture', work_id: 'task-1', action: 'semantic', query: 'needle', maxBytes: 4096 }, {});
+assert.equal(semanticWithMaxBytes.operationArgs.maxBytes, 4096, 'semantic search must accept maxBytes advertised by the public tool schema');
 const scopedDiff = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'diff', scope: 'task' }, {});
 assert.equal(scopedDiff.operationArgs.scope, 'task', 'diff scope must be exposed by the public action contract');
 assert.throws(
