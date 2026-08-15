@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getConfigPath, publicConfigSummary, writeConfig } from './config.js';
+import { getConfigPath, makeDefaultContextConfig, publicConfigSummary, writeConfig } from './config.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 import { discoverCommands, staleCommandKeys } from "./commandDiscovery.js";
 
@@ -10,16 +10,6 @@ const ALLOWED_SECTION_KEYS = {
   productUx: new Set(["staleHours", "cleanupOlderThanHours", "enableStateExport"]),
   release: new Set(["minimumReadinessScore", "requireHttpToken"]),
   telemetry: new Set(["enabled", "endpoint"])
-};
-
-const DEFAULT_CONTEXT = {
-  snapshotMaxFiles: 3000,
-  includeRoots: [],
-  excludePaths: [
-    ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
-    ".dart_tool", ".gradle", "target", "obj", "vendor", ".venv", "venv",
-    ".claude/skills", ".superpowers"
-  ]
 };
 
 function settingsPayload(config) {
@@ -235,13 +225,14 @@ function parseList(value, fallback = []) {
 
 function parseContext(value, fallback = {}) {
   const source = objectOrEmpty(value);
-  const current = { ...DEFAULT_CONTEXT, ...objectOrEmpty(fallback) };
+  const defaults = makeDefaultContextConfig();
+  const current = { ...defaults, ...objectOrEmpty(fallback) };
   const snapshotMaxFiles = source.snapshotMaxFiles == null
     ? current.snapshotMaxFiles
     : finiteNumber(source.snapshotMaxFiles, "context.snapshotMaxFiles");
   return {
     ...current,
-    snapshotMaxFiles: snapshotMaxFiles || DEFAULT_CONTEXT.snapshotMaxFiles,
+    snapshotMaxFiles: snapshotMaxFiles || defaults.snapshotMaxFiles,
     includeRoots: parseList(source.includeRoots, current.includeRoots || []),
     excludePaths: parseList(source.excludePaths, current.excludePaths || [])
   };
