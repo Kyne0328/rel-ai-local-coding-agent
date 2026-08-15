@@ -15,6 +15,7 @@ import {
   sanitizeTaskRecord
 } from './taskObservability.js';
 import { isTerminalTaskStatus, normalizeLiveTaskStatus } from './taskState.js';
+import { canonicalTaskSnapshot, lifecycleChangedFields } from './taskLifecycle.js';
 import { classifyTaskIntent } from './workflow/intent.js';
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
@@ -26,6 +27,7 @@ function createToolActivityTracker(options = {}) {
   const idleMs = resolveIdleMs(options.idleMs);
   const tasksById = new Map();
   const listeners = new Set();
+  const lastEmittedTaskSnapshots = new Map();
   let activeToolCalls = 0;
   let activeConnectorCalls = 0;
   let lastTask = null;
@@ -660,7 +662,7 @@ function createToolActivityTracker(options = {}) {
       .map(item => ({ ...item }))
       .sort((left, right) => left.startedAt - right.startedAt);
     const current = currentOperations[0] || null;
-    return sanitizeTaskRecord({
+    return canonicalTaskSnapshot({
       id: task.id,
       taskId: task.id,
       sessionId: task.id,
@@ -729,14 +731,20 @@ function createToolActivityTracker(options = {}) {
 
   function emitActivity(extras = {}, eventTaskId = '') {
     revision += 1;
-    const status = getToolActivity();
-    const eventTask = extras.task || (eventTaskId ? status.tasks.find(task => task.id === eventTaskId) : null);
+    const liveTask = eventTaskId ? tasksById.get(eventTaskId) : null;
+    const eventTask = extras.task
+      ? canonicalTaskSnapshot(extras.task)
+      : liveTask ? taskSnapshot(liveTask) : null;
+    const previousTask = eventTaskId ? lastEmittedTaskSnapshots.get(eventTaskId) || null : null;
+    const changedFields = eventTask ? lifecycleChangedFields(previousTask, eventTask) : [];
+    if (eventTaskId && eventTask) lastEmittedTaskSnapshots.set(eventTaskId, eventTask);
+    if (eventTaskId && !eventTask && ['completed', 'cancelled', 'inactive'].includes(extras.phase)) lastEmittedTaskSnapshots.delete(eventTaskId);
     const snapshot = Object.freeze({
       revision,
       activeConnectorCalls,
-      activeCalls: status.activeCalls,
-      activeTaskCount: status.activeTaskCount,
-      tasks: status.tasks,
+      activeCalls: activeToolCalls,
+      activeTaskCount: tasksById.size,
+      changedFields,
       ...(eventTask ? { task: eventTask } : {}),
       ...extras
     });
@@ -755,6 +763,7 @@ function createToolActivityTracker(options = {}) {
       if (!task.abortController.signal.aborted) task.abortController.abort(new Error('Task tracker reset.'));
     }
     tasksById.clear();
+    lastEmittedTaskSnapshots.clear();
     activeToolCalls = 0;
     activeConnectorCalls = 0;
     lastTask = null;
