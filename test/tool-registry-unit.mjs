@@ -37,6 +37,11 @@ assert.deepEqual(
   'stale profile configuration must not change discovery'
 );
 assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8') < 512);
+assert.match(connectorInstructions(config), /task-ownership/i, 'global instructions retain task ownership as a universal invariant');
+assert.match(connectorInstructions(config), /approval/i, 'global instructions retain approval safety as a universal invariant');
+assert.match(connectorInstructions(config), /authoritative evidence/i, 'global instructions retain truthful evidence semantics');
+assert.match(connectorInstructions(config), /explicit task-completion contract/i, 'global instructions retain explicit completion semantics');
+assert.doesNotMatch(connectorInstructions(config), /Inspect relevant files|Validate after changes|recovery guidance/i, 'discretionary workflow tactics belong to the workflow runtime/skills, not global MCP instructions');
 
 const manifest = getToolSurfaceManifest(config);
 assert.equal(manifest.schemaVersion, 7);
@@ -58,6 +63,8 @@ for (const schema of schemas) {
 }
 for (const schema of publicSchemas) {
   assert.equal(schema.inputSchema.oneOf, undefined, `${schema.name} must expose a flat connector input schema`);
+  assert.match(schema.description || '', /\bUse\b/i, `${schema.name} must state when to use the tool`);
+  assert.match(schema.description || '', /\bDo not\b/i, `${schema.name} must state when not to use the tool`);
 }
 const publicWorkSchema = publicSchemas.find(item => item.name === 'relai_work')?.inputSchema;
 for (const field of ['workspace', 'title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason', 'work_id']) {
