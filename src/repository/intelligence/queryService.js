@@ -82,6 +82,7 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
   const query = String(args.query || '').trim();
   if (!query) throw new Error('relai_semantic_search requires query.');
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 100, 20));
+  const maxBytes = args.maxBytes == null ? 0 : Math.floor(clampNumber(args.maxBytes, 1000, 393216, 393216));
   const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
@@ -97,6 +98,7 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
     const diffused = diffusionEnabled
       ? diffuseRelatedFiles(workspace, db, query, related, filters, maxResults)
       : { files: related.files, expandedCount: 0, truncated: false };
+    const bounded = boundSemanticResults(diffused.files, maxBytes);
     return {
       ok: true,
       workspace: workspace.alias,
@@ -106,13 +108,26 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
       privacy: 'All parsing, graph indexing, and ranking run locally. No source text is sent to an external service.',
       fingerprint: index.fingerprint,
       cacheHit: index.cacheHit,
-      results: diffused.files,
+      results: bounded.results,
       resultCount: Math.max(related.matchCount, diffused.files.length),
-      truncated: related.truncated || diffused.truncated
+      truncated: related.truncated || diffused.truncated || bounded.truncated
     };
   } finally {
     db.close();
   }
+}
+
+function boundSemanticResults(results, maxBytes) {
+  if (!maxBytes) return { results, truncated: false };
+  const bounded = [];
+  let bytes = 2;
+  for (const result of results) {
+    const resultBytes = Buffer.byteLength(JSON.stringify(result), 'utf8') + (bounded.length ? 1 : 0);
+    if (bytes + resultBytes > maxBytes) return { results: bounded, truncated: true };
+    bounded.push(result);
+    bytes += resultBytes;
+  }
+  return { results: bounded, truncated: false };
 }
 
 function findDefinitions(workspace, db, symbol, maxResults) {

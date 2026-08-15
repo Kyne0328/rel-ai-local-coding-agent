@@ -174,7 +174,7 @@ const PUBLIC_DEFINITION_VALUES = [
       required: ['action'],
       oneOf: [
         branch('text', ['pattern'], ['query', 'pathPrefix', 'language'], { maxFiles: { type: 'number', minimum: 1, maximum: 200 } }),
-        branch('semantic', ['query'], ['pattern', 'glob', 'fixed', 'ignoreCase', 'mode', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxRangesPerFile', 'maxRangeLines', 'maxBytes'], { maxResults: { type: 'number', minimum: 1, maximum: 100 } })
+        branch('semantic', ['query'], ['pattern', 'glob', 'fixed', 'ignoreCase', 'mode', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxRangesPerFile', 'maxRangeLines'], { maxResults: { type: 'number', minimum: 1, maximum: 100 } })
       ],
       additionalProperties: false
     },

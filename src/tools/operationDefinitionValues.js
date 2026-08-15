@@ -105,7 +105,7 @@ const OPERATION_DEFINITION_VALUES = [
     name: "relai_semantic_search",
     title: "Hybrid Semantic Search",
     description: "Read-only. Rank local source files with persistent Tree-sitter structure, code-graph, Zoekt when available, FTS5 lexical, path, and symbol signals. No neural model is used and no source text leaves the machine.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace","query"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"maxBytes":{"type":"number","minimum":1000,"maximum":393216},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace","query"],"additionalProperties":false},
     handlerName: 'semanticSearch',
   },
   {
