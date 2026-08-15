@@ -355,10 +355,12 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
           cwd: sourceWorkspace.path, timeout: 120000
         }, config);
         if (reverse.exitCode !== 0) {
-          throw promotionError(
+          const error = promotionError(
             'TASK_SANDBOX_PROMOTION_CONFLICT',
-            'This parallel task changed content that no longer applies cleanly to the visible workspace. Its private changes were preserved and no conflicting overwrite was made.'
+            `This parallel task changed content that no longer applies cleanly to the visible workspace. Its private changes were preserved for explicit resolution: ${changedFiles.slice(0, 8).join(', ')}${changedFiles.length > 8 ? ', ...' : ''}`
           );
+          markSandboxUnresolved(config, entry, error, changedFiles);
+          throw error;
         }
         alreadyApplied = true;
       }
@@ -396,6 +398,7 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
     current.sourceRevision = await workspaceRevision(sourceWorkspace, config);
     current.lastPromotedAt = new Date().toISOString();
     current.promotedFiles = [...new Set([...(current.promotedFiles || []), ...changedFiles])];
+    delete current.unresolved;
     writeSandboxRegistry(config, registry);
   }
   return { promoted: changedFiles.length > 0, changedFiles, alreadyApplied, synchronization };
@@ -490,10 +493,47 @@ function promotionError(code, message) {
 async function finalizeTaskSandbox(sourceWorkspace, config, taskId) {
   const entry = findTaskSandbox(config, sourceWorkspace.alias, taskId);
   if (!entry) return { finalized: false, changedFiles: [] };
-  const promotion = await promoteTaskSandbox(sourceWorkspace, config, taskId);
-  const current = findTaskSandbox(config, sourceWorkspace.alias, taskId);
-  if (current) await removeSandboxEntry(current, config);
-  return { finalized: true, changedFiles: promotion.changedFiles || [] };
+  const changedFiles = await taskSandboxChangedPaths(entry, config);
+  if (!changedFiles.length) {
+    await removeSandboxEntry(entry, config);
+    return { finalized: true, changedFiles: [] };
+  }
+  try {
+    const promotion = await promoteTaskSandbox(sourceWorkspace, config, taskId, { changedFiles });
+    const current = findTaskSandbox(config, sourceWorkspace.alias, taskId);
+    if (current) await removeSandboxEntry(current, config);
+    return { finalized: true, changedFiles: promotion.changedFiles || changedFiles };
+  } catch (error) {
+    const current = findTaskSandbox(config, sourceWorkspace.alias, taskId);
+    if (current) markSandboxUnresolved(config, current, error, changedFiles);
+    throw error;
+  }
+}
+
+async function taskSandboxChangedPaths(entry, config) {
+  const tracked = await runProcess('git', ['diff', '--name-only', '-z', entry.syncCommit, '--'], {
+    cwd: entry.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
+  }, config);
+  const untracked = await runProcess('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+    cwd: entry.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
+  }, config);
+  if (tracked.exitCode !== 0 || tracked.stdoutTruncated || untracked.exitCode !== 0 || untracked.stdoutTruncated) {
+    throw promotionError('TASK_SANDBOX_PROMOTION_FAILED', 'Could not inspect the private task changes before retiring its sandbox. The sandbox was preserved.');
+  }
+  return snapshotChangedPaths([...splitNullList(tracked.stdout), ...splitNullList(untracked.stdout)]);
+}
+
+function markSandboxUnresolved(config, entry, error, changedFiles = []) {
+  const registry = readSandboxRegistry(config);
+  const current = registry.sandboxes?.[entry.alias];
+  if (!current) return;
+  current.unresolved = {
+    code: String(error?.code || 'TASK_SANDBOX_UNRESOLVED'),
+    message: String(error?.message || 'Private task changes require explicit resolution.'),
+    changedFiles: snapshotChangedPaths(changedFiles),
+    at: new Date().toISOString()
+  };
+  writeSandboxRegistry(config, registry);
 }
 
 async function discardTaskSandbox(sourceWorkspace, config, taskId) {
@@ -621,6 +661,7 @@ function splitNullList(value) {
 }
 
 export {
+  createTaskSandbox,
   discardTaskSandbox,
   finalizeTaskSandbox,
   findTaskSandbox,
