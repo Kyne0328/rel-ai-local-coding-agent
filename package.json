@@ -21,10 +21,10 @@
     "NOTICE",
     "release-manifest.json"
   ],
-  "packageManager": "npm@11.9.0",
+  "packageManager": "npm@12.0.2",
   "engines": {
-    "node": ">=24.0.0 <25",
-    "npm": ">=11.0.0 <12"
+    "node": ">=24.15.0 <25",
+    "npm": ">=12.0.0 <13"
   },
   "bin": {
     "rel-ai-mcp": "bin/rel-ai-mcp.js",
@@ -146,9 +146,9 @@
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/core": "2.0.0",
     "@tailwindcss/cli": "^4.3.3",
-    "eslint": "^10.8.0",
-    "globals": "^17.8.0",
-    "knip": "^6.29.0",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
+    "knip": "^6.32.2",
     "tailwindcss": "^4.3.3",
     "typescript": "7.0.2"
   },
@@ -162,7 +162,7 @@
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "playwright-core": "^1.62.1",
     "tree-sitter-wasms": "^0.1.13",
-    "web-tree-sitter": "^0.25.10",
+    "web-tree-sitter": "0.25.10",
     "zod": "^4.4.3"
   },
   "bundledDependencies": [
@@ -178,7 +178,7 @@
     "zod"
   ],
   "overrides": {
-    "@hono/node-server": "2.0.12",
+    "@hono/node-server": "2.1.1",
     "oxc-resolver": "11.24.2"
   },
   "bundleDependencies": [

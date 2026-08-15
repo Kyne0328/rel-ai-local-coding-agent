@@ -8,14 +8,14 @@ const scripts = packageJson.scripts || {};
 const ciDir = path.join(root, '.github', 'workflows');
 const failures = [];
 
-if (packageJson.engines?.node !== '>=24.0.0 <25') {
-  failures.push(`package.json must require the Node.js 24 LTS line; got ${packageJson.engines?.node || 'none'}`);
+if (packageJson.engines?.node !== '>=24.15.0 <25') {
+  failures.push(`package.json must require Node.js 24.15+ LTS; got ${packageJson.engines?.node || 'none'}`);
 }
-if (packageJson.engines?.npm !== '>=11.0.0 <12') {
-  failures.push(`package.json must require npm 11; got ${packageJson.engines?.npm || 'none'}`);
+if (packageJson.engines?.npm !== '>=12.0.0 <13') {
+  failures.push(`package.json must require npm 12; got ${packageJson.engines?.npm || 'none'}`);
 }
-if (packageJson.packageManager !== 'npm@11.9.0') {
-  failures.push(`package.json must pin npm@11.9.0; got ${packageJson.packageManager || 'none'}`);
+if (packageJson.packageManager !== 'npm@12.0.2') {
+  failures.push(`package.json must pin npm@12.0.2; got ${packageJson.packageManager || 'none'}`);
 }
 
 const ciWorkflowPath = path.join(ciDir, 'ci.yml');

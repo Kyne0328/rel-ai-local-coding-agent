@@ -86,21 +86,22 @@ function normalizeExecutionInvocation(args = {}, operationName = 'relai_exec') {
   const argv = executable ? normalizeDirectArgv(args.argv, operationName) : [];
   const input = executable ? normalizeDirectInput(args.input, operationName) : undefined;
   const displayCommand = command || directCommandSummary(executable, argv);
-  let processExecutable = executable;
-  let processArgv = argv;
-  let executionLabel = 'Direct process';
-  if (command) {
-    const selectedShell = resolveShell();
-    processExecutable = selectedShell.executable;
-    processArgv = selectedShell.args(command);
-    executionLabel = selectedShell.label;
-  } else {
-    const direct = resolveDirectProcess(executable, argv);
-    processExecutable = direct.executable;
-    processArgv = direct.argv;
-    executionLabel = direct.label;
-  }
-  return { command, executable, argv, input, displayCommand, processExecutable, processArgv, executionLabel };
+  const execution = command ? resolveShellProcess(command) : resolveDirectProcess(executable, argv);
+  return {
+    command,
+    executable,
+    argv,
+    input,
+    displayCommand,
+    processExecutable: execution.executable,
+    processArgv: execution.argv,
+    executionLabel: execution.label
+  };
+}
+
+function resolveShellProcess(command) {
+  const shell = resolveShell();
+  return { executable: shell.executable, argv: shell.args(command), label: shell.label };
 }
 
 function locateWindowsExecutable(name) {

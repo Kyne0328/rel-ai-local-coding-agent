@@ -1,6 +1,6 @@
 # Package Management Policy
 
-Rel AI MCP uses npm 11 on Node.js 24 LTS.
+Rel AI MCP uses npm 12 on Node.js 24.15+ LTS.
 
 ## Canonical installation
 
@@ -20,6 +20,8 @@ A workspace conversion is deferred until a dedicated proof branch demonstrates a
 - rollback to the previous two-lockfile release can be performed without dependency ambiguity.
 
 Do not introduce pnpm, Yarn, a second root lockfile, or manual lockfile edits. Use package-manager commands and commit both lockfiles whenever either manifest changes.
+
+`web-tree-sitter` is intentionally pinned to `0.25.10` while Rel.AI uses the prebuilt `tree-sitter-wasms` grammar bundle. Web Tree-sitter 0.26 requires current/rebuilt language WASM artifacts; upgrading that runtime is a grammar-asset migration, not a standalone dependency bump.
 
 ## Security gates
 
