@@ -1,8 +1,9 @@
 import { pillHtml } from '../../components/pill.js';
-import { esc, statusClass } from '../../utils.js';
-import { getWorkspaceFilter } from '../../router.js';
+import { esc, metricHtml, statusClass } from '../../utils.js';
+import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { workspaceDetailsHtml, branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
+import { hydrateWorkspaceAnalytics } from './analytics.js';
 
 function buildWorkspaces(data) {
   const config = data.config || {};
@@ -18,6 +19,7 @@ function buildWorkspaces(data) {
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
   const findings = actionableFindings(health);
   const views = workspaces.map(workspace => workspaceCardView(workspace, healthByAlias.get(workspace.alias)));
+  const availableCount = views.filter(view => view.available).length;
 
   const root = document.createElement('div');
   root.className = 'section';
@@ -39,10 +41,18 @@ function buildWorkspaces(data) {
     return root;
   }
 
+  const metrics = document.createElement('div');
+  metrics.className = 'overview-grid overview-grid-compact summary-metrics overview-grid-two';
+  metrics.innerHTML = `
+    ${metricHtml('Ready for ChatGPT', `${availableCount}/${workspaces.length}`, availableCount === workspaces.length ? 'All project folders are available' : 'One or more project folders need attention', availableCount === workspaces.length ? 'good' : 'warn')}
+    ${metricHtml('Needs attention', findings.length, findings.length ? 'Problems that may affect a project' : 'No blocking problems', findings.length ? 'bad' : 'good')}`;
+  root.appendChild(metrics);
+
   const grid = document.createElement('div');
   grid.className = 'workspace-grid workspace-grid-detailed';
   grid.innerHTML = views.map(workspaceCard).join('');
   root.appendChild(grid);
+  void hydrateWorkspaceAnalytics(grid, views.map(view => view.alias));
 
   if (findings.length) root.appendChild(healthFindingsCard(findings));
   return root;
@@ -80,6 +90,7 @@ function workspaceCard(view) {
       ${workspaceHealthHtml(view)}
       ${workspaceReadinessHtml(view)}
       ${workspaceActivityNotice(view)}
+      <section class="workspace-analytics-mini" data-workspace-analytics="${view.aliasAttr}" aria-label="${view.aliasAttr} analytics" hidden></section>
       <footer class="workspace-actions workspace-primary-actions">${workspacePrimaryActions(view)}</footer>
       ${workspaceDetailsHtml(view)}
     </article>`;
@@ -180,6 +191,7 @@ function workspacePrimaryActions(view) {
     <button type="button" data-edit-workspace="${view.aliasAttr}">Edit workspace</button>
     <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run validation</button>
     <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Repository details</button>
+    <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>
     ${openFolder}`;
 }
 

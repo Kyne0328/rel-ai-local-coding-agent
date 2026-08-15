@@ -63,6 +63,7 @@ function renderStatus(container, status = {}, installedReleaseNotes = null) {
     ${supportPolicyHtml(status.supportPolicy)}
     ${releaseNotesHtml(status, installedReleaseNotes)}
     ${progressHtml(state, status.progress)}
+    ${status.errorCode ? `<code class="application-update-code">Error code: ${escapeHtml(status.errorCode)}</code>` : ''}
     <div class="connection-actions application-update-actions">
       ${view.action ? `<button class="${view.action.className}" type="button" data-update-action="${view.action.id}">${escapeHtml(view.action.label)}</button>` : ''}
       ${view.secondary ? `<button class="secondary" type="button" data-update-action="${view.secondary.id}">${escapeHtml(view.secondary.label)}</button>` : ''}
