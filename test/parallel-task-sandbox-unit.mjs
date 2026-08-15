@@ -43,6 +43,8 @@ try {
   git('commit', '-m', 'fixture');
   fs.mkdirSync(path.join(workspacePath, 'node_modules'), { recursive: true });
   fs.writeFileSync(path.join(workspacePath, 'node_modules', '.relai-marker'), 'shared dependency\n');
+  fs.mkdirSync(path.join(workspacePath, 'electron', 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(workspacePath, 'electron', 'node_modules', '.relai-marker'), 'shared electron dependency\n');
 
   fs.writeFileSync(configPath, JSON.stringify({
     version: 4,
@@ -122,6 +124,11 @@ try {
     fs.existsSync(path.join(entries[0].path, 'node_modules', '.relai-marker')),
     true,
     'shared dependency links must survive source synchronization without entering task diffs'
+  );
+  assert.equal(
+    fs.existsSync(path.join(entries[0].path, 'electron', 'node_modules', '.relai-marker')),
+    true,
+    'nested Electron dependencies should be reused without entering task diffs'
   );
 
   fs.writeFileSync(path.join(entries[0].path, 'merge.txt'), 'first from second\nsecond\nthird\n');

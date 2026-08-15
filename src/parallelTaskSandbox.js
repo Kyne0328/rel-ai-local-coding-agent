@@ -26,6 +26,7 @@ const SANDBOX_ROUTED_OPERATIONS = new Set([
 ]);
 const LIVE_PROMOTION_OPERATIONS = new Set(['relai_edit', 'relai_exec']);
 const TERMINAL_TASK_STATUSES = new Set(['completed', 'cancelled', 'failed', 'inactive']);
+const REUSABLE_DEPENDENCY_ROOTS = ['node_modules', 'electron/node_modules'];
 
 function registryPath(config) {
   return path.join(getStateDir(config), 'parallel-sandboxes', 'index.json');
@@ -502,10 +503,7 @@ function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
 
 function isReusableDependencyPath(relativePath) {
   const normalized = String(relativePath || '').replaceAll('\\', '/').replace(/^\.\//, '');
-  return normalized === 'node_modules'
-    || normalized.startsWith('node_modules/')
-    || normalized === 'electron/node_modules'
-    || normalized.startsWith('electron/node_modules/');
+  return REUSABLE_DEPENDENCY_ROOTS.some(root => normalized === root || normalized.startsWith(`${root}/`));
 }
 
 async function workspaceRevision(workspace, config) {
@@ -544,24 +542,29 @@ function statusPath(entry) {
 }
 
 function linkReusableDependencies(sourceRoot, targetRoot) {
-  const sourceModules = path.join(sourceRoot, 'node_modules');
-  const targetModules = path.join(targetRoot, 'node_modules');
-  if (!fs.existsSync(sourceModules) || fs.existsSync(targetModules)) return;
-  try {
-    if (!fs.statSync(sourceModules).isDirectory()) return;
-    fs.symlinkSync(sourceModules, targetModules, process.platform === 'win32' ? 'junction' : 'dir');
-  } catch {
-    // Dependency reuse is an optimization only. A sandbox remains valid without it.
+  for (const relativeRoot of REUSABLE_DEPENDENCY_ROOTS) {
+    const sourceModules = path.join(sourceRoot, relativeRoot);
+    const targetModules = path.join(targetRoot, relativeRoot);
+    if (!fs.existsSync(sourceModules) || fs.existsSync(targetModules)) continue;
+    try {
+      if (!fs.statSync(sourceModules).isDirectory()) continue;
+      fs.mkdirSync(path.dirname(targetModules), { recursive: true });
+      fs.symlinkSync(sourceModules, targetModules, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch {
+      // Dependency reuse is an optimization only. A sandbox remains valid without it.
+    }
   }
 }
 
 function unlinkReusableDependencies(targetRoot) {
-  const targetModules = path.join(targetRoot, 'node_modules');
-  try {
-    if (!fs.lstatSync(targetModules).isSymbolicLink()) return;
-    fs.rmSync(targetModules, { force: true });
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+  for (const relativeRoot of REUSABLE_DEPENDENCY_ROOTS) {
+    const targetModules = path.join(targetRoot, relativeRoot);
+    try {
+      if (!fs.lstatSync(targetModules).isSymbolicLink()) continue;
+      fs.unlinkSync(targetModules);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
   }
 }
 
