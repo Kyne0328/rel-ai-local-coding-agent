@@ -77,6 +77,19 @@ await assert.doesNotReject(() => validateToolOutput({}, 'relai_inspect', {
   configuredTestCommands: []
 }));
 await assert.doesNotReject(() => validateToolOutput({}, 'relai_work', {
+  action: 'begin',
+  workspace: 'repo'
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  status: 'planning',
+  identity: 'work_session',
+  title: 'Investigate output contract',
+  objective: 'Preserve first-class workflow intent.',
+  intent: 'investigation'
+}));
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_work', {
   action: 'cancel',
   work_id: 'work_output'
 }, {
@@ -97,6 +110,8 @@ await assert.doesNotReject(() => validateToolOutput({}, 'relai_exec', {
   ok: true,
   workspace: 'repo',
   work_id: 'work_output',
+  executed: true,
+  commandSucceeded: true,
   exitCode: 0,
   durationMs: 1
 }));
@@ -158,6 +173,16 @@ function requiredArgs(entry) {
     case 'relai_inspect:impact': return { paths: ['src/index.js'] };
     case 'relai_exec:default': return { command: 'npm test' };
     case 'relai_process:start': return { command: 'npm run dev', kind: 'service', purpose: 'Validate.' };
+    case 'relai_ui:start': return { port: 3000 };
+    case 'relai_ui:navigate': return { sessionId: 'ui_abcdefghijklmnopqrst', route: '/' };
+    case 'relai_ui:interact': return { sessionId: 'ui_abcdefghijklmnopqrst', interaction: 'click', target: { by: 'text', value: 'Save' } };
+    case 'relai_ui:viewport': return { sessionId: 'ui_abcdefghijklmnopqrst', width: 1280, height: 720 };
+    case 'relai_ui:snapshot':
+    case 'relai_ui:screenshot':
+    case 'relai_ui:console':
+    case 'relai_ui:network':
+    case 'relai_ui:reload':
+    case 'relai_ui:stop': return { sessionId: 'ui_abcdefghijklmnopqrst' };
     case 'relai_process:read':
     case 'relai_process:stop': return { processId: 'proc_output' };
     case 'relai_process:write': return { processId: 'proc_output', input: 'status\n' };

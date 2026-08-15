@@ -74,7 +74,12 @@ try {
   );
   assert.equal(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.name, 'rel-ai-mcp');
   assert.match(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.version || '', /^0\./);
-  assert.match(discovery.body.result?.instructions || '', /Start each objective with relai_work action begin/);
+  const serverInstructions = discovery.body.result?.instructions || '';
+  assert.match(serverInstructions, /task-ownership/i);
+  assert.match(serverInstructions, /approval/i);
+  assert.match(serverInstructions, /authoritative evidence/i);
+  assert.match(serverInstructions, /explicit task-completion contract/i);
+  assert.doesNotMatch(serverInstructions, /Start each objective|Inspect relevant files|Validate after changes|recovery guidance/i, 'global MCP instructions must contain universal invariants rather than specialist workflow tactics');
   assert.equal(discovery.body.result?.cacheScope, 'private');
   assert.equal(discovery.body.result?.ttlMs, 30000);
   assert.equal(discovery.response.headers.get('mcp-session-id'), null);
