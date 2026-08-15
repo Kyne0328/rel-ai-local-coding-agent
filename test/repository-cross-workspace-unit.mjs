@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { repositoryIndexPath } from '../src/repository/intelligence/database.js';
+import { analyzeCrossWorkspace } from '../src/repository/intelligence/crossWorkspace.js';
+import { openIndexDatabase, repositoryIndexPath } from '../src/repository/intelligence/database.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-cross-workspace-'));
@@ -17,10 +18,12 @@ fs.writeFileSync(path.join(clientRoot, 'package.json'), JSON.stringify({
   name: '@acme/client',
   dependencies: { '@acme/api': 'workspace:*' }
 }, null, 2));
+const genericEventNoise = Array.from({ length: 60 }, (_, index) => `export function noise${index}() { bus.emit('message', { index: ${index} }); }`).join('\n');
 fs.writeFileSync(path.join(clientRoot, 'src', 'client.js'), `
 export async function loadAccounts() {
   return fetch('https://api.example.test/api/accounts');
 }
+${genericEventNoise}
 export function publishSaved() {
   bus.emit('account:saved', { id: 1 });
 }
@@ -56,6 +59,15 @@ try {
 
   const coldGraph = repositoryIndexPath(config, { alias: 'cold', path: coldRoot });
   assert.equal(fs.existsSync(coldGraph), false);
+
+  const clientDb = openIndexDatabase(repositoryIndexPath(config, client), { readonly: true });
+  try {
+    const budgeted = analyzeCrossWorkspace(client, config, clientDb, { maxHintsPerWorkspace: 50, maxRelationships: 50 });
+    assert.ok(budgeted.relationships.some(item => item.type === 'CROSS_EMITS_TO' && item.key === 'event:account:saved'),
+      'generic event noise must be filtered before the cross-workspace hint budget is applied');
+  } finally {
+    clientDb.close();
+  }
 
   const result = await repositoryIntelligence.architecture(client, config, { maxResults: 50 });
   const cross = result.architecture.crossWorkspace;
