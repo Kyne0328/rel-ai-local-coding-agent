@@ -5,7 +5,7 @@ const COMPLEMENT = Object.freeze({
   LISTENS_ON: 'EMITS'
 });
 
-const GENERIC_PLATFORM_EVENTS = new Set([
+const GENERIC_PLATFORM_EVENT_NAMES = Object.freeze([
   'abort', 'aborted', 'beforeunload', 'blur', 'change', 'click', 'close', 'connect',
   'connection', 'data', 'domcontentloaded', 'drain', 'end', 'error', 'finish', 'focus',
   'hashchange', 'input', 'keydown', 'keypress', 'keyup', 'load', 'message', 'mousedown',
@@ -14,6 +14,7 @@ const GENERIC_PLATFORM_EVENTS = new Set([
   'resize', 'response', 'scroll', 'storage', 'submit', 'timeout', 'touchend', 'touchmove',
   'touchstart', 'unload', 'visibilitychange'
 ]);
+const GENERIC_PLATFORM_EVENTS = new Set(GENERIC_PLATFORM_EVENT_NAMES);
 
 function relationshipKey(type, targetName) {
   const value = String(targetName || '').trim();
@@ -40,4 +41,36 @@ function canonicalHttpKey(value) {
   return `${match[1].toUpperCase()} ${target}`;
 }
 
-export { COMPLEMENT, canonicalHttpKey, relationshipKey };
+function isSpecificHttpRelationshipKey(value) {
+  const key = canonicalHttpKey(value);
+  if (!key) return false;
+  const route = key.slice(key.indexOf(' ') + 1);
+  const meaningfulSegments = route.split('/').filter(Boolean).filter(segment => {
+    if (/^(?:api|v\d+)$/i.test(segment)) return false;
+    if (/^(?::[^/]+|\{[^}]+\}|\*+)$/.test(segment)) return false;
+    return true;
+  });
+  return meaningfulSegments.length >= 2;
+}
+
+function hasStrongComplementaryRelationshipEvidence(localHints = [], remoteHints = []) {
+  const remoteKeys = new Set((remoteHints || []).map(hint => {
+    const key = relationshipKey(hint?.type, hint?.targetName);
+    return key ? `${hint.type}\u0000${key}` : '';
+  }).filter(Boolean));
+  const matchedHttpKeys = new Set();
+  for (const hint of localHints || []) {
+    const complement = COMPLEMENT[hint?.type];
+    const key = relationshipKey(hint?.type, hint?.targetName);
+    if (!complement || !key || !remoteKeys.has(`${complement}\u0000${key}`)) continue;
+    if (key.startsWith('event:') || isSpecificHttpRelationshipKey(key)) return true;
+    matchedHttpKeys.add(key);
+    if (matchedHttpKeys.size >= 2) return true;
+  }
+  return false;
+}
+
+export {
+  COMPLEMENT, GENERIC_PLATFORM_EVENT_NAMES, canonicalHttpKey, hasStrongComplementaryRelationshipEvidence,
+  isSpecificHttpRelationshipKey, relationshipKey
+};
