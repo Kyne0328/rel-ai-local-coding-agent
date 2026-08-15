@@ -7,7 +7,7 @@ import { isSecretPath } from '../safety.js';
 import { clampNumber } from './limits.js';
 import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
-import { cachedSearchGraphContext } from '../repository/intelligence/contextPlanner.js';
+import { repositoryIntelligence } from '../repository/intelligence/service.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 25_000;
@@ -63,7 +63,7 @@ async function relaiSearch(workspace, config, args = {}) {
     };
   }
   const cachedGraph = searchPlan.requestedMode === "auto"
-    ? cachedSearchGraphContext(workspace, config, result.matches)
+    ? await repositoryIntelligence.searchGraphContext(workspace, config, result.matches)
     : null;
   const graphPrioritized = cachedGraph?.freshness === 'current' && Boolean(cachedGraph?.rankedPaths?.length);
   const workflowContext = {

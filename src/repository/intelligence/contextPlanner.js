@@ -27,7 +27,7 @@ const SEARCH_EDGE_WEIGHT = Object.freeze({
 });
 
 function cachedRepositoryContext(workspace, config = {}, options = {}) {
-  const opened = openCachedIndex(workspace, config);
+  const opened = openCachedIndex(workspace, config, options.repositoryStatuses?.[workspace.alias]);
   if (!opened) return null;
   const { db, generation, status } = opened;
   try {
@@ -54,7 +54,12 @@ function cachedRepositoryContext(workspace, config = {}, options = {}) {
       incoming: item.incoming,
       outgoing: item.outgoing
     }));
-    const crossWorkspace = analyzeCrossWorkspace(workspace, config, db, { maxPeers: 8, maxHintsPerWorkspace: 600, maxRelationships: 12 });
+    const crossWorkspace = analyzeCrossWorkspace(workspace, config, db, {
+      maxPeers: 8,
+      maxHintsPerWorkspace: 600,
+      maxRelationships: 12,
+      repositoryStatuses: options.repositoryStatuses
+    });
     const recommendedReadOrder = unique([
       ...entryPoints.slice(0, 5).map(item => item.path),
       ...hotspots.slice(0, 7).map(item => item.path)
@@ -81,10 +86,10 @@ function cachedRepositoryContext(workspace, config = {}, options = {}) {
   }
 }
 
-function cachedSearchGraphContext(workspace, config = {}, matches = []) {
+function cachedSearchGraphContext(workspace, config = {}, matches = [], options = {}) {
   const seedPaths = unique((matches || []).map(item => normalizePath(item?.path)).filter(Boolean)).slice(0, SEARCH_MAX_SEEDS);
   if (!seedPaths.length) return null;
-  const opened = openCachedIndex(workspace, config);
+  const opened = openCachedIndex(workspace, config, options.repositoryStatuses?.[workspace.alias]);
   if (!opened) return null;
   const { db, generation, status } = opened;
   try {
@@ -137,7 +142,7 @@ function cachedSearchGraphContext(workspace, config = {}, matches = []) {
   }
 }
 
-function openCachedIndex(workspace, config) {
+function openCachedIndex(workspace, config, statusOverride = null) {
   let databaseFile;
   try { databaseFile = repositoryIndexPath(config, workspace); } catch { return null; }
   if (!fs.existsSync(databaseFile)) return null;
@@ -146,7 +151,7 @@ function openCachedIndex(workspace, config) {
     db = openIndexDatabase(databaseFile, { readonly: true });
     const generation = currentGeneration(db);
     if (!generation) { db.close(); return null; }
-    return { db, generation, status: repositoryIndexStatus(workspace, config) };
+    return { db, generation, status: statusOverride || repositoryIndexStatus(workspace, config) };
   } catch {
     try { db?.close(); } catch {}
     return null;

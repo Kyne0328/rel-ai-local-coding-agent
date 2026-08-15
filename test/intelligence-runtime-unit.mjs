@@ -12,6 +12,8 @@ import { repositoryIntelligence } from '../src/repository/intelligence/service.j
 const zoektSource = fs.readFileSync(new URL('../src/repository/intelligence/zoekt.js', import.meta.url), 'utf8');
 const indexBuildSource = fs.readFileSync(new URL('../src/repository/intelligence/indexBuild.js', import.meta.url), 'utf8');
 const queryServiceSource = fs.readFileSync(new URL('../src/repository/intelligence/queryService.js', import.meta.url), 'utf8');
+const queryWorkerClientSource = fs.readFileSync(new URL('../src/repository/intelligence/queryWorkerClient.js', import.meta.url), 'utf8');
+const repositoryServiceSource = fs.readFileSync(new URL('../src/repository/intelligence/service.js', import.meta.url), 'utf8');
 const lexicalFallbackSource = fs.readFileSync(new URL('../src/repository/intelligence/lexicalFallback.js', import.meta.url), 'utf8');
 assert.doesNotMatch(zoektSource, /spawnSync/, 'Zoekt subprocesses must never block the MCP event loop');
 assert.doesNotMatch(lexicalFallbackSource, /spawnSync/, 'lexical fallback subprocesses must never block the MCP event loop');
@@ -19,6 +21,10 @@ assert.match(lexicalFallbackSource, /await runProcess\(/, 'lexical fallback must
 assert.match(zoektSource, /await runProcess\(/, 'Zoekt commands must use the asynchronous process runner');
 assert.match(indexBuildSource, /await rebuildZoektIndex\(/, 'full Zoekt rebuilds must execute inside the Repository Intelligence worker job');
 assert.match(queryServiceSource, /await searchZoekt\(/, 'query-time Zoekt search must remain asynchronous');
+assert.match(queryServiceSource, /const sourceCache = new Map\(\)/, 'repository queries must reuse source-file reads within one query');
+assert.match(queryWorkerClientSource, /new Worker\(new URL\('\.\/queryWorker\.js'/, 'repository query work must execute in a dedicated worker');
+assert.match(repositoryServiceSource, /runRepositoryQuery/, 'the repository service must route query work through the worker client');
+assert.doesNotMatch(repositoryServiceSource, /queryCodeInspect|querySemanticSearch/, 'the main repository service must not execute synchronous query implementations directly');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-intelligence-'));
 const stateDir = path.join(root, 'state');

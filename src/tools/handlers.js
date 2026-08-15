@@ -29,7 +29,7 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
     instructionPath: args.instructionPath
   });
   const bootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
-  const cachedIntelligence = repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
+  const cachedIntelligence = await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
   if (cachedIntelligence) bootstrap.repositoryIntelligence = cachedIntelligence;
   return {
     ...task,

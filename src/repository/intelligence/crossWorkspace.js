@@ -23,13 +23,14 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
   const maxRelationships = boundedInteger(options.maxRelationships, 1, 500, DEFAULT_MAX_RELATIONSHIPS);
   const localHints = safeReadRelationshipHints(localDb, maxHints);
   const localPackage = packageDescriptor(workspace.path);
-  const localStatus = repositoryIndexStatus(workspace, config);
+  const repositoryStatuses = options.repositoryStatuses || {};
+  const localStatus = repositoryStatuses[workspace.alias] || repositoryIndexStatus(workspace, config);
   const localFreshness = graphFreshness(localStatus);
   const peerSnapshots = [];
   const skipped = [];
 
   for (const peer of peers) {
-    const graph = openPeerGraph(peer, config);
+    const graph = openPeerGraph(peer, config, repositoryStatuses[peer.alias]);
     const packageInfo = packageDescriptor(peer.path);
     if (!graph) {
       peerSnapshots.push({ workspace: peer.alias, path: peer.path, freshness: 'unavailable', generation: null, hints: [], packageInfo });
@@ -189,7 +190,7 @@ function readRelationshipHints(db, limit) {
   }));
 }
 
-function openPeerGraph(peer, config) {
+function openPeerGraph(peer, config, statusOverride = null) {
   if (!peer.path || !fs.existsSync(peer.path)) return null;
   let databaseFile;
   try { databaseFile = repositoryIndexPath(config, peer); } catch { return null; }
@@ -199,7 +200,7 @@ function openPeerGraph(peer, config) {
     db = openIndexDatabase(databaseFile, { readonly: true });
     const generation = currentGeneration(db);
     if (!generation) { db.close(); return null; }
-    const status = repositoryIndexStatus(peer, config);
+    const status = statusOverride || repositoryIndexStatus(peer, config);
     return { db, generation, freshness: graphFreshness(status) };
   } catch {
     try { db?.close(); } catch {}

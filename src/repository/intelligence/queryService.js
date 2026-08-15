@@ -19,18 +19,26 @@ const MAX_LINE_CHARS = 400;
 const MAX_QUERY_CANDIDATES = 1000;
 
 async function queryCodeInspect(workspace, config, args = {}, options = {}) {
+  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
+  return executeCodeInspectQuery(workspace, config, args, index, options);
+}
+
+async function executeCodeInspectQuery(workspace, config, args = {}, index = {}, options = {}) {
   const action = String(args.action || '').trim().toLowerCase();
   if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture'].includes(action)) {
     throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, trace, diagnostics, architecture.');
   }
-  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 1000, DEFAULT_MAX_RESULTS));
+  const sourceCache = new Map();
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
     const base = { ok: true, workspace: workspace.alias, action, index };
     if (action === 'architecture') {
       const architecture = analyzeArchitecture(db, { maxResults });
-      const crossWorkspace = analyzeCrossWorkspace(workspace, config, db, { maxRelationships: Math.min(100, maxResults) });
+      const crossWorkspace = analyzeCrossWorkspace(workspace, config, db, {
+        maxRelationships: Math.min(100, maxResults),
+        repositoryStatuses: options.repositoryStatuses
+      });
       return {
         ...base,
         ...architecture,
@@ -44,7 +52,7 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
       const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 10);
       const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
       const fallback = zoekt.available && zoekt.current ? [] : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
-      return { ...base, query, ...relatedFiles(workspace, db, query, maxResults, args._workflowContext, {}, [...zoekt.results, ...fallback]) };
+      return { ...base, query, ...relatedFiles(workspace, db, query, maxResults, args._workflowContext, {}, [...zoekt.results, ...fallback], sourceCache) };
     }
 
     const symbol = String(args.symbol || '').trim();
@@ -53,8 +61,8 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
     if (!symbol && !pathOnlyImpact) throw new Error(`relai_code_inspect ${action} requires symbol${action === 'impact' ? ' or paths' : ''}.`);
     if (symbol && !/^[A-Za-z_$][A-Za-z0-9_$.:#-]{0,255}$/.test(symbol)) throw new Error('symbol must be a simple code identifier or qualified identifier.');
 
-    const definitions = symbol ? findDefinitions(workspace, db, symbol, maxResults) : [];
-    const references = symbol ? findReferences(workspace, db, symbol, maxResults) : emptyReferences();
+    const definitions = symbol ? findDefinitions(workspace, db, symbol, maxResults, sourceCache) : [];
+    const references = symbol ? findReferences(workspace, db, symbol, maxResults, sourceCache) : emptyReferences();
     if (action === 'symbol') {
       return {
         ...base,
@@ -79,11 +87,16 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
 }
 
 async function querySemanticSearch(workspace, config, args = {}, options = {}) {
+  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
+  return executeSemanticSearchQuery(workspace, config, args, index, options);
+}
+
+async function executeSemanticSearchQuery(workspace, config, args = {}, index = {}, options = {}) {
   const query = String(args.query || '').trim();
   if (!query) throw new Error('relai_semantic_search requires query.');
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 100, 20));
   const maxBytes = args.maxBytes == null ? 0 : Math.floor(clampNumber(args.maxBytes, 1000, 393216, 393216));
-  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
+  const sourceCache = new Map();
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
     const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 20);
@@ -93,10 +106,10 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
       pathPrefix: String(args.pathPrefix || '').replaceAll('\\', '/').replace(/^\.\//, ''),
       language: String(args.language || '').toLowerCase()
     };
-    const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, filters, [...zoekt.results, ...fallback]);
+    const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, filters, [...zoekt.results, ...fallback], sourceCache);
     const diffusionEnabled = options.graphDiffusion !== false;
     const diffused = diffusionEnabled
-      ? diffuseRelatedFiles(workspace, db, query, related, filters, maxResults)
+      ? diffuseRelatedFiles(workspace, db, query, related, filters, maxResults, sourceCache)
       : { files: related.files, expandedCount: 0, truncated: false };
     const bounded = boundSemanticResults(diffused.files, maxBytes);
     return {
@@ -130,7 +143,7 @@ function boundSemanticResults(results, maxBytes) {
   return { results: bounded, truncated: false };
 }
 
-function findDefinitions(workspace, db, symbol, maxResults) {
+function findDefinitions(workspace, db, symbol, maxResults, sourceCache) {
   const simple = simpleSymbol(symbol);
   const qualified = String(symbol);
   const rows = db.prepare(`
@@ -142,7 +155,7 @@ function findDefinitions(workspace, db, symbol, maxResults) {
     LIMIT ?
   `).all(simple, qualified, qualified, maxResults);
   return rows.map(row => {
-    const lines = readSourceLines(workspace, String(row.path));
+    const lines = readSourceLines(workspace, String(row.path), sourceCache);
     return {
       name: String(row.name), qualifiedName: String(row.qualified_name), kind: String(row.kind),
       line: Number(row.start_line), column: Number(row.start_column), endLine: Number(row.end_line), endColumn: Number(row.end_column),
@@ -163,7 +176,7 @@ function emptyReferences() {
   return { items: [], matchCount: 0, referenceCount: 0, callCount: 0, truncated: false };
 }
 
-function findReferences(workspace, db, symbol, maxResults) {
+function findReferences(workspace, db, symbol, maxResults, sourceCache) {
   const simple = simpleSymbol(symbol);
   const total = Number(db.prepare('SELECT count(*) AS count FROM occurrences WHERE name=?').get(simple)?.count || 0);
   const rows = db.prepare(`
@@ -175,7 +188,7 @@ function findReferences(workspace, db, symbol, maxResults) {
     LIMIT ?
   `).all(simple, maxResults);
   const items = rows.map(row => {
-    const lines = readSourceLines(workspace, String(row.path));
+    const lines = readSourceLines(workspace, String(row.path), sourceCache);
     return {
       path: String(row.path), line: Number(row.line), column: Number(row.column_no), language: String(row.language), test: Number(row.is_test) === 1,
       classification: row.role === 'reference' ? 'usage' : String(row.role), provider: String(row.provider), confidence: Number(row.confidence),
@@ -186,7 +199,7 @@ function findReferences(workspace, db, symbol, maxResults) {
   return { items, matchCount: total, referenceCount: total, callCount, truncated: total > items.length };
 }
 
-function relatedFiles(workspace, db, query, maxResults, workflowContext = {}, filters = {}, externalCandidates = []) {
+function relatedFiles(workspace, db, query, maxResults, workflowContext = {}, filters = {}, externalCandidates = [], sourceCache = new Map()) {
   const terms = queryTerms(query, 20);
   if (!terms.length) return { strategy: 'fts5-tree-sitter-graph', semanticEmbeddings: false, files: [], matchCount: 0, truncated: false, next: 'Use a more specific query.' };
   const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, Math.max(100, maxResults * 20));
@@ -204,7 +217,7 @@ function relatedFiles(workspace, db, query, maxResults, workflowContext = {}, fi
 
   const results = [];
   for (const candidate of ranked.slice(0, maxResults)) {
-    const lines = readSourceLines(workspace, candidate.path);
+    const lines = readSourceLines(workspace, candidate.path, sourceCache);
     if (!lines) continue;
     results.push({
       path: candidate.path,
@@ -227,7 +240,7 @@ function relatedFiles(workspace, db, query, maxResults, workflowContext = {}, fi
 }
 
 
-function diffuseRelatedFiles(workspace, db, query, related, filters, maxResults) {
+function diffuseRelatedFiles(workspace, db, query, related, filters, maxResults, sourceCache) {
   const ranked = rankWithGraphDiffusion(db, related.files, {
     query,
     maxResults,
@@ -254,15 +267,15 @@ function diffuseRelatedFiles(workspace, db, query, related, filters, maxResults)
       score: item.score,
       providers: ['graph-diffusion'],
       reasons: item.reasons,
-      snippets: structuralSnippets(workspace, db, item.path, 3)
+      snippets: structuralSnippets(workspace, db, item.path, 3, sourceCache)
     });
     if (files.length >= maxResults) break;
   }
   return { files, expandedCount, truncated: ranked.truncated };
 }
 
-function structuralSnippets(workspace, db, relativePath, limit = 3) {
-  const lines = readSourceLines(workspace, relativePath);
+function structuralSnippets(workspace, db, relativePath, limit = 3, sourceCache = new Map()) {
+  const lines = readSourceLines(workspace, relativePath, sourceCache);
   if (!lines) return [];
   const symbols = db.prepare(`
     SELECT s.start_line
@@ -481,13 +494,16 @@ function bestSnippets(lines, terms, limit, maxChars) {
   return scored.slice(0, limit).map(({ matches: _matches, ...item }) => item);
 }
 
-function readSourceLines(workspace, relativePath) {
+function readSourceLines(workspace, relativePath, sourceCache = null) {
+  const key = String(relativePath || '');
+  if (sourceCache?.has(key)) return sourceCache.get(key);
+  let lines = null;
   try {
     const resolved = resolveSafePath(workspace.path, relativePath, { operation: 'read' });
-    return fs.readFileSync(resolved.absolutePath, 'utf8').split(/\r\n|\n|\r/);
-  } catch {
-    return null;
-  }
+    lines = fs.readFileSync(resolved.absolutePath, 'utf8').split(/\r\n|\n|\r/);
+  } catch {}
+  sourceCache?.set(key, lines);
+  return lines;
 }
 
 function fileRowsByPaths(db, paths) {
@@ -552,4 +568,4 @@ function dedupeRows(rows) {
   return [...byId.values()];
 }
 
-export { queryCodeInspect, querySemanticSearch };
+export { executeCodeInspectQuery, executeSemanticSearchQuery, queryCodeInspect, querySemanticSearch };
