@@ -55,7 +55,9 @@ function assertJsonVersion(relativePath, version) {
 }
 
 function assertTunnelClient() {
-  const platform = String(process.env.REL_AI_TARGET_PLATFORM || (process.platform === 'win32' ? 'win32' : '')).trim();
+  // Source/release consistency is platform-neutral. The Electron packaging wrapper
+  // fetches and verifies the pinned build-time binary for the explicit target.
+  const platform = String(process.env.REL_AI_TARGET_PLATFORM || '').trim();
   if (!platform) return;
   const targetArch = normalizeArch(process.env.REL_AI_TARGET_ARCH || process.arch);
   const manifestPath = rel('vendor', 'tunnel-client', 'manifest.json');
