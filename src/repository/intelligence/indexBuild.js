@@ -14,6 +14,8 @@ import {
   listManifest,
   openIndexDatabase,
   replaceFileFacts,
+  relationshipImpactForPaths,
+  relationshipSourceIdsForNames,
   resolveRelationships
 } from './database.js';
 import { enhancedResolverLanguages, isTestPath, languageForPath, PARSER_VERSION, structuralLanguages } from './languages.js';
@@ -80,18 +82,30 @@ async function refreshRepositoryIndex(job, signal) {
 
     const changed = job?.kind === 'rebuild' || scan.mode === 'incremental'
       ? scan.candidates
-      : scan.candidates.filter(candidate => {
-          const previous = manifestByPath.get(candidate.path);
-          return !previous || previous.sizeBytes !== candidate.size || previous.mtimeMs !== candidate.mtimeMs || previous.parserVersion !== PARSER_VERSION;
-        });
+      : scan.candidates.filter(candidate => candidateChanged(candidate, manifestByPath.get(candidate.path)));
+    const deletionDeferred = scan.mode === 'full' && scan.truncated;
     const deleted = scan.mode === 'full'
-      ? manifest.filter(item => !scan.currentPaths.has(item.path)).map(item => item.path)
+      ? deletionDeferred ? [] : manifest.filter(item => !scan.currentPaths.has(item.path)).map(item => item.path)
       : [...scan.missingPaths].filter(relativePath => manifestByPath.has(relativePath));
     if (!changed.length && !deleted.length && previousGeneration) {
-      const metadata = indexMetadata(db, previousGeneration, workspace, scan, checkedAt, true, 0, 0, 0);
+      const metadata = indexMetadata(db, previousGeneration, workspace, scan, checkedAt, true, 0, 0, 0, 0, deletionDeferred);
       return attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal);
     }
 
+    const changedPaths = changed.map(candidate => candidate.path);
+    const canScopeRelationships = scan.mode === 'incremental'
+      && deleted.length === 0
+      && changed.length > 0
+      && changed.length <= 100
+      && changed.every(candidate => manifestByPath.has(candidate.path))
+      && changed.every(candidate => !isRelationshipResolverSensitivePath(candidate.path));
+    const relationshipImpact = canScopeRelationships
+      ? relationshipImpactForPaths(db, changedPaths)
+      : null;
+    const relationshipNames = new Set(relationshipImpact?.relationshipNames || []);
+    let relationshipScopeSafe = canScopeRelationships;
+
+    let sourceReadFailureCount = 0;
     const generationKind = previousGeneration ? normalizeGenerationKind(job?.kind) : 'build';
     generationId = beginGeneration(db, generationKind);
     for (let offset = 0; offset < changed.length; offset += WRITE_BATCH_SIZE) {
@@ -101,9 +115,28 @@ async function refreshRepositoryIndex(job, signal) {
       const failedPaths = [];
       for (const candidate of batch) {
         throwIfAborted(signal);
-        const parsed = await parseCandidate(candidate);
-        if (parsed) parsedBatch.push({ candidate, parsed });
-        else failedPaths.push(candidate.path);
+        const parsedResult = await parseCandidate(candidate);
+        if (parsedResult.parsed) {
+          const parsed = parsedResult.parsed;
+          parsedBatch.push({ candidate, parsed });
+          if (relationshipImpact) {
+            for (const symbol of parsed.symbols || []) {
+              if (symbol.name) relationshipNames.add(String(symbol.name));
+              if (symbol.qualifiedName) relationshipNames.add(String(symbol.qualifiedName));
+            }
+            for (const relation of parsed.relations || []) {
+              if (relation.targetName) relationshipNames.add(String(relation.targetName));
+              if (relation.targetQualifiedName) relationshipNames.add(String(relation.targetQualifiedName));
+            }
+          }
+        } else if (parsedResult.transientError) {
+          sourceReadFailureCount += 1;
+          relationshipScopeSafe = false;
+          if (!manifestByPath.has(candidate.path)) failedPaths.push(candidate.path);
+        } else {
+          failedPaths.push(candidate.path);
+          relationshipScopeSafe = false;
+        }
       }
       throwIfAborted(signal);
       db.exec('BEGIN IMMEDIATE');
@@ -132,7 +165,14 @@ async function refreshRepositoryIndex(job, signal) {
     throwIfAborted(signal);
     db.exec('BEGIN IMMEDIATE');
     try {
-      resolveRelationships(db, { workspaceRoot: workspace.path });
+      let relationshipSourceIds = null;
+      if (relationshipImpact && relationshipScopeSafe) {
+        const impacted = new Set(relationshipImpact.sourceFileIds);
+        for (const sourceId of relationshipSourceIdsForNames(db, [...relationshipNames])) impacted.add(sourceId);
+        for (const sourceId of relationshipImpactForPaths(db, changedPaths).sourceFileIds) impacted.add(sourceId);
+        if (impacted.size <= 500) relationshipSourceIds = [...impacted];
+      }
+      resolveRelationships(db, { workspaceRoot: workspace.path, sourceFileIds: relationshipSourceIds });
       finishGeneration(db, generationId, 'committed', processedFiles + skippedChangedFiles + deleted.length);
       db.exec('COMMIT');
     } catch (error) {
@@ -140,7 +180,19 @@ async function refreshRepositoryIndex(job, signal) {
       throw error;
     }
     try { db.exec('PRAGMA wal_checkpoint(PASSIVE)'); } catch {}
-    const metadata = indexMetadata(db, currentGeneration(db), workspace, scan, checkedAt, false, changed.length, deleted.length, skippedChangedFiles);
+    const metadata = indexMetadata(
+      db,
+      currentGeneration(db),
+      workspace,
+      scan,
+      checkedAt,
+      false,
+      changed.length,
+      deleted.length,
+      skippedChangedFiles,
+      sourceReadFailureCount,
+      deletionDeferred
+    );
     return attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal);
   } catch (error) {
     if (db && generationId != null) {
@@ -154,6 +206,18 @@ async function refreshRepositoryIndex(job, signal) {
 
 async function attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal) {
   if (scan.mode !== 'full') return metadata;
+  if (scan.truncated || metadata.needsReconcile) {
+    return {
+      ...metadata,
+      zoekt: {
+        available: false,
+        current: false,
+        reason: scan.truncated
+          ? 'Zoekt rebuild skipped because the repository scan was truncated.'
+          : 'Zoekt rebuild skipped because source reads were incomplete.'
+      }
+    };
+  }
   try {
     const zoekt = await rebuildZoektIndex(
       workspace,
@@ -233,30 +297,83 @@ function candidateForPath(realRoot, relativePath) {
 }
 
 function candidateFromStat(relativePath, absolutePath, stat) {
-  return { path: relativePath, absolutePath, size: stat.size, mtimeMs: stat.mtimeMs, language: languageForPath(relativePath), test: isTestPath(relativePath) };
+  return {
+    path: relativePath,
+    absolutePath,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs,
+    language: languageForPath(relativePath),
+    test: isTestPath(relativePath)
+  };
+}
+
+function candidateChanged(candidate, previous) {
+  if (!previous) return true;
+  if (previous.sizeBytes !== candidate.size
+    || previous.mtimeMs !== candidate.mtimeMs
+    || previous.ctimeMs !== candidate.ctimeMs
+    || previous.parserVersion !== PARSER_VERSION) return true;
+  try {
+    const data = fs.readFileSync(candidate.absolutePath);
+    candidate.contentHash = crypto.createHash('sha256').update(data).digest('hex');
+    return candidate.contentHash !== previous.contentHash;
+  } catch {
+    return true;
+  }
 }
 
 async function parseCandidate(candidate) {
+  let data;
   try {
-    const data = fs.readFileSync(candidate.absolutePath);
-    if (looksBinary(data)) return null;
+    data = fs.readFileSync(candidate.absolutePath);
+  } catch (error) {
+    return { parsed: null, transientError: boundedErrorMessage(error) };
+  }
+  if (looksBinary(data)) return { parsed: null, skipped: 'binary' };
+  try {
     const parsed = await parseSourceFile({ relativePath: candidate.path, source: data.toString('utf8') });
-    candidate.contentHash = crypto.createHash('sha256').update(data).digest('hex');
-    return parsed;
-  } catch { return null; }
+    candidate.contentHash ||= crypto.createHash('sha256').update(data).digest('hex');
+    return { parsed };
+  } catch (error) {
+    return { parsed: null, transientError: boundedErrorMessage(error) };
+  }
 }
 
-function indexMetadata(db, generation, workspace, scan, checkedAt, cacheHit, changedPathCount, deletedPathCount, skippedChangedFiles) {
+function indexMetadata(
+  db,
+  generation,
+  workspace,
+  scan,
+  checkedAt,
+  cacheHit,
+  changedPathCount,
+  deletedPathCount,
+  skippedChangedFiles,
+  sourceReadFailureCount = 0,
+  deletionDeferred = false
+) {
   const stats = indexStats(db);
+  const needsReconcile = sourceReadFailureCount > 0 || scan.truncated;
+  const freshness = sourceReadFailureCount > 0 ? 'stale' : scan.truncated ? 'partial' : 'current';
   return {
-    mode: 'persistent-tree-sitter-sqlite', persistent: true, freshness: 'current', cacheHit, scanMode: scan.mode, workerIsolated: true,
+    mode: 'persistent-tree-sitter-sqlite', persistent: true, freshness, cacheHit, scanMode: scan.mode, workerIsolated: true,
     fingerprint: `generation:${Number(generation?.id || 0)}`, generation: Number(generation?.id || 0),
     builtAt: generation?.completed_at || generation?.started_at || null, checkedAt,
     newestSourceMtime: stats.newestMtimeMs ? new Date(stats.newestMtimeMs).toISOString() : null,
     sourceFileCount: stats.fileCount, discoveredFileCount: scan.mode === 'full' ? scan.discoveredFiles : stats.fileCount,
     indexedBytes: stats.indexedBytes, skippedLargeFiles: scan.skippedLargeFiles, collectionSkippedCount: scan.collectionSkippedCount,
-    structuralFileCount: stats.structuralFileCount, symbolCount: stats.symbolCount, occurrenceCount: stats.occurrenceCount,
-    changedPathCount, deletedPathCount, skippedChangedFiles, truncated: scan.truncated,
+    structuralFileCount: stats.structuralFileCount,
+    structuralDegradedFileCount: stats.structuralDegradedFileCount,
+    symbolCount: stats.symbolCount,
+    occurrenceCount: stats.occurrenceCount,
+    changedPathCount,
+    deletedPathCount,
+    skippedChangedFiles,
+    sourceReadFailureCount,
+    deletionDeferred,
+    needsReconcile,
+    truncated: scan.truncated,
     providers: { structural: 'tree-sitter-wasm', graph: 'sqlite', lexical: 'sqlite-fts5', neural: false },
     languageIntelligence: { structuralLanguages: structuralLanguages().length, enhancedLanguages: enhancedResolverLanguages() },
     policy: 'Persistent derived index with worker-isolated parsing, bounded incremental refresh, and periodic full reconciliation. Source remains authoritative.',
@@ -280,6 +397,15 @@ function normalizeWorkspace(workspace) {
   const value = workspace && typeof workspace === 'object' ? workspace : {};
   const context = value.context && typeof value.context === 'object' ? value.context : {};
   return { alias: String(value.alias || ''), path: String(value.path || ''), context: { includeRoots: Array.isArray(context.includeRoots) ? [...context.includeRoots] : Array.isArray(context.includePaths) ? [...context.includePaths] : [], excludePaths: Array.isArray(context.excludePaths) ? [...context.excludePaths] : [] } };
+}
+
+function isRelationshipResolverSensitivePath(relativePath) {
+  const normalized = String(relativePath || '').replaceAll('\\', '/').toLowerCase();
+  const base = path.posix.basename(normalized);
+  return new Set([
+    'package.json', 'tsconfig.json', 'jsconfig.json', 'go.mod', 'composer.json',
+    'cargo.toml', 'pyproject.toml', 'compile_commands.json'
+  ]).has(base) || base.endsWith('.csproj');
 }
 
 function normalizeRequestedPaths(paths) {

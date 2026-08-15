@@ -64,6 +64,15 @@ try {
 }
 
 let now = 1_000;
+const quietManager = new McpConnectionManager({ clock: () => now, recentActivityMs: 60_000 });
+quietManager.configure({ serverInstanceId: 'quiet', credentialGeneration: 1, configurationGeneration: 1, manifest: neutralManifest });
+let quietSnapshots = 0;
+const quietSnapshot = quietManager.snapshot.bind(quietManager);
+quietManager.snapshot = () => { quietSnapshots += 1; return quietSnapshot(); };
+quietManager.markReady();
+assert.equal(quietSnapshots, 0, 'connection events must not build dashboard snapshots when no change listener is attached');
+await quietManager.shutdown('unit_shutdown');
+
 const manager = new McpConnectionManager({ clock: () => now, recentActivityMs: 60_000 });
 let changes = 0;
 const unsubscribe = manager.onChange(() => { changes += 1; });

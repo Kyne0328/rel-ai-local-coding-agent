@@ -9,7 +9,6 @@ import { analyzeCrossWorkspace } from './crossWorkspace.js';
 import { openIndexDatabase, repositoryIndexPath } from './database.js';
 import { reciprocalRankFusion } from './fusion.js';
 import { rankWithGraphDiffusion } from './graphDiffusion.js';
-import { ensureRepositoryIndex } from './indexer.js';
 import { queryTerms, simpleSymbol } from './languages.js';
 import { searchZoekt } from './zoekt.js';
 import { searchGitCandidates } from './lexicalFallback.js';
@@ -18,19 +17,15 @@ const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const MAX_QUERY_CANDIDATES = 1000;
 
-async function queryCodeInspect(workspace, config, args = {}, options = {}) {
-  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
-  return executeCodeInspectQuery(workspace, config, args, index, options);
-}
-
 async function executeCodeInspectQuery(workspace, config, args = {}, index = {}, options = {}) {
   const action = String(args.action || '').trim().toLowerCase();
   if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture'].includes(action)) {
     throw new Error('relai_inspect action must be one of: symbol, references, related, impact, trace, diagnostics, architecture.');
   }
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 1000, DEFAULT_MAX_RESULTS));
-  const sourceCache = new Map();
-  const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
+  const sourceCache = options.sourceCache || new Map();
+  const db = options.database || openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
+  const closeDatabase = !options.database;
   try {
     const base = { ok: true, workspace: workspace.alias, action, index };
     if (action === 'architecture') {
@@ -82,13 +77,8 @@ async function executeCodeInspectQuery(workspace, config, args = {}, index = {},
     if (action === 'trace') return { ...base, symbol, ...traceAnalysis(db, symbol, definitions, references, impact, maxResults) };
     return { ...base, ...(symbol ? { symbol } : {}), ...impact };
   } finally {
-    db.close();
+    if (closeDatabase) db.close();
   }
-}
-
-async function querySemanticSearch(workspace, config, args = {}, options = {}) {
-  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
-  return executeSemanticSearchQuery(workspace, config, args, index, options);
 }
 
 async function executeSemanticSearchQuery(workspace, config, args = {}, index = {}, options = {}) {
@@ -96,8 +86,9 @@ async function executeSemanticSearchQuery(workspace, config, args = {}, index = 
   if (!query) throw new Error('relai_search action "semantic" requires query.');
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 100, 20));
   const maxBytes = args.maxBytes == null ? 0 : Math.floor(clampNumber(args.maxBytes, 1000, 393216, 393216));
-  const sourceCache = new Map();
-  const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
+  const sourceCache = options.sourceCache || new Map();
+  const db = options.database || openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
+  const closeDatabase = !options.database;
   try {
     const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 20);
     const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
@@ -107,7 +98,7 @@ async function executeSemanticSearchQuery(workspace, config, args = {}, index = 
       language: String(args.language || '').toLowerCase()
     };
     const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, filters, [...zoekt.results, ...fallback], sourceCache);
-    const diffusionEnabled = options.graphDiffusion !== false;
+    const diffusionEnabled = options.graphDiffusion !== false && shouldDiffuseSemanticResults(related, query, maxResults);
     const diffused = diffusionEnabled
       ? diffuseRelatedFiles(workspace, db, query, related, filters, maxResults, sourceCache)
       : { files: related.files, expandedCount: 0, truncated: false };
@@ -126,8 +117,16 @@ async function executeSemanticSearchQuery(workspace, config, args = {}, index = 
       truncated: related.truncated || diffused.truncated || bounded.truncated
     };
   } finally {
-    db.close();
+    if (closeDatabase) db.close();
   }
+}
+
+function shouldDiffuseSemanticResults(related, query, maxResults) {
+  if (!related?.files?.length) return false;
+  if (related.files.length >= Math.min(maxResults, 8)) return true;
+  const terms = queryTerms(query, 20);
+  if (terms.length > 3) return true;
+  return !related.files.some(item => (item.reasons || []).some(reason => reason.startsWith('exact-symbol:') || reason.startsWith('path:')));
 }
 
 function boundSemanticResults(results, maxBytes) {
@@ -568,4 +567,4 @@ function dedupeRows(rows) {
   return [...byId.values()];
 }
 
-export { executeCodeInspectQuery, executeSemanticSearchQuery, queryCodeInspect, querySemanticSearch };
+export { executeCodeInspectQuery, executeSemanticSearchQuery };

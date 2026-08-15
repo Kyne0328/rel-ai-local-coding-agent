@@ -21,7 +21,7 @@ assert.match(lexicalFallbackSource, /await runProcess\(/, 'lexical fallback must
 assert.match(zoektSource, /await runProcess\(/, 'Zoekt commands must use the asynchronous process runner');
 assert.match(indexBuildSource, /await rebuildZoektIndex\(/, 'full Zoekt rebuilds must execute inside the Repository Intelligence worker job');
 assert.match(queryServiceSource, /await searchZoekt\(/, 'query-time Zoekt search must remain asynchronous');
-assert.match(queryServiceSource, /const sourceCache = new Map\(\)/, 'repository queries must reuse source-file reads within one query');
+assert.match(queryServiceSource, /options\.sourceCache \|\| new Map\(\)/, 'repository queries must accept a generation-aware shared source cache');
 assert.match(queryWorkerClientSource, /new Worker\(new URL\('\.\/queryWorker\.js'/, 'repository query work must execute in a dedicated worker');
 assert.match(repositoryServiceSource, /runRepositoryQuery/, 'the repository service must route query work through the worker client');
 assert.doesNotMatch(repositoryServiceSource, /queryCodeInspect|querySemanticSearch/, 'the main repository service must not execute synchronous query implementations directly');
@@ -70,7 +70,7 @@ const config = {
 };
 
 try {
-  const semantic = await relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 });
+  const semantic = await relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 }, { watch: false });
   assert.equal(semantic.ok, true);
   assert.equal(semantic.privacy.includes('No source text'), true);
   assert.equal(semantic.neuralEmbeddings, false);
@@ -81,7 +81,7 @@ try {
     queries: ['calculate attendance', 'theme accent'],
     maxResults: 3,
     maxBytes: 4000
-  });
+  }, { watch: false });
   assert.equal(batchedSemantic.ok, true);
   assert.equal(batchedSemantic.execution.maxConcurrentSteps, 2,
     'semantic batches must report the repository query pool\'s bounded read concurrency');
@@ -89,7 +89,7 @@ try {
   assert.ok(batchedSemantic.returnedBytes <= 4000, 'semantic batch maxBytes must be an aggregate cap');
   assert.match(batchedSemantic.strategy, /read-pool$/);
 
-  const hiddenSemantic = await relaiSemanticSearch(workspace, config, { query: 'recover connection after socket failure', maxResults: 5 });
+  const hiddenSemantic = await relaiSemanticSearch(workspace, config, { query: 'recover connection after socket failure', maxResults: 5 }, { watch: false });
   const hiddenPaths = hiddenSemantic.results.map(item => item.path);
   assert.equal(hiddenPaths[0], 'src/socketObserver.js');
   assert.ok(hiddenPaths.slice(0, 3).every(item => item !== 'src/runtime/continuation.js'),
@@ -118,6 +118,29 @@ try {
       'unimported unique-name calls must not create cross-file CALLS edges');
   } finally {
     db.close();
+  }
+
+  fs.writeFileSync(path.join(root, 'src', 'orphanTarget.js'), `export function ghostCall() { return 'target-v2'; }\n`);
+  repositoryIntelligence.noteMutation(workspace, config, ['src/orphanTarget.js']);
+  const incremental = await repositoryIntelligence.ensure(workspace, config);
+  assert.equal(incremental.scanMode, 'incremental');
+  assert.equal(incremental.changedPathCount, 1);
+  const incrementalDb = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
+  try {
+    const callEdges = incrementalDb.prepare(`
+      SELECT source.path AS source_path, target.path AS target_path
+      FROM edges e
+      JOIN files source ON source.id=e.source_file_id
+      JOIN files target ON target.id=e.target_file_id
+      WHERE e.type='CALLS' AND e.target_name='ghostCall'
+      ORDER BY source.path
+    `).all();
+    assert.ok(callEdges.some(row => row.source_path === 'src/importedCaller.js' && row.target_path === 'src/orphanTarget.js'),
+      'incremental relationship refresh must rebuild unchanged callers whose target file was reparsed');
+    assert.equal(callEdges.some(row => row.source_path === 'src/unrelated.js' && row.target_path === 'src/orphanTarget.js'), false,
+      'incremental relationship refresh must preserve cross-file call precision');
+  } finally {
+    incrementalDb.close();
   }
 
   const trace = await relaiCodeInspect(workspace, config, { action: 'trace', symbol: 'calculateDailyAttendance', maxResults: 50 });

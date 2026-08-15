@@ -24,6 +24,8 @@ import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWrit
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 3000;
+const LARGE_RANGE_STREAM_THRESHOLD = 512 * 1024;
+const RANGE_READ_CHUNK_BYTES = 64 * 1024;
 const EXACT_REPLACE_TEXT_BYTE_LIMIT = 50000;
 const EXACT_REPLACE_MAX_OPERATIONS = 50;
 
@@ -201,7 +203,7 @@ async function readSingleItemAsync(workspace, config, requested, sessionActive, 
         ? { item: readDirectory(workspace, safe.relativePath, args) }
         : { skipped: { path: String(requested), reason: "not a file or directory" } };
     }
-    const content = await readTextContentAsync(workspace, safe, stat, sessionActive);
+    const content = await readTextContentAsync(workspace, safe, stat, sessionActive, options, maxBytes);
     return readFileResult(workspace, safe, stat, sessionActive, maxBytes, options, content);
   } catch (error) {
     return { skipped: { path: String(requested), reason: error instanceof Error ? error.message : String(error) } };
@@ -213,7 +215,7 @@ function readFileResult(workspace, safe, stat, sessionActive, maxBytes, options,
   if (data === null && !cacheHit) {
     return { skipped: { path: safe.relativePath, reason: "binary-looking file" } };
   }
-  const selection = selectReadContent(text, options.lineRange, maxBytes);
+  const selection = content.selection || selectReadContent(text, options.lineRange, maxBytes);
   return {
     item: {
       type: "file",
@@ -260,11 +262,85 @@ function readTextContent(workspace, safe, stat, sessionActive) {
   return finalizeReadContent(workspace, safe, stat, sessionActive, fs.readFileSync(safe.absolutePath));
 }
 
-async function readTextContentAsync(workspace, safe, stat, sessionActive) {
+async function readTextContentAsync(workspace, safe, stat, sessionActive, options = {}, maxBytes = DEFAULT_MAX_READ_BYTES) {
   const cached = cachedReadContent(workspace, safe, stat, sessionActive);
   if (cached) return cached;
+  if (options.lineRange && options.guidanceMode !== 'full' && stat.size >= LARGE_RANGE_STREAM_THRESHOLD) {
+    return readLargeTextRangeAsync(safe.absolutePath, stat, options.lineRange, maxBytes);
+  }
   const data = await fs.promises.readFile(safe.absolutePath);
   return finalizeReadContent(workspace, safe, stat, sessionActive, data);
+}
+
+async function readLargeTextRangeAsync(file, stat, requestedRange, maxBytes) {
+  const handle = await fs.promises.open(file, 'r');
+  const hash = crypto.createHash('sha256');
+  const selected = [];
+  const startLine = requestedRange.startLine || 1;
+  const requestedEndLine = requestedRange.endLine || Number.POSITIVE_INFINITY;
+  let currentLine = stat.size === 0 ? 0 : 1;
+  let selectedBytes = 0;
+  let truncated = false;
+  let position = 0;
+  try {
+    while (position < stat.size) {
+      const buffer = Buffer.allocUnsafe(Math.min(RANGE_READ_CHUNK_BYTES, stat.size - position));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+      if (!bytesRead) break;
+      const chunk = buffer.subarray(0, bytesRead);
+      if (position === 0 && looksBinary(chunk)) return { data: null, text: '', cacheHit: false, sha256: null };
+      hash.update(chunk);
+      let segmentStart = 0;
+      for (let index = 0; index < chunk.length; index += 1) {
+        if (chunk[index] !== 10) continue;
+        appendRangeSegment(chunk.subarray(segmentStart, index + 1), currentLine);
+        currentLine += 1;
+        segmentStart = index + 1;
+      }
+      if (segmentStart < chunk.length) appendRangeSegment(chunk.subarray(segmentStart), currentLine);
+      position += bytesRead;
+    }
+  } finally {
+    await handle.close();
+  }
+  const totalLines = stat.size === 0 ? 0 : currentLine;
+  const endLine = Math.min(requestedEndLine, totalLines);
+  const content = Buffer.concat(selected).toString('utf8').replace(/\uFFFD+$/u, '');
+  const returnedBytes = Buffer.byteLength(content, 'utf8');
+  return {
+    data: Buffer.alloc(0),
+    text: content,
+    cacheHit: false,
+    sha256: hash.digest('hex'),
+    selection: {
+      content,
+      returnedBytes,
+      totalLines,
+      truncated,
+      lineRange: {
+        startLine,
+        endLine: startLine <= endLine ? endLine : startLine - 1,
+        totalLines
+      }
+    }
+  };
+
+  function appendRangeSegment(segment, lineNumber) {
+    if (!segment.length || lineNumber < startLine || lineNumber > requestedEndLine) return;
+    const remaining = Math.max(0, maxBytes - selectedBytes);
+    if (remaining === 0) {
+      truncated = true;
+      return;
+    }
+    if (segment.length <= remaining) {
+      selected.push(segment);
+      selectedBytes += segment.length;
+      return;
+    }
+    selected.push(segment.subarray(0, remaining));
+    selectedBytes += remaining;
+    truncated = true;
+  }
 }
 
 function normalizeReadLineRange(args = {}) {

@@ -222,7 +222,7 @@ class McpConnectionManager {
     this.eventHistory = this.eventHistory.slice(-200);
     this.revision += 1;
     this.events.emit('event', event);
-    this.events.emit('change', this.snapshot());
+    if (this.events.listenerCount('change') > 0) this.events.emit('change', this.snapshot());
     return event;
   }
 
@@ -262,7 +262,7 @@ class McpConnectionManager {
     this.activityExpiryTimer = setTimeout(() => {
       this.activityExpiryTimer = null;
       this.revision += 1;
-      this.events.emit('change', this.snapshot());
+      if (this.events.listenerCount('change') > 0) this.events.emit('change', this.snapshot());
     }, this.recentActivityMs + 1);
     this.activityExpiryTimer.unref?.();
   }

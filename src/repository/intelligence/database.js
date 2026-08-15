@@ -7,7 +7,7 @@ import { realRootOf } from '../../safety.js';
 import { statePath } from '../../stateLayout.js';
 import { createEcosystemResolver, supportsEcosystemResolution } from './ecosystemResolution.js';
 
-const INDEX_SCHEMA_VERSION = 2;
+const INDEX_SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS index_meta(
@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS files(
   is_test INTEGER NOT NULL CHECK(is_test IN (0,1)),
   size_bytes INTEGER NOT NULL,
   mtime_ms REAL NOT NULL,
+  ctime_ms REAL NOT NULL,
   content_hash TEXT NOT NULL,
   parser TEXT NOT NULL,
   parser_version INTEGER NOT NULL,
@@ -122,10 +123,7 @@ function repositoryIndexRoot(config = {}) {
 function repositoryIndexPath(config, workspace) {
   const realRoot = realRootOf(workspace.path);
   const identity = crypto.createHash('sha256').update(realRoot).digest('hex').slice(0, 24);
-  const directory = path.join(repositoryIndexRoot(config), identity);
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  try { fs.chmodSync(directory, 0o700); } catch {}
-  return path.join(directory, 'graph.db');
+  return path.join(repositoryIndexRoot(config), identity, 'graph.db');
 }
 
 function openIndexDatabase(file, { readonly = false } = {}) {
@@ -195,23 +193,23 @@ function currentGeneration(db) {
 }
 
 function listManifest(db) {
-  return db.prepare('SELECT id, path, language, is_test, size_bytes, mtime_ms, content_hash, parser, parser_version, generation_id, parse_error FROM files ORDER BY path').all()
+  return db.prepare('SELECT id, path, language, is_test, size_bytes, mtime_ms, ctime_ms, content_hash, parser, parser_version, generation_id, parse_error FROM files ORDER BY path').all()
     .map(row => ({
       id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1,
-      sizeBytes: Number(row.size_bytes), mtimeMs: Number(row.mtime_ms), contentHash: String(row.content_hash),
+      sizeBytes: Number(row.size_bytes), mtimeMs: Number(row.mtime_ms), ctimeMs: Number(row.ctime_ms), contentHash: String(row.content_hash),
       parser: String(row.parser), parserVersion: Number(row.parser_version), generationId: Number(row.generation_id), parseError: Number(row.parse_error) === 1
     }));
 }
 
 function replaceFileFacts(db, generationId, candidate, parsed, parserVersion) {
   db.prepare(`
-    INSERT INTO files(path, language, is_test, size_bytes, mtime_ms, content_hash, parser, parser_version, generation_id, parse_error)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO files(path, language, is_test, size_bytes, mtime_ms, ctime_ms, content_hash, parser, parser_version, generation_id, parse_error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(path) DO UPDATE SET
       language=excluded.language, is_test=excluded.is_test, size_bytes=excluded.size_bytes,
-      mtime_ms=excluded.mtime_ms, content_hash=excluded.content_hash, parser=excluded.parser,
+      mtime_ms=excluded.mtime_ms, ctime_ms=excluded.ctime_ms, content_hash=excluded.content_hash, parser=excluded.parser,
       parser_version=excluded.parser_version, generation_id=excluded.generation_id, parse_error=excluded.parse_error
-  `).run(candidate.path, parsed.language, candidate.test ? 1 : 0, candidate.size, candidate.mtimeMs, candidate.contentHash,
+  `).run(candidate.path, parsed.language, candidate.test ? 1 : 0, candidate.size, candidate.mtimeMs, candidate.ctimeMs, candidate.contentHash,
     parsed.parser, parserVersion, generationId, parsed.parseError ? 1 : 0);
   const fileId = Number(db.prepare('SELECT id FROM files WHERE path=?').get(candidate.path).id);
 
@@ -274,9 +272,70 @@ function deleteIndexedPath(db, relativePath) {
   return true;
 }
 
-function resolveRelationships(db, { workspaceRoot = null } = {}) {
-  db.prepare('UPDATE imports SET target_path=NULL, target_file_id=NULL').run();
-  db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS','INHERITS','IMPLEMENTS','USES_TYPE','TESTS','HANDLES','HTTP_CALLS','LISTENS_ON','EMITS')").run();
+function relationshipImpactForPaths(db, relativePaths = []) {
+  const paths = [...new Set(relativePaths.map(value => String(value || '')).filter(Boolean))];
+  const fileIds = new Set();
+  const sourceFileIds = new Set();
+  const relationshipNames = new Set();
+  forEachChunk(paths, 200, chunk => {
+    const placeholders = sqlPlaceholders(chunk.length);
+    for (const row of db.prepare(`SELECT id FROM files WHERE path IN (${placeholders})`).all(...chunk)) {
+      fileIds.add(Number(row.id));
+    }
+  });
+  const ids = [...fileIds];
+  for (const id of ids) sourceFileIds.add(id);
+  forEachChunk(ids, 200, chunk => {
+    const placeholders = sqlPlaceholders(chunk.length);
+    for (const row of db.prepare(`SELECT DISTINCT source_file_id FROM edges WHERE target_file_id IN (${placeholders})`).all(...chunk)) {
+      sourceFileIds.add(Number(row.source_file_id));
+    }
+    for (const row of db.prepare(`SELECT DISTINCT source_file_id FROM imports WHERE target_file_id IN (${placeholders})`).all(...chunk)) {
+      sourceFileIds.add(Number(row.source_file_id));
+    }
+    for (const row of db.prepare(`SELECT name, qualified_name FROM symbols WHERE file_id IN (${placeholders})`).all(...chunk)) {
+      if (row.name) relationshipNames.add(String(row.name));
+      if (row.qualified_name) relationshipNames.add(String(row.qualified_name));
+    }
+    for (const row of db.prepare(`SELECT target_name, target_qualified_name FROM relation_hints WHERE source_file_id IN (${placeholders})`).all(...chunk)) {
+      if (row.target_name) relationshipNames.add(String(row.target_name));
+      if (row.target_qualified_name) relationshipNames.add(String(row.target_qualified_name));
+    }
+  });
+  return { sourceFileIds: [...sourceFileIds], relationshipNames: [...relationshipNames] };
+}
+
+function relationshipSourceIdsForNames(db, names = []) {
+  const normalized = [...new Set(names.map(value => String(value || '')).filter(Boolean))];
+  const sourceFileIds = new Set();
+  forEachChunk(normalized, 200, chunk => {
+    const placeholders = sqlPlaceholders(chunk.length);
+    for (const row of db.prepare(`SELECT DISTINCT file_id FROM occurrences WHERE name IN (${placeholders})`).all(...chunk)) {
+      sourceFileIds.add(Number(row.file_id));
+    }
+    for (const row of db.prepare(`SELECT DISTINCT source_file_id FROM relation_hints WHERE target_name IN (${placeholders})`).all(...chunk)) {
+      sourceFileIds.add(Number(row.source_file_id));
+    }
+    for (const row of db.prepare(`SELECT DISTINCT source_file_id FROM relation_hints WHERE target_qualified_name IN (${placeholders})`).all(...chunk)) {
+      sourceFileIds.add(Number(row.source_file_id));
+    }
+  });
+  return [...sourceFileIds];
+}
+
+function resolveRelationships(db, { workspaceRoot = null, sourceFileIds = null } = {}) {
+  const scopedSourceIds = Array.isArray(sourceFileIds)
+    ? [...new Set(sourceFileIds.map(Number).filter(value => Number.isSafeInteger(value) && value > 0))]
+    : null;
+  if (scopedSourceIds && scopedSourceIds.length === 0) return;
+  const sourceFilter = scopedSourceIds ? `source_file_id IN (${sqlPlaceholders(scopedSourceIds.length)})` : '';
+  if (scopedSourceIds) {
+    db.prepare(`UPDATE imports SET target_path=NULL, target_file_id=NULL WHERE ${sourceFilter}`).run(...scopedSourceIds);
+    db.prepare(`DELETE FROM edges WHERE ${sourceFilter}`).run(...scopedSourceIds);
+  } else {
+    db.prepare('UPDATE imports SET target_path=NULL, target_file_id=NULL').run();
+    db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS','INHERITS','IMPLEMENTS','USES_TYPE','TESTS','HANDLES','HTTP_CALLS','LISTENS_ON','EMITS')").run();
+  }
   const files = db.prepare('SELECT id, path, language, is_test FROM files ORDER BY path').all().map(row => ({
     id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1
   }));
@@ -287,7 +346,9 @@ function resolveRelationships(db, { workspaceRoot = null } = {}) {
   const ecosystem = workspaceRoot && files.some(file => supportsEcosystemResolution(file.language))
     ? createEcosystemResolver(workspaceRoot, pathToId.keys())
     : null;
-  const imports = db.prepare('SELECT source_file_id, specifier FROM imports').all();
+  const imports = scopedSourceIds
+    ? db.prepare(`SELECT source_file_id, specifier FROM imports WHERE ${sourceFilter}`).all(...scopedSourceIds)
+    : db.prepare('SELECT source_file_id, specifier FROM imports').all();
   const updateImport = db.prepare('UPDATE imports SET target_path=?, target_file_id=? WHERE source_file_id=? AND specifier=?');
   const insertEdge = db.prepare(`
     INSERT INTO edges(source_symbol_id, target_symbol_id, source_file_id, target_file_id, type, target_name, provider, confidence)
@@ -320,11 +381,9 @@ function resolveRelationships(db, { workspaceRoot = null } = {}) {
     if (!symbolsByName.has(name)) symbolsByName.set(name, []);
     symbolsByName.get(name).push(row);
   }
-  const callRows = db.prepare(`
-    SELECT o.file_id, o.name, o.enclosing_symbol_id
-    FROM occurrences o
-    WHERE o.role='call'
-  `).all();
+  const callRows = scopedSourceIds
+    ? db.prepare(`SELECT o.file_id, o.name, o.enclosing_symbol_id FROM occurrences o WHERE o.role='call' AND o.file_id IN (${sqlPlaceholders(scopedSourceIds.length)})`).all(...scopedSourceIds)
+    : db.prepare(`SELECT o.file_id, o.name, o.enclosing_symbol_id FROM occurrences o WHERE o.role='call'`).all();
   for (const call of callRows) {
     const sourceFileId = Number(call.file_id);
     const targets = symbolsByName.get(String(call.name)) || [];
@@ -335,11 +394,12 @@ function resolveRelationships(db, { workspaceRoot = null } = {}) {
       'CALLS', String(call.name), 'tree-sitter', confidence);
   }
 
-  resolveHintRelationships(db, { files, fileById, pathToId, suffixIndex, directoryIndex, symbolsByName, insertEdge, ecosystem });
+  resolveHintRelationships(db, { files, fileById, pathToId, suffixIndex, directoryIndex, symbolsByName, insertEdge, ecosystem, sourceFileIds: scopedSourceIds });
 }
 
 function resolveHintRelationships(db, context) {
   const { fileById, pathToId, suffixIndex, directoryIndex, symbolsByName, insertEdge, ecosystem } = context;
+  const sourceFileIds = Array.isArray(context.sourceFileIds) ? new Set(context.sourceFileIds.map(Number)) : null;
   const symbolsByQualified = new Map();
   for (const row of db.prepare('SELECT id, file_id, name, qualified_name FROM symbols').all()) {
     const qualified = String(row.qualified_name);
@@ -352,6 +412,7 @@ function resolveHintRelationships(db, context) {
 
   for (const hint of hints) {
     const sourceFileId = Number(hint.source_file_id);
+    if (sourceFileIds && !sourceFileIds.has(sourceFileId)) continue;
     const sourceFile = fileById.get(sourceFileId);
     if (!sourceFile) continue;
     const sourceSymbol = hint.source_qualified_name == null
@@ -386,6 +447,14 @@ function resolveHintRelationships(db, context) {
     insertEdge.run(sourceSymbol ? Number(sourceSymbol.id) : null, targetSymbol ? Number(targetSymbol.id) : null, sourceFileId,
       targetSymbol ? Number(targetSymbol.file_id) : (targetFileId || null), String(hint.type), targetName || null, String(hint.provider), Number(hint.confidence));
   }
+}
+
+function sqlPlaceholders(count) {
+  return Array.from({ length: count }, () => '?').join(',');
+}
+
+function forEachChunk(values, size, callback) {
+  for (let offset = 0; offset < values.length; offset += size) callback(values.slice(offset, offset + size));
 }
 
 function uniqueHintTargets(hints, type) {
@@ -491,14 +560,15 @@ function stripKnownExtension(value) {
 function indexStats(db) {
   const counts = db.prepare(`
     SELECT count(*) AS files, coalesce(sum(size_bytes),0) AS bytes, coalesce(max(mtime_ms),0) AS newest,
-           coalesce(sum(CASE WHEN parser='tree-sitter' THEN 1 ELSE 0 END),0) AS structural
+           coalesce(sum(CASE WHEN parser='tree-sitter' THEN 1 ELSE 0 END),0) AS structural,
+           coalesce(sum(parse_error),0) AS parse_errors
     FROM files
   `).get();
   const symbolCount = Number(db.prepare('SELECT count(*) AS count FROM symbols').get().count || 0);
   const occurrenceCount = Number(db.prepare('SELECT count(*) AS count FROM occurrences').get().count || 0);
   return {
     fileCount: Number(counts.files || 0), indexedBytes: Number(counts.bytes || 0), newestMtimeMs: Number(counts.newest || 0),
-    structuralFileCount: Number(counts.structural || 0), symbolCount, occurrenceCount
+    structuralFileCount: Number(counts.structural || 0), structuralDegradedFileCount: Number(counts.parse_errors || 0), symbolCount, occurrenceCount
   };
 }
 
@@ -538,6 +608,8 @@ export {
   listManifest,
   openIndexDatabase,
   replaceFileFacts,
+  relationshipImpactForPaths,
+  relationshipSourceIdsForNames,
   repositoryIndexPath,
   repositoryIndexRoot,
   resolveRelationships
