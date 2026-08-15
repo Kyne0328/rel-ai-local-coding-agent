@@ -5,6 +5,8 @@ import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { principalFingerprint } from '../mcp/principal.js';
 import { isTerminalTaskStatus } from '../taskState.js';
 import { classifyTaskIntent } from '../workflow/intent.js';
+
+const TERMINAL_REFERENCE_OPERATIONS = new Set(['relai_process_list', 'relai_process_read', 'relai_status']);
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
@@ -63,6 +65,7 @@ function assertKnownTask(config, taskId, workspace, toolName, principal) {
   }
   if (session.status === 'cancelled' && toolName === 'relai_cancel_work') return session;
   if (session.status === 'completed' && toolName === 'relai_finish_work') return session;
+  if (isTerminalTaskReference(session, toolName)) return session;
   if (isTerminalTaskStatus(session.status)) {
     throw taskError('INVALID_TASK_STATE', `This work session is already ${session.status}. Start a new work session instead of reusing its work_id.`);
   }
@@ -72,6 +75,10 @@ function assertKnownTask(config, taskId, workspace, toolName, principal) {
     throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied work_id belongs to a different workspace.');
   }
   return session;
+}
+
+function isTerminalTaskReference(session, toolName) {
+  return isTerminalTaskStatus(session?.status) && TERMINAL_REFERENCE_OPERATIONS.has(String(toolName || ''));
 }
 
 function safeEqual(left, right) {
@@ -117,4 +124,4 @@ function withTaskIdentity(value, taskId) {
   return { ok: true, value, work_id: identity };
 }
 
-export { startTask, taskBootstrapFromSnapshot, assertKnownTask, taskAuditContext, withTaskIdentity };
+export { startTask, taskBootstrapFromSnapshot, assertKnownTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity };

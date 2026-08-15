@@ -18,7 +18,7 @@ import { describeToolOperation } from './operation.js';
 import { resolveExecutableToolCall } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
-import { assertKnownTask, taskAuditContext, withTaskIdentity } from './task.js';
+import { assertKnownTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
 import { deterministicActionId } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
@@ -82,13 +82,14 @@ async function callTool(name, args = {}, context = {}) {
     }
     assertRuntimeCompatibility(config, operationName, effectiveArgs, { activeTaskCount: getToolActivity().activeTaskCount });
     const duplicateTerminalCancellation = operationName === 'relai_cancel_work' && knownTask?.status === 'cancelled';
+    const terminalTaskReference = isTerminalTaskReference(knownTask, operationName);
     finishActivity = beginConnectorToolCall({
       tool: name,
       workspace: effectiveArgs?.workspace,
       scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
       createTask: operationName === 'relai_begin_work',
-      trackTask: !duplicateTerminalCancellation && (operationName === 'relai_begin_work' || Boolean(requestedTaskId)),
+      trackTask: !duplicateTerminalCancellation && !terminalTaskReference && (operationName === 'relai_begin_work' || Boolean(requestedTaskId)),
       connector,
       operation: describeToolOperation(operationName, effectiveArgs || {}),
       title: effectiveArgs?.title,
