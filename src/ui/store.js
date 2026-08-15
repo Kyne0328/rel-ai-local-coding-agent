@@ -82,7 +82,7 @@ function mergeActiveTaskUpdates(updates) {
   for (const task of updates) {
     const id = taskIdentity(task);
     if (!id) continue;
-    if (isTerminalTask(task)) {
+    if (shouldRemoveFromActiveTasks(task)) {
       byId.delete(id);
       activity.lastTask = task;
     } else {
@@ -102,7 +102,7 @@ function mergeActiveTaskUpdates(updates) {
   _state.taskActivity = activity;
 }
 
-function isTerminalTask(task) {
+function shouldRemoveFromActiveTasks(task) {
   return ['completed', 'cancelled', 'failed', 'inactive'].includes(String(task?.status || '').toLowerCase());
 }
 

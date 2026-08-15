@@ -8,6 +8,7 @@ import { runProcess } from './process.js';
 import { REUSABLE_DEPENDENCY_ROOTS, isReusableDependencyPath } from './reusableDependencies.js';
 import { isSecretPath } from './safety.js';
 import { getStateDir } from './statePaths.js';
+import { recordTaskRecoveryState } from './taskHistoryStore.js';
 import { taskError } from './toolActivity.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
@@ -395,12 +396,14 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
   const registry = readSandboxRegistry(config);
   const current = registry.sandboxes?.[entry.alias];
   if (current) {
+    const hadUnresolved = Boolean(current.unresolved);
     current.syncCommit = nextSyncCommit;
     current.sourceRevision = await workspaceRevision(sourceWorkspace, config);
     current.lastPromotedAt = new Date().toISOString();
     current.promotedFiles = [...new Set([...(current.promotedFiles || []), ...changedFiles])];
     delete current.unresolved;
     writeSandboxRegistry(config, registry);
+    if (hadUnresolved) recordTaskRecoveryState(config, current.taskId, null);
   }
   return { promoted: changedFiles.length > 0, changedFiles, alreadyApplied, synchronization };
 }
@@ -506,7 +509,7 @@ async function finalizeTaskSandbox(sourceWorkspace, config, taskId) {
     return { finalized: true, changedFiles: promotion.changedFiles || changedFiles };
   } catch (error) {
     const current = findTaskSandbox(config, sourceWorkspace.alias, taskId);
-    if (current) markSandboxUnresolved(config, current, error, changedFiles);
+    if (current && !current.unresolved) markSandboxUnresolved(config, current, error, changedFiles);
     throw error;
   }
 }
@@ -535,6 +538,7 @@ function markSandboxUnresolved(config, entry, error, changedFiles = []) {
     at: new Date().toISOString()
   };
   writeSandboxRegistry(config, registry);
+  recordTaskRecoveryState(config, current.taskId, current.unresolved);
 }
 
 function inactiveTaskSandboxEntries(config, sourceAlias, activeTasks = [], currentTaskId = '') {
@@ -578,6 +582,7 @@ async function discardTaskSandbox(sourceWorkspace, config, taskId) {
   const entry = findTaskSandbox(config, sourceAlias, taskId);
   if (!entry) return { discarded: false };
   await removeSandboxEntry(entry, config);
+  recordTaskRecoveryState(config, taskId, null);
   return { discarded: true };
 }
 

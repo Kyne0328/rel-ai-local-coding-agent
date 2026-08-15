@@ -13,7 +13,7 @@ const TASK_LIFECYCLE_VERSION = 1;
 const MAX_SESSION_EVENTS = 200;
 const DURABLE_FIELDS = Object.freeze([
   'changedFiles', 'changedFileCount', 'validation', 'committed', 'pushed', 'prDrafted',
-  'workflow', 'workflowEvidence', 'principalFingerprint'
+  'workflow', 'workflowEvidence', 'principalFingerprint', 'sandboxRecovery', 'repairable'
 ]);
 
 function canonicalTaskSnapshot(record = {}) {
