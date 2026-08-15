@@ -3,7 +3,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { workspaceReplace, workspaceWrite, relaiApplyPatch, relaiVerify, relaiDiff, writeStagedPayload, readStagedPayload, clearStagedPayload, resolveStagedWriteId, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD } from "./localRepoBridge.js";
+import { workspaceReplace, workspaceWrite, relaiApplyPatch, relaiVerify, relaiDiff, createStagedPayload, appendStagedPayload, writeStagedMetadata, readStagedPayload, readStagedContent, clearStagedPayload, resolveStagedWriteId, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD } from "./localRepoBridge.js";
 import { makeOperationId, appendOperation } from "./journal.js";
 import { resolveSafePath } from "./safety.js";
 import { runEnvOperation } from "./envOperations.js";
@@ -233,10 +233,10 @@ async function handleStagedEdit(workspace, config, args) {
       return { ...result, plannerPath: 'write:staged', plannerReason: 'content chunk provided — starting a staged full-file write' };
     }
     const writeId = makeOperationId();
-    writeStagedPayload(config, workspace, writeId, {
+    createStagedPayload(config, workspace, writeId, {
       id: writeId, kind: 'patch', workspace: workspace.alias, root: workspace.path,
-      chunks: [args.updateText], createdAt: new Date().toISOString()
-    });
+      bytes: Buffer.byteLength(args.updateText, 'utf8'), chunkCount: 1, createdAt: new Date().toISOString()
+    }, args.updateText);
     return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:start', writeId, chunks: 1,
       next: "Call relai_edit { work_id, stage:'append', writeId, updateText } for more chunks, then { work_id, stage:'commit', writeId }." };
   }
@@ -253,10 +253,12 @@ async function handleStagedEdit(workspace, config, args) {
       return { ...result, plannerPath: 'write:staged', plannerReason: 'content chunk provided — appending to a staged full-file write' };
     }
     if (payload.kind !== 'patch') throw new Error('Staged payload is a full-file write, not a patch. Append content instead.');
-    payload.chunks.push(args.updateText);
+    appendStagedPayload(config, workspace, writeId, args.updateText);
+    payload.bytes += Buffer.byteLength(args.updateText, 'utf8');
+    payload.chunkCount += 1;
     payload.updatedAt = new Date().toISOString();
-    writeStagedPayload(config, workspace, writeId, payload);
-    return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:append', writeId, chunks: payload.chunks.length };
+    writeStagedMetadata(config, workspace, writeId, payload);
+    return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:append', writeId, chunks: payload.chunkCount };
   }
 
   if (stage === 'commit' || stage === 'abort') {
@@ -271,7 +273,10 @@ async function handleStagedEdit(workspace, config, args) {
       const existed = clearStagedPayload(config, workspace, writeId);
       return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:abort', writeId, cleared: existed };
     }
-    const patch = payload.chunks.join('');
+    const patch = readStagedContent(config, workspace, writeId);
+    if (Buffer.byteLength(patch, 'utf8') !== payload.bytes) {
+      throw new Error(`Staged patch payload size mismatch for writeId ${writeId}. Abort it and start again.`);
+    }
     const result = await relaiApplyPatch(workspace, config, { ...args, patch, returnDiff: false });
     if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
     const out = { ...result, operation: 'stagedPatch:commit', writeId, plannerPath: 'apply-update:staged' };
