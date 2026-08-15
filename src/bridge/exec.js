@@ -136,7 +136,7 @@ function resolveNpmCli(command) {
 }
 
 function processExecutionError(code, message, retryable = false) {
-  const error = new Error(message);
+  const error = /** @type {Error & { code: string, source: string, operation: string, retryable: boolean }} */ (new Error(message));
   error.code = code;
   error.source = 'rel-ai-mcp-process';
   error.operation = 'execute';
@@ -260,13 +260,18 @@ function parseNameStatusPaths(output) {
   const paths = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
+    if (!record) continue;
     const tab = record.indexOf('\t');
     if (tab >= 0) {
       const candidate = record.slice(tab + 1);
       if (candidate) paths.push(candidate);
       continue;
     }
-    if (/^[A-Z][0-9]*$/i.test(record) && records[index + 1]) paths.push(records[++index]);
+    const next = records[index + 1];
+    if (/^[A-Z][0-9]*$/i.test(record) && next) {
+      paths.push(next);
+      index += 1;
+    }
   }
   return paths;
 }
