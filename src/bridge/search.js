@@ -8,6 +8,7 @@ import { clampNumber } from './limits.js';
 import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
+import { compactBatchResult, resolveQueryTerms, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 25_000;
@@ -16,7 +17,7 @@ const MAX_STDERR_BYTES = 64 * 1024;
 // Stream git grep output instead of buffering it through runProcess. Broad searches
 // can exceed the generic process-output cap; streaming preserves the earliest
 // matches and stops once maxResults + 1 visible matches prove the response is truncated.
-async function relaiSearch(workspace, config, args = {}) {
+async function relaiSearchOne(workspace, config, args = {}) {
   const pattern = String(args.pattern || "");
   if (!pattern.trim()) throw new Error("relai_search requires a non-empty pattern.");
   if (pattern.length > 1000) throw new Error("relai_search pattern must be 1000 characters or fewer.");
@@ -88,6 +89,45 @@ async function relaiSearch(workspace, config, args = {}) {
             : "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
           : "Context is included. Use relai_read only when a wider range or complete file is needed."
         : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
+  };
+}
+
+async function relaiSearch(workspace, config, args = {}) {
+  const { batched, terms } = resolveQueryTerms(args, {
+    singleField: 'pattern',
+    label: 'relai_search',
+    maxLength: 1000,
+    maxItems: 4
+  });
+  if (!batched) return relaiSearchOne(workspace, config, args);
+
+  const maxResults = splitBatchLimit(args.maxResults, {
+    min: 1,
+    max: 1000,
+    fallback: DEFAULT_MAX_RESULTS,
+    count: terms.length
+  });
+  const maxBytes = splitBatchLimit(args.maxBytes, {
+    min: 1000,
+    max: 393216,
+    fallback: 393216,
+    count: terms.length
+  });
+  const results = await Promise.all(terms.map(pattern => relaiSearchOne(workspace, config, {
+    ...args,
+    pattern,
+    queries: undefined,
+    maxResults,
+    maxBytes
+  })));
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    queries: terms,
+    queryCount: terms.length,
+    results: results.map(compactBatchResult),
+    ...summarizeBatchResults(results),
+    next: 'Batched search completed in one call. Read only the most relevant returned ranges or refine the smallest query that still needs more evidence.'
   };
 }
 

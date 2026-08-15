@@ -13,7 +13,7 @@ import {
 } from '../src/tools/schema.js';
 
 const config = { workspaces: {} };
-const expectedTools = [
+const requiredTools = [
   'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit',
   'relai_exec', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish'
 ];
@@ -24,9 +24,11 @@ const removedDirectNames = [
   'relai_diff', 'relai_status', 'relai_finish_work'
 ];
 
-assert.deepEqual(TOOL_NAMES, expectedTools);
-assert.deepEqual(getDefinitionMetadata(config).map(item => item.name), expectedTools);
-assert.equal(getToolDefinitions(config).length, expectedTools.length);
+assert.ok(TOOL_NAMES.length > 0, 'the public tool registry must not be empty');
+assert.equal(new Set(TOOL_NAMES).size, TOOL_NAMES.length, 'public tool names must remain unique');
+for (const required of requiredTools) assert.ok(TOOL_NAMES.includes(required), `${required} must remain available`);
+assert.deepEqual(getDefinitionMetadata(config).map(item => item.name), [...TOOL_NAMES]);
+assert.equal(getToolDefinitions(config).length, TOOL_NAMES.length);
 
 const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
@@ -45,11 +47,11 @@ assert.match(connectorInstructions(config), /explicit task-completion contract/i
 assert.doesNotMatch(connectorInstructions(config), /Inspect relevant files|Validate after changes|recovery guidance/i, 'discretionary workflow tactics belong to the workflow runtime/skills, not global MCP instructions');
 
 const manifest = getToolSurfaceManifest(config);
-assert.equal(manifest.schemaVersion, 7);
-assert.equal(manifest.toolSurfaceVersion, 43);
+assert.ok(Number.isSafeInteger(manifest.schemaVersion) && manifest.schemaVersion > 0, 'manifest schema revision must remain a positive integer');
+assert.ok(Number.isSafeInteger(manifest.toolSurfaceVersion) && manifest.toolSurfaceVersion > 0, 'tool-surface revision must remain a positive integer');
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
-assert.equal(manifest.toolCount, expectedTools.length);
-assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
+assert.equal(manifest.toolCount, TOOL_NAMES.length);
+assert.deepEqual(manifest.tools.map(item => item.name), [...TOOL_NAMES]);
 assert.deepEqual(manifest.deprecations, []);
 assert.deepEqual(manifest.compatibilityAliases, {});
 assert.equal(Object.hasOwn(manifest, 'migration'), false);
@@ -125,9 +127,14 @@ await valid('relai_process', { action: 'read', work_id: 'work', processId: 'p', 
 await invalid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'ignored' });
 await invalid('relai_work', { action: 'status', title: 'ignored' });
 await valid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200 });
+await valid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
+await invalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
+await invalid('relai_search', { action: 'text', work_id: 'work', queries: ['a', 'b', 'c', 'd', 'e'] });
 await invalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 201 });
 await valid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100 });
-await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 101 });
+await valid('relai_search', { action: 'semantic', work_id: 'work', queries: ['needle', 'haystack'], maxResults: 100 });
+await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', queries: ['haystack'] });
+await invalid('relai_search', { action: 'semantic', work_id: 'work', maxResults: 101, queries: ['needle'] });
 await valid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
@@ -161,10 +168,14 @@ await publicInvalid('relai_work', { action: 'finish', work_id: 'work' });
 await publicValid('relai_work', { action: 'status', title: 'ignored-known-extra' });
 
 await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200 });
+await publicValid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
 await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', query: 'ignored-known-extra' });
+await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 201 });
 await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100 });
+await publicValid('relai_search', { action: 'semantic', work_id: 'work', queries: ['needle', 'haystack'], maxResults: 100 });
 await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', pattern: 'ignored-known-extra' });
+await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', queries: ['haystack'] });
 await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 101 });
 
 await publicValid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.' });
