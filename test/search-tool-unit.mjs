@@ -50,6 +50,23 @@ try {
   assert.equal(capped.truncated, true);
   assert.ok(capped.matchCount > 1);
 
+  // Several independent patterns can fan out inside one public tool call.
+  const batch = await relaiSearch(workspace, config, {
+    queries: ['alphaThing', 'BETA', 'notPresentAnywhere'],
+    fixed: true,
+    maxResults: 12,
+    mode: 'compact'
+  });
+  assert.equal(batch.ok, true);
+  assert.deepEqual(batch.queries, ['alphaThing', 'BETA', 'notPresentAnywhere']);
+  assert.equal(batch.queryCount, 3);
+  assert.equal(batch.results.length, 3);
+  assert.equal(batch.results[0].pattern, 'alphaThing');
+  assert.ok(batch.uniqueFileCount >= 2);
+  assert.ok(batch.matchCount >= 3);
+  assert.equal(batch.results[2].matchCount, 0);
+  assert.equal(batch.results.some(item => Object.hasOwn(item, 'workspace')), false, 'batch children should not repeat workspace metadata');
+
   // No matches is a valid empty result, not an error.
   const none = await relaiSearch(workspace, config, { pattern: 'zzz_does_not_exist_zzz' });
   assert.equal(none.ok, true);
