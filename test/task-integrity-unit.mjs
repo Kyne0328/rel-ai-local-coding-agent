@@ -44,6 +44,19 @@ const event = (taskId, tool, extra = {}) => ({
 });
 
 try {
+  const integrityLockDir = path.join(stateDir, 'task-integrity');
+  const integrityLock = path.join(integrityLockDir, '.lock');
+  fs.mkdirSync(integrityLockDir, { recursive: true });
+  fs.writeFileSync(integrityLock, 'other-runtime\n', 'utf8');
+  const contentionStartedAt = Date.now();
+  assert.throws(
+    () => recordTaskIntegrityEvent(config, event('lock-contention-task', 'relai_begin_work')),
+    error => error?.code === 'TASK_INTEGRITY_PERSISTENCE_FAILED',
+    'fresh task-integrity lock contention must fail fast rather than block the MCP event loop'
+  );
+  assert.ok(Date.now() - contentionStartedAt < 1000, 'task-integrity lock contention must return in under one second');
+  fs.rmSync(integrityLock, { force: true });
+
   recordTaskIntegrityEvent(config, event(taskOne, 'relai_begin_work'));
   const initial = readTaskIntegrity(config, taskOne, 'app');
   assert.ok(initial.baseline.changedFiles.includes('ambient.txt'));

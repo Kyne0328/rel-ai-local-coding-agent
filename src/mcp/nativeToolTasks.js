@@ -3,7 +3,8 @@ import {
   createNativeTask,
   failNativeTask,
   nativeTaskSignal,
-  pruneNativeTasks
+  pruneNativeTasks,
+  retryNativeTaskOperation
 } from './nativeTaskService.js';
 
 const TOOL_TASK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -27,15 +28,15 @@ function createNativeToolTask(config, options = {}) {
 }
 
 function completeNativeToolTask(config, taskId, result) {
-  return completeNativeTask(config, taskId, result, {
+  return retryNativeTaskOperation(() => completeNativeTask(config, taskId, result, {
     statusMessage: 'Tool execution completed.'
-  });
+  }));
 }
 
 function failNativeToolTask(config, taskId, error) {
-  return failNativeTask(config, taskId, error, {
+  return retryNativeTaskOperation(() => failNativeTask(config, taskId, error, {
     statusMessage: 'Tool execution failed.'
-  });
+  }));
 }
 
 function nativeToolTaskSignal(taskId) {
@@ -43,7 +44,7 @@ function nativeToolTaskSignal(taskId) {
 }
 
 function pruneNativeToolTasks(config) {
-  return pruneNativeTasks(config);
+  return retryNativeTaskOperation(() => pruneNativeTasks(config));
 }
 
 export {

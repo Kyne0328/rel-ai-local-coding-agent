@@ -22,6 +22,7 @@ import {
   principalFingerprint,
   pruneNativeTasks,
   requestNativeTaskInput,
+  retryNativeTaskOperation,
   updateNativeTask,
   updateNativeTaskInputs
 } from '../src/mcp/nativeTaskService.js';
@@ -69,9 +70,9 @@ function assertRequestError(operation, reason) {
 
 function runInputWorker(taskId, key) {
   const source = `
-    import { updateNativeTaskInputs } from ${JSON.stringify(serviceUrl.href)};
+    import { retryNativeTaskOperation, updateNativeTaskInputs } from ${JSON.stringify(serviceUrl.href)};
     const [root, taskId, key] = process.argv.slice(1);
-    updateNativeTaskInputs({ stateDir: root }, taskId, { [key]: { value: key } }, { principal: 'client-a' });
+    await retryNativeTaskOperation(() => updateNativeTaskInputs({ stateDir: root }, taskId, { [key]: { value: key } }, { principal: 'client-a' }));
   `;
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--input-type=module', '-e', source, root, taskId, key], {
@@ -118,6 +119,17 @@ try {
 
   const owned = activeTask('ownership-test', { logicalTaskId: 'logical-a' });
   assert.match(owned.taskId, /^task_[A-Za-z0-9_-]{32,160}$/);
+
+  const contentionLock = path.join(root, 'native-tasks', `${owned.taskId}.lock`);
+  fs.writeFileSync(contentionLock, 'other-runtime\n', 'utf8');
+  const contentionStartedAt = Date.now();
+  assert.throws(
+    () => getNativeTask(config, owned.taskId, { principal: owner }),
+    error => error instanceof NativeTaskStoreError && error.reason === 'lock_busy',
+    'fresh native-task lock contention must fail fast rather than block the MCP event loop'
+  );
+  assert.ok(Date.now() - contentionStartedAt < 1000, 'native-task lock contention must return in under one second');
+  fs.rmSync(contentionLock, { force: true });
   assert.equal(getNativeTask(config, owned.taskId, { principal: sameOwner }).status, 'working');
   assertUnavailable(() => getNativeTask(config, owned.taskId, { principal: otherOwner }));
   assertUnavailable(() => updateNativeTask(config, owned.taskId, { statusMessage: 'cross-principal update' }, { principal: otherOwner }));

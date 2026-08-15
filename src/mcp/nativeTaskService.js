@@ -15,8 +15,9 @@ const MAX_INPUT_MAP_BYTES = 256 * 1024;
 const MAX_INTERNAL_BYTES = 256 * 1024;
 const MAX_INPUT_ENTRIES = 64;
 const MAX_INPUT_UPDATES = 100;
-const MAX_LOCK_WAIT_MS = 5000;
 const STALE_LOCK_MS = 30_000;
+const LOCK_RETRY_TIMEOUT_MS = 5_000;
+const LOCK_RETRY_DELAY_MS = 10;
 const TASK_ID_PATTERN = /^task_[A-Za-z0-9_-]{32,160}$/;
 const INPUT_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const VALID_STATUSES = new Set(['working', 'input_required', 'completed', 'failed', 'cancelled']);
@@ -29,7 +30,6 @@ const TASK_TRANSITIONS = Object.freeze({
 });
 const RUNTIME_ID = crypto.randomUUID();
 const executors = new Map();
-const sleepArray = new Int32Array(new SharedArrayBuffer(4));
 
 class NativeTaskUnavailableError extends Error {
   constructor() {
@@ -567,26 +567,41 @@ function attachExecutor(taskId, executor) {
   });
 }
 
+async function retryNativeTaskOperation(operation, options = {}) {
+  const timeoutMs = Math.max(0, Number(options.timeoutMs ?? LOCK_RETRY_TIMEOUT_MS));
+  const delayMs = Math.max(1, Number(options.delayMs ?? LOCK_RETRY_DELAY_MS));
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error?.code !== 'NATIVE_TASK_STORE_ERROR' || error.reason !== 'lock_busy' || Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, Math.min(delayMs, Math.max(1, deadline - Date.now()))));
+    }
+  }
+}
+
 function withTaskLock(config, taskId, operation) {
   const id = validateTaskId(taskId);
   const directory = taskDirectory(config);
   const lockPath = path.join(directory, `${id}.lock`);
-  const deadline = Date.now() + MAX_LOCK_WAIT_MS;
   let descriptor = null;
   try {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    while (descriptor == null) {
+    try {
+      descriptor = fs.openSync(lockPath, 'wx', 0o600);
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      const removed = removeStaleLock(lockPath);
+      if (!removed) throw taskStoreError('lock_busy', error, id);
       try {
         descriptor = fs.openSync(lockPath, 'wx', 0o600);
-        fs.writeFileSync(descriptor, `${process.pid}:${RUNTIME_ID}\n`);
-        fs.fsyncSync(descriptor);
-      } catch (error) {
-        if (error?.code !== 'EEXIST') throw error;
-        removeStaleLock(lockPath);
-        if (Date.now() >= deadline) throw taskStoreError('lock_timeout', error, id);
-        Atomics.wait(sleepArray, 0, 0, 10);
+      } catch (retryError) {
+        if (retryError?.code === 'EEXIST') throw taskStoreError('lock_busy', retryError, id);
+        throw retryError;
       }
     }
+    fs.writeFileSync(descriptor, `${process.pid}:${RUNTIME_ID}\n`);
     return operation();
   } catch (error) {
     if (error?.code === 'NATIVE_TASK_STORE_ERROR' || error?.code === 'NATIVE_TASK_UNAVAILABLE' || error?.code === 'NATIVE_TASK_INVALID_REQUEST') {
@@ -604,9 +619,12 @@ function withTaskLock(config, taskId, operation) {
 function removeStaleLock(lockPath) {
   try {
     const stats = fs.statSync(lockPath);
-    if (Date.now() - stats.mtimeMs > STALE_LOCK_MS) fs.rmSync(lockPath, { force: true });
+    if (Date.now() - stats.mtimeMs <= STALE_LOCK_MS) return false;
+    fs.rmSync(lockPath, { force: true });
+    return true;
   } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+    if (error?.code === 'ENOENT') return true;
+    throw error;
   }
 }
 
@@ -1132,6 +1150,7 @@ export {
   principalFingerprint,
   pruneNativeTasks,
   requestNativeTaskInput,
+  retryNativeTaskOperation,
   updateNativeTask,
   updateNativeTaskInputs,
   updateNativeTaskRecovery,
