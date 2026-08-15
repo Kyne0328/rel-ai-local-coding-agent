@@ -35,15 +35,14 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     ? [...new Set(args.changedFiles.map(file => String(file || '').trim()).filter(Boolean))]
     : [];
   const ownedChangedFiles = currentTaskId ? taskOwnedChangedFiles(config, currentTaskId, logicalWorkspaceAlias) : [];
-  const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : ownedChangedFiles;
-  let effectiveArgs = args;
+  const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : (ownedChangedFiles.length ? ownedChangedFiles : undefined);  let effectiveArgs = args;
   let validationPlan = null;
   let planSelection = '';
   let currentFingerprint = null;
   if (!args.planId && !hasRequestedChecks(args)) {
     validationPlan = await createValidationPlan(workspace, config, {
       release: String(args.level || '').toLowerCase() === 'release',
-      changedFiles: validationScope
+      ...(validationScope ? { changedFiles: validationScope } : {})
     });
     currentFingerprint = validationPlan.workspaceFingerprint
       ? { fingerprint: validationPlan.workspaceFingerprint }
@@ -54,9 +53,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     effectiveArgs = { ...args, checks: plannedChecks };
   } else if (args.planId) {
     validationPlan = readValidationPlan(config, args.planId, workspace);
-    currentFingerprint = await createValidationFingerprint(workspace, config, {
-      paths: validationPlan.validationScope || validationPlan.changedFiles || []
-    });
+    currentFingerprint = await createValidationFingerprint(workspace, config);
     if (!validationPlan.workspaceFingerprint || validationPlan.workspaceFingerprint !== currentFingerprint.fingerprint) {
       throw new Error('Validation plan is stale because relevant workspace content changed. Run relai_validate with action "checks" again to generate a current internal plan.');
     }
@@ -66,9 +63,6 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     effectiveArgs = { ...args, checks: plannedChecks };
   }
 
-  const fingerprintScope = Array.isArray(validationPlan?.validationScope)
-    ? validationPlan.validationScope
-    : validationScope;
   const level = String(planSelection === 'focused' ? 'quick' : (args.level || planSelection || 'standard')).toLowerCase();
   const complete = args.complete === true;
   const completionSummary = complete ? normalizeCompletionSummary(args.summary) : '';
@@ -80,7 +74,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   if (checks.length === 0) {
     return noChecksValidationResult(workspace, config, {
       level, skippedChecks, aliasNormalizations, validationLevel,
-      validationLevelReason, changedFiles, policy, validationScope: fingerprintScope
+      validationLevelReason, changedFiles, policy
     });
   }
 
@@ -88,7 +82,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const fullOutput = Boolean(args.fullOutput);
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const indexedResults = new Array(checks.length);
-  if (!currentFingerprint) currentFingerprint = await createValidationFingerprint(workspace, config, { paths: fingerprintScope });
+  if (!currentFingerprint) currentFingerprint = await createValidationFingerprint(workspace, config);
   const recentEvidence = currentTaskId ? readRecentWorkflowEvidence(config, currentTaskId, 100) : [];
   const reusedCheckIds = new Array(checks.length);
   let executedUnits = 0;
@@ -224,11 +218,9 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const reusedChecks = reusedCheckIds.filter(Boolean);
 
   const cancelled = signal?.aborted === true || results.some(item => item.cancelled === true);
-  const finalFingerprint = await createValidationFingerprint(workspace, config, { paths: fingerprintScope });
-  const scopeChanged = finalFingerprint.fingerprint !== currentFingerprint.fingerprint;
-  const ok = !cancelled && !scopeChanged && results.length === checks.length && results.every(item => item.ok);
+  const ok = !cancelled && results.length === checks.length && results.every(item => item.ok);
   const failedCheck = results.find(item => !item.ok)?.command || '';
-  const validationStatus = cancelled ? 'cancelled' : scopeChanged ? 'stale' : ok ? 'passed' : 'failed';
+  const validationStatus = cancelled ? 'cancelled' : ok ? 'passed' : 'failed';
   publishValidationProgress({
     checks,
     skippedChecks,
@@ -244,10 +236,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     ? 'Validation is current for this work_id. Do not rerun unchanged checks; review task-owned changes if needed, then call relai_work with action "finish" once, or use complete:true on the validating call to close atomically.'
     : cancelled
       ? 'Validation was cancelled. Review the partial result and resume only the smallest still-relevant check.'
-      : scopeChanged
-        ? 'Relevant task or validation configuration changed while checks were running. Re-run the same smallest relevant validation against the current task state.'
-        : 'Fix or diagnose the failing check, then rerun only the smallest relevant validation unless workflow guidance widens the boundary.';
-  const validationFingerprint = finalFingerprint.fingerprint;
+      : 'Fix or diagnose the failing check, then rerun only the smallest relevant validation unless workflow guidance widens the boundary.';
+  const validationFingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
   const validationResult = {
     ok,
     workspace: workspace.alias,
@@ -264,7 +254,6 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     validated: results.length > 0,
     validationStatus,
     validationFingerprint,
-    validationScope: finalFingerprint.scopePaths,
     cancelled,
     completedUnits: completedValidationUnits(results),
     executedUnits,

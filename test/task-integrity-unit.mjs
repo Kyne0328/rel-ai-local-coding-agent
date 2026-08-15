@@ -87,13 +87,11 @@ try {
   await recordTaskIntegrityEvent(config, event(taskOne, 'validate.checks', {
     validationStatus: 'passed',
     validationLevel: 'focused',
-    validationFingerprint: 'fingerprint-one',
-    validationScope: ['task-one.js', 'package.json']
+    validationFingerprint: 'fingerprint-one'
   }));
   const validated = readTaskIntegrity(config, taskOne, 'app');
   assert.equal(validated.latestValidatedMutationGeneration, validated.mutationGeneration);
   assert.equal(validated.validatedRepositoryFingerprint, 'fingerprint-one');
-  assert.deepEqual(validated.validationScope, ['task-one.js', 'package.json']);
 
   fs.writeFileSync(path.join(workspacePath, 'task-one.js'), 'export const one = 3;\n');
   await recordTaskIntegrityEvent(config, event(taskOne, 'edit', { changedFiles: ['task-one.js'] }));

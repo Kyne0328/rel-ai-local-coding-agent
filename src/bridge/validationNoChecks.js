@@ -4,10 +4,9 @@ import { createValidationFingerprint } from './validationPlan.js';
 async function noChecksValidationResult(workspace, config, details) {
   const {
     level, skippedChecks, aliasNormalizations, validationLevel,
-    validationLevelReason, changedFiles, policy, validationScope = []
+    validationLevelReason, changedFiles, policy
   } = details;
-  const fingerprint = await createValidationFingerprint(workspace, config, { paths: validationScope });
-  const validationFingerprint = fingerprint.fingerprint;
+  const validationFingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
   updateCurrentToolActivity({
     status: 'validating',
     operation: `No ${level} validation commands were detected`,
@@ -37,7 +36,6 @@ async function noChecksValidationResult(workspace, config, details) {
     validated: false,
     validationStatus: 'not_run',
     validationFingerprint,
-    validationScope: fingerprint.scopePaths,
     message: 'Validation status: NOT RUN. No validation checks were detected or executed. This is not a passed validation. Define a check/test/build script or pass an explicit check.'
   };
 }
