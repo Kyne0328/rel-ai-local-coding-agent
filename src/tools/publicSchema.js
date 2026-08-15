@@ -11,16 +11,16 @@ const PUBLIC_INPUT_DESCRIPTIONS = Object.freeze({
 function compactPublicInputSchema(name, inputSchema) {
   // Keep shared connector properties at the top level. OpenAI's MCP importer can
   // project a top-level oneOf branch as a complete argument object, hiding shared
-  // properties. Preserve the exact executable constraints by moving action
-  // variants into conditional allOf guards and wrapping non-action variants one
-  // level down instead of discarding them.
+  // properties. Preserve the constraints that help callers construct a valid
+  // request (required fields, bounds, and primary modes), while leaving known
+  // action-only extras to runtime normalization.
   const schema = connectorSafeInputSchema(inputSchema || {});
   return stripPublicDescriptions(schema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
 }
 
 function connectorSafeInputSchema(inputSchema) {
-  const { oneOf: variants, allOf: existingGuards = [], ...schema } = inputSchema;
-  const allOf = [...existingGuards];
+  const { oneOf: variants, allOf: _runtimeFieldGuards, ...schema } = inputSchema;
+  const allOf = [];
   if (Array.isArray(variants) && variants.length) {
     if (variants.every(isActionVariant)) {
       allOf.push(...variants.map(actionVariantGuard));
