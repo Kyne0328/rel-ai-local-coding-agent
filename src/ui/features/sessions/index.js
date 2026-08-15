@@ -117,14 +117,19 @@ function maybeOpenRequestedSession() {
 export function sessionSummary(sessions) {
   const counts = sessions.reduce((summary, session) => {
     const state = workSessionStateView(session);
-    if (state.active) summary.active += 1;
-    else if (state.status === 'waiting') summary.open += 1;
-    else if (['waiting_for_approval', 'blocked', 'validation_failed'].includes(state.status)) summary.attention += 1;
-    else if (state.status === 'inactive') summary.inactive += 1;
+    const inactive = state.status === 'inactive';
+    const open = !state.terminal && !inactive;
+    // Active is the executing subset of open; inactivity is the stale boundary.
+    const active = open && Number(session.activeCalls || 0) > 0;
+
+    if (open) summary.open += 1;
+    if (active) summary.active += 1;
+    if (['waiting_for_approval', 'blocked', 'validation_failed'].includes(state.status)) summary.attention += 1;
+    else if (inactive) summary.inactive += 1;
     else if (state.status === 'completed') summary.completed += 1;
     else if (state.status === 'cancelled') summary.cancelled += 1;
     else if (state.status === 'failed') summary.failed += 1;
-    else summary.other += 1;
+    else if (!open) summary.other += 1;
     return summary;
   }, { active: 0, open: 0, attention: 0, inactive: 0, completed: 0, cancelled: 0, failed: 0, other: 0 });
 
@@ -402,7 +407,8 @@ function durationDetail(session, live) {
 
 function sessionNeedsAttention(session) {
   if (workSessionStateView(session).status === 'completed') return false;
-  return session.validation === 'failed'
+  return session.sandboxRecovery?.state === 'conflict'
+    || session.validation === 'failed'
     || ['failed', 'validation_failed', 'blocked'].includes(String(session.status || ''));
 }
 
@@ -412,7 +418,13 @@ function attentionSection(session) {
   const failures = Number(session.failures || session.failedToolCallCount || 0);
   if (failures) items.push(`${failures} action${failures === 1 ? '' : 's'} failed`);
   if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Checks failed');
-  if (session.status === 'blocked') items.push(session.endReason || 'Task is blocked');
+  const recovery = session.sandboxRecovery?.state === 'conflict' ? session.sandboxRecovery : null;
+  if (recovery) {
+    items.push(recovery.message || 'Private task changes conflict with newer visible workspace changes.');
+    const paths = Array.isArray(recovery.changedFiles) ? recovery.changedFiles.slice(0, 8) : [];
+    if (paths.length) items.push(`Conflicting files: ${paths.join(', ')}`);
+  }
+  if (session.status === 'blocked' && !recovery) items.push(session.endReason || 'Task is blocked');
   if (session.status === 'failed') items.push(session.endReason || 'The task ended with an unresolved problem');
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
 }
