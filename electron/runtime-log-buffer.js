@@ -7,6 +7,7 @@ import { sanitizeText } from "../src/diagnostics.js";
 function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISOString(), filePath = '' } = {}) {
   const entries = [];
   let hydratedPath = '';
+  let writeQueue = Promise.resolve();
 
   function append(message, options = {}) {
     hydrate();
@@ -75,25 +76,31 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
   function persist(entry, rewrite) {
     const target = resolveFilePath();
     if (!target) return;
-    try {
-      fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
-      if (rewrite) rewriteFile();
-      else fs.appendFileSync(target, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 });
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] runtime log persist:', error);
+    if (rewrite) {
+      rewriteFile();
+      return;
     }
+    enqueueWrite(target, () => fs.promises.appendFile(target, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 }));
   }
 
   function rewriteFile() {
     const target = resolveFilePath();
     if (!target) return;
-    try {
-      fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
-      const text = entries.map(entry => JSON.stringify(entry)).join('\n');
-      fs.writeFileSync(target, text ? `${text}\n` : '', { encoding: 'utf8', mode: 0o600 });
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] runtime log rewrite:', error);
-    }
+    const text = entries.map(entry => JSON.stringify(entry)).join('\n');
+    enqueueWrite(target, () => fs.promises.writeFile(target, text ? `${text}\n` : '', { encoding: 'utf8', mode: 0o600 }));
+  }
+
+  function enqueueWrite(target, operation) {
+    writeQueue = writeQueue.then(async () => {
+      await fs.promises.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+      await operation();
+    }).catch(error => {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] runtime log persist:', error);
+    });
+  }
+
+  async function flush() {
+    await writeQueue;
   }
 
   function resolveFilePath() {
@@ -104,7 +111,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     }
   }
 
-  return { append, snapshot, clear, recordStatusTransition };
+  return { append, snapshot, clear, recordStatusTransition, flush };
 }
 
 function normalizeEntry(value = {}) {

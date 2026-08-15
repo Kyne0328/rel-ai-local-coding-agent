@@ -7,6 +7,7 @@ function createShutdownCoordinator(options = {}) {
     removeRuntimeMarker = () => {},
     shutdownTelemetry = async () => {},
     markCleanShutdown = () => {},
+    flushLogs = async () => {},
     onLog = () => {}
   } = options;
   let shutdownPromise = null;
@@ -52,6 +53,7 @@ function createShutdownCoordinator(options = {}) {
           code: 'shutdown_process_exit_unconfirmed'
         });
       }
+      await flushLogs();
       return { ok: clean && errors.length === 0, clean, reason, errors, serviceResult };
     })();
     return shutdownPromise;

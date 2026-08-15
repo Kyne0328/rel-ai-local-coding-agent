@@ -30,9 +30,9 @@ function createDesktopTray(deps) {
       { type: 'separator' },
       { label: 'Open Dashboard', click: () => void openDashboard().catch(onError) },
       {
-        label: 'Copy local connection address',
-        enabled: Boolean(status.mcpUrl),
-        click: () => { if (status.mcpUrl) clipboard.writeText(status.mcpUrl); }
+        label: 'Copy local MCP address',
+        enabled: Boolean(status.localMcpUrl),
+        click: () => { if (status.localMcpUrl) clipboard.writeText(status.localMcpUrl); }
       },
       {
         label: status.serverRunning ? 'Stop Rel.AI' : 'Start Rel.AI',

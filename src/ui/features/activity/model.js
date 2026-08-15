@@ -24,43 +24,38 @@ export function mergeActivityEntries(current, incoming) {
   const incomingEntries = Array.isArray(incoming) ? incoming : [];
   if (incomingEntries.length === 0) return { entries: currentEntries, changed: false };
 
-  const byKey = new Map(currentEntries.map(entry => [activityEntryKey(entry), entry]));
+  const next = [...currentEntries];
+  const indexByKey = new Map();
+  for (let index = 0; index < next.length; index += 1) {
+    const entry = next[index];
+    if (entry && typeof entry === 'object') indexByKey.set(activityEntryKey(entry), index);
+  }
   let changed = false;
+  let orderChanged = false;
   for (const incomingEntry of incomingEntries) {
     if (!incomingEntry || typeof incomingEntry !== 'object') continue;
     const key = activityEntryKey(incomingEntry);
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, incomingEntry);
+    const index = indexByKey.get(key);
+    if (index === undefined) {
+      indexByKey.set(key, next.length);
+      next.push(incomingEntry);
       changed = true;
+      orderChanged = true;
       continue;
     }
+    const existing = next[index];
     const merged = mergeActivityEntry(existing, incomingEntry);
-    if (JSON.stringify(merged) !== JSON.stringify(existing)) {
-      byKey.set(key, merged);
-      changed = true;
-    }
+    if (JSON.stringify(merged) === JSON.stringify(existing)) continue;
+    next[index] = merged;
+    changed = true;
+    if (eventTimestampValue(merged) !== eventTimestampValue(existing)) orderChanged = true;
   }
   if (!changed) return { entries: currentEntries, changed: false };
+  const ordered = orderChanged ? sortActivityEntries(next) : next;
   return {
-    entries: sortActivityEntries([...byKey.values()]).slice(0, MAX_ACTIVITY_ENTRIES),
+    entries: ordered.length > MAX_ACTIVITY_ENTRIES ? ordered.slice(0, MAX_ACTIVITY_ENTRIES) : ordered,
     changed: true
   };
-}
-
-export function activityEntriesFingerprint(entries) {
-  return JSON.stringify((Array.isArray(entries) ? entries : []).map(entry => [
-    activityEntryKey(entry),
-    eventTimestampValue(entry),
-    entry?.tool?.name || entry?.tool || entry?.type || '',
-    entry?.workspace || '',
-    entry?.taskId || '',
-    entry?.sessionId || '',
-    entry?.status || '',
-    entry?.ok,
-    entry?.title || entry?.operation || '',
-    activityMessage(entry)
-  ]));
 }
 
 export function activityMessage(entry) {
@@ -127,7 +122,8 @@ export function filterActivityEntries(entries, filterState = {}, now = Date.now(
   const rangeMs = RANGE_MS[filterState.timeRange];
   const requestedStatus = normalizeStatusFilter(filterState.status);
   const search = String(filterState.search || '').trim().toLowerCase();
-  return sortActivityEntries(entries).filter(entry => {
+  const source = options.sorted === true ? (Array.isArray(entries) ? entries : []) : sortActivityEntries(entries);
+  return source.filter(entry => {
     if (rangeMs) {
       const timestamp = eventTimestampMs(entry);
       if (!timestamp || now - timestamp >= rangeMs) return false;

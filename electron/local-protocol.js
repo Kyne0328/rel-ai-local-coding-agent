@@ -32,12 +32,12 @@ function installLocalProtocol(protocol, rendererRoot) {
   }
   if (installedProtocols.has(protocol)) return false;
   const root = path.resolve(rendererRoot);
-  protocol.handle(LOCAL_SCHEME, request => {
+  protocol.handle(LOCAL_SCHEME, async request => {
     const target = resolveLocalRendererPath(request.url, root);
     if (!target) return new Response('Not found', { status: 404 });
     try {
       const contentType = CONTENT_TYPES[path.extname(target).toLowerCase()] || 'application/octet-stream';
-      return new Response(fs.readFileSync(target), {
+      return new Response(await fs.promises.readFile(target), {
         status: 200,
         headers: {
           'content-type': contentType,

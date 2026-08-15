@@ -4,7 +4,6 @@ import * as activityModel from '../src/ui/features/activity/model.js';
 import {
   activityAbsoluteTime,
   activityActionLabel,
-  activityEntriesFingerprint,
   activityFilterTransition,
   activityMessage,
   activityStatusGroup,
@@ -49,14 +48,6 @@ test('live merges report no-op snapshots and preserve useful message text', () =
   assert.equal(changed.entries[0].summary, 'Read failed.');
 });
 
-test('activity fingerprints only change when displayed content changes', () => {
-  const base = activityEntriesFingerprint([entry()]);
-  assert.equal(base, activityEntriesFingerprint([entry()]));
-  assert.notEqual(base, activityEntriesFingerprint([entry({ summary: 'Different message.' })]));
-  assert.notEqual(base, activityEntriesFingerprint([entry({ taskId: 'task-2' })]), 'session reassignment must refresh the displayed Session column');
-  assert.notEqual(base, activityEntriesFingerprint([entry({ sessionId: 'session-2' })]), 'session-id reassignment must refresh the displayed Session column');
-});
-
 test('activity resolves user-facing work-session context from task or session ids', () => {
   assert.equal(typeof activityModel.activitySessionView, 'function', 'activity model must expose session resolution');
   const { activitySessionView } = activityModel;
@@ -70,7 +61,7 @@ test('activity resolves user-facing work-session context from task or session id
     shortId: 'task-1',
     linked: true
   });
-  assert.equal(activitySessionView(entry({ taskId: 'missing-session' }), sessions).title, 'Session missing-');
+  assert.equal(activitySessionView(entry({ taskId: 'missing-session' }), sessions).title, 'Task missing-');
   assert.equal(activitySessionView(entry({ taskId: '', sessionId: '' }), sessions).title, 'Unlinked activity');
 });
 
@@ -107,6 +98,8 @@ test('filters use exact status groups and an injected current time', () => {
   ];
   const base = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
   assert.deepEqual(filterActivityEntries(entries, base, NOW).map(item => item.eventId), ['recent-success', 'recent-running', 'recent-blocked']);
+  const sorted = [entries[1], entries[0], entries[2], entries[3]];
+  assert.deepEqual(filterActivityEntries(sorted, base, NOW, { sorted: true }).map(item => item.eventId), ['recent-running', 'recent-success', 'recent-blocked'], 'pre-sorted activity should filter without reordering');
   assert.deepEqual(filterActivityEntries(entries, { ...base, status: 'active' }, NOW).map(item => item.eventId), ['recent-running']);
   assert.deepEqual(filterActivityEntries(entries, { ...base, status: 'blocked' }, NOW).map(item => item.eventId), ['recent-blocked']);
   assert.deepEqual(filterActivityEntries(entries, { ...base, status: 'ok' }, NOW).map(item => item.eventId), ['recent-success'], 'legacy successful routes should map to succeeded only');

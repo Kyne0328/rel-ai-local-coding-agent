@@ -19,6 +19,7 @@ try {
   buffer.append('Authorization: Bearer secret-token', { source: 'openai-tunnel', code: 'public_endpoint_failed' });
   buffer.append('{"token":"secret-token"}', { level: 'error' });
   buffer.append('fourth');
+  await buffer.flush();
 
   const bounded = buffer.snapshot();
   assert.equal(bounded.count, 3);
@@ -50,6 +51,7 @@ try {
   assert.doesNotMatch(JSON.stringify(messages), /secret-token/);
 
   const cleared = buffer.clear();
+  await buffer.flush();
   assert.equal(cleared.ok, true);
   assert.equal(cleared.removed, 3);
   assert.equal(buffer.snapshot().count, 0);
