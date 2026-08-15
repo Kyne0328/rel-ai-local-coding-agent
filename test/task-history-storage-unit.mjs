@@ -17,7 +17,7 @@ try {
 
   // Simulate another Rel.AI process replacing the same session file with a same-size
   // payload. A filename-only metadata cache used to keep returning "before" forever.
-  fs.writeFileSync(file, JSON.stringify({ id, workspace: 'repo', summary: 'after!' }));
+  fs.writeFileSync(file, JSON.stringify({ version: 3, id, taskId: id, sessionId: id, workspace: 'repo', summary: 'after!' }));
   const future = new Date(Date.now() + 2000);
   fs.utimesSync(file, future, future);
 
