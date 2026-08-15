@@ -6,7 +6,7 @@ import { collectOptionsFromWorkspace, createCollectionPathFilter, isPathInside, 
 import { repositoryIndexPath } from './database.js';
 import { DEFAULT_MAX_INDEX_FILES, MAX_INDEXED_FILE_BYTES, scanWorkspace } from './indexBuild.js';
 
-const RECONCILE_INTERVAL_MS = 30000;
+const FALLBACK_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const MAX_INCREMENTAL_PATHS = 1000;
 const MAX_COALESCED_PASSES = 3;
 const WORKER_CANCEL_GRACE_MS = 250;
@@ -21,7 +21,8 @@ async function ensureRepositoryIndex(workspace, config = {}, options = {}) {
   const state = runtimeState(databaseFile);
   if (options.watch !== false) ensureWorkspaceWatcher(workspace, databaseFile, state);
   const now = Date.now();
-  if (state.metadata && !state.dirty && now - state.lastFullScanAt < RECONCILE_INTERVAL_MS && options.force !== true) {
+  const fallbackReconcileDue = !state.watcher && now - state.lastFullScanAt >= FALLBACK_RECONCILE_INTERVAL_MS;
+  if (state.metadata && !state.dirty && !fallbackReconcileDue && options.force !== true) {
     return decorateMetadata(state, { ...state.metadata, cacheHit: true, checkedAt: new Date().toISOString() });
   }
 
@@ -173,8 +174,9 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
 }
 
 function consumeRefreshSelection(state, mode, force) {
-  const periodicFullScanDue = !state.lastFullScanAt || Date.now() - state.lastFullScanAt >= RECONCILE_INTERVAL_MS;
-  const full = force || mode === 'rebuild' || mode === 'recover' || state.fullScanRequired || periodicFullScanDue || state.pendingPaths.size === 0;
+  const fallbackReconcileDue = !state.watcher
+    && (!state.lastFullScanAt || Date.now() - state.lastFullScanAt >= FALLBACK_RECONCILE_INTERVAL_MS);
+  const full = force || mode === 'rebuild' || mode === 'recover' || state.fullScanRequired || fallbackReconcileDue;
   const paths = full ? null : [...state.pendingPaths].slice(0, MAX_INCREMENTAL_PATHS);
   state.pendingPaths.clear();
   state.fullScanRequired = false;

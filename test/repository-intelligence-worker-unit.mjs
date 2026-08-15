@@ -44,6 +44,18 @@ try {
   assert.equal(cached.cacheHit, true);
   assert.equal(evictIdleRepositoryWorkers('cache hit must not recreate worker'), 0);
 
+  const realNow = Date.now;
+  try {
+    const baselineNow = realNow();
+    Date.now = () => baselineNow + 10 * 60_000;
+    const watcherCached = await repositoryIntelligence.ensure(workspace, config);
+    assert.equal(watcherCached.cacheHit, true,
+      'a healthy watcher must remain authoritative instead of forcing periodic full scans');
+    assert.equal(evictIdleRepositoryWorkers('healthy watcher cache hit must not recreate worker'), 0);
+  } finally {
+    Date.now = realNow;
+  }
+
   const status = repositoryIntelligence.status(workspace, config);
   assert.equal(status.status, 'ready');
   assert.equal(status.active, false);
