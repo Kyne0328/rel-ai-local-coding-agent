@@ -14,7 +14,7 @@ const READ_TAIL_BYTES = 256 * 1024;
 const AUDIT_FLUSH_DELAY_MS = 50;
 const auditWriteStates = new Map();
 
-function logAudit(config, event) {
+async function logAudit(config, event) {
   const auditPath = getAuditPath(config);
   const redacted = redactEvent(event || {});
   const entry = {
@@ -23,15 +23,15 @@ function logAudit(config, event) {
     ...redacted,
     auditId: redacted.auditId || crypto.randomUUID()
   };
-  const integrity = recordTaskIntegrityEvent(config, entry);
+  const integrity = await recordTaskIntegrityEvent(config, entry);
   if (integrity) Object.assign(entry, integrity);
   enqueueAuditWrite(auditPath, entry);
   return entry;
 }
 
-function safeLogAudit(config, event, options = {}) {
+async function safeLogAudit(config, event, options = {}) {
   try {
-    return logAudit(config, event);
+    return await logAudit(config, event);
   } catch (error) {
     if (options.strictIntegrity === true && /^TASK_INTEGRITY_/.test(String(error?.code || ''))) throw error;
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] audit write:', error);

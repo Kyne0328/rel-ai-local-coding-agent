@@ -1,8 +1,9 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { resolveWorkspace } from './config.js';
+import { runProcess } from './process.js';
+import { gitStatusArgs, parseGitStatus } from './repo/gitStatus.js';
 import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { getStateDir } from './statePaths.js';
 
@@ -31,13 +32,15 @@ class TaskIntegrityError extends Error {
   }
 }
 
-function recordTaskIntegrityEvent(config, event = {}) {
+async function recordTaskIntegrityEvent(config, event = {}) {
   const taskId = clean(event.taskId);
   const workspaceAlias = clean(event.workspace);
   if (!taskId || !workspaceAlias || Number(event.taskIdentityVersion || 0) < 2) return null;
 
   try {
     if (!integrityEventRequiresPersistence(event)) return readIntegrityProjection(config, taskId, workspaceAlias);
+    const workspace = resolveWorkspace(config, workspaceAlias);
+    const repository = await repositoryStateForEvent(workspace, config, event);
     return withIntegrityLock(config, () => {
       let authority = readJson(taskFile(config, taskId));
       if (!authority) {
@@ -47,14 +50,13 @@ function recordTaskIntegrityEvent(config, event = {}) {
             `Authoritative integrity state is missing for logical task '${taskId}'. Start a new logical task rather than reconstructing safety state from audit history.`
           );
         }
-        const workspace = resolveWorkspace(config, workspaceAlias);
-        authority = createAuthority(taskId, workspace, event);
+        authority = createAuthority(taskId, workspace, event, repository.baseline);
       }
-      const workspace = resolveWorkspace(config, authority.workspace || workspaceAlias);
-      const workspaceState = readJson(workspaceFile(config, workspace.alias)) || createWorkspaceState(workspace.alias);
-      const projection = applyIntegrityEvent(authority, workspaceState, workspace, event);
+      const ownedWorkspace = resolveWorkspace(config, authority.workspace || workspaceAlias);
+      const workspaceState = readJson(workspaceFile(config, ownedWorkspace.alias)) || createWorkspaceState(ownedWorkspace.alias);
+      const projection = applyIntegrityEvent(authority, workspaceState, ownedWorkspace, event, repository.changedFiles);
       writeJson(taskFile(config, taskId), authority);
-      writeJson(workspaceFile(config, workspace.alias), workspaceState);
+      writeJson(workspaceFile(config, ownedWorkspace.alias), workspaceState);
       return projection;
     });
   } catch (error) {
@@ -92,7 +94,7 @@ function readWorkspaceIntegrity(config, workspaceAlias) {
   }
 }
 
-function applyIntegrityEvent(authority, workspaceState, workspace, event) {
+function applyIntegrityEvent(authority, workspaceState, workspace, event, repositoryChanged = null) {
   const tool = clean(event.tool);
   const timestamp = clean(event.ts) || new Date().toISOString();
   const changedFiles = exactChangedFiles(event);
@@ -131,7 +133,7 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
   if (tool === 'relai_cancel_work' && event.ok !== false) authority.cancelledAt = timestamp;
 
   if (mutation || REPOSITORY_RECONCILE_TOOLS.has(tool)) {
-    authority.ambientChangedFiles = repositoryChangedFiles(workspace.path);
+    authority.ambientChangedFiles = Array.isArray(repositoryChanged) ? repositoryChanged : authority.ambientChangedFiles;
     authority.externalChangedFiles = authority.ambientChangedFiles.filter(file =>
       !authority.baseline.changedFiles.includes(file) && !authority.taskOwnedChangedFiles.includes(file)
     );
@@ -188,8 +190,8 @@ function applyValidationState(authority, workspaceState, event, timestamp) {
   authority.validatedRepositoryFingerprint = authority.validationFingerprint;
   authority.conflictingExternalMutations = [];
 }
-function createAuthority(taskId, workspace, event) {
-  const baseline = repositoryBaseline(workspace.path);
+function createAuthority(taskId, workspace, event, baseline) {
+  if (!baseline) throw new TaskIntegrityError('TASK_INTEGRITY_STATE_INVALID', 'Repository baseline was not captured for task creation.');
   const timestamp = clean(event.ts) || new Date().toISOString();
   return {
     version: STORE_VERSION,
@@ -231,44 +233,36 @@ function createWorkspaceState(workspace) {
   };
 }
 
-function repositoryBaseline(root) {
-  const branch = gitText(root, ['branch', '--show-current']);
-  const head = gitText(root, ['rev-parse', '--verify', 'HEAD']);
+async function repositoryStateForEvent(workspace, config, event) {
+  const tool = clean(event?.tool);
+  const mutation = eventMutatedCode(event) && (event?.ok !== false || exactChangedFiles(event).length > 0);
+  const needsChangedFiles = tool === 'relai_begin_work' || mutation || REPOSITORY_RECONCILE_TOOLS.has(tool);
+  if (!needsChangedFiles) return { baseline: null, changedFiles: null };
+  const statusResult = await runProcess('git', gitStatusArgs(), {
+    cwd: workspace.path,
+    timeout: 30_000,
+    maxOutputBytes: 8 * 1024 * 1024
+  }, config);
+  const parsed = statusResult.exitCode === 0 && !statusResult.stdoutTruncated
+    ? parseGitStatus(statusResult.stdout || '')
+    : { branch: null, unborn: false, entries: [] };
+  const changedFiles = unique((parsed.entries || []).map(entry => normalizePath(entry.path)).filter(Boolean)).sort();
+  if (tool !== 'relai_begin_work') return { baseline: null, changedFiles };
+  const headResult = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
+    cwd: workspace.path,
+    timeout: 30_000,
+    maxOutputBytes: 1024 * 1024
+  }, config);
+  const head = headResult.exitCode === 0 && !headResult.stdoutTruncated ? String(headResult.stdout || '').trim() : '';
   return {
-    branch,
-    head,
-    unborn: Boolean(branch && !head),
-    changedFiles: repositoryChangedFiles(root)
+    changedFiles,
+    baseline: {
+      branch: parsed.branch || '',
+      head,
+      unborn: parsed.unborn === true || Boolean(parsed.branch && !head),
+      changedFiles
+    }
   };
-}
-
-function repositoryChangedFiles(root) {
-  const text = gitText(root, ['status', '--porcelain=v1', '-z'], false);
-  if (!text) return [];
-  const files = [];
-  const parts = text.split('\0').filter(Boolean);
-  for (let index = 0; index < parts.length; index += 1) {
-    const item = parts[index];
-    const status = item.slice(0, 2);
-    let file = item.slice(3);
-    if (status.includes('R') || status.includes('C')) file = parts[++index] || file;
-    if (file) files.push(normalizePath(file));
-  }
-  return unique(files).sort();
-}
-
-function gitText(root, args, trim = true) {
-  try {
-    const output = execFileSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 8 * 1024 * 1024
-    });
-    return trim ? output.trim() : output;
-  } catch {
-    return '';
-  }
 }
 
 function eventMutatedCode(event) {
