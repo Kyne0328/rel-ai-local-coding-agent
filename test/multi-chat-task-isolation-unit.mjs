@@ -110,9 +110,9 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
   fs.writeFileSync(path.join(workspace, 'README.md'), '# task isolation\n');
   const config = { stateDir };
   try {
-    assert.equal(ensureSessionStarted(config, 'repo', workspace, { taskId: 'task-a' }), true);
+    assert.equal(await ensureSessionStarted(config, 'repo', workspace, { taskId: 'task-a' }), true);
     fs.writeFileSync(path.join(workspace, 'a.txt'), 'a\n');
-    assert.equal(ensureSessionStarted(config, 'repo', workspace, { taskId: 'task-b' }), true);
+    assert.equal(await ensureSessionStarted(config, 'repo', workspace, { taskId: 'task-b' }), true);
     const policyA = readSessionPolicy(config, 'repo', 'task-a');
     const policyB = readSessionPolicy(config, 'repo', 'task-b');
     assert.equal(policyA?.taskId, 'task-a');
@@ -123,8 +123,27 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
     assert.equal(readSessionPolicy(config, 'repo', 'task-a'), null);
     assert.equal(readSessionPolicy(config, 'repo', 'task-b')?.taskId, 'task-b', 'clearing A must not clear B');
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    await removeDirectoryWithRetry(root);
   }
+}
+
+async function removeDirectoryWithRetry(directory, attempts = 40) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      fs.rmSync(directory, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(error?.code)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+  if (process.platform === 'win32' && lastError?.code === 'EPERM') {
+    process.once('exit', () => { try { fs.rmSync(directory, { recursive: true, force: true }); } catch {} });
+    return;
+  }
+  throw lastError;
 }
 
 console.log('Multi-chat logical task isolation tests passed.');

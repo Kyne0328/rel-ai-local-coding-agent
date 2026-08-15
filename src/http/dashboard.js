@@ -15,7 +15,8 @@ import { getVersion } from "../version.js";
 import { resolveRequireHttpToken } from "./auth.js";
 import { readTaskHistory, readTaskHistorySession } from "../taskHistoryStore.js";
 import { onToolActivity } from "../toolActivity.js";
-import { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskProjection, mergeDashboardActivity } from "./dashboardData.js";
+import { buildDashboardConnectionProjection, buildDashboardPayload, buildDashboardTaskDelta, mergeDashboardActivity } from "./dashboardData.js";
+import { createDashboardTaskEventBatcher } from './dashboardEventBatcher.js';
 import { handleOpenFolder, handlePickFolder, handleWorkspaceChecks, workspacePathPreflight } from "./dashboardActions.js";
 import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
@@ -311,13 +312,15 @@ function openDashboardEvents(res, req, options) {
     sendDashboardStreamError(res, error);
   }
 
-  const unsubscribe = onToolActivity(activity => {
-    try {
-      const config = readConfigCached();
-      sendDomain('task.updated', 'task', activity.revision, buildDashboardTaskProjection(config, options));
-      sendDesktopConnectionIfChanged();
-    } catch (error) { sendDashboardStreamError(res, error); }
+  const taskEvents = createDashboardTaskEventBatcher({
+    onFlush: batch => {
+      try {
+        sendDomain('task.updated', 'task', batch.revision, buildDashboardTaskDelta(options, batch.activities));
+        sendDesktopConnectionIfChanged();
+      } catch (error) { sendDashboardStreamError(res, error); }
+    }
   });
+  const unsubscribe = onToolActivity(activity => taskEvents.push(activity));
   const unsubscribeConnection = mcpConnectionManager.onChange(snapshot => sendConnection(snapshot));
   const unsubscribeWorkspace = onWorkspaceStateChange(event => {
     sendDomain('workspace.updated', 'workspace', event.version, { alias: event.alias, state: event.state });
@@ -339,6 +342,7 @@ function openDashboardEvents(res, req, options) {
     unsubscribeConnection();
     unsubscribeWorkspace();
     unsubscribeProcess();
+    taskEvents.close();
     clearInterval(heartbeat);
   });
 }

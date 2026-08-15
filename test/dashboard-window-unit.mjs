@@ -137,7 +137,7 @@ try {
   assert.deepEqual(win.options.webPreferences.additionalArguments, ['--relai-preload-surface=dashboard']);
   assert.equal(win.options.backgroundColor, '#1f2937');
   assert.equal(win.options.webPreferences.sandbox, true);
-  assert.equal(win.options.webPreferences.backgroundThrottling, false);
+  assert.notEqual(win.options.webPreferences.backgroundThrottling, false, 'hidden dashboards should use Electron background throttling');
   assert.equal(win.options.webPreferences.partition, 'relai-dashboard');
   assert.equal(win.webContents.url, 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code');
   assert.equal(win.webContents.url.includes('secret-token'), false);

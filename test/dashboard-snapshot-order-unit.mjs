@@ -11,10 +11,13 @@ init({
 
 assert.equal(applyLiveEvent('task.updated', {
   streamId: 'stream-a', revision: 2,
-  taskActivity: { state: 'working', activeTaskCount: 1 },
-  tasks: [{ id: 'task-1' }]
+  taskActivity: { state: 'working', activeTaskCount: 1, tasks: [{ id: 'task-1', workspace: 'app', state: 'working' }] },
+  taskUpdates: [{ id: 'task-1', workspace: 'app', updatedAt: '2026-08-15T00:00:00.000Z' }],
+  activityEntries: [{ eventId: 'event-1', ts: '2026-08-15T00:00:00.000Z', message: 'Started' }]
 }).accepted, true);
 assert.equal(get().tasks[0].id, 'task-1');
+assert.equal(get().auditTail.entries[0].eventId, 'event-1');
+assert.equal(get().workspaceStates.app.currentActivity.taskId, 'task-1');
 assert.equal(get().live.revisions.task, 2);
 
 assert.equal(applyLiveEvent('task.updated', {

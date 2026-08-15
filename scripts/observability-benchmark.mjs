@@ -6,7 +6,9 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createToolActivityTracker } from '../src/toolActivity.js';
 import { flushTaskHistoryPersistence, recordTaskActivityEvent, readTaskHistory } from '../src/taskHistoryStore.js';
-import { buildDashboardPayload } from '../src/http/dashboardData.js';
+import { resetTaskHistoryCaches } from '../src/taskHistoryStorage.js';
+import { buildDashboardPayload, buildDashboardTaskDelta } from '../src/http/dashboardData.js';
+import { DASHBOARD_TASK_EVENT_COALESCE_MS, createDashboardTaskEventBatcher } from '../src/http/dashboardEventBatcher.js';
 import { flushLocalAnalytics, recordLocalToolOutcome } from '../src/localAnalytics.js';
 import { sanitizeDisplayText } from '../src/taskObservability.js';
 import { createDashboardClock } from '../src/ui/clock.js';
@@ -26,16 +28,21 @@ fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ name
 fs.mkdirSync(config.stateDir, { recursive: true });
 fs.writeFileSync(config.auditLogPath, '');
 
-const DASHBOARD_SNAPSHOT_COALESCE_MS = 100;
-
 const metrics = [];
 const tracker = createToolActivityTracker({ idleMs: 60_000 });
 let activityEvents = 0;
 let persistenceWrites = 0;
 let analyticsWrites = 0;
-let pendingPublication = false;
 let snapshotPublications = 0;
-let publicationTimer = null;
+let taskDeltaProjectionMs = 0;
+const taskEventBatcher = createDashboardTaskEventBatcher({
+  onFlush: batch => {
+    const started = performance.now();
+    buildDashboardTaskDelta({}, batch.activities);
+    taskDeltaProjectionMs += performance.now() - started;
+    snapshotPublications += 1;
+  }
+});
 const originalRename = fs.renameSync;
 const originalAsyncRename = fs.promises.rename;
 fs.renameSync = function patchedRename(source, target) {
@@ -50,13 +57,7 @@ fs.promises.rename = async function patchedAsyncRename(source, target) {
 const unsubscribe = tracker.onToolActivity(event => {
   activityEvents += 1;
   recordTaskActivityEvent(config, event, { defer: true });
-  if (!pendingPublication) {
-    pendingPublication = true;
-    publicationTimer = setTimeout(() => {
-      pendingPublication = false;
-      snapshotPublications += 1;
-    }, DASHBOARD_SNAPSHOT_COALESCE_MS);
-  }
+  taskEventBatcher.push(event);
 });
 
 try {
@@ -68,6 +69,7 @@ try {
   const eventBaseline = activityEvents;
   const writeBaseline = persistenceWrites;
   const publicationBaseline = snapshotPublications;
+  const taskDeltaBaseline = taskDeltaProjectionMs;
   for (let index = 0; index < 100; index += 1) {
     const finish = tracker.beginConnectorToolCall({
       tool: 'relai_read',
@@ -78,12 +80,13 @@ try {
     finish.update({ currentStage: 'Reading benchmark data', currentActivity: `Read ${index + 1} of 100` });
     finish({ ok: true, activity: { summary: `Read benchmark file ${index}` } });
   }
-  await delay(DASHBOARD_SNAPSHOT_COALESCE_MS + 20);
+  await delay(DASHBOARD_TASK_EVENT_COALESCE_MS + 20);
   await flushTaskHistoryPersistence();
   const afterStorage = directoryBytes(historyDirectory);
   addMetric('activity_events_per_100_tool_calls', '100 serial task-scoped tool calls with one progress update each', null, activityEvents - eventBaseline, 0, 305, '<=');
   addMetric('persistence_writes_per_100_tool_calls', 'same workload; coalesced async atomic history writes', null, persistenceWrites - writeBaseline, 0, 10, '<=');
-  addMetric('snapshot_publications_per_100_tool_calls', '100 ms canonical snapshot coalescer under serial burst', null, snapshotPublications - publicationBaseline, 0, 5, '<=');
+  addMetric('snapshot_publications_per_100_tool_calls', `${DASHBOARD_TASK_EVENT_COALESCE_MS} ms production dashboard task-event batcher under serial burst`, null, snapshotPublications - publicationBaseline, 0, 5, '<=');
+  addMetric('task_delta_projection_100_tool_calls_ms', 'production incremental task projection work for the coalesced 100-call burst', null, round(taskDeltaProjectionMs - taskDeltaBaseline), 0, 50, '<=');
   addMetric('queue_wait_events_per_100_tool_calls', 'serial uncontended workspace workload', null, 0, 0, 0, '<=');
   addMetric('task_history_storage_growth_bytes', '100 task-scoped calls', null, afterStorage - beforeStorage, 0, 2 * 1024 * 1024, '<=');
 
@@ -93,7 +96,7 @@ try {
     const finish = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'app', taskId, operation: `Event ${index}` });
     finish({ ok: true });
   }
-  await delay(DASHBOARD_SNAPSHOT_COALESCE_MS + 20);
+  await delay(DASHBOARD_TASK_EVENT_COALESCE_MS + 20);
   global.gc?.();
   const heapAfter = process.memoryUsage().heapUsed;
   addMetric('memory_after_1000_events_bytes', 'heap used after an additional 1,000 tool calls in one bounded task timeline', null, heapAfter, 0, 256 * 1024 * 1024, '<=');
@@ -187,10 +190,11 @@ try {
   console.log(JSON.stringify(report, null, 2));
   if (!report.complete || report.summary.failed > 0) process.exitCode = 1;
 } finally {
-  if (publicationTimer) clearTimeout(publicationTimer);
+  taskEventBatcher.close();
   unsubscribe();
   await flushTaskHistoryPersistence();
   await flushLocalAnalytics(config);
+  resetTaskHistoryCaches();
   fs.renameSync = originalRename;
   fs.promises.rename = originalAsyncRename;
   fs.rmSync(temp, { recursive: true, force: true });

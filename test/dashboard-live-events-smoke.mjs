@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import * as dashboardSessions from '../src/http/dashboardSessions.js';
 import { beginConnectorToolCall, resetToolActivity } from '../src/toolActivity.js';
+import { resetTaskHistoryCaches } from '../src/taskHistoryStorage.js';
 import { mcpConnectionManager } from '../src/mcp/connectionManager.js';
 
 const dashboardSource = fs.readFileSync(new URL('../src/http/dashboard.js', import.meta.url), 'utf8');
@@ -17,7 +18,8 @@ for (const eventName of ['dashboard.bootstrap', 'task.updated', 'connection.upda
   assert.match(eventClientSource, new RegExp(eventName.replace('.', '\\.')), `client must subscribe to ${eventName}`);
 }
 assert.doesNotMatch(dashboardSource, /sendSse\(res, ['"]dashboard['"]/, 'legacy broad dashboard SSE events must be deleted');
-assert.doesNotMatch(dashboardSource, /DASHBOARD_SNAPSHOT_COALESCE_MS|DASHBOARD_SNAPSHOT_MAX_WAIT_MS|dashboardStreamPayload|requestedDashboardRevision/);
+assert.match(dashboardSource, /createDashboardTaskEventBatcher/, 'production task updates must be coalesced before SSE publication');
+assert.doesNotMatch(dashboardSource, /DASHBOARD_SNAPSHOT_MAX_WAIT_MS|dashboardStreamPayload|requestedDashboardRevision/);
 assert.doesNotMatch(eventClientSource, /_snapshotRevision|params\.set\(['"]revision['"]/, 'client must not request legacy snapshot catch-up');
 assert.match(eventClientSource, /removeEventListener/, 'SSE listeners must be removed when a source closes');
 assert.match(eventClientSource, /function parseEventData[\s\S]*try[\s\S]*JSON\.parse[\s\S]*catch/, 'SSE payload parsing must fail safely');
@@ -101,7 +103,8 @@ try {
   const taskEvent = JSON.parse((await stream.nextType('task.updated')).data);
   assert.equal(taskEvent.domain, 'task');
   assert.ok(taskEvent.revision > bootstrap.live.revisions.task);
-  assert.ok(taskEvent.tasks.some(task => task.id === taskId));
+  assert.ok(taskEvent.taskUpdates.some(task => task.id === taskId));
+  assert.ok(Array.isArray(taskEvent.activityEntries), 'task delta must carry only changed activity entries');
   assert.equal(Object.hasOwn(taskEvent, 'release'), false, 'task delta must not rebuild unrelated release state');
   assert.equal(Object.hasOwn(taskEvent, 'tools'), false, 'task delta must not rebuild static tool data');
   assert.equal(Object.hasOwn(taskEvent, 'managedProcesses'), false, 'task delta must not include process state');
@@ -144,12 +147,15 @@ try {
   controller.abort();
   await responseReader?.cancel().catch(() => {});
   resetToolActivity();
+  resetTaskHistoryCaches();
   server.closeAllConnections?.();
   await closeServer(server);
   if (previousConfigPath == null) delete process.env.REL_AI_MCP_CONFIG; else process.env.REL_AI_MCP_CONFIG = previousConfigPath;
   if (previousStateDir == null) delete process.env.REL_AI_MCP_STATE_DIR; else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;
   fs.rmSync(sandbox, { recursive: true, force: true });
 }
+
+console.log('Dashboard typed live events and reconnect bootstrap passed.');
 
 function createEventReader(reader) {
   const decoder = new TextDecoder();

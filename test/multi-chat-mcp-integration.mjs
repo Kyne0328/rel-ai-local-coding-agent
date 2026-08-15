@@ -57,9 +57,9 @@ try {
   client.initialize(++requestId);
   const discovery = await client.waitFor(requestId);
   assert.equal(discovery.result.capabilities.experimental.relai.taskIdentityVersion, 2);
-  assert.match(discovery.result.instructions, /relai_work action begin/);
-  assert.match(discovery.result.instructions, /pass its work_id to later calls/);
-  assert.match(discovery.result.instructions, /workspace, task, or destructive-operation safeguards/);
+  assert.match(discovery.result.instructions, /unrelated objective bound to its own work_id/i);
+  assert.match(discovery.result.instructions, /configured workspace/i);
+  assert.match(discovery.result.instructions, /workspace, task-ownership, authorization, or destructive-operation safeguards/);
 
   async function rpc(name, args, { allowError = false } = {}) {
     const id = ++requestId;
@@ -157,6 +157,7 @@ try {
   assert.equal(completedReuse.isError, true);
   assert.equal(completedReuse.payload.errorCode, 'INVALID_TASK_STATE');
 
+  await waitForAuditEvent(auditLogPath, event => event.taskId === taskA && event.eventType === 'task.completion.duplicate', 5000);
   await client.close();
   client = null;
 
@@ -217,4 +218,18 @@ async function waitForFile(filePath, timeoutMs) {
     if (Date.now() > deadline) throw new Error(`Timed out waiting for barrier file: ${filePath}`);
     await new Promise(resolve => setTimeout(resolve, 20));
   }
+}
+
+async function waitForAuditEvent(filePath, predicate, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (fs.existsSync(filePath)) {
+      const events = fs.readFileSync(filePath, 'utf8').split(/\r?\n/).filter(Boolean).flatMap(line => {
+        try { return [JSON.parse(line)]; } catch { return []; }
+      });
+      if (events.some(predicate)) return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  throw new Error(`Timed out waiting for audit event in ${filePath}`);
 }
