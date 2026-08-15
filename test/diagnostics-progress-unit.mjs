@@ -14,10 +14,10 @@ const events = [];
 tracker.onToolActivity(event => events.push(event));
 
 try {
-  const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'app', createTask: true });
+  const start = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'app', createTask: true });
   const taskId = start.taskId;
   start({ ok: true });
-  const finish = tracker.beginConnectorToolCall({ tool: 'relai_diagnostics_run', workspace: 'app', taskId });
+  const finish = tracker.beginConnectorToolCall({ tool: 'relai_validate', internalOperation: 'validate.diagnostics', workspace: 'app', taskId });
   const result = await runWithToolActivity(finish, () => relaiDiagnosticsRun(workspace, config, {
     commands: ['node -e "process.exit(0)"', 'node -e "process.exit(1)"'],
     stopOnFailure: false

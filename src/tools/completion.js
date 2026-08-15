@@ -7,11 +7,14 @@ import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
 
+const WORK_FINISH_SOURCE = 'relai_work:finish';
+const VALIDATE_CHECKS_SOURCE = 'relai_validate:checks';
+
 async function completeTask(config, args = {}) {
   const workspace = resolveWorkspace(config, args.workspace);
   const requestedTaskId = normalizeTaskId(args.work_id);
   if (!requestedTaskId) {
-    throw taskError('TASK_ID_REQUIRED', 'relai_finish_work requires the work_id returned by relai_begin_work.');
+    throw taskError('TASK_ID_REQUIRED', 'relai_work with action "finish" requires the work_id returned by relai_work with action "begin".');
   }
   const context = requireMatchingTaskContext(requestedTaskId);
   const previous = readTaskHistorySession(config, requestedTaskId);
@@ -115,7 +118,7 @@ async function completeTask(config, args = {}) {
     validationAt: authority.validationAt || '',
     validationFingerprint: authority.validatedRepositoryFingerprint || authority.validationFingerprint || '',
     changedFiles: authority.taskOwnedChangedFiles || [],
-    completionSource: 'relai_finish_work'
+    completionSource: WORK_FINISH_SOURCE
   });
 }
 
@@ -132,7 +135,7 @@ function finalizeValidatedTask(config, workspace, options = {}) {
   const changedFiles = Array.isArray(options.changedFiles)
     ? unique(options.changedFiles.map(String).filter(Boolean))
     : changedFilesForTask(config, workspace.alias, taskId);
-  const completionSource = String(options.completionSource || 'relai_finish_work');
+  const completionSource = String(options.completionSource || WORK_FINISH_SOURCE);
   const validationStatus = String(options.validationStatus || 'passed');
   const completion = requestCurrentTaskCompletion({
     summary,
@@ -167,7 +170,7 @@ function finalizeValidationResult(config, workspace, validationResult, summary) 
     validationLevel: validationResult.validationLevel,
     validationAt: new Date().toISOString(),
     validationFingerprint: validationResult.validationFingerprint,
-    completionSource: 'relai_run_checks'
+    completionSource: VALIDATE_CHECKS_SOURCE
   });
   return {
     ...validationResult,
@@ -194,7 +197,7 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
     duplicate: true,
     completionKnown: true,
     endReason: 'explicit_completion',
-    completionSource: 'relai_finish_work',
+    completionSource: WORK_FINISH_SOURCE,
     summary,
     validationStatus: previous.validation || 'passed',
     validationLevel: previous.validationLevel || '',
@@ -219,7 +222,7 @@ function requireMatchingTaskContext(taskId) {
 
 function completionMessage(source, duplicate) {
   if (duplicate) return 'Duplicate work-session completion request accepted idempotently.';
-  if (source === 'relai_run_checks') {
+  if (source === VALIDATE_CHECKS_SOURCE) {
     return 'Validation passed and this work session was completed in the same Rel.AI call. Other work sessions remain unchanged.';
   }
   return 'Work-session completion accepted for this work_id. Other work sessions remain active and unchanged.';

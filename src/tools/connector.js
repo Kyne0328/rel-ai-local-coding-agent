@@ -1,4 +1,5 @@
 import { slimCompactPublicResult } from './compactResult.js';
+import { OPERATION_IDS as OP } from './operationIds.js';
 import { withTaskIdentity } from './task.js';
 import {
   boundedStringArray,
@@ -21,7 +22,7 @@ function serializeConnectorResult({ publicName, action, operationName, value, ar
 function compactForConnector(name, value, args = {}) {
   if (!value || typeof value !== 'object') return value;
   switch (name) {
-    case 'relai_read': {
+    case OP.READ: {
       if (!Array.isArray(value.items)) return value;
       const items = value.items.map(item => {
         if (!item || typeof item !== 'object') return item;
@@ -38,7 +39,7 @@ function compactForConnector(name, value, args = {}) {
       });
       return { ...value, items };
     }
-    case 'relai_status': {
+    case OP.WORK_STATUS: {
       const workspace = value.workspace && typeof value.workspace === 'object'
         ? pruneEmpty({
             alias: value.workspace.alias,
@@ -60,18 +61,19 @@ function compactForConnector(name, value, args = {}) {
           schemaVersion: value.toolSurface.schemaVersion,
           toolSurfaceVersion: value.toolSurface.toolSurfaceVersion,
           toolCount: value.toolSurface.toolCount,
-          deprecations: value.toolSurface.deprecations,
-          compatibilityAliases: value.toolSurface.compatibilityAliases
+          deprecations: value.toolSurface.deprecations
         } : undefined,
         workspace,
+        work_id: value.work_id,
+        backgroundOperation: value.backgroundOperation,
         state: workspace && value.workspace ? policySentence(value.workspace.policy) : null,
         workspaceCount: value.workspaceCount,
         workspaceAliases: value.workspaceAliases
       });
     }
-    case 'relai_diff':
+    case OP.CHANGES_DIFF:
       return pruneEmpty({ ...compactRepositoryState(value), staged: value.staged, path: value.path, reviewScope: value.reviewScope || value.reviewedScope, reviewedScope: value.reviewedScope, reviewHash: value.reviewHash, reviewedFiles: value.reviewedFiles, excludedWorkspaceFiles: value.excludedWorkspaceFiles, diff: value.diff });
-    case 'relai_run_checks':
+    case OP.VALIDATE_CHECKS:
       return pruneEmpty({
         ok: value.ok,
         workspace: value.workspace,
@@ -101,7 +103,7 @@ function compactForConnector(name, value, args = {}) {
         nextAction: value.nextAction,
         fullOutput: value.fullOutput
       });
-    case 'relai_exec':
+    case OP.EXEC:
       return pruneEmpty({
         ok: value.ok,
         executed: value.executed,
@@ -126,15 +128,15 @@ function compactForConnector(name, value, args = {}) {
         changedFilesTruncated: value.changedFilesTruncated === true ? true : undefined,
         mutationTracking: value.changedFiles?.length ? value.mutationTracking : undefined
       });
-    case 'relai_process_list':
+    case OP.PROCESS_LIST:
       return {
         ok: value.ok,
         processes: Array.isArray(value.processes) ? value.processes.map(compactProcessMetadata) : value.processes,
         count: value.count
       };
-    case 'relai_process_read':
+    case OP.PROCESS_READ:
       return pruneEmpty({ ...compactProcessMetadata(value), stdout: value.stdout, stderr: value.stderr });
-    case 'relai_repo_snapshot': {
+    case OP.SNAPSHOT: {
       const files = boundedStringArray(value.files, 12 * 1024);
       return pruneEmpty({
         ok: value.ok,

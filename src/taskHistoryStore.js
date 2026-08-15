@@ -5,6 +5,7 @@ import { isTerminalTaskStatus } from './taskState.js';
 import { canonicalTaskSnapshot, mergeTaskLifecycleSnapshots, reduceTaskLifecycleAuditEvent } from './taskLifecycle.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isCurrentTaskEvent, timestampMs } from './taskEvents.js';
 import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
 const TASK_HISTORY_FLUSH_MS = 75;
@@ -181,7 +182,7 @@ function hasExplicitCompletionEvidence(session = {}) {
   if (session.completionKnown === true || String(session.endReason || '') === 'explicit_completion') return true;
   return (Array.isArray(session.events) ? session.events : []).some(event => {
     if (event?.completionKnown === true || String(event?.endReason || '') === 'explicit_completion') return true;
-    return event?.tool === 'relai_finish_work' && event?.ok !== false && !['failed', 'cancelled'].includes(String(event?.status || '').toLowerCase());
+    return event?.tool === OP.WORK_FINISH && event?.ok !== false && !['failed', 'cancelled'].includes(String(event?.status || '').toLowerCase());
   });
 }
 
@@ -217,7 +218,7 @@ function recoverCompletedSession(session, options = {}) {
 function reconcileInactiveStoredSession(session, activeIds, timestamp = Date.now()) {
   if (!session?.id || activeIds.has(session.id)) return session;
   if (!isTerminalTaskStatus(session.status) && hasExplicitCompletionEvidence(session)) {
-    return recoverCompletedSession(session, { endReason: 'explicit_completion', completionSource: session.completionSource || 'relai_finish_work' });
+    return recoverCompletedSession(session, { endReason: 'explicit_completion', completionSource: session.completionSource || 'relai_work:finish' });
   }
   if (!isTerminalTaskStatus(session.status) && hasWorkflowCompletionEvidence(session)) {
     return recoverCompletedSession(session, { endReason: 'workflow_completion', completionSource: 'workflow' });
@@ -464,7 +465,7 @@ function isStoredSessionNoise(session, activeIds) {
   const events = Array.isArray(session.events) ? session.events : [];
   if (events.length !== 1 || session.completionKnown || Number(session.changedFileCount || 0) > 0) return false;
   const event = events[0] || {};
-  if (event.tool !== 'relai_begin_work') return false;
+  if (event.tool !== OP.WORK_BEGIN) return false;
   const endedAt = eventTime(session);
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }

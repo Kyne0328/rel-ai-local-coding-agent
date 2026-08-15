@@ -114,7 +114,7 @@ function read(rel) {
   assert.doesNotMatch(router, /_container\.innerHTML = ''/);
 }
 
-// Stale-command diagnostics cover commands AND testCommands, matching relai_status.
+// Stale-command diagnostics cover commands AND testCommands, matching relai_work action status.
 {
   const workspaceRoot = fs.mkdtempSync(path.join(tmpRoot, 'workspace-'));
   fs.writeFileSync(path.join(workspaceRoot, 'package.json'), JSON.stringify({ scripts: { test: 'node ok.js' } }), 'utf8');

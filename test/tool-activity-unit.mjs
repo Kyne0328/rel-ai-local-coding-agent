@@ -25,12 +25,12 @@ const tracker = createToolActivityTracker({
 });
 tracker.onToolActivity(event => trackerEvents.push(event));
 
-const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'request-a', createTask: true, operation: 'Reading src/app.js' });
+const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'request-a', createTask: true, operation: 'Reading src/app.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/app.js');
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.title, 'Reading src/app.js');
 finishRead.update({ operation: 'Reading src/config.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/config.js');
-const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'other', scopeId: 'request-b', createTask: true });
+const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'other', scopeId: 'request-b', createTask: true });
 assert.notEqual(finishRead.taskId, finishChecks.taskId, 'each explicit task start must create a separate task');
 assert.equal(tracker.getToolActivity().activeConnectorCalls, 2);
 assert.equal(tracker.getToolActivity().activeTaskCount, 2);
@@ -106,7 +106,7 @@ assert.equal(approvalTask?.events[0]?.status, 'blocked');
 
 const revalidationTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishRevalidation = revalidationTracker.beginConnectorToolCall({
-  tool: 'relai_finish_work',
+  tool: 'relai_work', internalOperation: 'work.finish',
   workspace: 'repo',
   scopeId: 'revalidation-test',
   createTask: true
@@ -137,7 +137,7 @@ assert.equal(revalidationTask?.events[0]?.result?.outcome, 'Final validation req
 
 const volumeTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishVolumeStart = volumeTracker.beginConnectorToolCall({
-  tool: 'relai_begin_work',
+  tool: 'relai_work', internalOperation: 'work.begin',
   workspace: 'repo',
   scopeId: 'volume-test',
   createTask: true
@@ -146,7 +146,7 @@ const volumeTaskId = finishVolumeStart.taskId;
 finishVolumeStart();
 for (let index = 1; index < 250; index += 1) {
   const finishVolumeCall = volumeTracker.beginConnectorToolCall({
-    tool: 'relai_status',
+    tool: 'relai_work', internalOperation: 'work.status',
     workspace: 'repo',
     scopeId: `volume-${index}`,
     taskId: volumeTaskId
@@ -170,9 +170,9 @@ assert.equal(inactive.every(task => task.status === 'inactive' && !task.endReaso
 assert.equal(inactive.every(task => !task.endedAt && task.inactiveAt && task.title && ['determinate', 'indeterminate'].includes(task.progress?.mode)), true);
 
 const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
-const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'transport-a', createTask: true });
+const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'transport-a', createTask: true });
 startedTask();
-const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'transport-b', taskId: startedTask.taskId });
+const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.finish', workspace: 'repo', scopeId: 'transport-b', taskId: startedTask.taskId });
 assert.equal(rotatedTransport.taskId, startedTask.taskId, 'an exact task ID must survive transport rotation');
 rotatedTransport();
 assert.throws(
@@ -180,14 +180,14 @@ assert.throws(
   error => error?.code === 'TASK_ID_REQUIRED',
   'tracked calls without an explicit task ID must fail rather than infer by scope or workspace'
 );
-const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'transport-b', createTask: true });
+const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'transport-b', createTask: true });
 assert.notEqual(secondTask.taskId, startedTask.taskId, 'separate explicit starts remain isolated even on one transport');
 secondTask();
 reconnectTracker.reset();
 
 const warningCompletionTracker = createToolActivityTracker({ idleMs: 60_000 });
 const warningStart = warningCompletionTracker.beginConnectorToolCall({
-  tool: 'relai_begin_work',
+  tool: 'relai_work', internalOperation: 'work.begin',
   workspace: 'repo',
   scopeId: 'warning-completion',
   createTask: true,
@@ -196,14 +196,14 @@ const warningStart = warningCompletionTracker.beginConnectorToolCall({
 const warningTaskId = warningStart.taskId;
 warningStart();
 const failedProbe = warningCompletionTracker.beginConnectorToolCall({
-  tool: 'relai_http_probe',
+  tool: 'relai_validate', internalOperation: 'validate.http',
   workspace: 'repo',
   scopeId: 'warning-completion',
   taskId: warningTaskId
 });
 failedProbe({ ok: false, error: 'Probe unavailable.' });
 const warningCompletion = warningCompletionTracker.beginConnectorToolCall({
-  tool: 'relai_finish_work',
+  tool: 'relai_work', internalOperation: 'work.finish',
   workspace: 'repo',
   scopeId: 'warning-completion',
   taskId: warningTaskId
@@ -266,16 +266,17 @@ const runtime = createTaskActivityRuntime({
   notify: () => false
 });
 runtimeStatus = { state: 'working', activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
-boundListener({ phase: 'started', activeConnectorCalls: 1 });
+boundListener({ phase: 'started', activeConnectorCalls: 1, activeCalls: 1, task: runtimeStatus.tasks[0] });
 assert.equal(started.has(41), true);
 runtimeStatus = { state: 'waiting', activeConnectorCalls: 0, activeTaskCount: 1, tasks: [{ id: 'task', state: 'waiting', activeCalls: 0 }] };
-boundListener({ phase: 'finished', activeConnectorCalls: 0, ok: true });
+boundListener({ phase: 'finished', activeConnectorCalls: 0, activeCalls: 0, ok: true, task: runtimeStatus.tasks[0] });
 assert.equal(started.has(41), true, 'the blocker must remain active while the work session is open between calls');
 assert.equal(runtime.getStatus().activeTaskCount, 1);
 assert.deepEqual(runtime.resetHistory(), { ok: true });
 assert.equal(started.has(41), false, 'clearing the final open session must release the blocker');
 assert.equal(resetCalls, 1);
 runtimeStatus = { state: 'working', activeCalls: 1, activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
+boundListener({ phase: 'started', activeConnectorCalls: 1, activeCalls: 1, task: runtimeStatus.tasks[0] });
 assert.equal(runtime.resetHistory().ok, false, 'history reset must refuse while a tool call is active');
 runtime.stop();
 assert.equal(unsubscribed, true);
@@ -316,7 +317,7 @@ try {
   callEvents.length = 0;
   await assert.rejects(
     () => callTool('relai_read', {}, { publicHttpOnly: true }),
-    error => error?.code === 'TASK_ID_REQUIRED'
+    error => /work_id/i.test(String(error?.message || ''))
   );
   assert.deepEqual(callEvents, [], 'schema-level task rejection must happen before activity begins');
   assert.equal(getToolActivity().activeTaskCount, 0, 'rejected taskless calls must not leave waiting sessions');

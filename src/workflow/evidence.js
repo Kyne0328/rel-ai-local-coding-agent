@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import { stableJson } from './contracts.js';
+import { OPERATION_IDS as OP } from '../tools/operationIds.js';
 
 function buildWorkflowEvidenceReceipt({ tool = '', args = {}, result = {}, auditEntry = {}, repositoryFingerprint = '', commandId = '' } = {}) {
   const kind = evidenceKind(tool, args, result);
@@ -54,13 +55,13 @@ function failureSignature({ tool, action, commandId, command, cwd, result, targe
 }
 
 function evidenceKind(tool, args, result) {
-  if (tool === 'relai_exec' && looksLikeCheck(args?.command || result?.commandSummary || result?.command)) return 'check';
-  if (tool === 'relai_run_checks' || tool === 'relai_validate') return 'check';
-  if (tool === 'relai_read') return 'read';
-  if (tool === 'relai_ui') return 'ui';
-  if (/inspect|search/.test(tool)) return 'inspection';
-  if (/diff|changes/.test(tool)) return 'review';
-  if (/process_(?:start|read)/.test(tool)) return 'process';
+  if (tool === OP.EXEC && looksLikeCheck(args?.command || result?.commandSummary || result?.command)) return 'check';
+  if (tool === OP.VALIDATE_CHECKS) return 'check';
+  if (tool === OP.READ) return 'read';
+  if (tool === OP.UI) return 'ui';
+  if (tool === OP.INSPECT || tool === OP.SEARCH_TEXT || tool === OP.SEARCH_SEMANTIC) return 'inspection';
+  if (tool === OP.CHANGES_DIFF) return 'review';
+  if (tool === OP.PROCESS_START || tool === OP.PROCESS_READ) return 'process';
   return '';
 }
 function looksLikeCheck(command) { return /(?:^|\s)(test|lint|check|typecheck|build|pytest|cargo test|go test|flutter test|dart analyze)(?:\s|$|:)/i.test(String(command || '')); }
@@ -78,7 +79,7 @@ function compactMetadata(result = {}, tool = '') {
   if (result.processId) output.processId = String(result.processId).slice(0, 200);
   if (result.reviewHash) output.reviewHash = String(result.reviewHash).slice(0, 128);
   if (result.reviewScope) output.reviewScope = String(result.reviewScope).slice(0, 40);
-  if (tool === 'relai_ui') {
+  if (tool === OP.UI) {
     if (result.action) output.uiAction = String(result.action).slice(0, 40);
     if (result.sessionId) output.sessionId = String(result.sessionId).slice(0, 200);
     if (result.route || result.url) output.route = String(result.route || result.url).slice(0, 500);
@@ -86,7 +87,7 @@ function compactMetadata(result = {}, tool = '') {
     if (Number.isFinite(Number(result.networkFailureCount))) output.networkFailureCount = Math.max(0, Number(result.networkFailureCount));
     if (result.evidenceId) output.evidenceId = String(result.evidenceId).slice(0, 200);
   }
-  if (tool === 'relai_read' && Array.isArray(result.items)) {
+  if (tool === OP.READ && Array.isArray(result.items)) {
     output.reads = result.items.slice(0, 50).map(item => ({
       path: String(item?.path || '').trim().replaceAll('\\', '/').slice(0, 500),
       sha256: String(item?.sha256 || '').trim().slice(0, 128),

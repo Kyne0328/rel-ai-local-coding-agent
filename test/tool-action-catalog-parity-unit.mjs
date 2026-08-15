@@ -88,7 +88,7 @@ for (const entry of catalog) {
   }
 
   assert.deepEqual(catalogApprovalRequirement(entry.publicTool, args), approvalRequirement(entry.publicTool, args));
-  if (entry.operationName === 'relai_git_commit') {
+  if (entry.publicTool === 'relai_publish' && entry.action === 'commit') {
     const approvalArgs = { ...args, addAll: true };
     assert.deepEqual(catalogApprovalRequirement(entry.publicTool, approvalArgs), approvalRequirement(entry.publicTool, approvalArgs));
   }

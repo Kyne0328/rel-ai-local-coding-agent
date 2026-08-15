@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { serializeConnectorResult } from '../src/tools/connector.js';
 import { outputSchemaFor } from '../src/tools/outputSchemas.js';
 import { normalizeWorkflowSnapshot } from '../src/workflow/contracts.js';
+import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
 
 const workflow = normalizeWorkflowSnapshot({
   stage: 'verify',
@@ -19,17 +20,17 @@ assert.ok(workflow.recommendedActions.length <= 5);
 const result = serializeConnectorResult({
   publicName: 'relai_read',
   action: 'file',
-  operationName: 'relai_read',
+  operationName: OP.READ,
   value: { ok: true, workspace: 'repo', items: [], workflow },
   workId: 'task-1'
 });
 assert.deepEqual(result.workflow, workflow);
 assert.equal(result.work_id, 'task-1');
-const readSchema = outputSchemaFor('relai_read');
+const readSchema = outputSchemaFor(OP.READ);
 assert.ok(readSchema.properties.workflow, 'closed success schema must admit workflow');
 assert.equal(readSchema.oneOf[0].additionalProperties, false);
 assert.equal(Object.hasOwn(readSchema.properties, 'unrelatedUnknownField'), false);
-const checksSchema = outputSchemaFor('relai_run_checks');
+const checksSchema = outputSchemaFor(OP.VALIDATE_CHECKS);
 assert.equal(checksSchema.properties.executedUnits.type, 'number');
 assert.equal(checksSchema.properties.reusedUnits.type, 'number');
 assert.equal(checksSchema.properties.reusedChecks.type, 'array');

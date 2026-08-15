@@ -18,6 +18,7 @@ import { recordExecutionPlanMetrics } from '../executionObservability.js';
 import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
 import { noChecksValidationResult } from './validationNoChecks.js';
+import { OPERATION_IDS as OP } from '../tools/operationIds.js';
 import {
   boundCheckOutput,
   checkResultStatus,
@@ -172,7 +173,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
           const authority = readTaskIntegrity(config, currentTaskId, logicalWorkspaceAlias);
           const workspaceIntegrity = readWorkspaceIntegrity(config, logicalWorkspaceAlias);
           const receipt = buildWorkflowEvidenceReceipt({
-            tool: 'relai_validate',
+            tool: OP.VALIDATE_CHECKS,
             args: { command, cwd: unit.cwd || '.' },
             result: { ok: true, exitCode: summary.exitCode, durationMs: summary.durationMs, validationStatus: 'passed' },
             auditEntry: {

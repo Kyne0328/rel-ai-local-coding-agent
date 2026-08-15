@@ -122,7 +122,7 @@ try {
   assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
   assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
   assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
-  assert.deepEqual(surface.compatibilityAliases, {});
+  assert.equal(Object.hasOwn(surface, 'compatibilityAliases'), false);
   const help = await readResourceText(primarySession, 14, 'relai://server/help');
   assert.ok(help.includes(`version: ${applicationVersion}`));
 
@@ -174,7 +174,7 @@ try {
   });
   assert.equal(completed.validationStatus, 'passed');
   assert.equal(completed.completionKnown, true);
-  assert.equal(completed.completionSource, 'relai_run_checks');
+  assert.equal(completed.completionSource, 'relai_validate:checks');
   assert.ok(completed.changedFiles?.includes('acceptance.txt'));
 
   const completedDashboard = await dashboard();

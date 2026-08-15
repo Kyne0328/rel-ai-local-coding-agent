@@ -222,7 +222,7 @@ try {
   assert.equal(atomicCompletion.validationStatus, 'passed');
   assert.equal(atomicCompletion.completionKnown, true);
   assert.equal(atomicCompletion.endReason, 'explicit_completion');
-  assert.equal(atomicCompletion.completionSource, 'relai_run_checks');
+  assert.equal(atomicCompletion.completionSource, 'relai_validate:checks');
   assert.equal(atomicCompletion.summary, 'Validated and completed atomically.');
   assert.match(atomicCompletion.nextAction, /completion was accepted/i);
   assert.equal(resolvePolicy({ alias: 'app', path: workspace }, readConfig()).sessionActive, false);
@@ -231,7 +231,7 @@ try {
   assert.equal(atomicStatus.lastTask.status, 'completed');
   assert.equal(atomicStatus.lastTask.summary, 'Validated and completed atomically.');
   const atomicAudit = readAudit(readConfig(), { limit: 100 });
-  const atomicEvent = atomicAudit.entries.find(entry => entry.taskId === atomicTaskId && entry.tool === 'relai_run_checks' && entry.completionSource === 'relai_run_checks');
+  const atomicEvent = atomicAudit.entries.find(entry => entry.taskId === atomicTaskId && entry.tool === 'validate.checks' && entry.completionSource === 'relai_validate:checks');
   assert.ok(atomicEvent, 'atomic validation completion must be persisted under the exact task ID');
   assert.equal(atomicEvent.completionKnown, true);
   assert.equal(atomicEvent.taskIdentityVersion, 2);
@@ -248,7 +248,7 @@ try {
   assert.equal(validation.ok, true);
   assert.equal(validation.work_id, taskId);
   assert.equal(validation.validationStatus, 'passed');
-  assert.match(validation.nextAction, /relai_finish_work|complete:true/i);
+  assert.match(validation.nextAction, /relai_work|complete:true/i);
 
   const completion = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
@@ -270,7 +270,7 @@ try {
   assert.equal(status.lastTask.summary, 'Implemented and validated the requested code changes.');
 
   const audit = readAudit(readConfig(), { limit: 100 });
-  const completionEvent = audit.entries.find(entry => entry.taskId === taskId && entry.tool === 'relai_finish_work' && entry.ok === true);
+  const completionEvent = audit.entries.find(entry => entry.taskId === taskId && entry.tool === 'work.finish' && entry.ok === true);
   assert.ok(completionEvent, 'completion must be persisted under the requested task ID');
   assert.equal(completionEvent.eventType, 'task.completion.committed');
   assert.equal(completionEvent.completionKnown, true);
@@ -393,7 +393,7 @@ try {
   assert.equal(recoveredAtomicCompletion.ok, true);
   assert.equal(recoveredAtomicCompletion.completionKnown, true);
   assert.equal(recoveredAtomicCompletion.work_id, changedTaskId);
-  assert.equal(recoveredAtomicCompletion.completionSource, 'relai_run_checks');
+  assert.equal(recoveredAtomicCompletion.completionSource, 'relai_validate:checks');
   assert.equal(getToolActivity().lastTask?.status, 'completed');
 
   resetToolActivity();

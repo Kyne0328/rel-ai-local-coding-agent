@@ -33,7 +33,7 @@ try {
   for (let index = 0; index < 251; index += 1) {
     recordTaskHistoryEvent(config, currentEvent(`task-${String(index).padStart(3, '0')}`, {
       ts: new Date(base + index * 1000).toISOString(),
-      tool: 'relai_read',
+      tool: 'read',
       operation: `Reading task ${index}`,
       ms: 5
     }));
@@ -48,26 +48,26 @@ try {
   assert.equal(sessions.find(session => session.id === 'legacy-task').title, 'Historical Rel.AI task');
 
   recordTaskHistoryEvent(config, currentEvent('exact-task', {
-    ts: new Date(base + 300000).toISOString(), tool: 'relai_run_checks', validationStatus: 'passed'
+    ts: new Date(base + 300000).toISOString(), tool: 'validate.checks', validationStatus: 'passed'
   }));
   recordTaskHistoryEvent(config, currentEvent('exact-task', {
-    ts: new Date(base + 301000).toISOString(), tool: 'relai_finish_work', completionKnown: true, taskSummary: 'Completed exactly.'
+    ts: new Date(base + 301000).toISOString(), tool: 'work.finish', completionKnown: true, taskSummary: 'Completed exactly.'
   }));
   recordTaskHistoryEvent(config, currentEvent('separate-task', {
-    ts: new Date(base + 302000).toISOString(), tool: 'relai_finish_work', completionKnown: true,
+    ts: new Date(base + 302000).toISOString(), tool: 'work.finish', completionKnown: true,
     relatedTaskIds: ['exact-task'], taskSummary: 'Must remain separate.'
   }));
   recordTaskHistoryEvent(config, currentEvent('atomic-completion', {
-    ts: new Date(base + 303000).toISOString(), tool: 'relai_run_checks', validationStatus: 'passed',
-    completionKnown: true, completionSource: 'relai_run_checks', taskSummary: 'Validated atomically.', changedFiles: ['src/atomic.js']
+    ts: new Date(base + 303000).toISOString(), tool: 'validate.checks', validationStatus: 'passed',
+    completionKnown: true, completionSource: 'relai_validate:checks', taskSummary: 'Validated atomically.', changedFiles: ['src/atomic.js']
   }));
   recordTaskHistoryEvent(config, currentEvent('draft-task', {
-    ts: new Date(base + 304000).toISOString(), tool: 'relai_git_draft_pr'
+    ts: new Date(base + 304000).toISOString(), tool: 'publish.draft_pr'
   }));
   recordTaskHistoryEvent(config, currentEvent('abandoned-start', {
-    ts: '2020-01-01T00:00:00.000Z', eventType: 'task.started', tool: 'relai_begin_work'
+    ts: '2020-01-01T00:00:00.000Z', eventType: 'task.started', tool: 'work.begin'
   }));
-  recordTaskHistoryEvent(config, { taskId: 'legacy-event', tool: 'relai_read', ok: true });
+  recordTaskHistoryEvent(config, { taskId: 'legacy-event', tool: 'read', ok: true });
   const stalePlanningUpdatedAt = new Date(Date.now() - 10 * 60_000).toISOString();
   writeSession(historyDir, {
     id: 'stale-planning-session',
@@ -82,7 +82,7 @@ try {
     currentStage: 'Planning next step',
     currentActivity: 'Last command completed successfully.',
     activeCalls: 0,
-    currentOperations: [{ operationId: 'stale-running-op', tool: 'relai_exec', label: 'Running old command', startedAt: Date.now() - 11 * 60_000 }],
+    currentOperations: [{ operationId: 'stale-running-op', tool: 'exec', label: 'Running old command', startedAt: Date.now() - 11 * 60_000 }],
     startedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
     updatedAt: stalePlanningUpdatedAt,
     lastActivityAt: Date.parse(stalePlanningUpdatedAt),
@@ -100,7 +100,7 @@ try {
     completionKnown: false,
     progress: { mode: 'indeterminate', label: 'Running command' },
     activeCalls: 1,
-    currentOperations: [{ operationId: 'stale-op', tool: 'relai_exec', label: 'Running command', startedAt: Date.now() - 1000 }],
+    currentOperations: [{ operationId: 'stale-op', tool: 'exec', label: 'Running command', startedAt: Date.now() - 1000 }],
     startedAt: '2026-07-25T00:00:00.000Z',
     updatedAt: '2026-07-25T00:01:00.000Z',
     endedAt: '2026-07-25T00:01:00.000Z',
@@ -113,7 +113,7 @@ try {
     title: 'Explicitly completed historical task', status: 'inactive', state: 'inactive', completionKnown: false,
     workflow: { stage: 'complete', recommendedAction: 'Workflow complete' },
     startedAt: new Date(Date.now() - 20 * 60_000).toISOString(), updatedAt: explicitCompletionAt, inactiveAt: explicitCompletionAt,
-    events: [{ eventId: 'inactive-explicit-completion-finish', taskId: 'inactive-explicit-completion', timestamp: explicitCompletionAt, tool: 'relai_finish_work', ok: true, completionKnown: true, endReason: 'explicit_completion', taskSummary: 'Finished explicitly.' }]
+    events: [{ eventId: 'inactive-explicit-completion-finish', taskId: 'inactive-explicit-completion', timestamp: explicitCompletionAt, tool: 'work.finish', ok: true, completionKnown: true, endReason: 'explicit_completion', taskSummary: 'Finished explicitly.' }]
   });
   writeSession(historyDir, {
     id: 'inactive-workflow-complete', taskId: 'inactive-workflow-complete', sessionId: 'inactive-workflow-complete', version: 3,

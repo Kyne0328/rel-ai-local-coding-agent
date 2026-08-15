@@ -36,7 +36,7 @@ function createHarness() {
 {
   const { tracker, advanceToInactivity } = createHarness();
   const start = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     workspace: 'repo',
     createTask: true
   });
@@ -79,7 +79,7 @@ function createHarness() {
 {
   const { tracker, advanceToInactivity } = createHarness();
   const start = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     workspace: 'repo',
     createTask: true
   });
@@ -105,7 +105,7 @@ function createHarness() {
 {
   const { tracker, advanceWithoutFiringTimers } = createHarness();
   const start = tracker.beginConnectorToolCall({
-    tool: 'relai_begin_work',
+    tool: 'relai_work', internalOperation: 'work.begin',
     workspace: 'repo',
     createTask: true
   });

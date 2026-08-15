@@ -12,7 +12,6 @@ import {
 import {
   acknowledgeNativeTaskCancellation,
   cancelNativeTask,
-  createNativeTask,
   getNativeTask,
   getNativeTaskRecord
 } from '../src/mcp/nativeTaskService.js';
@@ -22,7 +21,7 @@ const config = { stateDir: root };
 try {
   const created = createNativeToolTask(config, {
     method: 'tools/call',
-    name: 'relai_run_checks',
+    name: 'relai_validate',
     workspace: 'repo',
     logicalTaskId: 'logical-a',
     principal: 'principal-a',
@@ -36,7 +35,7 @@ try {
     logicalTaskId: 'logical-a'
   });
   assert.equal(nativeCreated.origin.method, 'tools/call');
-  assert.equal(nativeCreated.origin.name, 'relai_run_checks');
+  assert.equal(nativeCreated.origin.name, 'relai_validate');
   assert.equal(nativeCreated.origin.logicalTaskId, 'logical-a');
   assert.equal(nativeCreated.internal.workspace, 'repo');
   assert.equal(Object.hasOwn(nativeCreated.internal, 'compatibilityOperation'), false);
@@ -84,18 +83,8 @@ try {
   });
   assert.equal(getNativeTask(config, cancellable.taskId, { principal: 'principal-a' }).status, 'cancelled');
 
-  const legacyRecord = createNativeTask(config, {
-    method: 'tools/call',
-    name: 'relai_exec',
-    principal: 'principal-a',
-    ttlMs: 24 * 60 * 60 * 1000,
-    executor: { controller: new AbortController() },
-    internal: { compatibilityOperation: true, workspace: 'legacy' }
-  });
-  const legacyRead = getNativeTaskRecord(config, legacyRecord.taskId, { principal: 'principal-a' });
-  assert.equal(legacyRead.internal.compatibilityOperation, true, 'old records remain readable during their bounded TTL');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-console.log('Native tool-task adapter, ownership, cancellation, and legacy-record compatibility passed.');
+console.log('Native tool-task adapter, ownership, and cancellation passed without compatibility operation fields.');

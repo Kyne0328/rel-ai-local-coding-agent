@@ -413,8 +413,8 @@ function aliasConsistencyCheck(config) {
   const results = [];
   const entries = Object.entries(config.workspaces || {}).sort(([left], [right]) => compareText(left, right));
   for (const [alias, ws] of entries) {
-    // Cover BOTH command maps, matching relai_status. Checking only testCommands made
-    // the dashboard report "All consistent" while relai_status flagged a stale entry in
+    // Cover BOTH command maps, matching relai_work action "status". Checking only testCommands made
+    // the dashboard report "All consistent" while relai_work action "status" flagged a stale entry in
     // the plain commands map — two surfaces disagreeing about the same workspace.
     const allConfigured = { ...commandMapOrEmpty(ws.commands), ...commandMapOrEmpty(ws.testCommands) };
     const configuredKeys = Object.keys(allConfigured).sort(compareText);

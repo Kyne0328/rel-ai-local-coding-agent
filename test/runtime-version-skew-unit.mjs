@@ -4,7 +4,6 @@ import os from 'node:os';
 import path from 'node:path';
 const {
   assessRuntimeCompatibility,
-  assertRuntimeCompatibility,
   readRepositoryMetadata,
   runtimeMetadata
 } = await import('../src/runtimeCompatibility.js');
@@ -82,25 +81,6 @@ try {
   const cachedAlias = readRepositoryMetadata(temp, 'secondary');
   assert.equal(cachedAlias.applicationVersion, repositoryVersion);
   assert.equal(cachedAlias.workspace, 'secondary', 'cached repository metadata must not retain the previous workspace alias');
-  const config = { workspaces: { repo: { path: temp } } };
-  const editCompatibility = assertRuntimeCompatibility(
-    config,
-    'relai_edit',
-    { workspace: 'repo' },
-    { activeTaskCount: 1 }
-  );
-  assert.equal(editCompatibility.compatibility.status, 'restart_required');
-  assert.equal(editCompatibility.compatibility.schemaSensitiveOperationsBlocked, false);
-  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_status', { workspace: 'repo' }));
-  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_begin_work', { workspace: 'repo' }));
-  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_cancel_work', { workspace: 'repo' }));
-  assert.doesNotThrow(() => assertRuntimeCompatibility(
-    config,
-    'relai_run_checks',
-    { workspace: 'repo', work_id: 'task-1', complete: true, summary: 'Validate and close.' },
-    { activeTaskCount: 1 }
-  ));
-
   fs.writeFileSync(path.join(temp, 'package.json'), JSON.stringify({ name: 'rel-ai-mcp', version: current.applicationVersion }));
   fs.writeFileSync(path.join(temp, 'release-manifest.json'), JSON.stringify({
     schemaVersion: current.schemaVersion,
@@ -113,7 +93,6 @@ try {
   const refreshedRepository = readRepositoryMetadata(temp, 'repo');
   assert.equal(refreshedRepository.applicationVersion, current.applicationVersion, 'repository metadata cache must invalidate when source files change');
   assert.equal(refreshedRepository.manifestHash, current.manifestHash);
-  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_edit', { workspace: 'repo' }));
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

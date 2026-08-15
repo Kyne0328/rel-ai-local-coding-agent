@@ -14,13 +14,14 @@ import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActiv
 import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
 import { finalizeValidationResult } from './completion.js';
 import { invalidateSessionCacheForCall, maybeStartSession } from './session.js';
+import { OPERATION_IDS as OP } from './operationIds.js';
 
-const SANDBOX_CREATE_OPERATIONS = new Set(['relai_edit', 'relai_exec']);
+const SANDBOX_CREATE_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
 
 async function executeToolCall({ config, name, executionName = name, effectiveArgs, context, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
   const value = await runWithToolActivity(finishActivity, () => runSpan(config,
-    executionName === 'relai_begin_work' ? 'relai.logical_task.start' : 'relai.tool.call',
+    executionName === OP.WORK_BEGIN ? 'relai.logical_task.start' : 'relai.tool.call',
     spanAttributes(name, effectiveArgs, context, finishActivity),
     async () => {
       const taskId = String(finishActivity?.taskId || effectiveArgs?.work_id || '').trim();
@@ -49,12 +50,12 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         ? { ...effectiveArgs, workspace: executionWorkspace.alias }
         : effectiveArgs;
       const deferSandboxCompletion = executionWorkspace?.taskSandbox === true
-        && executionName === 'relai_run_checks'
+        && executionName === OP.VALIDATE_CHECKS
         && effectiveArgs?.complete === true;
       const handlerArgs = deferSandboxCompletion ? { ...physicalArgs, complete: false } : physicalArgs;
 
       const result = await runWorkspaceOperation(
-        executionName === 'relai_cancel_work' ? '' : handlerArgs?.workspace,
+        executionName === OP.WORK_CANCEL ? '' : handlerArgs?.workspace,
         async () => {
           sessionStart = await maybeStartSession(config, executionName, effectiveArgs || {}, { taskId });
           if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
@@ -83,7 +84,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         },
         queueOptions(
           definition?.annotations?.readOnlyHint === true ? 'read' : 'write',
-          hadSandbox && executionName === 'relai_finish_work'
+          hadSandbox && executionName === OP.WORK_FINISH
             ? 'workspace'
             : definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
           taskId
@@ -123,10 +124,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
 }
 
 function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName, args = {}) {
-  if (executionName === 'relai_cancel_work') return false;
+  if (executionName === OP.WORK_CANCEL) return false;
   if (findTaskSandbox(config, workspaceAlias, taskId)) return true;
   if (!SANDBOX_CREATE_OPERATIONS.has(executionName)) return false;
-  return executionName !== 'relai_exec' || !isClearlyReadOnlyExec(args);
+  return executionName !== OP.EXEC || !isClearlyReadOnlyExec(args);
 }
 
 function isClearlyReadOnlyExec(args = {}) {
@@ -161,7 +162,7 @@ function mapVisibleWorkspace(result, executionWorkspace, sourceWorkspace) {
 }
 
 function isExplicitBranchChange(executionName, args = {}) {
-  if (executionName !== 'relai_exec') return false;
+  if (executionName !== OP.EXEC) return false;
   const executable = path.basename(String(args.executable || '')).toLowerCase();
   if (executable === 'git' || executable === 'git.exe') {
     return (Array.isArray(args.argv) ? args.argv : []).some(token => ['switch', 'checkout'].includes(String(token).toLowerCase()));

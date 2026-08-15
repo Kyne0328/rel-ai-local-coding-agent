@@ -4,17 +4,17 @@ import { resolveSafePath } from "../safety.js";
 // resolveSafePath validates these as filesystem paths, but git reads them as
 // pathspecs: "*" or "." after `--` matches the whole worktree, so a single-file
 // restore request could discard every uncommitted change without the RESET
-// confirmation that relai_reset_workspace demands.
+// confirmation that relai_changes action "reset" demands.
 const PATHSPEC_MAGIC = /[*?[\]]/;
 
 function normalizePaths(workspace, paths) {
   if (!Array.isArray(paths) || paths.length === 0) {
-    throw new Error("relai_restore_paths requires at least one path.");
+    throw new Error('relai_changes action "restore" requires at least one path.');
   }
   return paths.map((item) => {
     const relativePath = resolveSafePath(workspace.path, item, { operation: "restore" }).relativePath;
     if (PATHSPEC_MAGIC.test(relativePath) || relativePath === ".") {
-      throw new Error(`relai_restore_paths requires literal file paths, not patterns: ${relativePath}. Use relai_reset_workspace with confirmation RESET to discard everything.`);
+      throw new Error(`relai_changes action "restore" requires literal file paths, not patterns: ${relativePath}. Use relai_changes action "reset" with confirmation RESET to discard everything.`);
     }
     return relativePath;
   });
@@ -46,7 +46,7 @@ async function relaiResetWorkspace(workspace, config, args = {}) {
   const expected = expectedConfirmation(removeUntracked);
   const confirmation = String(args.confirmation || "").trim();
   if (confirmation !== expected) {
-    throw new Error(`relai_reset_workspace requires confirmation='${expected}'${removeUntracked ? " when removeUntracked is true" : ""}.`);
+    throw new Error(`relai_changes action "reset" requires confirmation='${expected}'${removeUntracked ? " when removeUntracked is true" : ""}.`);
   }
 
   const reset = await runProcess("git", ["reset", "--hard", "HEAD"], {

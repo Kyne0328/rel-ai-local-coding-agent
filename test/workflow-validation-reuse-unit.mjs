@@ -20,7 +20,7 @@ try {
   execFileSync('git', ['commit', '-m', 'fixture'], { cwd: root, stdio: 'ignore' });
   const workspace = { alias: 'repo', path: root, commands: {}, testCommands: {} };
   const fingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
-  recordTaskHistoryEvent(config, { taskId: 'task-1', taskHistoryEligible: true, taskIdentityVersion: 2, taskIdExplicit: true, tool: 'relai_begin_work', workspace: 'repo', ok: true, ts: new Date().toISOString() });
+  recordTaskHistoryEvent(config, { taskId: 'task-1', taskHistoryEligible: true, taskIdentityVersion: 2, taskIdExplicit: true, tool: 'work.begin', workspace: 'repo', ok: true, ts: new Date().toISOString() });
   recordWorkflowEvidence(config, 'task-1', {
     version: 1, key: 'check:front', kind: 'check', sourceTool: 'relai_exec', createdAt: new Date().toISOString(),
     commandId: 'npm:front-end:test', command: 'npm test', cwd: 'front-end', outcome: 'passed', repositoryFingerprint: fingerprint,

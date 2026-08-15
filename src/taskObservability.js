@@ -1,6 +1,7 @@
 
 import * as crypto from 'node:crypto';
 import { TERMINAL_TASK_STATUSES, normalizeHistoricalTaskStatus } from './taskState.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const TASK_MODEL_VERSION = 3;
 const MAX_TITLE_LENGTH = 100;
 const MAX_OBJECTIVE_LENGTH = 500;
@@ -35,28 +36,28 @@ function titleForTool(tool, details = {}) {
   const workspace = cleanText(details.workspace, 60);
   const suffix = path ? ` ${displayPath(path)}` : workspace ? ` ${workspace}` : '';
   const titles = {
-    relai_begin_work: workspace ? `Work in ${workspace}` : 'Start workspace task',
-    relai_repo_snapshot: `Inspect repository${suffix}`,
-    relai_read: path ? `Read ${displayPath(path)}` : 'Read repository files',
-    relai_search: 'Search repository',
-    relai_code_inspect: 'Inspect code relationships',
-    relai_semantic_search: 'Search code semantically',
-    relai_edit: path ? `Update ${displayPath(path)}` : 'Apply repository changes',
-    relai_exec: 'Run repository command',
-    relai_process_start: 'Start managed process',
-    relai_process_read: 'Inspect managed process',
-    relai_process_write: 'Send managed process input',
-    relai_process_stop: 'Stop managed process',
-    relai_process_list: 'List managed processes',
-    relai_run_checks: 'Run repository validation',
-    relai_diagnostics_run: 'Run code diagnostics',
-    relai_git_commit: 'Create Git commit',
-    relai_git_push: 'Publish Git branch',
-    relai_git_draft_pr: 'Draft pull request',
-    relai_diff: 'Review repository changes',
-    relai_status: 'Inspect repository status',
-    relai_cancel_work: 'Cancel work session',
-    relai_finish_work: 'Finish work session'
+    [OP.WORK_BEGIN]: workspace ? `Work in ${workspace}` : 'Start workspace task',
+    [OP.SNAPSHOT]: `Inspect repository${suffix}`,
+    [OP.READ]: path ? `Read ${displayPath(path)}` : 'Read repository files',
+    [OP.SEARCH_TEXT]: 'Search repository',
+    [OP.INSPECT]: 'Inspect code relationships',
+    [OP.SEARCH_SEMANTIC]: 'Search code semantically',
+    [OP.EDIT]: path ? `Update ${displayPath(path)}` : 'Apply repository changes',
+    [OP.EXEC]: 'Run repository command',
+    [OP.PROCESS_START]: 'Start managed process',
+    [OP.PROCESS_READ]: 'Inspect managed process',
+    [OP.PROCESS_WRITE]: 'Send managed process input',
+    [OP.PROCESS_STOP]: 'Stop managed process',
+    [OP.PROCESS_LIST]: 'List managed processes',
+    [OP.VALIDATE_CHECKS]: 'Run repository validation',
+    [OP.VALIDATE_DIAGNOSTICS]: 'Run code diagnostics',
+    [OP.PUBLISH_COMMIT]: 'Create Git commit',
+    [OP.PUBLISH_PUSH]: 'Publish Git branch',
+    [OP.PUBLISH_DRAFT_PR]: 'Draft pull request',
+    [OP.CHANGES_DIFF]: 'Review repository changes',
+    [OP.WORK_STATUS]: 'Inspect repository status',
+    [OP.WORK_CANCEL]: 'Cancel work session',
+    [OP.WORK_FINISH]: 'Finish work session'
   };
   return titles[String(tool || '')] || '';
 }
@@ -162,7 +163,7 @@ function progressForTool(name, args = {}, value = null, ok = true, phase = 'comp
     if (!ok && progress.percentage >= 100) progress.percentage = 99;
     return progress;
   }
-  if (phase === 'complete' && ok && name === 'relai_finish_work') return completeProgress('Task completed');
+  if (phase === 'complete' && ok && name === OP.WORK_FINISH) return completeProgress('Task completed');
   return { mode: 'indeterminate', label: stageForTool(name, phase === 'running' ? 'running' : ok ? 'succeeded' : 'failed') };
 }
 
@@ -355,11 +356,11 @@ function resultForTool(name, args, value, ok, error = null) {
   let outcome = isValidationBlock(error)
     ? 'Final validation required'
     : ok ? 'Completed successfully' : 'Failed';
-  if (name === 'relai_read' && affectedItemCount) outcome = `Read ${affectedItemCount} item${affectedItemCount === 1 ? '' : 's'}`;
-  else if (name === 'relai_search' && Number.isFinite(value?.matchCount)) outcome = `Found ${searchMatchCountText(value)}`;
+  if (name === OP.READ && affectedItemCount) outcome = `Read ${affectedItemCount} item${affectedItemCount === 1 ? '' : 's'}`;
+  else if ([OP.SEARCH_TEXT, OP.SEARCH_SEMANTIC].includes(name) && Number.isFinite(value?.matchCount)) outcome = `Found ${searchMatchCountText(value)}`;
   else if (changed.length) outcome = `Updated ${changed.length} file${changed.length === 1 ? '' : 's'}`;
   else if (/checks|diagnostics/.test(name) && value?.validationStatus) outcome = `Validation ${value.validationStatus}`;
-  else if (/git_commit/.test(name) && value?.commit) outcome = `Created commit ${cleanText(value.commit, 20)}`;
+  else if (name === OP.PUBLISH_COMMIT && value?.commit) outcome = `Created commit ${cleanText(value.commit, 20)}`;
   return compactObject({ outcome, affectedItemCount, warningCount });
 }
 
@@ -368,16 +369,16 @@ function summaryForTool(name, args, value, error, operation, result) {
     return `Task completion paused: ${error.message}`;
   }
   if (error) return `${operation || titleForTool(name, args) || 'Tool execution'} failed: ${error.message}`;
-  if (name === 'relai_begin_work') return args?.title
+  if (name === OP.WORK_BEGIN) return args?.title
     ? `Started logical task “${sanitizeDisplayText(args.title, 120)}”.`
     : 'Started a logical workspace task.';
-  if (name === 'relai_read') return result.affectedItemCount
+  if (name === OP.READ) return result.affectedItemCount
     ? `Read ${result.affectedItemCount} repository item${result.affectedItemCount === 1 ? '' : 's'}.`
     : 'Read repository content.';
-  if (name === 'relai_search') return Number.isFinite(value?.matchCount)
+  if ([OP.SEARCH_TEXT, OP.SEARCH_SEMANTIC].includes(name)) return Number.isFinite(value?.matchCount)
     ? `Searched the repository and found ${searchMatchCountText(value)}.`
     : 'Searched repository content.';
-  if (name === 'relai_edit') {
+  if (name === OP.EDIT) {
     const count = changedFiles(value).length || pathCount(args);
     return count ? `Updated ${count} file${count === 1 ? '' : 's'}.` : 'Applied repository changes.';
   }
@@ -385,15 +386,15 @@ function summaryForTool(name, args, value, error, operation, result) {
     const status = cleanText(value?.validationStatus, 40);
     return status ? `Validation ${status}.` : 'Ran repository validation.';
   }
-  if (name === 'relai_exec') {
+  if (name === OP.EXEC) {
     const command = cleanText(value?.commandSummary, 180);
     const exit = Number.isFinite(value?.exitCode) ? ` Exit code ${value.exitCode}.` : '';
     return `${command ? `Ran ${command}.` : 'Ran a repository command.'}${exit}`.trim();
   }
-  if (name === 'relai_git_commit') return value?.commit ? `Created Git commit ${cleanText(value.commit, 20)}.` : 'Created a Git commit.';
-  if (name === 'relai_git_push') return 'Published the Git branch.';
-  if (name === 'relai_cancel_work') return sanitizeDisplayText(value?.terminalReason || args?.reason, MAX_SUMMARY_LENGTH) || 'Task cancellation was reported.';
-  if (name === 'relai_finish_work') return sanitizeDisplayText(value?.summary || args?.summary, MAX_SUMMARY_LENGTH) || 'Task completion was reported.';
+  if (name === OP.PUBLISH_COMMIT) return value?.commit ? `Created Git commit ${cleanText(value.commit, 20)}.` : 'Created a Git commit.';
+  if (name === OP.PUBLISH_PUSH) return 'Published the Git branch.';
+  if (name === OP.WORK_CANCEL) return sanitizeDisplayText(value?.terminalReason || args?.reason, MAX_SUMMARY_LENGTH) || 'Task cancellation was reported.';
+  if (name === OP.WORK_FINISH) return sanitizeDisplayText(value?.summary || args?.summary, MAX_SUMMARY_LENGTH) || 'Task completion was reported.';
   return cleanText(result?.outcome, MAX_SUMMARY_LENGTH) || `${operation || titleForTool(name, args) || 'Tool operation'} completed.`;
 }
 

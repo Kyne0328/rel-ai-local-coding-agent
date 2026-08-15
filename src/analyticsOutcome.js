@@ -1,3 +1,5 @@
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
+
 const OUTCOME_CLASSES = Object.freeze({
   SUCCESS: 'success',
   OPERATION_FAILURE: 'operation_failure',
@@ -20,7 +22,7 @@ function classifyAnalyticsOutcome(event = {}) {
     return OUTCOME_CLASSES.RECOVERABLE_FAILURE;
   }
 
-  if (operation === 'relai_validate' || operation === 'relai_run_checks') return OUTCOME_CLASSES.OPERATION_FAILURE;
+  if (operation === 'relai_validate' || operation === OP.VALIDATE_CHECKS || operation === OP.VALIDATE_DIAGNOSTICS || operation === OP.VALIDATE_HTTP) return OUTCOME_CLASSES.OPERATION_FAILURE;
 
   if (/TASK_ID_REQUIRED|SENSITIVE|PROTECTED|APPROVAL|RESTRICTED|DENIED|UNAUTHORIZED|FORBIDDEN|AUTHORIZATION|AUTHENTICATION|INVALID_(INPUT|ARGUMENT)|SCHEMA|PROTOCOL|WORKSPACE_(REQUIRED|UNKNOWN)|UNKNOWN WORKSPACE|UNSUPPORTED FIELD|UNMATCHED .*\(|INVALID REGEX|REGULAR EXPRESSION|BAD PATTERN/.test(signal)) {
     return OUTCOME_CLASSES.OPERATION_FAILURE;

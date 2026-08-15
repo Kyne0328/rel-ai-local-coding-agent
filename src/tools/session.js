@@ -1,4 +1,5 @@
 import { getOperationDefinition } from './actionCatalog.js';
+import { OPERATION_IDS as OP } from './operationIds.js';
 // @ts-check
 
 /** @typedef {import('../../types/boundaries.d.ts').ToolArgs} ToolArgs */
@@ -17,7 +18,7 @@ function debugSwallow(context, error) {
 }
 
 /** @type {Readonly<Record<string, AuditEnricher>>} */
-const CODE_MUTATING_TOOLS = new Set(['relai_edit', 'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace']);
+const CODE_MUTATING_TOOLS = new Set([OP.EDIT, OP.CHANGES_TIDY_RUN, OP.CHANGES_RESTORE, OP.CHANGES_RESET]);
 
 const AUDIT_ENRICHERS = Object.freeze({
   edit: enrichEditAudit,
@@ -39,13 +40,13 @@ function buildExtraAudit(name, value, args) {
 }
 
 function enrichCommonAudit(extra, name, value) {
-  const mutationCapable = CODE_MUTATING_TOOLS.has(name) || name === 'relai_exec';
+  const mutationCapable = CODE_MUTATING_TOOLS.has(name) || name === OP.EXEC;
   const changedFiles = mutationCapable && Array.isArray(value?.changedFiles) ? value.changedFiles : [];
   if (changedFiles.length) extra.changedFiles = changedFiles.slice(0, 200);
   assignTruthy(extra, "validationStatus", value?.validationStatus);
-  if (name === "relai_git_commit" && value?.ok !== false) extra.commitCreated = true;
-  if (name === "relai_git_push" && value?.ok !== false) extra.pushPublished = true;
-  if (name === "relai_git_draft_pr" && value?.ok !== false) extra.prDrafted = true;
+  if (name === OP.PUBLISH_COMMIT && value?.ok !== false) extra.commitCreated = true;
+  if (name === OP.PUBLISH_PUSH && value?.ok !== false) extra.pushPublished = true;
+  if (name === OP.PUBLISH_DRAFT_PR && value?.ok !== false) extra.prDrafted = true;
 }
 
 function enrichEditAudit(extra, value, args) {

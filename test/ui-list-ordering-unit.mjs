@@ -10,26 +10,24 @@ import { sortEntries as orderActivityEntries } from '../src/ui/features/activity
 import { aliasConsistencyCheck, cautionSummary } from "../src/productUx.js";
 
 const orderedTools = orderToolsForCatalog([
-  { name: 'relai_restore_paths', title: 'Restore Tracked Paths' },
-  { name: 'relai_reset_workspace', title: 'Reset Workspace State' },
-  { name: 'relai_status', title: 'Rel.AI Status' },
-  { name: 'relai_read', title: 'Read Local Repo Paths' },
-  { name: 'relai_code_inspect', title: 'Code Intelligence' },
-  { name: 'relai_git_push', title: 'Publish Branch' },
-  { name: 'relai_http_probe', title: 'HTTP Route Probe' },
-  { name: 'relai_edit', title: 'Unified Workspace Edit' },
-  { name: 'relai_run_checks', title: 'Workspace Checks' }
+  { name: 'relai_publish', title: 'Publish', capabilities: ['git'] },
+  { name: 'relai_changes', title: 'Changes', capabilities: ['review', 'recover'] },
+  { name: 'relai_validate', title: 'Validate', capabilities: ['validate'] },
+  { name: 'relai_process', title: 'Processes', capabilities: ['execute'] },
+  { name: 'relai_edit', title: 'Edit', capabilities: ['edit'] },
+  { name: 'relai_read', title: 'Read', capabilities: ['inspect'] },
+  { name: 'relai_inspect', title: 'Inspect', capabilities: ['inspect'] },
+  { name: 'relai_work', title: 'Work', capabilities: ['workflow'] }
 ]);
 assert.deepEqual(orderedTools.map(tool => tool.name), [
-  'relai_code_inspect',
+  'relai_inspect',
   'relai_read',
-  'relai_status',
   'relai_edit',
-  'relai_http_probe',
-  'relai_run_checks',
-  'relai_git_push',
-  'relai_reset_workspace',
-  'relai_restore_paths'
+  'relai_process',
+  'relai_work',
+  'relai_changes',
+  'relai_validate',
+  'relai_publish'
 ]);
 
 const consolidatedToolMetadata = getToolMetadata();

@@ -51,11 +51,11 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   const invocation = normalizeExecutionInvocation(args, 'relai_process start');
   const kind = String(args.kind || '').trim().toLowerCase();
   if (!['service', 'watcher', 'interactive'].includes(kind)) {
-    throw new Error('relai_process_start requires kind: service, watcher, or interactive. Use relai_exec or relai_validate with action "checks" for one-shot commands.');
+    throw new Error('relai_process action "start" requires kind: service, watcher, or interactive. Use relai_exec or relai_validate with action "checks" for one-shot commands.');
   }
   const purpose = String(args.purpose || '').trim();
-  if (!purpose) throw new Error('relai_process_start requires a persistent-process purpose.');
-  if (purpose.length > 300) throw new Error('relai_process_start purpose must be 300 characters or fewer.');
+  if (!purpose) throw new Error('relai_process action "start" requires a persistent-process purpose.');
+  if (purpose.length > 300) throw new Error('relai_process action "start" purpose must be 300 characters or fewer.');
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const workSessionId = String(context.taskId || args.work_id || '').trim();

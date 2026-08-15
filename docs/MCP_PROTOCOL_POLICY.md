@@ -26,13 +26,13 @@ Compatibility is protected by the HTTP/ChatGPT smoke tests, while stdio tests ve
 - Native MCP Tasks advertisement/routing through `io.modelcontextprotocol/tasks` on the modern protocol route only.
 - Direct completion for clearly bounded operations, native tasks for long/indeterminate eligible work, and bounded synchronous fallback when Tasks are not advertised.
 
-### Forward-compatible Native Tasks policy
+### Native Tasks capability policy
 
-Rel.AI intentionally keeps its Native MCP Tasks implementation active in source even when the connected ChatGPT client uses the legacy `2025-11-25` compatibility route. That legacy route does not advertise the Tasks extension, so eligible operations continue to return ordinary synchronous tool results. There is no user-facing “enable Tasks” switch and no client-name heuristic.
+Rel.AI keeps one current tool surface regardless of whether a connected MCP client advertises the Tasks extension. Clients that do not advertise `io.modelcontextprotocol/tasks` receive ordinary synchronous results for the same current tools; there are no legacy tool aliases, compatibility operation names, or client-name heuristics.
 
-On a modern request, Native Tasks activate only when the request explicitly advertises the supported `io.modelcontextprotocol/tasks` capability. The eligible-operation metadata therefore describes what Rel.AI *can* run as a task, not what every current client will receive. This separation is deliberate forward compatibility: when ChatGPT begins negotiating the capability, an existing compatible Rel.AI build can use Native Tasks automatically without a feature-toggle release.
+Native Tasks activate only when the request explicitly advertises the supported Tasks capability. The eligibility metadata describes which current operations may use that execution mode. Protocol-version negotiation remains transport interoperability, not a second or legacy tool API.
 
-Do not remove `nativeTaskService`, `nativeToolTasks`, `transportTasks`, task eligibility metadata, or their protocol tests as stale solely because current ChatGPT sessions fall back to synchronous execution. Remove them only if Rel.AI intentionally drops Native MCP Tasks support.
+Keep `nativeTaskService`, `nativeToolTasks`, `transportTasks`, task eligibility metadata, and their protocol tests while Rel.AI supports Native MCP Tasks.
 
 Transport connections deliver requests but do not retain work-session identity. They never select, merge, replay, or complete repository work.
 

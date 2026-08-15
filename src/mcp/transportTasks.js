@@ -8,6 +8,11 @@ import {
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { combineAbortSignals } from '../abortSignals.js';
 import {
+  DEFAULT_FALLBACK_GRACE_MS,
+  fallbackSignature,
+  startFallbackExecution
+} from './fallbackExecutions.js';
+import {
   acknowledgeNativeTaskCancellation,
   cancelNativeTask,
   getNativeTask,
@@ -38,6 +43,7 @@ import {
   nativeToolTaskSignal
 } from './nativeToolTasks.js';
 import { createRelaiRequestStateCodec } from './context.js';
+import { toolResult } from './results.js';
 import { catalogApprovalRequirement, resolveToolOperation } from '../tools/actionCatalog.js';
 import { getToolSchemas } from '../tools/schema.js';
 import { validateToolOutput } from '../tools/outputValidation.js';
@@ -68,6 +74,16 @@ async function handleTransportTaskRequest(config, message, options = {}) {
 
   const bounds = options.synchronousBounds || DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS;
   const taskCapability = negotiateTasksCapability(capabilities);
+  const execute = typeof options.executeToolResult === 'function'
+    ? options.executeToolResult
+    : executeToolResult;
+  if (taskCapability.valid && !taskCapability.supported) {
+    return runFallbackToolExecution(config, message, validated.value, {
+      ...options,
+      capabilities,
+      execute
+    });
+  }
   const estimate = synchronousEstimate(name, validated.value, capabilities, bounds, options);
   const selection = selectExecutionMode({
     clientCapabilities: capabilities,
@@ -87,20 +103,6 @@ async function handleTransportTaskRequest(config, message, options = {}) {
       bounds: selection.bounds,
       message
     });
-  }
-
-  const execute = typeof options.executeToolResult === 'function'
-    ? options.executeToolResult
-    : executeToolResult;
-  if (!taskCapability.supported) {
-    const value = await execute(config, name, validated.value, {
-      ...options,
-      capabilities,
-      signal: selection.signal,
-      requestId: message.id,
-      message
-    });
-    return successResponse(message.id, value);
   }
 
   const bounded = await runBoundedExecution(
@@ -182,6 +184,60 @@ function synchronousEstimate(name, args, capabilities, bounds, options = {}) {
     durationMs: explicitBound ? timeoutMs : undefined,
     outputBytes
   };
+}
+
+async function runFallbackToolExecution(config, message, args, options = {}) {
+  const name = String(message.params?.name || '');
+  const workId = String(args.work_id || '').trim();
+  const graceMs = Math.max(0, Number(options.synchronousFallbackGraceMs ?? DEFAULT_FALLBACK_GRACE_MS));
+  let started;
+  try {
+    started = startFallbackExecution({
+      workId,
+      tool: name,
+      workspace: String(args.workspace || ''),
+      signature: fallbackSignature(name, args),
+      run: () => options.execute(config, name, args, {
+        ...options,
+        signal: undefined,
+        requestId: `fallback:${workId}`,
+        message
+      })
+    });
+  } catch (error) {
+    return successResponse(message.id, toolResult({
+      ok: false,
+      work_id: workId,
+      error: error instanceof Error ? error.message : String(error),
+      errorCode: String(error?.code || 'TASK_OPERATION_IN_PROGRESS'),
+      nextAction: `Call relai_work with action "status" and work_id "${workId}" before starting another long operation.`
+    }, true));
+  }
+
+  if (!started.reused && graceMs > 0) {
+    const settled = await Promise.race([
+      started.record.promise.then(value => ({ kind: 'settled', value })),
+      new Promise(resolve => setTimeout(() => resolve({ kind: 'pending' }), graceMs))
+    ]);
+    if (settled.kind === 'settled') {
+      if (settled.value.ok) return successResponse(message.id, settled.value.result);
+      return successResponse(message.id, toolResult({
+        ok: false,
+        work_id: workId,
+        error: settled.value.error instanceof Error ? settled.value.error.message : String(settled.value.error || 'Long-running operation failed.'),
+        errorCode: 'TOOL_EXECUTION_FAILED'
+      }, true));
+    }
+  }
+
+  return successResponse(message.id, toolResult({
+    ok: true,
+    workspace: String(args.workspace || ''),
+    work_id: workId,
+    status: 'running',
+    message: `${name} is still running safely after this request returns.`,
+    nextAction: `Call relai_work with action "status" and work_id "${workId}" to get the result.`
+  }, false));
 }
 
 async function handleTaskProtocolRequest(config, message, principal, capabilities) {
@@ -353,7 +409,7 @@ async function awaitCleanup(execution) {
 
 function boundedArguments(name, args, bounds) {
   const value = { ...args };
-  if (['relai_exec', 'relai_validate', 'relai_diagnostics_run', 'relai_run_checks'].includes(name)) {
+  if (['relai_exec', 'relai_validate'].includes(name)) {
     value.timeoutMs = Math.min(Number(args.timeoutMs) || bounds.maxDurationMs, bounds.maxDurationMs);
   }
   if (name === 'relai_exec') {
