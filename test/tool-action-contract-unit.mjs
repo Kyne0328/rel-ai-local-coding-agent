@@ -96,11 +96,8 @@ const processStopWithWorkspace = resolveExecutableToolCall('relai_process', { wo
 assert.equal(processStopWithWorkspace.operationArgs.workspace, 'fixture', 'process stop must accept workspace advertised by the public action schema');
 const scopedDiff = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'diff', scope: 'task' }, {});
 assert.equal(scopedDiff.operationArgs.scope, 'task', 'diff scope must be exposed by the public action contract');
-assert.throws(
-  () => resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'restore', paths: ['README.md'], scope: 'task' }, {}),
-  /Unsupported field 'scope'/,
-  'scope must remain diff-only'
-);
+const restoreWithIrrelevantScope = resolveExecutableToolCall('relai_changes', { workspace: 'fixture', work_id: 'task-1', action: 'restore', paths: ['README.md'], scope: 'task' }, {});
+assert.equal(restoreWithIrrelevantScope.operationArgs.scope, undefined, 'known fields from another action should be ignored before runtime dispatch');
 
 const actualKeys = [];
 for (const expected of rows) {

@@ -8,7 +8,7 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 41;
+const TOOL_SURFACE_VERSION = 42;
 const READ = 'repository:read';
 const WRITE = 'repository:write';
 const EXECUTE = 'command:execute';
@@ -213,7 +213,16 @@ function normalizeOperationArguments(publicName, action, entry, args) {
   const allowed = new Set([...(entry.fields || []), '_operationTaskId']);
   if (entry.keepAction) allowed.add('action');
   const unsupported = Object.keys(args).filter(field => !allowed.has(field));
-  if (unsupported.length) throw new Error(`Unsupported field '${unsupported[0]}' for ${publicName} action ${action}.`);
+  if (unsupported.length) {
+    const publicDefinition = getCatalogToolDefinition(publicName);
+    const publicFields = new Set([
+      ...Object.keys(schemaFromDefinition(publicDefinition).inputSchema?.properties || {}),
+      '_operationTaskId'
+    ]);
+    const unknown = unsupported.filter(field => !publicFields.has(field));
+    if (unknown.length) throw new Error(`Unsupported field '${unknown[0]}' for ${publicName} action ${action}.`);
+    for (const field of unsupported) delete args[field];
+  }
   for (const field of entry.required || []) {
     if (args[field] === undefined || args[field] === null || args[field] === '') {
       throw new Error(`Missing required field '${field}' for ${publicName} action ${action}.`);
