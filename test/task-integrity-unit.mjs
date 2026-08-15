@@ -7,6 +7,10 @@ import path from 'node:path';
 import * as taskIntegrity from '../src/taskIntegrity.js';
 const { readTaskIntegrity, readWorkspaceIntegrity, recordTaskIntegrityEvent } = taskIntegrity;
 
+const taskIntegritySource = fs.readFileSync(new URL('../src/taskIntegrity.js', import.meta.url), 'utf8');
+assert.doesNotMatch(taskIntegritySource, /execFileSync/, 'task-integrity Git probes must never block the MCP event loop');
+assert.match(taskIntegritySource, /await runProcess\('git'/, 'task-integrity Git probes must use the asynchronous process runner');
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-integrity-'));
 const workspacePath = path.join(root, 'workspace');
 const stateDir = path.join(root, 'state');
@@ -49,7 +53,7 @@ try {
   fs.mkdirSync(integrityLockDir, { recursive: true });
   fs.writeFileSync(integrityLock, 'other-runtime\n', 'utf8');
   const contentionStartedAt = Date.now();
-  assert.throws(
+  await assert.rejects(
     () => recordTaskIntegrityEvent(config, event('lock-contention-task', 'relai_begin_work')),
     error => error?.code === 'TASK_INTEGRITY_PERSISTENCE_FAILED',
     'fresh task-integrity lock contention must fail fast rather than block the MCP event loop'
@@ -57,17 +61,17 @@ try {
   assert.ok(Date.now() - contentionStartedAt < 1000, 'task-integrity lock contention must return in under one second');
   fs.rmSync(integrityLock, { force: true });
 
-  recordTaskIntegrityEvent(config, event(taskOne, 'relai_begin_work'));
+  await recordTaskIntegrityEvent(config, event(taskOne, 'relai_begin_work'));
   const initial = readTaskIntegrity(config, taskOne, 'app');
   assert.ok(initial.baseline.changedFiles.includes('ambient.txt'));
   assert.deepEqual(initial.taskOwnedChangedFiles, []);
   assert.equal(initial.mutationGeneration, 0);
 
   fs.writeFileSync(path.join(workspacePath, 'task-one.js'), 'export const one = 1;\n');
-  recordTaskIntegrityEvent(config, event(taskOne, 'relai_edit', { changedFiles: ['task-one.js'] }));
+  await recordTaskIntegrityEvent(config, event(taskOne, 'relai_edit', { changedFiles: ['task-one.js'] }));
   fs.writeFileSync(path.join(workspacePath, 'task-two.js'), 'export const two = 2;\n');
-  recordTaskIntegrityEvent(config, event(taskTwo, 'relai_begin_work'));
-  recordTaskIntegrityEvent(config, event(taskTwo, 'relai_edit', { changedFiles: ['task-two.js'] }));
+  await recordTaskIntegrityEvent(config, event(taskTwo, 'relai_begin_work'));
+  await recordTaskIntegrityEvent(config, event(taskTwo, 'relai_edit', { changedFiles: ['task-two.js'] }));
 
   assert.equal(typeof taskIntegrity.taskOwnedChangedFiles, 'function', 'task integrity must expose exact task-owned changed files');
   assert.deepEqual(taskIntegrity.taskOwnedChangedFiles(config, taskOne, 'app'), ['task-one.js']);
@@ -80,7 +84,7 @@ try {
   assert.equal(one.taskOwnedChangedFiles.includes('task-two.js'), false);
   assert.equal(two.taskOwnedChangedFiles.includes('task-one.js'), false);
 
-  recordTaskIntegrityEvent(config, event(taskOne, 'relai_run_checks', {
+  await recordTaskIntegrityEvent(config, event(taskOne, 'relai_run_checks', {
     validationStatus: 'passed',
     validationLevel: 'focused',
     validationFingerprint: 'fingerprint-one'
@@ -90,14 +94,14 @@ try {
   assert.equal(validated.validatedRepositoryFingerprint, 'fingerprint-one');
 
   fs.writeFileSync(path.join(workspacePath, 'task-one.js'), 'export const one = 3;\n');
-  recordTaskIntegrityEvent(config, event(taskOne, 'relai_edit', { changedFiles: ['task-one.js'] }));
+  await recordTaskIntegrityEvent(config, event(taskOne, 'relai_edit', { changedFiles: ['task-one.js'] }));
   const stale = readTaskIntegrity(config, taskOne, 'app');
   assert.equal(stale.validationResult, 'stale');
   assert.notEqual(stale.latestValidatedMutationGeneration, stale.mutationGeneration);
 
-  recordTaskIntegrityEvent(config, event(failedMutationTask, 'relai_begin_work'));
+  await recordTaskIntegrityEvent(config, event(failedMutationTask, 'relai_begin_work'));
   fs.writeFileSync(path.join(workspacePath, 'failed-command.js'), 'export const failed = true;\n');
-  recordTaskIntegrityEvent(config, event(failedMutationTask, 'relai_exec', {
+  await recordTaskIntegrityEvent(config, event(failedMutationTask, 'relai_exec', {
     ok: false,
     changedFiles: ['failed-command.js'],
     mutationTracking: 'git'
@@ -106,9 +110,9 @@ try {
   assert.equal(failedMutation.mutationGeneration, 1, 'a failed command that changed files must still advance mutation authority');
   assert.deepEqual(failedMutation.taskOwnedChangedFiles, ['failed-command.js']);
 
-  recordTaskIntegrityEvent(config, event(failedPostCheckTask, 'relai_begin_work'));
+  await recordTaskIntegrityEvent(config, event(failedPostCheckTask, 'relai_begin_work'));
   fs.writeFileSync(path.join(workspacePath, 'failed-post-check.js'), 'export const changed = true;\n');
-  recordTaskIntegrityEvent(config, event(failedPostCheckTask, 'relai_edit', {
+  await recordTaskIntegrityEvent(config, event(failedPostCheckTask, 'relai_edit', {
     ok: false,
     changedFiles: ['failed-post-check.js'],
     validationStatus: 'failed',
@@ -119,9 +123,9 @@ try {
   assert.equal(failedPostCheck.mutationGeneration, 1, 'failed post-checks must preserve the edit mutation');
   assert.deepEqual(failedPostCheck.taskOwnedChangedFiles, ['failed-post-check.js']);
   assert.equal(failedPostCheck.validationResult, 'failed');
-  recordTaskIntegrityEvent(config, event(embeddedValidationTask, 'relai_begin_work'));
+  await recordTaskIntegrityEvent(config, event(embeddedValidationTask, 'relai_begin_work'));
   fs.writeFileSync(path.join(workspacePath, 'embedded.js'), 'export const embedded = true;\n');
-  recordTaskIntegrityEvent(config, event(embeddedValidationTask, 'relai_edit', {
+  await recordTaskIntegrityEvent(config, event(embeddedValidationTask, 'relai_edit', {
     changedFiles: ['embedded.js'],
     validationStatus: 'passed',
     validationLevel: 'focused',
@@ -131,8 +135,8 @@ try {
   assert.equal(embedded.validationResult, 'passed', 'passing embedded edit checks must establish validation authority');
   assert.equal(embedded.latestValidatedMutationGeneration, embedded.mutationGeneration);
   assert.equal(embedded.validatedRepositoryFingerprint, 'embedded-fingerprint');
-  recordTaskIntegrityEvent(config, event(unavailableTrackingTask, 'relai_begin_work'));
-  recordTaskIntegrityEvent(config, event(unavailableTrackingTask, 'relai_exec', {
+  await recordTaskIntegrityEvent(config, event(unavailableTrackingTask, 'relai_begin_work'));
+  await recordTaskIntegrityEvent(config, event(unavailableTrackingTask, 'relai_exec', {
     changedFiles: [],
     mutationTracking: 'unavailable'
   }));

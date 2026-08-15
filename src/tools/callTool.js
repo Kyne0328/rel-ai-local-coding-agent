@@ -129,7 +129,7 @@ async function callTool(name, args = {}, context = {}) {
       repositoryFingerprint: String(value?.validationFingerprint || ''),
       commandId: workflowCommandId(operationName, resolved.action, effectiveArgs)
     }) : null;
-    const auditEntry = safeLogAudit(config, {
+    const auditEntry = await safeLogAudit(config, {
       ...activityResult.activity,
       ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, valueOk, value),
       tool: operationName,
@@ -199,7 +199,7 @@ async function callTool(name, args = {}, context = {}) {
       commandId: workflowCommandId(operationName, resolvedAction, effectiveArgs)
     }) : null;
     if (!/^TASK_INTEGRITY_/.test(String(enhanced.code || ''))) {
-      const failedAuditEntry = safeLogAudit(config, {
+      const failedAuditEntry = await safeLogAudit(config, {
         ...activityResult.activity,
         ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, false),
         tool: operationName,
