@@ -52,7 +52,7 @@ const config = { stateDir: path.join(root, 'state') };
 // Start a session against the clean worktree first — this mirrors the real
 // connector flow (a write auto-starts a session before git_status is consulted),
 // so files created afterward are correctly attributed as session-owned.
-await writeSessionPolicy(config, workspace.alias, { workspaceRoot: workspacePath });
+await writeSessionPolicy(config, workspace.alias, { workspaceRoot: workspacePath, taskId: 'task-git-workflow' });
 fs.writeFileSync(path.join(workspacePath, 'notes.txt'), 'dirty session note\n');
 const status = await workspaceGitStatus(workspace, config, {});
 assert.equal(status.ok, true);

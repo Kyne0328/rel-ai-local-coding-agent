@@ -3,7 +3,6 @@
   "capturedAt": "2026-08-12",
   "platform": "linux",
   "architecture": "x64",
-  "electronVersion": "43.2.0",
   "policy": "strict",
   "tolerancePercent": 5,
   "provisional": false,

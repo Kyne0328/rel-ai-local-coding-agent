@@ -1,67 +1,38 @@
 import assert from 'node:assert/strict';
 import { evaluatePackagingAudit } from '../scripts/audit-packaging.mjs';
 
-const policy = {
-  schemaVersion: 1,
-  expiresOn: '2026-08-31',
-  allowedPackages: ['brace-expansion', 'minimatch'],
-  allowedAdvisoryUrls: ['https://github.com/advisories/GHSA-mh99-v99m-4gvg']
+const cleanReport = {
+  metadata: { vulnerabilities: { low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
+  vulnerabilities: {}
 };
-const lockfile = {
-  packages: {
-    'node_modules/brace-expansion': { dev: true },
-    'node_modules/minimatch': { peer: true }
-  }
-};
-const acceptedReport = {
-  metadata: { vulnerabilities: { high: 2, critical: 0 } },
-  vulnerabilities: {
-    'brace-expansion': {
-      nodes: ['node_modules/brace-expansion'],
-      via: [{ url: 'https://github.com/advisories/GHSA-mh99-v99m-4gvg' }]
-    },
-    minimatch: {
-      nodes: ['node_modules/minimatch'],
-      via: ['brace-expansion']
-    }
-  }
-};
-
-const accepted = evaluatePackagingAudit({
-  report: acceptedReport,
-  policy,
-  lockfile,
-  now: new Date('2026-07-31T12:00:00Z')
+assert.deepEqual(evaluatePackagingAudit({ report: cleanReport }), {
+  accepted: true,
+  vulnerabilityCount: 0,
+  packages: []
 });
-assert.equal(accepted.vulnerabilityCount, 2);
-assert.deepEqual(accepted.advisoryUrls, ['https://github.com/advisories/GHSA-mh99-v99m-4gvg']);
 
-assert.throws(() => evaluatePackagingAudit({
-  report: { ...acceptedReport, vulnerabilities: { ...acceptedReport.vulnerabilities, unknown: { nodes: ['node_modules/minimatch'], via: ['brace-expansion'] } } },
-  policy,
-  lockfile,
-  now: new Date('2026-07-31T12:00:00Z')
-}), /unapproved package/);
+const moderateOnly = {
+  metadata: { vulnerabilities: { low: 0, moderate: 1, high: 0, critical: 0, total: 1 } },
+  vulnerabilities: {
+    example: { severity: 'moderate' }
+  }
+};
+assert.doesNotThrow(() => evaluatePackagingAudit({ report: moderateOnly }), 'the release gate is explicitly high-severity and above');
 
-assert.throws(() => evaluatePackagingAudit({
-  report: { ...acceptedReport, vulnerabilities: { 'brace-expansion': { nodes: ['node_modules/brace-expansion'], via: [{ url: 'https://example.invalid/new-advisory' }] } } },
-  policy,
-  lockfile,
-  now: new Date('2026-07-31T12:00:00Z')
-}), /unapproved advisory/);
+const highReport = {
+  metadata: { vulnerabilities: { low: 0, moderate: 0, high: 1, critical: 0, total: 1 } },
+  vulnerabilities: {
+    'build-tool': { severity: 'high' }
+  }
+};
+assert.throws(() => evaluatePackagingAudit({ report: highReport }), /1 high.*build-tool/i);
 
-assert.throws(() => evaluatePackagingAudit({
-  report: acceptedReport,
-  policy,
-  lockfile,
-  now: new Date('2026-09-01T00:00:00Z')
-}), /expired/);
+const criticalReport = {
+  metadata: { vulnerabilities: { low: 0, moderate: 0, high: 0, critical: 1, total: 1 } },
+  vulnerabilities: {
+    'critical-build-tool': { severity: 'critical' }
+  }
+};
+assert.throws(() => evaluatePackagingAudit({ report: criticalReport }), /1 critical.*critical-build-tool/i);
 
-assert.throws(() => evaluatePackagingAudit({
-  report: acceptedReport,
-  policy,
-  lockfile: { packages: { ...lockfile.packages, 'node_modules/brace-expansion': {} } },
-  now: new Date('2026-07-31T12:00:00Z')
-}), /non-build dependency/);
-
-console.log('Packaging audit policy is fail-closed for scope, advisory, expiry, and runtime reachability.');
+console.log('Packaging audit fails closed on all high and critical build-tool findings without stale advisory exceptions.');

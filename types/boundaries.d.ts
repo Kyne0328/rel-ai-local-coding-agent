@@ -92,22 +92,13 @@ interface ToolBehavior {
   executionClass: ToolExecutionClass;
 }
 
-type ToolCapability = 'inspect' | 'edit' | 'validate' | 'git' | 'recover';
+type ToolCapability = 'inspect' | 'edit' | 'execute' | 'workflow' | 'review' | 'validate' | 'git' | 'recover';
 
 interface ToolDashboardMetadata {
   category: string;
   requiredProfile: 'workspace';
   requiresApproval: boolean;
   capabilities?: readonly ToolCapability[];
-}
-
-interface ToolLifecycleMetadata {
-  state: 'active' | 'deprecated';
-  replacement?: ToolName;
-  replacements?: ToolName[];
-  deprecatedSince?: number;
-  removalTarget?: number;
-  note?: string;
 }
 
 export interface ToolDefinitionMetadata {
@@ -123,7 +114,6 @@ export interface ToolDefinitionMetadata {
   groups: ToolGroup[];
   behavior: ToolBehavior;
   dashboard: ToolDashboardMetadata;
-  lifecycle?: ToolLifecycleMetadata;
 }
 
 
