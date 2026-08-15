@@ -87,7 +87,7 @@ function read(rel) {
 }
 
 // Targeted state reads bypass the shared GET cache and collapse overlapping requests.
-// Routine dashboard updates are driven by tool activity, while workspace filters are
+// Routine dashboard updates use typed domain deltas, while workspace filters are
 // page-owned Tailwind listboxes instead of native topbar controls.
 {
   const dashboard = read('public/dashboard.js');
@@ -98,7 +98,12 @@ function read(rel) {
   assert.match(dashboard, /fetchJson\(DASHBOARD_DATA_URL, \{ cache: 'no-store' \}\)/);
   assert.match(dashboard, /let _refreshPromise = null/);
   assert.match(dashboard, /finally \{\s*_refreshPromise = null;\s*\}/);
-  assert.match(dashboardHtml, /onToolActivity\(scheduleSnapshot\)/);
+  assert.match(dashboardHtml, /onToolActivity\(activity =>/);
+  assert.match(dashboardHtml, /sendDomain\('task\.updated', 'task'/);
+  assert.match(dashboardHtml, /mcpConnectionManager\.onChange\(snapshot => sendConnection\(snapshot\)\)/);
+  assert.match(dashboardHtml, /sendDomain\('workspace\.updated', 'workspace'/);
+  assert.match(dashboardHtml, /sendDomain\('process\.updated', 'process'/);
+  assert.doesNotMatch(dashboardHtml, /sendSse\(res, ['"]dashboard['"]|scheduleSnapshot|DASHBOARD_SNAPSHOT_COALESCE_MS|DASHBOARD_SNAPSHOT_MAX_WAIT_MS/);
   assert.doesNotMatch(dashboardHtml, /workspaceScope|refreshBtn|topbar-refresh/);
   assert.match(dashboardCss, /\.workspace-menu-popover/);
   assert.doesNotMatch(dashboardCss, /workspace-scope-control/);
