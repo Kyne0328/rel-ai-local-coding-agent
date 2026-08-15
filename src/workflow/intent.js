@@ -24,21 +24,23 @@ function classifyTaskIntent(objective) {
   const text = String(objective || '').trim().toLowerCase();
   if (!text) return 'auto';
   const rules = [
-    ['migration', /\b(migrat(?:e|ion)|hard cutover|cutover|upgrade)\b/],
-    ['performance', /\b(performance|optimi[sz]e|latency|throughput|hot[- ]?path|faster|speed up)\b/],
-    ['bugfix', /\b(fix|bug|broken|failing|failure|error|regression|crash|incorrect|wrong)\b/],
-    ['refactor', /\b(refactor|restructure|reorganize|decouple|consolidate|single source of truth|deduplicat)\b/],
-    ['cleanup', /\b(cleanup|clean up|remove (?:dead|stale|unused)|residue|simplif(?:y|ication))\b/],
-    ['documentation', /\b(documentation|docs?|readme|changelog)\b/],
-    ['release', /\b(release|publish|ship|distribution)\b/],
-    ['review', /\b(review|audit|assess|evaluate)\b/],
-    ['investigation', /\b(investigat|diagnos|analy[sz]e|explain|trace|understand|inspect)\b/],
-    ['feature', /\b(add|implement|create|introduce|support|feature|build)\b/]
+    ['review', 6, /\b(review|audit|assess|evaluate)\b/g],
+    ['investigation', 6, /\b(investigat|diagnos|analy[sz]e|explain|trace|understand|inspect)\w*\b/g],
+    ['migration', 5, /\b(migrat(?:e|ion)|hard cutover|cutover|upgrade)\b/g],
+    ['bugfix', 5, /\b(fix|bug|broken|failing|failure|error|regression|crash|incorrect|wrong)\w*\b/g],
+    ['refactor', 5, /\b(refactor|restructure|reorganize|decouple|consolidate|single source of truth|deduplicat)\w*\b/g],
+    ['cleanup', 5, /\b(cleanup|clean up|remove (?:dead|stale|unused)|residue|simplif(?:y|ication))\b/g],
+    ['documentation', 5, /\b(documentation|docs?|readme|changelog)\b/g],
+    ['release', 5, /\b(release|publish|ship|distribution)\b/g],
+    ['performance', 4, /\b(performance|optimi[sz]e|latency|throughput|hot[- ]?path|faster|speed up)\w*\b/g],
+    ['feature', 3, /\b(add|implement|create|introduce|support|feature|build)\w*\b/g]
   ];
-  for (const [intent, pattern] of rules) {
-    if (pattern.test(text)) return intent;
-  }
-  return 'other';
+  const ranked = rules.map(([intent, weight, pattern], order) => {
+    const matches = [...text.matchAll(pattern)].length;
+    return { intent, score: matches * weight, order };
+  }).filter(item => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.order - right.order);
+  return ranked[0]?.intent || 'other';
 }
 
 export { TASK_INTENTS, classifyTaskIntent, normalizeTaskIntent };

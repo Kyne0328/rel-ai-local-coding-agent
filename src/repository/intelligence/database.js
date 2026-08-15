@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { realRootOf } from '../../safety.js';
 import { statePath } from '../../stateLayout.js';
 import { createEcosystemResolver, supportsEcosystemResolution } from './ecosystemResolution.js';
+import { relationshipKey } from './relationshipPolicy.js';
 
 const INDEX_SCHEMA_VERSION = 3;
 
@@ -425,10 +426,11 @@ function resolveHintRelationships(db, context) {
     let targetFileId = moduleTargetPath ? pathToId.get(moduleTargetPath) : null;
     let targetSymbol = null;
 
+    const relationshipTargetKey = relationshipKey(String(hint.type), targetName);
     const linkedHint = hint.type === 'HTTP_CALLS'
-      ? routeTargets.get(targetName)
+      ? routeTargets.get(relationshipTargetKey)
       : hint.type === 'EMITS'
-        ? eventTargets.get(targetName)
+        ? eventTargets.get(relationshipTargetKey)
         : null;
     if (linkedHint) {
       targetFileId = Number(linkedHint.source_file_id);
@@ -461,7 +463,8 @@ function uniqueHintTargets(hints, type) {
   const result = new Map();
   for (const hint of hints) {
     if (String(hint.type) !== type || hint.target_name == null) continue;
-    const key = String(hint.target_name);
+    const key = relationshipKey(type, String(hint.target_name));
+    if (!key) continue;
     if (!result.has(key)) result.set(key, hint);
     else result.set(key, null);
   }
@@ -488,6 +491,8 @@ function chooseCallTarget(sourceFileId, targets, importedIds = new Set()) {
 function resolveImportPath(sourcePath, specifier, pathToId, suffixIndex, directoryIndex = new Map(), ecosystem = null, language = null) {
   const clean = String(specifier || '').replaceAll('\\', '/').replace(/[{}*]/g, '').trim();
   if (!clean) return null;
+  const languageKey = String(language || '').toLowerCase();
+  if (['javascript', 'typescript', 'tsx'].includes(languageKey) && !clean.startsWith('.')) return null;
   if (clean.startsWith('.')) {
     const base = path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), clean));
     return resolveCandidateBase(base, pathToId, suffixIndex, directoryIndex);
@@ -587,14 +592,19 @@ function setMeta(db, key, value) {
 }
 
 function metaNumber(db, key, fallback = 0) {
+  const value = Number(metaValue(db, key, fallback));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function metaValue(db, key, fallback = '') {
   try {
     const row = db.prepare('SELECT value FROM index_meta WHERE key=?').get(String(key));
-    const value = Number(row?.value);
-    return Number.isFinite(value) ? value : fallback;
-  } catch {
-    return fallback;
-  }
+    return row?.value == null ? fallback : String(row.value);
+  } catch { return fallback; }
 }
+
+function indexProducerVersion(db) { return metaValue(db, 'producer_version', ''); }
+function setIndexProducerVersion(db, value) { setMeta(db, 'producer_version', String(value || '')); }
 
 export {
   INDEX_SCHEMA_VERSION,
@@ -604,6 +614,7 @@ export {
   deleteIndexedPath,
   ensureIndexSchema,
   finishGeneration,
+  indexProducerVersion,
   indexStats,
   listManifest,
   openIndexDatabase,
@@ -612,5 +623,6 @@ export {
   relationshipSourceIdsForNames,
   repositoryIndexPath,
   repositoryIndexRoot,
-  resolveRelationships
+  resolveRelationships,
+  setIndexProducerVersion
 };

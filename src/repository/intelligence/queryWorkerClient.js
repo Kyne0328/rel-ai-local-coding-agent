@@ -200,7 +200,16 @@ function repositoryStatusSnapshot(workspace, config) {
     if (!alias || !candidate?.path || result[alias]) continue;
     try {
       const status = repositoryIndexStatus(candidate, config);
-      result[alias] = { dirty: status.dirty === true, metadata: status.metadata ? true : null };
+      const metadata = status.metadata;
+      result[alias] = {
+        dirty: status.dirty === true,
+        metadata: metadata ? {
+          generation: Number(metadata.generation || 0),
+          freshness: String(metadata.freshness || ''),
+          truncated: metadata.truncated === true,
+          needsReconcile: metadata.needsReconcile === true
+        } : null
+      };
     } catch {}
   }
   return result;
@@ -210,6 +219,8 @@ function serializableWorkspace(workspace = {}) {
   return {
     alias: String(workspace.alias || ''),
     path: String(workspace.path || ''),
+    sourceAlias: String(workspace.sourceAlias || ''),
+    taskSandbox: workspace.taskSandbox === true,
     context: plainObject(workspace.context),
     commands: plainObject(workspace.commands),
     testCommands: plainObject(workspace.testCommands)

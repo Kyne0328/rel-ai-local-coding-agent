@@ -10,15 +10,18 @@ import {
   deleteIndexedPath,
   ensureIndexSchema,
   finishGeneration,
+  indexProducerVersion,
   indexStats,
   listManifest,
   openIndexDatabase,
   replaceFileFacts,
   relationshipImpactForPaths,
   relationshipSourceIdsForNames,
-  resolveRelationships
+  resolveRelationships,
+  setIndexProducerVersion
 } from './database.js';
 import { enhancedResolverLanguages, isTestPath, languageForPath, PARSER_VERSION, structuralLanguages } from './languages.js';
+import { intelligenceRuntimeFingerprint, intelligenceWorkspaceFingerprint } from './producer.js';
 import { parseSourceFile } from './treeSitter.js';
 import { rebuildZoektIndex } from './zoekt.js';
 
@@ -73,14 +76,16 @@ async function refreshRepositoryIndex(job, signal) {
     const manifest = listManifest(db);
     const manifestByPath = new Map(manifest.map(item => [item.path, item]));
     const parserVersionChanged = manifest.some(item => item.parserVersion !== PARSER_VERSION);
+    const runtimeProducerVersion = intelligenceRuntimeFingerprint();
+    const producerVersionChanged = Boolean(previousGeneration && indexProducerVersion(db) !== runtimeProducerVersion);
     const requestedPaths = normalizeRequestedPaths(job?.paths);
-    let scan = previousGeneration && requestedPaths.length && !parserVersionChanged
+    let scan = previousGeneration && requestedPaths.length && !parserVersionChanged && !producerVersionChanged
       ? scanSelectedPaths(workspace, requestedPaths)
       : scanWorkspace(workspace, maxFiles);
     if (scan.requiresFullScan) scan = scanWorkspace(workspace, maxFiles);
     throwIfAborted(signal);
 
-    const changed = job?.kind === 'rebuild' || scan.mode === 'incremental'
+    const changed = job?.kind === 'rebuild' || producerVersionChanged || scan.mode === 'incremental'
       ? scan.candidates
       : scan.candidates.filter(candidate => candidateChanged(candidate, manifestByPath.get(candidate.path)));
     const deletionDeferred = scan.mode === 'full' && scan.truncated;
@@ -173,6 +178,7 @@ async function refreshRepositoryIndex(job, signal) {
         if (impacted.size <= 500) relationshipSourceIds = [...impacted];
       }
       resolveRelationships(db, { workspaceRoot: workspace.path, sourceFileIds: relationshipSourceIds });
+      setIndexProducerVersion(db, runtimeProducerVersion);
       finishGeneration(db, generationId, 'committed', processedFiles + skippedChangedFiles + deleted.length);
       db.exec('COMMIT');
     } catch (error) {
@@ -355,7 +361,10 @@ function indexMetadata(
 ) {
   const stats = indexStats(db);
   const needsReconcile = sourceReadFailureCount > 0 || scan.truncated;
-  const freshness = sourceReadFailureCount > 0 ? 'stale' : scan.truncated ? 'partial' : 'current';
+  const producerVersion = intelligenceRuntimeFingerprint();
+  const workspaceProducerVersion = intelligenceWorkspaceFingerprint(workspace.path);
+  const runtimeStale = Boolean(workspaceProducerVersion && workspaceProducerVersion !== producerVersion);
+  const freshness = runtimeStale ? 'runtime-stale' : sourceReadFailureCount > 0 ? 'stale' : scan.truncated ? 'partial' : 'current';
   return {
     mode: 'persistent-tree-sitter-sqlite', persistent: true, freshness, cacheHit, scanMode: scan.mode, workerIsolated: true,
     fingerprint: `generation:${Number(generation?.id || 0)}`, generation: Number(generation?.id || 0),
@@ -373,10 +382,15 @@ function indexMetadata(
     sourceReadFailureCount,
     deletionDeferred,
     needsReconcile,
+    producerVersion,
+    ...(workspaceProducerVersion ? { workspaceProducerVersion } : {}),
+    runtimeStale,
     truncated: scan.truncated,
     providers: { structural: 'tree-sitter-wasm', graph: 'sqlite', lexical: 'sqlite-fts5', neural: false },
     languageIntelligence: { structuralLanguages: structuralLanguages().length, enhancedLanguages: enhancedResolverLanguages() },
-    policy: 'Persistent derived index with worker-isolated parsing, bounded incremental refresh, and periodic full reconciliation. Source remains authoritative.',
+    policy: runtimeStale
+      ? 'The self-hosted repository intelligence source differs from the connected runtime. Derived graph data is stale until the runtime is restarted; source remains authoritative.'
+      : 'Persistent derived index with worker-isolated parsing, bounded incremental refresh, producer-version invalidation, and periodic full reconciliation. Source remains authoritative.',
     workspace: workspace.alias
   };
 }

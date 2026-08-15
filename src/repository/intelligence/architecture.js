@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { boundedInteger } from './limits.js';
 
 const DEFAULT_MAX_RESULTS = 50;
@@ -40,7 +43,7 @@ function analyzeArchitecture(db, options = {}) {
   }
 
   const modules = moduleSummary(files, edges, maxResults);
-  const entryPoints = rankEntryPoints(files, maxResults);
+  const entryPoints = rankEntryPoints(files, maxResults, options.workspaceRoot);
   const hotspots = rankHotspots(files, maxResults);
   const dependencyAnalysis = dependencyLayers(modules.allItems, modules.edgeWeights);
   const communities = detectCommunities(files, adjacency, maxResults);
@@ -219,21 +222,56 @@ function moduleSummary(files, edges, maxResults) {
   return { items: items.slice(0, maxResults), allItems: items, edgeWeights };
 }
 
-function rankEntryPoints(files, maxResults) {
+function rankEntryPoints(files, maxResults, workspaceRoot = '') {
+  const explicit = packageEntryHints(workspaceRoot);
   return files.map(file => {
+    if (!isExecutableLanguage(file.language)) return { path: file.path, score: 0 };
     const reasons = [];
     let score = 0;
     const basename = basenameWithoutExtension(file.path);
-    if (/^(?:main|index|server|app|cli|worker|bootstrap|start)$/.test(basename)) { score += 8; reasons.push(`entry-name:${basename}`); }
-    if (!file.path.includes('/')) { score += 4; reasons.push('repository-root'); }
-    if (file.routeCount) { score += Math.min(8, file.routeCount * 3); reasons.push(`routes:${file.routeCount}`); }
+    if (explicit.has(file.path)) { score += 20; reasons.push('package-entry'); }
+    if (/^(?:main|server|cli|worker|bootstrap|start)$/.test(basename)) { score += 8; reasons.push(`entry-name:${basename}`); }
+    else if (basename === 'app') { score += 5; reasons.push('entry-name:app'); }
+    else if (basename === 'index') { score += 2; reasons.push('entry-name:index'); }
+    if (!file.path.includes('/')) { score += 3; reasons.push('repository-root'); }
+    if (file.routeCount) { score += Math.min(6, file.routeCount * 2); reasons.push(`routes:${file.routeCount}`); }
     if (file.incoming === 0 && file.outgoing > 0) { score += 4; reasons.push('no-incoming-dependencies'); }
-    if (/^(?:bin|cmd|scripts?|electron|src)\//.test(file.path)) { score += 1; reasons.push('entry-directory'); }
-    if (file.test) score -= 8;
+    if (/^(?:bin|cmd|scripts?|electron)\//.test(file.path)) { score += 2; reasons.push('entry-directory'); }
+    if (file.test) score -= 12;
     return { path: file.path, language: file.language, score, incoming: file.incoming, outgoing: file.outgoing, reasons };
   }).filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score || b.outgoing - a.outgoing || a.path.localeCompare(b.path))
     .slice(0, maxResults);
+}
+
+function packageEntryHints(workspaceRoot) {
+  const root = String(workspaceRoot || '').trim();
+  const result = new Set();
+  if (!root) return result;
+  for (const relativeManifest of ['package.json', 'electron/package.json']) {
+    try {
+      const file = path.join(root, ...relativeManifest.split('/'));
+      const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const base = path.posix.dirname(relativeManifest) === '.' ? '' : path.posix.dirname(relativeManifest);
+      for (const value of [pkg.main, pkg.module, pkg.browser]) addEntryHint(result, base, value);
+      for (const value of Object.values(pkg.bin && typeof pkg.bin === 'object' ? pkg.bin : {})) addEntryHint(result, base, value);
+      for (const command of Object.values(pkg.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {})) {
+        const match = String(command || '').match(/(?:^|\s)node\s+([^\s;&|]+)/);
+        if (match) addEntryHint(result, base, match[1]);
+      }
+    } catch {}
+  }
+  return result;
+}
+
+function addEntryHint(result, base, value) {
+  const text = String(value || '').trim().replace(/^\.\//, '').replaceAll('\\', '/');
+  if (!text || text.includes('*')) return;
+  result.add(base ? path.posix.join(base, text) : text);
+}
+
+function isExecutableLanguage(language) {
+  return new Set(['javascript', 'typescript', 'tsx', 'python', 'go', 'rust', 'java', 'kotlin', 'csharp', 'c', 'cpp', 'ruby', 'php', 'dart', 'swift']).has(String(language || ''));
 }
 
 function rankHotspots(files, maxResults) {
@@ -386,6 +424,8 @@ function moduleForPath(filePath) {
   const parts = String(filePath || '').replaceAll('\\', '/').split('/').filter(Boolean);
   if (!parts.length) return '(root)';
   if (['packages', 'apps', 'services', 'modules', 'libs'].includes(parts[0]) && parts[1]) return `${parts[0]}/${parts[1]}`;
+  if (parts[0] === 'src' && parts[1] === 'repository' && parts[2]) return `src/repository/${parts[2]}`;
+  if (parts[0] === 'src' && parts[1] && parts.length > 2) return `src/${parts[1]}`;
   return parts.length === 1 ? '(root)' : parts[0];
 }
 
