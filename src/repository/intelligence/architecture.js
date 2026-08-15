@@ -23,38 +23,17 @@ function analyzeArchitecture(db, options = {}) {
   const maxNodes = boundedInteger(options.maxNodes, 100, 10000, DEFAULT_MAX_NODES);
   const maxEdges = boundedInteger(options.maxEdges, 100, 50000, DEFAULT_MAX_EDGES);
   const totalFileCount = Number(db.prepare('SELECT count(*) AS count FROM files').get()?.count || 0);
-  const files = db.prepare(`
-    SELECT f.id, f.path, f.language, f.is_test, count(s.id) AS symbol_count
-    FROM files f LEFT JOIN symbols s ON s.file_id=f.id
-    GROUP BY f.id ORDER BY f.is_test, f.path LIMIT ?
-  `).all(maxNodes).map(row => ({
-    id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1,
-    symbolCount: Number(row.symbol_count || 0), incoming: 0, outgoing: 0, routeCount: 0, testLinks: 0
-  }));
+  const files = selectRepresentativeFiles(db, maxNodes);
   const byId = new Map(files.map(file => [file.id, file]));
-  const edges = db.prepare(`
-    SELECT source_file_id, target_file_id, type, target_name
-    FROM edges
-    ORDER BY id LIMIT ?
-  `).all(maxEdges).map(row => ({
-    source: Number(row.source_file_id), target: row.target_file_id == null ? null : Number(row.target_file_id), type: String(row.type),
-    targetName: row.target_name == null ? null : String(row.target_name)
-  })).filter(edge => byId.has(edge.source) && (edge.target == null || byId.has(edge.target)));
+  const edgeSelection = selectArchitectureEdges(db, files.map(file => file.id), maxEdges);
+  const edges = edgeSelection.edges;
 
   const relationshipTypes = {};
   const adjacency = new Map(files.map(file => [file.id, new Map()]));
   for (const edge of edges) {
-    const source = byId.get(edge.source);
     const target = edge.target == null ? null : byId.get(edge.target);
     relationshipTypes[edge.type] = Number(relationshipTypes[edge.type] || 0) + 1;
-    if (edge.type === 'HANDLES') source.routeCount += 1;
     if (!target) continue;
-    source.outgoing += 1;
-    target.incoming += 1;
-    if (edge.type === 'TESTS') {
-      source.testLinks += 1;
-      target.testLinks += 1;
-    }
     const weight = EDGE_WEIGHTS[edge.type] || 1;
     addNeighbor(adjacency, edge.source, edge.target, weight);
     addNeighbor(adjacency, edge.target, edge.source, weight);
@@ -63,8 +42,9 @@ function analyzeArchitecture(db, options = {}) {
   const modules = moduleSummary(files, edges, maxResults);
   const entryPoints = rankEntryPoints(files, maxResults);
   const hotspots = rankHotspots(files, maxResults);
-  const layers = dependencyLayers(modules.items, modules.edgeWeights);
+  const dependencyAnalysis = dependencyLayers(modules.allItems, modules.edgeWeights);
   const communities = detectCommunities(files, adjacency, maxResults);
+  const truncated = totalFileCount > files.length || edgeSelection.truncated;
 
   return {
     architecture: {
@@ -74,25 +54,112 @@ function analyzeArchitecture(db, options = {}) {
       analyzedEdgeCount: edges.length,
       maxNodes,
       maxEdges,
-      truncated: totalFileCount > files.length || edges.length >= maxEdges
+      truncated
     },
     relationshipTypes,
     modules: modules.items,
     entryPoints,
     hotspots,
-    layers,
+    layers: dependencyAnalysis.layers,
+    cycles: dependencyAnalysis.cycles,
     communities,
     summary: {
       files: totalFileCount,
       analyzedFiles: files.length,
       edges: edges.length,
-      modules: modules.items.length,
+      modules: modules.allItems.length,
+      cycles: dependencyAnalysis.cycles.length,
       communities: communities.length,
       entryPoints: entryPoints.length,
       hotspots: hotspots.length
     },
-    truncated: totalFileCount > files.length || edges.length >= maxEdges,
-    next: 'Use entryPoints for repository bootstrap, hotspots for high-impact review, and modules/layers/communities to choose the smallest source boundary before reading code.'
+    truncated,
+    next: 'Use entryPoints for repository bootstrap, hotspots for high-impact review, and modules/layers/cycles/communities to choose the smallest source boundary before reading code.'
+  };
+}
+
+function selectRepresentativeFiles(db, maxNodes) {
+  return db.prepare(`
+    WITH symbol_counts AS (
+      SELECT file_id, count(*) AS symbol_count FROM symbols GROUP BY file_id
+    ), edge_rows AS (
+      SELECT source_file_id AS file_id,
+             0 AS incoming,
+             count(*) AS outgoing,
+             sum(CASE WHEN type='HANDLES' THEN 1 ELSE 0 END) AS route_count,
+             sum(CASE WHEN type='TESTS' THEN 1 ELSE 0 END) AS test_links
+      FROM edges GROUP BY source_file_id
+      UNION ALL
+      SELECT target_file_id AS file_id,
+             count(*) AS incoming,
+             0 AS outgoing,
+             0 AS route_count,
+             sum(CASE WHEN type='TESTS' THEN 1 ELSE 0 END) AS test_links
+      FROM edges WHERE target_file_id IS NOT NULL GROUP BY target_file_id
+    ), edge_counts AS (
+      SELECT file_id,
+             sum(incoming) AS incoming,
+             sum(outgoing) AS outgoing,
+             sum(route_count) AS route_count,
+             sum(test_links) AS test_links
+      FROM edge_rows GROUP BY file_id
+    )
+    SELECT f.id, f.path, f.language, f.is_test,
+           coalesce(s.symbol_count, 0) AS symbol_count,
+           coalesce(e.incoming, 0) AS incoming,
+           coalesce(e.outgoing, 0) AS outgoing,
+           coalesce(e.route_count, 0) AS route_count,
+           coalesce(e.test_links, 0) AS test_links
+    FROM files f
+    LEFT JOIN symbol_counts s ON s.file_id=f.id
+    LEFT JOIN edge_counts e ON e.file_id=f.id
+    ORDER BY f.is_test,
+             (coalesce(e.incoming, 0) * 2 + coalesce(e.outgoing, 0) + coalesce(s.symbol_count, 0) * 0.25
+               + coalesce(e.route_count, 0) * 3 + coalesce(e.test_links, 0)) DESC,
+             f.path
+    LIMIT ?
+  `).all(maxNodes).map(row => ({
+    id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1,
+    symbolCount: Number(row.symbol_count || 0), incoming: Number(row.incoming || 0), outgoing: Number(row.outgoing || 0),
+    routeCount: Number(row.route_count || 0), testLinks: Number(row.test_links || 0)
+  }));
+}
+
+function selectArchitectureEdges(db, fileIds, maxEdges) {
+  const ids = [...new Set(fileIds.map(Number).filter(Number.isSafeInteger))];
+  if (!ids.length) return { edges: [], truncated: false };
+  const placeholders = ids.map(() => '?').join(',');
+  const perSourceLimit = Math.max(1, Math.ceil(maxEdges / ids.length));
+  const rows = db.prepare(`
+    WITH ranked AS (
+      SELECT id, source_file_id, target_file_id, type, target_name, confidence,
+             row_number() OVER (
+               PARTITION BY source_file_id
+               ORDER BY CASE type
+                 WHEN 'HTTP_CALLS' THEN 10 WHEN 'CALLS' THEN 9 WHEN 'INHERITS' THEN 8 WHEN 'IMPLEMENTS' THEN 8
+                 WHEN 'IMPORTS' THEN 7 WHEN 'EMITS' THEN 6 WHEN 'TESTS' THEN 5 WHEN 'USES_TYPE' THEN 4
+                 WHEN 'HANDLES' THEN 3 WHEN 'LISTENS_ON' THEN 3 ELSE 1 END DESC,
+                 confidence DESC, id
+             ) AS source_rank,
+             count(*) OVER (PARTITION BY source_file_id) AS source_edge_count
+      FROM edges
+      WHERE source_file_id IN (${placeholders})
+        AND (target_file_id IS NULL OR target_file_id IN (${placeholders}))
+    )
+    SELECT id, source_file_id, target_file_id, type, target_name, source_edge_count
+    FROM ranked
+    WHERE source_rank <= ?
+    ORDER BY source_rank, source_file_id, id
+    LIMIT ?
+  `).all(...ids, ...ids, perSourceLimit, maxEdges);
+  return {
+    edges: rows.map(row => ({
+      source: Number(row.source_file_id),
+      target: row.target_file_id == null ? null : Number(row.target_file_id),
+      type: String(row.type),
+      targetName: row.target_name == null ? null : String(row.target_name)
+    })),
+    truncated: rows.length >= maxEdges || rows.some(row => Number(row.source_edge_count || 0) > perSourceLimit)
   };
 }
 
@@ -149,7 +216,7 @@ function moduleSummary(files, edges, maxResults) {
       .map(file => file.path)
   })).sort((a, b) => b.fileCount - a.fileCount || b.externalEdges - a.externalEdges || a.name.localeCompare(b.name));
 
-  return { items: items.slice(0, maxResults), edgeWeights };
+  return { items: items.slice(0, maxResults), allItems: items, edgeWeights };
 }
 
 function rankEntryPoints(files, maxResults) {
@@ -192,27 +259,84 @@ function dependencyLayers(modules, edgeWeights) {
     const [from, to] = key.split('\u0000');
     if (from !== to && names.has(from) && names.has(to)) dependencies.get(from).add(to);
   }
-  const depth = new Map([...names].map(name => [name, 0]));
-  for (let iteration = 0; iteration < 8; iteration += 1) {
-    let changed = false;
-    for (const name of [...names].sort()) {
-      const deps = [...dependencies.get(name)].filter(dep => dep !== name);
-      const next = deps.length ? Math.min(8, Math.max(...deps.map(dep => Number(depth.get(dep) || 0) + 1))) : 0;
-      if (next !== depth.get(name)) { depth.set(name, next); changed = true; }
+
+  const components = stronglyConnectedComponents(dependencies);
+  const componentByName = new Map();
+  components.forEach((component, index) => {
+    for (const name of component) componentByName.set(name, index);
+  });
+  const componentDependencies = new Map(components.map((_component, index) => [index, new Set()]));
+  for (const [from, targets] of dependencies) {
+    const fromComponent = componentByName.get(from);
+    for (const to of targets) {
+      const toComponent = componentByName.get(to);
+      if (fromComponent !== toComponent) componentDependencies.get(fromComponent).add(toComponent);
     }
-    if (!changed) break;
   }
+
+  const depthMemo = new Map();
+  const componentDepth = componentId => {
+    if (depthMemo.has(componentId)) return depthMemo.get(componentId);
+    const targets = [...componentDependencies.get(componentId)];
+    const depth = targets.length ? 1 + Math.max(...targets.map(componentDepth)) : 0;
+    depthMemo.set(componentId, depth);
+    return depth;
+  };
   const grouped = new Map();
   for (const name of [...names].sort()) {
-    const layer = Number(depth.get(name) || 0);
-    if (!grouped.has(layer)) grouped.set(layer, []);
-    grouped.get(layer).push(name);
+    const depth = componentDepth(componentByName.get(name));
+    if (!grouped.has(depth)) grouped.set(depth, []);
+    grouped.get(depth).push(name);
   }
-  return [...grouped.entries()].sort((a, b) => a[0] - b[0]).map(([depthValue, moduleNames]) => ({
-    depth: depthValue,
-    role: depthValue === 0 ? 'foundation' : 'consumer',
+  const layers = [...grouped.entries()].sort((a, b) => a[0] - b[0]).map(([depth, moduleNames]) => ({
+    depth,
+    role: depth === 0 ? 'foundation' : 'consumer',
     modules: moduleNames
   }));
+  const cycles = components
+    .filter(component => component.length > 1)
+    .map(component => ({ modules: [...component].sort(), size: component.length }))
+    .sort((a, b) => b.size - a.size || a.modules[0].localeCompare(b.modules[0]));
+  return { layers, cycles };
+}
+
+function stronglyConnectedComponents(graph) {
+  let nextIndex = 0;
+  const stack = [];
+  const onStack = new Set();
+  const indexByNode = new Map();
+  const lowLink = new Map();
+  const components = [];
+
+  const visit = node => {
+    indexByNode.set(node, nextIndex);
+    lowLink.set(node, nextIndex);
+    nextIndex += 1;
+    stack.push(node);
+    onStack.add(node);
+
+    for (const target of graph.get(node) || []) {
+      if (!indexByNode.has(target)) {
+        visit(target);
+        lowLink.set(node, Math.min(lowLink.get(node), lowLink.get(target)));
+      } else if (onStack.has(target)) {
+        lowLink.set(node, Math.min(lowLink.get(node), indexByNode.get(target)));
+      }
+    }
+
+    if (lowLink.get(node) !== indexByNode.get(node)) return;
+    const component = [];
+    let member;
+    do {
+      member = stack.pop();
+      onStack.delete(member);
+      component.push(member);
+    } while (member !== node);
+    components.push(component);
+  };
+
+  for (const node of [...graph.keys()].sort()) if (!indexByNode.has(node)) visit(node);
+  return components;
 }
 
 function detectCommunities(files, adjacency, maxResults) {

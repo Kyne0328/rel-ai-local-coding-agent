@@ -15,6 +15,21 @@ const EXECUTE = 'command:execute';
 const PROCESS = 'process:manage';
 const PUBLISH = 'git:publish';
 
+const TOOL_SURFACE_SOURCE_PATHS = Object.freeze([
+  'src/tools/actionCatalog.js',
+  'src/tools/actionDefinitions.js',
+  'src/tools/actionRegistry.js',
+  'src/tools/connector.js',
+  'src/tools/connectorHelpers.js',
+  'src/tools/executableSchema.js',
+  'src/tools/operationDefinitionValues.js',
+  'src/tools/operationIds.js',
+  'src/tools/outputSchemas.js',
+  'src/tools/runtimeRegistry.js',
+  'src/tools/schema.js'
+]);
+const TOOL_SURFACE_SOURCE_SET = new Set(TOOL_SURFACE_SOURCE_PATHS);
+
 const INSPECT_FIELDS = Object.freeze({
   symbol: contract({ required: ['symbol'], omit: ['query', 'paths', 'maxDepth'] }),
   references: contract({ required: ['symbol'], omit: ['query', 'paths', 'maxDepth'] }),
@@ -127,4 +142,9 @@ function operation(operationName, options = {}) {
   });
 }
 
-export { ACTION_REGISTRY };
+function isToolSurfaceSourcePath(value) {
+  const normalized = String(value || '').trim().replaceAll('\\', '/').replace(/^\.\//, '');
+  return TOOL_SURFACE_SOURCE_SET.has(normalized);
+}
+
+export { ACTION_REGISTRY, TOOL_SURFACE_SOURCE_PATHS, isToolSurfaceSourcePath };

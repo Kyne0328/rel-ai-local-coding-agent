@@ -1,5 +1,7 @@
+import { isToolSurfaceSourcePath } from '../tools/actionRegistry.js';
+
 const RELEASE_PATH = /^(?:\.github\/workflows\/|scripts\/(?:release|package|electron-package)|release-manifest\.json|electron-builder|CHANGELOG\.md)/i;
-const CONTRACT_PATH = /^(?:types\/|src\/tools\/(?:outputSchemas|actionDefinitions|connector)|src\/mcp\/|skills\/)/i;
+const CONTRACT_PATH = /^(?:types\/|src\/mcp\/|skills\/)/i;
 const DEPENDENCY_PATH = /(?:^|\/)(?:package\.json|package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.toml|Cargo\.lock|go\.mod|go\.sum|pyproject\.toml|requirements\.txt)$/i;
 const SECURITY_CONFIG_PATH = /(?:^|\/)(?:auth|oauth|security|authorization|csp|permissions?|config)(?:\/|\.|$)/i;
 const DOC_PATH = /\.(?:md|txt|rst)$/i;
@@ -14,7 +16,7 @@ function classifyWorkflowRisk({ changedFiles = [], packageIds = [], impactedPack
     boundary = 'repository'; risk = 'critical'; reasons.push('migration operation can change durable data');
   } else if (files.some(file => RELEASE_PATH.test(file))) {
     boundary = 'release'; risk = 'high'; reasons.push('release or workflow surface changed');
-  } else if (files.some(file => CONTRACT_PATH.test(file))) {
+  } else if (files.some(file => CONTRACT_PATH.test(file) || isToolSurfaceSourcePath(file))) {
     boundary = 'cross_package'; risk = 'high'; reasons.push('shared contract or public runtime surface changed');
     if (files.some(file => /src\/tools\/outputSchemas\.js$/i.test(file))) boundary = 'repository';
   }

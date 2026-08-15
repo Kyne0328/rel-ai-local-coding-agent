@@ -16,6 +16,9 @@ fs.writeFileSync(path.join(workspaceRoot, 'src', 'beta.js'), 'export function be
 
 const workspace = { alias: 'worker-test', path: workspaceRoot, context: {}, testCommands: {}, commands: {} };
 const config = { stateDir };
+const plannedIndexPath = repositoryIndexPath(config, workspace);
+assert.equal(fs.existsSync(path.dirname(plannedIndexPath)), false,
+  'resolving an intelligence index path must not create runtime directories on a read-only path');
 
 try {
   const initial = await repositoryIntelligence.ensure(workspace, config);
@@ -65,6 +68,34 @@ try {
   assert.equal(rebuilt.scanMode, 'full');
   assert.equal(rebuilt.rebuilt, true);
   assert.ok(rebuilt.generation > incremental.generation);
+
+  const alphaPath = path.join(workspaceRoot, 'src', 'alpha.js');
+  const alphaStat = fs.statSync(alphaPath);
+  const generationBeforeTimestampCollision = rebuilt.generation;
+  repositoryIntelligence.shutdown();
+  fs.writeFileSync(alphaPath, 'export function alpha() { return 3; }\n');
+  fs.utimesSync(alphaPath, alphaStat.atime, alphaStat.mtime);
+  const reconciled = await repositoryIntelligence.ensure(workspace, config, { force: true, watch: false });
+  assert.ok(reconciled.generation > generationBeforeTimestampCollision,
+    'a same-size edit with restored mtime must still be detected through ctime or content hashing');
+
+  for (let index = 0; index < 12; index += 1) {
+    fs.writeFileSync(path.join(workspaceRoot, 'src', `extra-${index}.js`), `export const extra${index} = ${index};\n`);
+  }
+  const expanded = await repositoryIntelligence.rebuild(workspace, config, { watch: false });
+  const partial = await repositoryIntelligence.ensure(workspace, config, { force: true, maxFiles: 1, watch: false });
+  assert.equal(partial.truncated, true);
+  assert.equal(partial.deletionDeferred, true,
+    'a truncated full scan must never infer deletions for files outside the scan budget');
+  assert.ok(partial.sourceFileCount >= expanded.sourceFileCount,
+    'truncated reconciliation must retain previously indexed files');
+  assert.equal(partial.freshness, 'partial');
+  assert.equal(partial.needsReconcile, true);
+  assert.equal(partial.zoekt?.current, false,
+    'a partial repository scan must not publish an incomplete Zoekt index as current');
+  const repairedPartial = await repositoryIntelligence.ensure(workspace, config, { watch: false });
+  assert.equal(repairedPartial.pendingRefresh, false,
+    'a partial index must remain dirty until a complete reconciliation succeeds');
 
   repositoryIntelligence.shutdown();
   fs.writeFileSync(repositoryIndexPath(config, workspace), 'not-a-sqlite-database', 'utf8');

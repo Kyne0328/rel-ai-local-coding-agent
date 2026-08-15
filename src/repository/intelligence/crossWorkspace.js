@@ -26,14 +26,15 @@ const GENERIC_PLATFORM_EVENTS = new Set([
 ].map(value => value.toLowerCase()));
 
 function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
-  const allPeers = configuredPeers(workspace, config);
+  const configured = configuredPeers(workspace, config);
   const maxPeers = boundedInteger(options.maxPeers, 1, 50, DEFAULT_MAX_PEERS);
-  const peers = allPeers.slice(0, maxPeers);
   const maxHints = boundedInteger(options.maxHintsPerWorkspace, 50, 5000, DEFAULT_MAX_HINTS_PER_WORKSPACE);
   const maxRelationships = boundedInteger(options.maxRelationships, 1, 500, DEFAULT_MAX_RELATIONSHIPS);
   const localHints = safeReadRelationshipHints(localDb, maxHints, workspace);
   const localPackage = packageDescriptor(workspace.path);
   const repositoryStatuses = options.repositoryStatuses || {};
+  const allPeers = rankConfiguredPeers(configured, localPackage, repositoryStatuses);
+  const peers = allPeers.slice(0, maxPeers);
   const localStatus = repositoryStatuses[workspace.alias] || repositoryIndexStatus(workspace, config);
   const localGeneration = currentGeneration(localDb);
   const localFreshness = repositoryFreshness(localStatus, localGeneration);
@@ -42,7 +43,7 @@ function analyzeCrossWorkspace(workspace, config = {}, localDb, options = {}) {
 
   for (const peer of peers) {
     const graph = openPeerGraph(peer, config, repositoryStatuses[peer.alias]);
-    const packageInfo = packageDescriptor(peer.path);
+    const packageInfo = peer.packageInfo || packageDescriptor(peer.path);
     if (!graph) {
       peerSnapshots.push({ workspace: peer.alias, path: peer.path, freshness: 'unavailable', generation: null, hints: [], packageInfo });
       skipped.push({ workspace: peer.alias, reason: 'persistent graph unavailable' });
@@ -167,21 +168,23 @@ function matchPackageRelationships(workspace, localPackage, peers, remaining) {
     const remote = peer.packageInfo;
     if (!remote?.name) continue;
     if (localPackage.dependencies.has(remote.name)) {
+      const dependencyKind = localPackage.dependencyKinds.get(remote.name) || 'dependencies';
       result.push({
         type: 'CROSS_PACKAGE_DEPENDS_ON', direction: 'outgoing', key: remote.name,
         from: { workspace: workspace.alias, path: 'package.json', symbol: localPackage.name || null },
         to: { workspace: peer.workspace, path: 'package.json', symbol: remote.name },
         peerWorkspace: peer.workspace, peerGeneration: peer.generation, peerFreshness: peer.freshness,
-        ambiguous: false, confidence: 0.99
+        dependencyKind, ambiguous: false, confidence: packageDependencyConfidence(dependencyKind)
       });
     }
     if (localPackage.name && remote.dependencies.has(localPackage.name)) {
+      const dependencyKind = remote.dependencyKinds.get(localPackage.name) || 'dependencies';
       result.push({
         type: 'CROSS_PACKAGE_USED_BY', direction: 'incoming', key: localPackage.name,
         from: { workspace: peer.workspace, path: 'package.json', symbol: remote.name },
         to: { workspace: workspace.alias, path: 'package.json', symbol: localPackage.name },
         peerWorkspace: peer.workspace, peerGeneration: peer.generation, peerFreshness: peer.freshness,
-        ambiguous: false, confidence: 0.99
+        dependencyKind, ambiguous: false, confidence: packageDependencyConfidence(dependencyKind)
       });
     }
     if (result.length >= remaining) break;
@@ -255,12 +258,49 @@ function packageDescriptor(root) {
     const raw = fs.readFileSync(file, 'utf8');
     if (Buffer.byteLength(raw, 'utf8') > 1024 * 1024) return null;
     const parsed = JSON.parse(raw);
-    const dependencyMaps = [parsed.dependencies, parsed.devDependencies, parsed.peerDependencies, parsed.optionalDependencies];
-    const dependencies = new Set(dependencyMaps.flatMap(map => map && typeof map === 'object' ? Object.keys(map) : []));
-    return { name: String(parsed.name || '').trim() || null, dependencies };
+    const dependencyKinds = new Map();
+    for (const kind of ['dependencies', 'peerDependencies', 'optionalDependencies', 'devDependencies']) {
+      const values = parsed[kind];
+      if (!values || typeof values !== 'object' || Array.isArray(values)) continue;
+      for (const name of Object.keys(values)) if (!dependencyKinds.has(name)) dependencyKinds.set(name, kind);
+    }
+    return { name: String(parsed.name || '').trim() || null, dependencies: new Set(dependencyKinds.keys()), dependencyKinds };
   } catch {
     return null;
   }
+}
+
+function rankConfiguredPeers(peers, localPackage, repositoryStatuses = {}) {
+  return peers.map(peer => {
+    const packageInfo = packageDescriptor(peer.path);
+    let score = 0;
+    if (localPackage && packageInfo?.name && localPackage.dependencies.has(packageInfo.name)) {
+      score += packageDependencyRank(localPackage.dependencyKinds.get(packageInfo.name));
+    }
+    if (localPackage?.name && packageInfo?.dependencies.has(localPackage.name)) {
+      score += Math.round(packageDependencyRank(packageInfo.dependencyKinds.get(localPackage.name)) * 0.9);
+    }
+    const status = repositoryStatuses[peer.alias];
+    if (status?.metadata) score += 12;
+    if (status?.dirty === false) score += 4;
+    return { ...peer, packageInfo, rankScore: score };
+  }).sort((left, right) => right.rankScore - left.rankScore || left.alias.localeCompare(right.alias));
+}
+
+function packageDependencyRank(kind) {
+  if (kind === 'dependencies') return 100;
+  if (kind === 'peerDependencies') return 80;
+  if (kind === 'optionalDependencies') return 60;
+  if (kind === 'devDependencies') return 30;
+  return 20;
+}
+
+function packageDependencyConfidence(kind) {
+  if (kind === 'dependencies') return 0.99;
+  if (kind === 'peerDependencies') return 0.94;
+  if (kind === 'optionalDependencies') return 0.88;
+  if (kind === 'devDependencies') return 0.72;
+  return 0.7;
 }
 
 function relationshipKey(type, targetName) {

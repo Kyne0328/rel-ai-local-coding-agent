@@ -4,6 +4,7 @@ import { analyzeArchitecture } from './architecture.js';
 import { analyzeCrossWorkspace } from './crossWorkspace.js';
 import { currentGeneration, indexStats, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { repositoryIndexStatus } from './indexer.js';
+import { rankWithGraphDiffusion } from './graphDiffusion.js';
 import { boundedInteger } from './limits.js';
 import { recentIntelligenceDiagnostics, recordIntelligenceDiagnostic, repositoryFreshness } from './state.js';
 
@@ -13,19 +14,6 @@ const BOOTSTRAP_MAX_HOTSPOTS = 8;
 const BOOTSTRAP_MAX_READ_ORDER = 12;
 const SEARCH_MAX_SEEDS = 100;
 const SEARCH_MAX_EDGES = 4000;
-
-const SEARCH_EDGE_WEIGHT = Object.freeze({
-  HTTP_CALLS: 8,
-  CALLS: 7,
-  INHERITS: 6,
-  IMPLEMENTS: 6,
-  IMPORTS: 5,
-  TESTS: 4,
-  EMITS: 4,
-  USES_TYPE: 3,
-  HANDLES: 2,
-  LISTENS_ON: 2
-});
 
 function cachedRepositorySummary(workspace, config = {}, options = {}) {
   const opened = openCachedIndex(workspace, config, options.repositoryStatuses?.[workspace.alias]);
@@ -125,37 +113,19 @@ function cachedSearchGraphContext(workspace, config = {}, matches = [], options 
   if (!opened) return null;
   const { db, generation, status } = opened;
   try {
-    const placeholders = seedPaths.map(() => '?').join(',');
-    const fileRows = db.prepare(`SELECT id, path FROM files WHERE path IN (${placeholders})`).all(...seedPaths)
-      .map(row => ({ id: Number(row.id), path: String(row.path) }));
-    if (!fileRows.length) return null;
-    const ids = fileRows.map(item => item.id);
-    const idPlaceholders = ids.map(() => '?').join(',');
-    const edges = db.prepare(`
-      SELECT source_file_id, target_file_id, type
-      FROM edges
-      WHERE source_file_id IN (${idPlaceholders}) OR target_file_id IN (${idPlaceholders})
-      ORDER BY id LIMIT ?
-    `).all(...ids, ...ids, SEARCH_MAX_EDGES);
-    const seedIds = new Set(ids);
-    const pathById = new Map(fileRows.map(item => [item.id, item.path]));
-    const scores = new Map(fileRows.map(item => [item.path, 0]));
-    const reasons = new Map(fileRows.map(item => [item.path, new Set()]));
-
-    for (const edge of edges) {
-      const sourceId = Number(edge.source_file_id);
-      const targetId = edge.target_file_id == null ? null : Number(edge.target_file_id);
-      const type = String(edge.type || 'RELATED');
-      const weight = SEARCH_EDGE_WEIGHT[type] || 1;
-      if (seedIds.has(sourceId)) addSearchScore(pathById.get(sourceId), weight + (targetId != null && seedIds.has(targetId) ? weight * 2 : 0), type, scores, reasons);
-      if (targetId != null && seedIds.has(targetId)) addSearchScore(pathById.get(targetId), weight * 1.5 + (seedIds.has(sourceId) ? weight * 2 : 0), type, scores, reasons);
-    }
-
-    const rankedPaths = [...scores.entries()].map(([path, rawScore]) => ({
-      path,
-      score: Math.min(500, Math.round(rawScore * 10) / 10),
-      reasons: [...reasons.get(path)].sort()
-    })).filter(item => item.score > 0)
+    const ranked = rankWithGraphDiffusion(
+      db,
+      seedPaths.map(path => ({ path, reasons: [], snippets: [] })),
+      { maxResults: seedPaths.length, maxSeeds: SEARCH_MAX_SEEDS, maxEdges: SEARCH_MAX_EDGES, includeExpanded: false }
+    );
+    const seedSet = new Set(seedPaths);
+    const rankedPaths = ranked.results
+      .filter(item => seedSet.has(item.path) && Number(item.graphScore || 0) > 0)
+      .map(item => ({
+        path: item.path,
+        score: Math.min(500, Math.round(Number(item.graphScore || 0) * 1000) / 10),
+        reasons: (item.reasons || []).filter(reason => reason.startsWith('graph')).sort()
+      }))
       .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
     if (!rankedPaths.length) return null;
     return {
@@ -164,8 +134,8 @@ function cachedSearchGraphContext(workspace, config = {}, matches = [], options 
       freshness: repositoryFreshness(status, generation),
       pathScores: Object.fromEntries(rankedPaths.map(item => [item.path, item.score])),
       rankedPaths: rankedPaths.slice(0, 20),
-      analyzedEdgeCount: edges.length,
-      truncated: edges.length >= SEARCH_MAX_EDGES
+      analyzedEdgeCount: ranked.analyzedEdgeCount,
+      truncated: ranked.truncated
     };
   } catch (error) {
     recordIntelligenceDiagnostic(workspace, 'cached_search_context_failed', error);
@@ -190,12 +160,6 @@ function openCachedIndex(workspace, config, statusOverride = null) {
     recordIntelligenceDiagnostic(workspace, 'cached_index_open_failed', error);
     return null;
   }
-}
-
-function addSearchScore(path, score, type, scores, reasons) {
-  if (!path || !scores.has(path)) return;
-  scores.set(path, Number(scores.get(path) || 0) + Number(score || 0));
-  reasons.get(path)?.add(String(type || 'RELATED'));
 }
 
 function normalizePath(value) {

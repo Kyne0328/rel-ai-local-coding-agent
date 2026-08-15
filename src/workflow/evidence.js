@@ -50,8 +50,44 @@ function repeatFailureCount(receipts = []) {
 }
 
 function failureSignature({ tool, action, commandId, command, cwd, result, target }) {
-  const value = [normalizeToken(tool), normalizeToken(action || commandId), normalizeCommand(command), normalizeCwd(cwd), String(result?.errorCode || result?.exitCode || '').trim(), String(target || '').trim()];
+  const value = [
+    normalizeToken(tool),
+    normalizeToken(action || commandId),
+    normalizeCommand(command),
+    normalizeCwd(cwd),
+    String(result?.errorCode || result?.exitCode || '').trim(),
+    String(target || '').trim(),
+    failureEvidence(result)
+  ];
   return crypto.createHash('sha256').update(stableJson(value)).digest('hex');
+}
+
+function failureEvidence(result = {}) {
+  const diagnostics = (Array.isArray(result.diagnostics) ? result.diagnostics : []).slice(0, 8).map(item => ({
+    path: normalizeCwd(item?.path || '.'),
+    line: nonNegativeInt(item?.line),
+    column: nonNegativeInt(item?.column),
+    severity: normalizeToken(item?.severity),
+    code: String(item?.code || '').trim().slice(0, 80),
+    message: normalizeFailureText(item?.message).slice(0, 500)
+  }));
+  const failures = [result.failedChecks, result.failures, result.errors]
+    .flatMap(value => Array.isArray(value) ? value : [])
+    .slice(0, 8)
+    .map(item => normalizeFailureText(typeof item === 'string' ? item : item?.name || item?.message || stableJson(item)).slice(0, 500))
+    .filter(Boolean);
+  const text = normalizeFailureText(result.stderr || result.error || result.message || result.output || '').slice(0, 2000);
+  return { diagnostics, failures, text };
+}
+
+function normalizeFailureText(value) {
+  return String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/(?:[A-Za-z]:)?(?:[\\/][^\s:]+)+/g, '<path>')
+    .replace(/:(\d+):(\d+)/g, ':#:#')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds?)\b/gi, '<duration>')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function evidenceKind(tool, args, result) {
