@@ -117,19 +117,14 @@ function maybeOpenRequestedSession() {
 export function sessionSummary(sessions) {
   const counts = sessions.reduce((summary, session) => {
     const state = workSessionStateView(session);
-    const inactive = state.status === 'inactive';
-    const open = !state.terminal && !inactive;
-    // Active is the executing subset of open; inactivity is the stale boundary.
-    const active = open && Number(session.activeCalls || 0) > 0;
-
-    if (open) summary.open += 1;
-    if (active) summary.active += 1;
-    if (['waiting_for_approval', 'blocked', 'validation_failed'].includes(state.status)) summary.attention += 1;
-    else if (inactive) summary.inactive += 1;
+    if (state.active) summary.active += 1;
+    else if (state.status === 'waiting') summary.open += 1;
+    else if (['waiting_for_approval', 'blocked', 'validation_failed'].includes(state.status)) summary.attention += 1;
+    else if (state.status === 'inactive') summary.inactive += 1;
     else if (state.status === 'completed') summary.completed += 1;
     else if (state.status === 'cancelled') summary.cancelled += 1;
     else if (state.status === 'failed') summary.failed += 1;
-    else if (!open) summary.other += 1;
+    else summary.other += 1;
     return summary;
   }, { active: 0, open: 0, attention: 0, inactive: 0, completed: 0, cancelled: 0, failed: 0, other: 0 });
 
