@@ -10,6 +10,7 @@ const {
 } = await import('../src/runtimeCompatibility.js');
 
 const current = runtimeMetadata();
+assert.equal(runtimeMetadata(), current, 'unchanged runtime metadata should reuse the canonical manifest calculation');
 const packageVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const releaseManifest = JSON.parse(fs.readFileSync(new URL('../release-manifest.json', import.meta.url), 'utf8'));
 assert.equal(current.applicationVersion, packageVersion);
@@ -78,6 +79,9 @@ try {
   const repository = readRepositoryMetadata(temp, 'repo');
   assert.equal(repository.applicationVersion, repositoryVersion);
   assert.equal(repository.workspace, 'repo');
+  const cachedAlias = readRepositoryMetadata(temp, 'secondary');
+  assert.equal(cachedAlias.applicationVersion, repositoryVersion);
+  assert.equal(cachedAlias.workspace, 'secondary', 'cached repository metadata must not retain the previous workspace alias');
   const config = { workspaces: { repo: { path: temp } } };
   const editCompatibility = assertRuntimeCompatibility(
     config,
@@ -106,6 +110,9 @@ try {
     toolCount: current.toolCount,
     manifestHash: current.manifestHash
   }));
+  const refreshedRepository = readRepositoryMetadata(temp, 'repo');
+  assert.equal(refreshedRepository.applicationVersion, current.applicationVersion, 'repository metadata cache must invalidate when source files change');
+  assert.equal(refreshedRepository.manifestHash, current.manifestHash);
   assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_edit', { workspace: 'repo' }));
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });

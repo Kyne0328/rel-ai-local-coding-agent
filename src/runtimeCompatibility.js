@@ -10,19 +10,28 @@ import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
 
 const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
+const MAX_REPOSITORY_METADATA_CACHE = 64;
+let runtimeMetadataCache = null;
+const repositoryMetadataCache = new Map();
+
 function runtimeMetadata() {
   const surface = getToolSurfaceManifest();
+  const applicationVersion = getVersion();
+  const revision = `${applicationVersion}\0${surface.schemaVersion}\0${surface.toolSurfaceVersion}\0${surface.toolCount}`;
+  if (runtimeMetadataCache?.revision === revision) return runtimeMetadataCache.value;
   const manifest = buildToolManifest();
-  return normalizeMetadata({
+  const value = Object.freeze(normalizeMetadata({
     source: 'runtime',
-    applicationVersion: getVersion(),
+    applicationVersion,
     packageVersion: pkg.version,
     protocolVersion: PROTOCOL_VERSION,
     toolSurfaceVersion: surface.toolSurfaceVersion,
     toolCount: manifest.activeToolCount,
     manifestHash: manifest.version,
     schemaVersion: manifest.schemaVersion
-  });
+  }));
+  runtimeMetadataCache = { revision, value };
+  return value;
 }
 
 function repositoryMetadata(config, preferredWorkspace = '') {
@@ -52,26 +61,56 @@ function repositoryCandidates(config, preferredWorkspace) {
 }
 
 function readRepositoryMetadata(root, alias = '') {
+  const packagePath = path.join(root, 'package.json');
+  const releasePath = path.join(root, 'release-manifest.json');
+  const revision = repositoryFilesRevision(packagePath, releasePath);
+  const cacheKey = path.resolve(root);
+  const cached = repositoryMetadataCache.get(cacheKey);
+  if (cached?.revision === revision) return cached.value ? { ...cached.value, workspace: alias } : null;
+
+  let value = null;
   try {
-    const packageValue = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-    if (packageValue.name !== pkg.name) return null;
-    const releasePath = path.join(root, 'release-manifest.json');
-    const release = JSON.parse(fs.readFileSync(releasePath, 'utf8'));
-    return normalizeMetadata({
-      source: 'repository',
-      workspace: alias,
-      root,
-      applicationVersion: release.applicationVersion || packageValue.version,
-      packageVersion: packageValue.version,
-      protocolVersion: release.protocolVersion,
-      toolSurfaceVersion: release.toolSurfaceVersion,
-      toolCount: release.toolCount,
-      manifestHash: release.manifestHash,
-      schemaVersion: release.schemaVersion,
-      releaseManifestPath: releasePath
-    });
+    const packageValue = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    if (packageValue.name === pkg.name) {
+      const release = JSON.parse(fs.readFileSync(releasePath, 'utf8'));
+      value = Object.freeze(normalizeMetadata({
+        source: 'repository',
+        workspace: '',
+        root,
+        applicationVersion: release.applicationVersion || packageValue.version,
+        packageVersion: packageValue.version,
+        protocolVersion: release.protocolVersion,
+        toolSurfaceVersion: release.toolSurfaceVersion,
+        toolCount: release.toolCount,
+        manifestHash: release.manifestHash,
+        schemaVersion: release.schemaVersion,
+        releaseManifestPath: releasePath
+      }));
+    }
   } catch {
     return null;
+  }
+
+  rememberRepositoryMetadata(cacheKey, revision, value);
+  return value ? { ...value, workspace: alias } : null;
+}
+
+function repositoryFilesRevision(...files) {
+  return files.map(file => {
+    try {
+      const stat = fs.statSync(file, { bigint: true });
+      return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    } catch (error) {
+      return `missing:${String(error?.code || '')}`;
+    }
+  }).join('|');
+}
+
+function rememberRepositoryMetadata(key, revision, value) {
+  if (repositoryMetadataCache.has(key)) repositoryMetadataCache.delete(key);
+  repositoryMetadataCache.set(key, { revision, value });
+  while (repositoryMetadataCache.size > MAX_REPOSITORY_METADATA_CACHE) {
+    repositoryMetadataCache.delete(repositoryMetadataCache.keys().next().value);
   }
 }
 
