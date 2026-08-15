@@ -22,7 +22,6 @@ import {
   principalFingerprint,
   pruneNativeTasks,
   requestNativeTaskInput,
-  retryNativeTaskOperation,
   updateNativeTask,
   updateNativeTaskInputs
 } from '../src/mcp/nativeTaskService.js';

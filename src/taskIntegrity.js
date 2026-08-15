@@ -303,7 +303,7 @@ function withIntegrityLock(config, callback) {
     descriptor = fs.openSync(file, 'wx', 0o600);
   } catch (error) {
     if (error?.code !== 'EEXIST') throw error;
-    let stale = false;
+    let stale;
     try { stale = Date.now() - fs.statSync(file).mtimeMs > LOCK_STALE_MS; } catch (statError) {
       if (statError?.code === 'ENOENT') stale = true;
       else throw statError;
