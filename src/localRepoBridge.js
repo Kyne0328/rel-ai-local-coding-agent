@@ -375,21 +375,111 @@ function applyReplacements(replacements, oldContent, relativePath) {
     const item = replacements[index];
     const before = nextContent;
     const totalMatches = countStringOccurrences(before, item.oldText);
+    const recovery = replacementRecoveryDetails(before, item.oldText, totalMatches);
     if (totalMatches === 0) {
-      throw new Error(`Exact replacement operation ${index + 1} found 0 matches in ${relativePath}. Re-read the file and use exact current text.`);
+      throw exactReplacementError(
+        `Exact replacement operation ${index + 1} found 0 matches in ${relativePath}.${formatRecoveryHint(recovery)}`,
+        relativePath,
+        recovery
+      );
     }
     const hasExplicitOccurrence = item.occurrence != null;
     if (!hasExplicitOccurrence && totalMatches !== 1) {
-      throw new Error(`Exact replacement operation ${index + 1} found ${totalMatches} matches in ${relativePath}. Pass occurrence to replace exactly one match, or use a larger unique oldText block.`);
+      throw exactReplacementError(
+        `Exact replacement operation ${index + 1} found ${totalMatches} matches in ${relativePath}.${formatRecoveryHint(recovery)} Pass occurrence to replace exactly one match, or use a larger unique oldText block.`,
+        relativePath,
+        recovery
+      );
     }
     const occurrence = hasExplicitOccurrence ? item.occurrence : 1;
     if (occurrence > totalMatches) {
-      throw new Error(`Exact replacement operation ${index + 1} requested occurrence ${occurrence}, but only ${totalMatches} matches exist in ${relativePath}.`);
+      throw exactReplacementError(
+        `Exact replacement operation ${index + 1} requested occurrence ${occurrence}, but only ${totalMatches} matches exist in ${relativePath}.${formatRecoveryHint(recovery)}`,
+        relativePath,
+        recovery
+      );
     }
     nextContent = replaceNth(before, item.oldText, item.newText, occurrence);
     results.push({ index: index + 1, matchesBefore: totalMatches, occurrence, oldBytes: Buffer.byteLength(item.oldText, "utf8"), newBytes: Buffer.byteLength(item.newText, "utf8"), changed: nextContent !== before });
   }
   return { nextContent, results };
+}
+
+function exactReplacementError(message, relativePath, recovery) {
+  const error = new Error(message);
+  error.code = 'EDIT_CONTEXT_MISMATCH';
+  error.source = 'rel-ai-mcp';
+  error.operation = 'write';
+  error.path = relativePath;
+  error.retryable = true;
+  error.candidateCount = recovery.matchCount;
+  error.matchLines = recovery.matchLines;
+  error.candidateContexts = recovery.candidateContexts;
+  error.currentSha256 = recovery.currentSha256;
+  error.allowedAlternatives = [
+    'Retry with occurrence when one of the returned exact match lines is intended.',
+    'Retry with a larger unique oldText block using the returned current context.',
+    'Call relai_read only when the returned context is insufficient.'
+  ];
+  return error;
+}
+
+function replacementRecoveryDetails(content, oldText, matchCount) {
+  const matchLines = exactMatchLines(content, oldText, 8);
+  const candidateContexts = matchCount > 0
+    ? matchLines.map(line => lineContext(content, line))
+    : nearbyAnchorContexts(content, oldText, 5);
+  return {
+    matchCount,
+    matchLines,
+    candidateContexts,
+    currentSha256: sha256Text(content)
+  };
+}
+
+function exactMatchLines(content, needle, limit) {
+  const lines = [];
+  let cursor = 0;
+  while (lines.length < limit) {
+    const found = content.indexOf(needle, cursor);
+    if (found === -1) break;
+    lines.push(1 + countStringOccurrences(content.slice(0, found), '\n'));
+    cursor = found + needle.length;
+  }
+  return lines;
+}
+
+function nearbyAnchorContexts(content, oldText, limit) {
+  const anchors = String(oldText || '')
+    .split(/\r?\n/)
+    .map(line => line.trim().slice(0, 120))
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+  if (anchors.length === 0) return [];
+  const lines = String(content || '').split(/\r?\n/);
+  const candidates = [];
+  for (let index = 0; index < lines.length && candidates.length < limit; index += 1) {
+    const comparable = lines[index].trim().slice(0, 240);
+    if (!comparable) continue;
+    if (anchors.some(anchor => comparable.includes(anchor) || anchor.includes(comparable))) {
+      candidates.push(lineContext(content, index + 1));
+    }
+  }
+  return candidates;
+}
+
+function lineContext(content, lineNumber) {
+  const lines = String(content || '').split(/\r?\n/);
+  const index = Math.max(0, Number(lineNumber || 1) - 1);
+  const start = Math.max(0, index - 1);
+  const end = Math.min(lines.length, index + 2);
+  return lines.slice(start, end).map((line, offset) => `${start + offset + 1}: ${line.slice(0, 240)}`).join('\n');
+}
+
+function formatRecoveryHint(recovery) {
+  if (recovery.matchLines.length > 0) return ` Exact matches begin at lines ${recovery.matchLines.join(', ')}.`;
+  if (recovery.candidateContexts.length > 0) return ` Nearby current context: ${recovery.candidateContexts[0]}`;
+  return '';
 }
 
 function workspaceReplace(workspace, config, args = {}) {
