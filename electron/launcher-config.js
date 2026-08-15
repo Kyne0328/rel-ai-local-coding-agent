@@ -2,22 +2,11 @@
 /** @typedef {import('../types/boundaries.d.ts').LauncherConfigInput} LauncherConfigInput */
 /** @typedef {import('../types/boundaries.d.ts').LauncherConfig} LauncherConfig */
 
-import * as net from 'node:net';
 import { importResourceModule } from './resource-path.js';
 import { normalizePort, normalizeTunnelId, readGuiConfig } from './launcher-utils.js';
 
 const connection = await importResourceModule('src/connectionProfile.js');
 const configModule = await importResourceModule('src/config.js');
-
-/** @param {number} port @returns {Promise<boolean>} */
-function isPortAvailable(port) {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.once('error', () => resolve(false));
-    server.once('listening', () => server.close(() => resolve(true)));
-    server.listen(port, '127.0.0.1');
-  });
-}
 
 /** @param {LauncherConfigInput} [config] @returns {LauncherConfig} */
 function normalizeWizardConfig(config = {}) {
@@ -52,4 +41,4 @@ function saveLauncherConfig(config = {}) {
   return normalized;
 }
 
-export { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };
+export { normalizeWizardConfig, saveLauncherConfig };

@@ -126,9 +126,12 @@ function handleConnection(ctx) {
 
 function handleDashboardV10(ctx) {
   const config = readConfig();
+  const live = dashboardLiveMetadata(ctx.options);
   sendJson(ctx.res, 200, buildDashboardPayload(config, {
     ...ctx.options,
-    limit: Number(ctx.parsed.searchParams.get("limit") || 100)
+    limit: Number(ctx.parsed.searchParams.get("limit") || 100),
+    snapshotRevision: dashboardSourceRevision(ctx.options, config),
+    live
   }, resolveRequireHttpToken(ctx.parsed, config)), ctx.ae);
 }
 
@@ -252,6 +255,25 @@ function desktopStatusRevision(status = null) {
   ]);
 }
 
+function dashboardLiveMetadata(options = {}, overrides = {}) {
+  const taskActivity = overrides.taskActivity
+    ?? (typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : null);
+  const connectionSnapshot = overrides.connectionSnapshot ?? mcpConnectionManager.snapshot();
+  const runtimeLogs = typeof options.getRuntimeLogs === 'function'
+    ? options.getRuntimeLogs({ limit: 1 })
+    : null;
+  return {
+    streamId: DASHBOARD_EVENT_STREAM_ID,
+    revisions: {
+      task: Number(taskActivity?.revision || 0),
+      connection: Number(connectionSnapshot?.revision || 0),
+      workspace: Number(workspaceStateRevision() || 0),
+      process: Number(managedProcessStateRevision() || 0),
+      diagnostics: Number(runtimeLogs?.revision || 0)
+    }
+  };
+}
+
 function openDashboardEvents(res, req, options) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -291,23 +313,12 @@ function openDashboardEvents(res, req, options) {
   };
 
   try {
-    const config = readConfigCached();
     const taskActivity = typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : null;
     const connectionSnapshot = mcpConnectionManager.snapshot();
-    const bootstrap = buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision: dashboardSourceRevision(options, config) }, false);
-    sendSse(res, 'ready', { ok: true, generatedAt: new Date().toISOString(), streamId: DASHBOARD_EVENT_STREAM_ID });
-    sendDomain('dashboard.bootstrap', 'bootstrap', 1, {
-      ...bootstrap,
-      live: {
-        streamId: DASHBOARD_EVENT_STREAM_ID,
-        revisions: {
-          task: Number(taskActivity?.revision || 0),
-          connection: Number(connectionSnapshot.revision || 0),
-          workspace: Number(workspaceStateRevision() || 0),
-          process: Number(managedProcessStateRevision() || 0),
-          diagnostics: Number(typeof options.getRuntimeLogs === 'function' ? options.getRuntimeLogs({ limit: 1 })?.revision || 0 : 0)
-        }
-      }
+    sendSse(res, 'ready', {
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      ...dashboardLiveMetadata(options, { taskActivity, connectionSnapshot })
     });
   } catch (error) {
     sendDashboardStreamError(res, error);
@@ -363,8 +374,9 @@ function sendDashboardStreamError(res, error) {
 function safeInitialDashboardData(options = {}) {
   try {
     const config = readConfig();
+    const live = dashboardLiveMetadata(options);
     const snapshotRevision = dashboardSourceRevision(options, config);
-    return buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision }, false);
+    return buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision, live }, false);
   } catch (error) {
     return errorPayload(
       ERROR_CODES.CONFIGURATION_INVALID,

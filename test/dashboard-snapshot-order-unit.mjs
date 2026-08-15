@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyLiveEvent, get, init } from '../src/ui/store.js';
+import { applyLiveEvent, get, init, patchLocalConnection } from '../src/ui/store.js';
 
 init({
   ok: true,
@@ -47,13 +47,17 @@ assert.equal(applyLiveEvent('task.updated', {
   streamId: 'stream-b', revision: 99, tasks: [{ id: 'wrong-stream' }]
 }).accepted, false, 'events from a different live stream must not mutate the current store');
 
-assert.equal(applyLiveEvent('dashboard.bootstrap', {
+patchLocalConnection({ desktopStatus: { serverRunning: true }, connectionState: { status: 'ready' } });
+assert.equal(get().tasks[0].id, 'task-1', 'desktop-only state patches must not replace task state');
+
+init({
   ok: true,
-  tasks: [{ id: 'boot-2' }],
-  live: { streamId: 'stream-b', revisions: { task: 5, connection: 2, workspace: 1, process: 0 } }
-}).accepted, true, 'a reconnect bootstrap establishes the new stream atomically');
-assert.equal(get().tasks[0].id, 'boot-2');
+  tasks: [{ id: 'refresh-2' }],
+  live: { streamId: 'stream-b', revisions: { task: 5, connection: 2, workspace: 1, process: 0, diagnostics: 3 } }
+});
+assert.equal(get().tasks[0].id, 'refresh-2', 'an authoritative aggregate refresh establishes the new stream atomically');
 assert.equal(get().live.streamId, 'stream-b');
 assert.equal(get().live.revisions.task, 5);
+assert.equal(get().live.revisions.diagnostics, 3);
 
 console.log('Dashboard typed domain revisions reject stale and cross-stream deltas.');

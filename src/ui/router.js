@@ -113,8 +113,6 @@ function _route() {
   const shouldFocusHeading = _currentRouteKey !== null;
   _currentRouteKey = routeKey;
   try { localStorage.setItem('relai_dashboard_route', routeKey); } catch {}
-  _updatePageIdentity(id);
-  _updateNavActive(id);
   _mount(id, { focusHeading: shouldFocusHeading });
   window.dispatchEvent(new CustomEvent('relai:route-change', { detail: { section: id, params: getRouteParams() } }));
 }
@@ -172,17 +170,19 @@ function _mount(id, options = {}) {
   const view = options.preserveView ? captureViewState() : null;
   if (view) _container.style.minHeight = `${Math.ceil(_container.getBoundingClientRect().height)}px`;
   _container.setAttribute('aria-busy', 'true');
-  // Keep the current route visible while a lazy feature module resolves. Each
-  // feature owns its synchronous DOM replacement once its mount function starts.
   const mount = _sections[id] || _sections.home;
+  const context = {
+    generation,
+    isCurrent: () => generation === _mountGeneration && currentSection() === id
+  };
   let result;
   try {
-    result = mount ? mount(_container) : null;
+    result = mount ? mount(_container, context) : null;
   } catch (error) {
-    finishMount(generation, view, options.focusHeading === true);
+    finishMount(generation, id, view, options.focusHeading === true);
     throw error;
   }
-  return Promise.resolve(result).finally(() => finishMount(generation, view, options.focusHeading === true));
+  return Promise.resolve(result).finally(() => finishMount(generation, id, view, options.focusHeading === true));
 }
 
 function captureViewState() {
@@ -192,7 +192,8 @@ function captureViewState() {
     routeKey: currentRouteKey(),
     scrollX: scroller === window ? window.scrollX : scroller.scrollLeft,
     scrollY: scroller === window ? window.scrollY : scroller.scrollTop,
-    activeId: active instanceof HTMLElement ? active.id : ''
+    activeId: active instanceof HTMLElement ? active.id : '',
+    activeFocusKey: active instanceof HTMLElement ? String(active.dataset.focusKey || '') : ''
   };
 }
 
@@ -201,8 +202,10 @@ function pageScroller() {
   return document.documentElement.dataset.windowChrome === 'custom' && main ? main : window;
 }
 
-function finishMount(generation, view, focusHeading = false) {
-  if (generation !== _mountGeneration || !_container) return;
+function finishMount(generation, id, view, focusHeading = false) {
+  if (generation !== _mountGeneration || !_container || currentSection() !== id) return;
+  _updatePageIdentity(id);
+  _updateNavActive(id);
   if (!view) {
     _container.style.minHeight = '';
     _container.removeAttribute('aria-busy');
@@ -213,11 +216,26 @@ function finishMount(generation, view, focusHeading = false) {
   requestAnimationFrame(() => {
     if (generation !== _mountGeneration || currentRouteKey() !== view.routeKey) return;
     pageScroller().scrollTo(view.scrollX, view.scrollY);
-    if (view.activeId) document.getElementById(view.activeId)?.focus({ preventScroll: true });
+    restoreFocus(view);
     _container.style.minHeight = '';
     _container.removeAttribute('aria-busy');
     announceRouteMounted();
   });
+}
+
+function restoreFocus(view) {
+  const byId = view.activeId ? document.getElementById(view.activeId) : null;
+  if (byId) {
+    byId.focus({ preventScroll: true });
+    return;
+  }
+  if (!view.activeFocusKey) return;
+  for (const element of document.querySelectorAll('[data-focus-key]')) {
+    if (element instanceof HTMLElement && element.dataset.focusKey === view.activeFocusKey) {
+      element.focus({ preventScroll: true });
+      return;
+    }
+  }
 }
 
 function announceRouteMounted() {

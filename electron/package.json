@@ -82,6 +82,8 @@
       "shutdown-coordinator.js",
       "controller-runtime.js",
       "service-runtime.js",
+      "service-process.js",
+      "service-process-client.js",
       "setup-window.js",
       "renderer/**",
       "build/icon.png",

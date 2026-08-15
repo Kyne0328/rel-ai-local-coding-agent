@@ -20,7 +20,7 @@ const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageDat
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
 assert.match(navigationCatalog, /See how Rel\.AI is used and where problems happen/i);
-assert.match(dashboard, /usage: element => mountSystemRoute\(element, ['"]usage['"]\)/);
+assert.match(dashboard, /usage: systemSection\(['"]usage['"]\)/, 'Usage must mount through the generation-safe lazy system route wrapper');
 assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.doesNotMatch(preload, /getGatewayUsage|desktop:gateway:usage/);
 assert.match(ipc, /desktop:analytics:local/);

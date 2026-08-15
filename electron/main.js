@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, utilityProcess } from 'electron';
 import electronUpdater from 'electron-updater';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importResourceModule } from './resource-path.js';
-import { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } from './launcher-config.js';
+import { normalizeWizardConfig, saveLauncherConfig } from './launcher-config.js';
 import { createDesktopServiceRuntime } from './service-runtime.js';
+import { createServiceProcessClient } from './service-process-client.js';
 import { createSetupWindowManager } from './setup-window.js';
 import { fitWindowToContent, WINDOW_SIZE_LIMITS } from './window-size.js';
 import { installLocalProtocol, localRendererUrl, registerLocalScheme } from './local-protocol.js';
@@ -37,16 +38,25 @@ registerLocalScheme(protocol);
 app.setName('Rel.AI MCP');
 if (process.platform === 'win32') app.setAppUserModelId('com.relai.mcp');
 
-const connection = await importResourceModule('src/connectionProfile.js');
-const toolActivity = await importResourceModule('src/toolActivity.js');
-const dashboardSessions = await importResourceModule('src/http/dashboardSessions.js');
-const configModule = await importResourceModule('src/config.js');
-const { ERROR_CODES } = await importResourceModule('src/desktopUxContracts.js');
-const { startHttpServer } = await importResourceModule('src/httpServer.js');
-const { terminateProcessTree } = await importResourceModule('src/process.js');
-const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
-const { readLocalUsageSnapshot } = await importResourceModule('src/localAnalytics.js');
-const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');
+const [
+  connection,
+  configModule,
+  desktopUxContracts,
+  processModule,
+  localAnalytics,
+  telemetry
+] = await Promise.all([
+  importResourceModule('src/connectionProfile.js'),
+  importResourceModule('src/config.js'),
+  importResourceModule('src/desktopUxContracts.js'),
+  importResourceModule('src/process.js'),
+  importResourceModule('src/localAnalytics.js'),
+  importResourceModule('src/telemetry.js')
+]);
+const { ERROR_CODES } = desktopUxContracts;
+const { terminateProcessTree } = processModule;
+const { readLocalUsageSnapshot } = localAnalytics;
+const { shutdownTelemetry } = telemetry;
 let serviceRuntime = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
@@ -99,7 +109,31 @@ const taskbarCompletionBadge = createTaskbarCompletionBadge({
   nativeImage, platform: process.platform,
   getWindow: () => dashboardWindowManager.getWindow() || BrowserWindow.getAllWindows().find(win => !win.isDestroyed()) || null,
   isApplicationOpen: () => BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible() && win.isFocused())
-}); const desktopTray = createDesktopTray({
+});
+const serviceProcessClient = createServiceProcessClient({
+  utilityProcess,
+  modulePath: path.join(electronRoot, 'service-process.js'),
+  cwd: path.dirname(electronRoot),
+  nativeHandlers: {
+    pickFolder: () => dashboardWindowManager.pickFolder(),
+    openFolder: payload => dashboardWindowManager.openFolder(payload.path),
+    clearRuntimeLogs: () => runtimeLogs.clear()
+  },
+  onLog: (message, options) => publicConnectionLog(options.source || 'local-service', message, options),
+  onExit: ({ code }) => {
+    if (isQuitting || !currentStatus.serverRunning) return;
+    setStatus(desktopStatusFailure(
+      ERROR_CODES.LOCAL_SERVICE_START_FAILED,
+      `Local service process exited unexpectedly with code ${code}.`,
+      { serverRunning: false, tunnelStatus: 'failed' }
+    ));
+  }
+});
+runtimeLogs.onChange(change => serviceProcessClient.updateContext({
+  runtimeLogs: runtimeLogs.snapshot(),
+  runtimeLogChange: change
+}));
+const desktopTray = createDesktopTray({
   Tray,
   Menu,
   nativeImage,
@@ -120,7 +154,7 @@ const taskbarCompletionBadge = createTaskbarCompletionBadge({
   onError: error => setStatus({ error: formatError(error), errorCode: ERROR_CODES.UNKNOWN })
 });
 const toolActivityRuntime = createTaskActivityRuntime({
-  toolActivity,
+  toolActivity: serviceProcessClient.activitySource,
   powerSaveBlocker,
   notify: desktopNotifications.show,
   onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
@@ -130,11 +164,8 @@ serviceRuntime = createDesktopServiceRuntime({
   app,
   connection,
   configModule,
-  startHttpServer,
-  stopAllManagedProcesses,
-  dashboardSessions,
+  serviceProcessClient,
   dashboardWindowManager,
-  toolActivityRuntime,
   runtimeLogs,
   secureTunnelRuntime,
   tunnelCredentials,
@@ -157,7 +188,7 @@ updateSupportPolicy = createUpdateSupportPolicy({
   onLog: (message, options) => runtimeLogs.append(message, options)
 });
 const shutdownCoordinator = createShutdownCoordinator({
-  stopService: () => stopServer({ silent: true }),
+  stopService: () => stopServer({ silent: true, terminateUtility: true }),
   stopUpdater: () => { appUpdater?.stop(); updateSupportPolicy?.stop(); },
   stopActivity: () => toolActivityRuntime.stop(),
   async closeWindows() {
@@ -280,6 +311,7 @@ function pushStatus(options = {}) {
 function setTaskActivityStatus(taskActivity) {
   currentStatus = normalizeDesktopStatus({ ...currentStatus, taskActivity });
   recoveryWindowManager.sendStatus(currentStatus);
+  syncServiceContext();
 }
 
 function combinedUpdateStatus(baseStatus = appUpdater?.getStatus()) {
@@ -319,6 +351,7 @@ function pushUpdateStatus(status) {
   desktopNotifications.handleUpdateStatus(merged);
   dashboardWindowManager.getWindow()?.webContents.send('desktop:update-status', merged);
   desktopTray.update();
+  syncServiceContext();
 }
 
 function setStatus(next, options = {}) {
@@ -326,6 +359,7 @@ function setStatus(next, options = {}) {
   currentStatus = normalizeDesktopStatus({ ...currentStatus, ...next });
   desktopNotifications.handleDesktopStatusChange(previous, currentStatus);
   runtimeLogs.recordStatusTransition(previous, currentStatus);
+  syncServiceContext();
   pushStatus(options);
 }
 
@@ -334,13 +368,21 @@ function replaceCurrentStatus(next, options = {}) {
   currentStatus = normalizeDesktopStatus(next);
   if (!options.silent) desktopNotifications.handleDesktopStatusChange(previous, currentStatus);
   runtimeLogs.recordStatusTransition(previous, currentStatus);
+  syncServiceContext();
   if (!options.silent) pushStatus();
   else desktopTray.update();
 }
 
-function publicConnectionLog(source, chunk) {
-  const entry = runtimeLogs.append(chunk, { source });
+function publicConnectionLog(source, chunk, options = {}) {
+  const entry = runtimeLogs.append(chunk, { ...options, source });
   if (entry) recoveryWindowManager.sendLog(entry);
+}
+
+function syncServiceContext() {
+  serviceProcessClient.updateContext({
+    status: currentStatus,
+    runtimeAccess: updateRuntimeAccess()
+  });
 }
 
 function startServer() {
@@ -457,4 +499,4 @@ registerIpcHandlers({
   fitWindowToContent
 });
 
-export { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };
+export { normalizeWizardConfig, saveLauncherConfig };

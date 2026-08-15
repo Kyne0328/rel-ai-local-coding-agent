@@ -1,5 +1,5 @@
 import { fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
-import { init as initStore, get as getStore, applyLiveEvent } from './ui/store.js';
+import { init as initStore, get as getStore, applyLiveEvent, patchLocalConnection } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getRouteParams, replaceRouteParams, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
 import { mountHome, updateHomeLiveState } from './ui/features/home/index.js';
@@ -128,9 +128,6 @@ async function boot() {
   window.addEventListener('relai:dropdown-closed', flushDeferredViewRender);
   initEvents(liveOnEvent, liveStateChange);
   startSSE();
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void doRefresh({ source: 'visibility-resume' });
-  });
   checkOnboarding();
 }
 
@@ -142,22 +139,52 @@ function activateRouter(routeRoot = ensureRouteRoot()) {
 
 let _sectionsCache = null;
 function getSections() {
-  return _sectionsCache || (_sectionsCache = {
-    home: element => mountHome(element, getStore()),
-    tasks: element => import('./ui/features/sessions/index.js').then(module => module.mountTasks(element, getStore())).catch(debugError),
-    workspaces: element => import('./ui/features/workspaces/index.js').then(module => module.mountWorkspaces(element, getStore())).catch(debugError),
-    activity: element => import('./ui/features/activity/index.js').then(module => module.mountActivity(element, getStore())).catch(debugError),
-    settings: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, settingsSubPage())).catch(debugError),
-    system: element => mountSystemRoute(element, 'connection'),
-    connection: element => mountSystemRoute(element, 'connection'),
-    processes: element => mountSystemRoute(element, 'processes'),
-    diagnostics: element => mountSystemRoute(element, 'diagnostics'),
-    tools: element => mountSystemRoute(element, 'tools'),
-    usage: element => mountSystemRoute(element, 'usage')
+  if (_sectionsCache) return _sectionsCache;
+  const systemSection = pageId => lazySection(
+    () => import('./ui/features/system/index.js'),
+    (module, element) => module.mountSystemPage(element, pageId)
+  );
+  _sectionsCache = {
+    home: routeSection(element => mountHome(element, getStore())),
+    tasks: lazySection(() => import('./ui/features/sessions/index.js'), (module, element) => module.mountTasks(element, getStore())),
+    workspaces: lazySection(() => import('./ui/features/workspaces/index.js'), (module, element) => module.mountWorkspaces(element, getStore())),
+    activity: lazySection(() => import('./ui/features/activity/index.js'), (module, element) => module.mountActivity(element, getStore())),
+    settings: lazySection(() => import('./ui/features/settings/index.js'), (module, element) => module.mountSettings(element, settingsSubPage())),
+    system: systemSection('connection'),
+    connection: systemSection('connection'),
+    processes: systemSection('processes'),
+    diagnostics: systemSection('diagnostics'),
+    tools: systemSection('tools'),
+    usage: systemSection('usage')
+  };
+  return _sectionsCache;
+}
+
+function routeSection(mount) {
+  return async (element, context = {}) => {
+    try {
+      if (context.isCurrent?.() === false) return null;
+      return await mount(element, context);
+    } catch (error) {
+      if (context.isCurrent?.() !== false) renderRouteFailure(element, error);
+      debugError(error);
+      return null;
+    }
+  };
+}
+
+function lazySection(loadModule, mount) {
+  return routeSection(async (element, context) => {
+    const module = await loadModule();
+    if (context.isCurrent?.() === false) return null;
+    return mount(module, element, context);
   });
 }
-function mountSystemRoute(element, pageId) {
-  return import('./ui/features/system/index.js').then(module => module.mountSystemPage(element, pageId)).catch(debugError);
+
+function renderRouteFailure(element, error) {
+  const message = error instanceof Error ? error.message : String(error || 'The page could not be loaded.');
+  element.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Page unavailable</span><h2>This page could not load.</h2><p>${escapeHtml(message)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-route-retry>Retry page</button><a class="buttonlike secondary" href="#diagnostics">Open diagnostics</a></div></div></div>`;
+  element.querySelector('[data-route-retry]')?.addEventListener('click', () => rerender({ preserveView: false }));
 }
 
 function settingsSubPage() {
@@ -178,8 +205,9 @@ function initDesktopBridge() {
 
 function applyDesktopStatus(status) {
   if (!status) return;
-  const data = withConnectionState({ ...getStore(), desktopStatus: status }, _liveState);
-  initStore(data);
+  const projected = withConnectionState({ ...getStore(), desktopStatus: status }, _liveState);
+  patchLocalConnection({ desktopStatus: status, connectionState: projected.connectionState });
+  const data = getStore();
   updateShell(data);
   if (_routerReady) void syncLiveView(data);
 }
@@ -241,14 +269,15 @@ function renderDashboardState(kind, title, description) {
 async function liveOnEvent(event) {
   if (!event?.type || !event.data || event.data.ok === false) return;
   window.dispatchEvent(new CustomEvent('relai:diagnostics-live', { detail: event }));
-  if (event.type === 'diagnostics.updated') return;
   const applied = applyLiveEvent(event.type, event.data);
   if (!applied.accepted) return;
-  const hydrated = withConnectionState(applied.state, _liveState);
-  initStore(hydrated);
-  updateShell(hydrated);
+  if (event.type === 'diagnostics.updated') return;
+  const projected = withConnectionState(applied.state, _liveState);
+  patchLocalConnection({ connectionState: projected.connectionState });
+  const data = getStore();
+  updateShell(data);
   if (!_routerReady) activateRouter();
-  await syncLiveView(hydrated);
+  await syncLiveView(data);
 }
 
 async function syncLiveView(data) {
@@ -291,12 +320,26 @@ async function updateLiveView(data) {
 }
 
 function liveStateChange(detail) {
+  const catchUpRequired = detail.state === 'live' && liveCatchUpRequired(getStore().live, detail);
   _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
-  const data = withConnectionState(getStore(), _liveState);
-  initStore(data);
+  const projected = withConnectionState(getStore(), _liveState);
+  patchLocalConnection({ connectionState: projected.connectionState });
+  const data = getStore();
   renderConnectionStatus();
   if (_routerReady && ['system', 'connection'].includes(currentRoutePath())) void syncLiveView(data);
+  if (catchUpRequired) void doRefresh({ source: 'sse-catch-up' });
+}
+
+function liveCatchUpRequired(localLive = {}, remote = {}) {
+  const localStreamId = String(localLive?.streamId || '');
+  const remoteStreamId = String(remote?.streamId || '');
+  if (remoteStreamId && localStreamId !== remoteStreamId) return true;
+  const localRevisions = localLive?.revisions || {};
+  const remoteRevisions = remote?.revisions || {};
+  return Object.entries(remoteRevisions).some(([domain, revision]) => (
+    Number(revision || 0) > Number(localRevisions[domain] || 0)
+  ));
 }
 
 function updateShell(data) {

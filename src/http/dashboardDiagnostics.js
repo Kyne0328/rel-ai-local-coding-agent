@@ -70,7 +70,7 @@ async function handleApiDiagnosticsReset(ctx) {
 
   const result = { ok: true, target, history: null, runtimeLogs: null };
   if (target === 'history' || target === 'all') result.history = await clearHistory(ctx);
-  if (target === 'runtime_logs' || target === 'all') result.runtimeLogs = ctx.options.clearRuntimeLogs();
+  if (target === 'runtime_logs' || target === 'all') result.runtimeLogs = await ctx.options.clearRuntimeLogs();
   result.message = resetMessage(target);
   sendJson(ctx.res, 200, result, ctx.ae);
 }
