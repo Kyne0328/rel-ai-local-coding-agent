@@ -1,8 +1,8 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { getStateDir } from '../statePaths.js';
+import { runProcess } from '../process.js';
 import { workspaceGitStatus } from '../repo/gitOps.js';
 import { relaiCodeInspect } from './codeIntelligence.js';
 import { detectVerifyCheckUnits, detectVerifyChecks } from './checkDetection.js';
@@ -93,9 +93,9 @@ async function createValidationFingerprint(workspace, config, suppliedStatus = n
   const descriptor = {
     version: FINGERPRINT_VERSION,
     workspace: workspace.alias,
-    head: gitText(workspace.path, ['rev-parse', 'HEAD']),
-    indexHash: gitDigest(workspace.path, ['diff', '--cached', '--binary', '--no-ext-diff']),
-    worktreeHash: gitDigest(workspace.path, ['diff', '--binary', '--no-ext-diff']),
+    head: await gitText(workspace.path, ['rev-parse', 'HEAD'], config),
+    indexHash: await gitDigest(workspace.path, ['diff', '--cached', '--binary', '--no-ext-diff'], config),
+    worktreeHash: await gitDigest(workspace.path, ['diff', '--binary', '--no-ext-diff'], config),
     changedFiles,
     relevantFiles: relevantPaths.map(file => fingerprintPath(workspace.path, file)),
     checks: {
@@ -137,31 +137,23 @@ function fingerprintPath(root, relativePath) {
   };
 }
 
-function gitText(root, args) {
-  try {
-    return execFileSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 64 * 1024 * 1024
-    }).trim();
-  } catch {
-    return '';
-  }
+async function gitText(root, args, config) {
+  const result = await runProcess('git', args, {
+    cwd: root,
+    timeout: 30_000,
+    maxOutputBytes: 64 * 1024 * 1024
+  }, config);
+  return result.exitCode === 0 && !result.stdoutTruncated ? String(result.stdout || '').trim() : '';
 }
 
-function gitDigest(root, args) {
-  try {
-    const output = execFileSync('git', args, {
-      cwd: root,
-      encoding: 'buffer',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 64 * 1024 * 1024
-    });
-    return crypto.createHash('sha256').update(output).digest('hex');
-  } catch {
-    return '';
-  }
+async function gitDigest(root, args, config) {
+  const result = await runProcess('git', args, {
+    cwd: root,
+    timeout: 30_000,
+    maxOutputBytes: 64 * 1024 * 1024
+  }, config);
+  if (result.exitCode !== 0 || result.stdoutTruncated) return '';
+  return crypto.createHash('sha256').update(String(result.stdout || ''), 'utf8').digest('hex');
 }
 
 function deriveFocusedChecks(catalog, quickUnits, packageIds, affectedTests, workspace) {
