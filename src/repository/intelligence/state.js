@@ -2,8 +2,10 @@ const MAX_DIAGNOSTICS_PER_WORKSPACE = 32;
 const diagnosticsByWorkspace = new Map();
 
 function repositoryFreshness(status = {}, generation = null) {
-  if (status?.dirty === true) return 'stale';
-  const verifiedGeneration = Number(status?.metadata?.generation || 0);
+  const metadata = status?.metadata || {};
+  if (metadata.freshness === 'partial' || metadata.truncated === true) return 'partial';
+  if (status?.dirty === true || metadata.needsReconcile === true || metadata.freshness === 'stale') return 'stale';
+  const verifiedGeneration = Number(metadata.generation || 0);
   const requestedGeneration = Number(generation?.id || generation || 0);
   if (verifiedGeneration > 0 && (!requestedGeneration || verifiedGeneration === requestedGeneration)) return 'current';
   return 'cached-unverified';

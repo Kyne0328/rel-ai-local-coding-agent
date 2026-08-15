@@ -10,9 +10,12 @@ const EDGE_WEIGHT = Object.freeze({
   HTTP_CALLS: 0.98,
   CALLS: 0.95,
   EMITS: 0.86,
+  HANDLES: 0.82,
+  LISTENS_ON: 0.8,
   IMPLEMENTS: 0.78,
   INHERITS: 0.78,
   USES_TYPE: 0.72,
+  TESTS: 0.65,
   IMPORTS: 0.58
 });
 
@@ -20,9 +23,12 @@ const REVERSE_FACTOR = Object.freeze({
   HTTP_CALLS: 0.62,
   CALLS: 0.7,
   EMITS: 0.58,
+  HANDLES: 0.55,
+  LISTENS_ON: 0.55,
   IMPLEMENTS: 0.65,
   INHERITS: 0.65,
   USES_TYPE: 0.58,
+  TESTS: 0.62,
   IMPORTS: 0.48
 });
 
@@ -30,6 +36,7 @@ function rankWithGraphDiffusion(db, baselineResults = [], options = {}) {
   const maxResults = boundedInteger(options.maxResults, 1, 100, DEFAULT_MAX_RESULTS);
   const maxEdges = boundedInteger(options.maxEdges, 100, 20000, DEFAULT_MAX_EDGES);
   const maxSeeds = boundedInteger(options.maxSeeds, 1, 100, DEFAULT_MAX_SEEDS);
+  const includeExpanded = options.includeExpanded !== false;
   const queryTerms = tokenizeQuery(options.query);
   const baseline = dedupeBaseline(baselineResults).slice(0, maxSeeds);
   const seedPaths = baseline.map(item => normalizePath(item.path)).filter(Boolean);
@@ -72,7 +79,9 @@ function rankWithGraphDiffusion(db, baselineResults = [], options = {}) {
     }
   }
 
-  const secondSeeds = [...firstHopStrength.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_SECOND_HOP_SEEDS);
+  const secondSeeds = includeExpanded
+    ? [...firstHopStrength.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_SECOND_HOP_SEEDS)
+    : [];
   let analyzedEdgeCount = first.edgeCount;
   let truncated = first.truncated;
   if (secondSeeds.length && analyzedEdgeCount < maxEdges) {
@@ -90,7 +99,9 @@ function rankWithGraphDiffusion(db, baselineResults = [], options = {}) {
     }
   }
 
-  const candidateIds = new Set([...baselineScoreById.keys(), ...expandedRaw.keys()]);
+  const candidateIds = new Set(includeExpanded
+    ? [...baselineScoreById.keys(), ...expandedRaw.keys()]
+    : [...baselineScoreById.keys()]);
   const results = [];
   for (const id of candidateIds) {
     const file = fileById.get(id);
@@ -105,6 +116,7 @@ function rankWithGraphDiffusion(db, baselineResults = [], options = {}) {
       language: file.language,
       test: file.test,
       score: Number(score.toFixed(6)),
+      graphScore: Number(graphScore.toFixed(6)),
       baselineRank: baselineRankByPath.get(file.path) || null,
       expanded: baselineScore == null,
       reasons: [...(reasons.get(id) || [])].slice(0, 8)
@@ -128,24 +140,43 @@ function loadNeighborhood(db, ids, maxEdges) {
   const uniqueIds = [...new Set(ids.map(Number).filter(Number.isInteger))];
   if (!uniqueIds.length || maxEdges <= 0) return { byNode: new Map(), files: [], edgeCount: 0, truncated: false };
   const placeholders = uniqueIds.map(() => '?').join(',');
+  const perSeedLimit = Math.max(1, Math.ceil(maxEdges / uniqueIds.length));
   const rows = db.prepare(`
-    SELECT e.source_file_id, e.target_file_id, e.type, e.provider, e.confidence,
-           source.path AS source_path, source.language AS source_language, source.is_test AS source_test,
-           target.path AS target_path, target.language AS target_language, target.is_test AS target_test,
-           EXISTS(
-             SELECT 1 FROM edges support
-             WHERE support.source_file_id=e.source_file_id
-               AND support.target_file_id=e.target_file_id
-               AND support.type='IMPORTS'
-           ) AS import_supported
-    FROM edges e
-    JOIN files source ON source.id=e.source_file_id
-    JOIN files target ON target.id=e.target_file_id
-    WHERE e.target_file_id IS NOT NULL
-      AND (e.source_file_id IN (${placeholders}) OR e.target_file_id IN (${placeholders}))
-      AND e.type IN ('HTTP_CALLS','CALLS','EMITS','IMPLEMENTS','INHERITS','USES_TYPE','IMPORTS')
-    ORDER BY e.id LIMIT ?
-  `).all(...uniqueIds, ...uniqueIds, maxEdges);
+    WITH relevant AS (
+      SELECT e.id, e.source_file_id, e.target_file_id, e.type, e.provider, e.confidence,
+             source.path AS source_path, source.language AS source_language, source.is_test AS source_test,
+             target.path AS target_path, target.language AS target_language, target.is_test AS target_test,
+             CASE WHEN e.source_file_id IN (${placeholders}) THEN e.source_file_id ELSE e.target_file_id END AS seed_id,
+             EXISTS(
+               SELECT 1 FROM edges support
+               WHERE support.source_file_id=e.source_file_id
+                 AND support.target_file_id=e.target_file_id
+                 AND support.type='IMPORTS'
+             ) AS import_supported
+      FROM edges e
+      JOIN files source ON source.id=e.source_file_id
+      JOIN files target ON target.id=e.target_file_id
+      WHERE e.target_file_id IS NOT NULL
+        AND (e.source_file_id IN (${placeholders}) OR e.target_file_id IN (${placeholders}))
+        AND e.type IN ('HTTP_CALLS','CALLS','EMITS','HANDLES','LISTENS_ON','IMPLEMENTS','INHERITS','USES_TYPE','TESTS','IMPORTS')
+    ), ranked AS (
+      SELECT *,
+             row_number() OVER (
+               PARTITION BY seed_id
+               ORDER BY CASE type
+                 WHEN 'HTTP_CALLS' THEN 10 WHEN 'CALLS' THEN 9 WHEN 'EMITS' THEN 8 WHEN 'HANDLES' THEN 8
+                 WHEN 'LISTENS_ON' THEN 8 WHEN 'IMPLEMENTS' THEN 7 WHEN 'INHERITS' THEN 7 WHEN 'USES_TYPE' THEN 6
+                 WHEN 'TESTS' THEN 5 WHEN 'IMPORTS' THEN 4 ELSE 1 END DESC,
+                 confidence DESC, id
+             ) AS seed_rank,
+             count(*) OVER (PARTITION BY seed_id) AS seed_edge_count
+      FROM relevant
+    )
+    SELECT * FROM ranked
+    WHERE seed_rank <= ?
+    ORDER BY seed_rank, seed_id, id
+    LIMIT ?
+  `).all(...uniqueIds, ...uniqueIds, ...uniqueIds, perSeedLimit, maxEdges);
 
   const files = new Map();
   const byNode = new Map();
@@ -163,14 +194,20 @@ function loadNeighborhood(db, ids, maxEdges) {
     addNeighbor(byNode, seen, source, target, baseWeight, type, 'forward');
     addNeighbor(byNode, seen, target, source, baseWeight * (REVERSE_FACTOR[type] || 0.5), type, 'reverse');
   }
-  return { byNode, files: [...files.values()], edgeCount: rows.length, truncated: rows.length >= maxEdges };
+  return {
+    byNode,
+    files: [...files.values()],
+    edgeCount: rows.length,
+    truncated: rows.length >= maxEdges || rows.some(row => Number(row.seed_edge_count || 0) > perSeedLimit)
+  };
 }
 
 function isReliableDiffusionEdge(type, provider, confidence, importSupported) {
   if (confidence < 0.7) return false;
   if (type === 'CALLS') return provider.startsWith('resolver-') || importSupported;
-  if (type === 'HTTP_CALLS' || type === 'EMITS') return confidence >= 0.85;
+  if (type === 'HTTP_CALLS' || type === 'EMITS' || type === 'HANDLES' || type === 'LISTENS_ON') return confidence >= 0.85;
   if (type === 'IMPLEMENTS' || type === 'INHERITS' || type === 'USES_TYPE') return confidence >= 0.85;
+  if (type === 'TESTS') return confidence >= 0.9;
   return type === 'IMPORTS' && confidence >= 0.8;
 }
 

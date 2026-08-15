@@ -24,6 +24,8 @@ const workspaceRoot = path.join(root, 'workspace');
 fs.mkdirSync(path.join(workspaceRoot, 'src'), { recursive: true });
 fs.mkdirSync(path.join(workspaceRoot, 'electron'), { recursive: true });
 fs.mkdirSync(path.join(workspaceRoot, 'test'), { recursive: true });
+fs.mkdirSync(path.join(workspaceRoot, 'packages', 'a'), { recursive: true });
+fs.mkdirSync(path.join(workspaceRoot, 'packages', 'b'), { recursive: true });
 
 fs.writeFileSync(path.join(workspaceRoot, 'src', 'core.js'), `
 export function coreValue() { return 1; }
@@ -46,6 +48,14 @@ fs.writeFileSync(path.join(workspaceRoot, 'test', 'service.test.js'), `
 import { serviceValue } from '../src/service.js';
 serviceValue();
 `);
+fs.writeFileSync(path.join(workspaceRoot, 'packages', 'a', 'index.js'), `
+import { packageB } from '../b/index.js';
+export function packageA() { return packageB(); }
+`);
+fs.writeFileSync(path.join(workspaceRoot, 'packages', 'b', 'index.js'), `
+import { packageA } from '../a/index.js';
+export function packageB() { return packageA; }
+`);
 
 const workspace = { alias: 'architecture-test', path: workspaceRoot, context: {}, testCommands: {}, commands: {} };
 const config = { stateDir };
@@ -64,6 +74,8 @@ try {
   assert.ok(result.communities.length >= 1);
   assert.ok(result.relationshipTypes.IMPORTS >= 4);
   assert.ok(result.relationshipTypes.HANDLES >= 1);
+  assert.ok(result.cycles.some(item => item.modules.includes('packages/a') && item.modules.includes('packages/b')),
+    'cyclic module dependencies must be reported as one strongly connected component instead of fake dependency depth');
 
   const direct = await repositoryIntelligence.architecture(workspace, config, { maxResults: 10 });
   assert.equal(direct.action, 'architecture');
