@@ -70,6 +70,21 @@ try {
   assert.equal(readOnlyCompletion.validationStatus, 'not_required');
   assert.equal(readOnlyCompletion.completionKnown, true);
   assert.deepEqual(readOnlyCompletion.changedFiles || [], [], 'read-only completion must not claim ambient repository changes');
+  const terminalProcessList = await callTool('relai_process', {
+    action: 'list',
+    workspace: 'app',
+    work_id: unvalidatedTask
+  }, { publicHttpOnly: true });
+  assert.equal(terminalProcessList.ok, true, 'safe process observation may reuse a completed work_id');
+  await assert.rejects(
+    () => callTool('relai_edit', {
+      workspace: 'app',
+      work_id: unvalidatedTask,
+      path: 'src/must-not-reopen.js',
+      content: 'console.log("must stay terminal");\n'
+    }, { publicHttpOnly: true }),
+    error => error?.code === 'INVALID_TASK_STATE'
+  );
 
   resetToolActivity();
   const integrityTasksDir = path.join(stateDir, 'task-integrity', 'tasks');
