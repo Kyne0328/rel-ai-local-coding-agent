@@ -14,6 +14,7 @@ import { createValidationPlan } from "./bridge/validationPlan.js";
 import { normalizeVerifyChecks } from "./bridge/validationChecks.js";
 import { checkExecutionPolicy } from "./workflow/checkExecution.js";
 import { parallel, runPlan, step } from "./executionPlan.js";
+import { createExecutionPlanObserver, recordExecutionPlanMetrics } from "./executionObservability.js";
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -219,9 +220,17 @@ async function runPostActions(workspace, config, args, changedFiles = []) {
     } catch {}
     if (prepared?.parallelSafe === true) {
       const execution = await runPlan(parallel([
-        step('post-validation', () => runChecks({ planId: prepared.planId, planLevel: prepared.planSelection })),
-        step('post-diff', runDiff)
-      ], { maxConcurrency: 2, stopOnFailure: false }));
+        step('post-validation', () => runChecks({ planId: prepared.planId, planLevel: prepared.planSelection }), { metadata: { displayName: 'Validation' } }),
+        step('post-diff', runDiff, { metadata: { displayName: 'Diff review' } })
+      ], { maxConcurrency: 2, stopOnFailure: false }), {
+        onEvent: createExecutionPlanObserver({
+          source: 'edit-post-actions',
+          title: 'Finishing edit',
+          noun: 'post-actions',
+          category: 'edit'
+        })
+      });
+      recordExecutionPlanMetrics('edit-post-actions', execution.metrics);
       post.checks = execution.results[0]?.value;
       post.diff = execution.results[1]?.value;
       post.execution = {

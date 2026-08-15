@@ -9,6 +9,7 @@ import { combineAbortSignals } from '../abortSignals.js';
 import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { parallel, runPlan, sequence, step } from '../executionPlan.js';
+import { createExecutionPlanObserver, recordExecutionPlanMetrics } from '../executionObservability.js';
 import { buildCheckExecutionStages } from '../workflow/checkExecution.js';
 async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
@@ -58,14 +59,29 @@ async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
       },
       {
         isSuccess: value => value?.ok === true,
-        metadata: { index, kind: policy.kind, parallelSafe: policy.parallelSafe, resourceKey: policy.resourceKey }
+        metadata: {
+          index,
+          kind: policy.kind,
+          parallelSafe: policy.parallelSafe,
+          resourceKey: policy.resourceKey,
+          displayName: sanitizeDisplayText(unit.command, 120)
+        }
       }
     ));
     return stage.parallel
       ? parallel(nodes, { maxConcurrency: 3, stopOnFailure })
       : sequence(nodes, { stopOnFailure });
   });
-  const execution = await runPlan(sequence(planStages, { stopOnFailure }), { signal });
+  const execution = await runPlan(sequence(planStages, { stopOnFailure }), {
+    signal,
+    onEvent: createExecutionPlanObserver({
+      source: 'diagnostics',
+      title: 'Running repository diagnostics',
+      noun: 'diagnostics',
+      category: 'validation'
+    })
+  });
+  recordExecutionPlanMetrics('diagnostics', execution.metrics);
   const results = visibleResults();
   const diagnostics = diagnosticsByIndex.filter(Boolean).flat();
   const unique = deduplicateDiagnostics(diagnostics).slice(0, clampNumber(args.maxResults, 1, 5000, 500));

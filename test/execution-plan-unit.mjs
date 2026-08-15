@@ -22,6 +22,7 @@ assert.equal(parallelResult.ok, true);
 assert.deepEqual(parallelResult.results.map(item => item.value), [0, 1, 2, 3]);
 assert.equal(observedMax, 2, 'bounded execution should never exceed configured concurrency');
 assert.equal(parallelResult.metrics.maxParallelism, 2);
+assert.equal(parallelResult.metrics.parallelGroupCount, 1);
 assert.ok(parallelResult.metrics.parallelTimeSavedMs > 50, `expected useful overlap, got ${parallelResult.metrics.parallelTimeSavedMs}ms saved`);
 assert.ok(parallelWallMs < 260, `four 70ms steps at concurrency 2 should overlap, got ${parallelWallMs}ms`);
 

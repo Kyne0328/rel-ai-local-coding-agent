@@ -119,7 +119,7 @@ async function relaiSearch(workspace, config, args = {}) {
     queries: undefined,
     maxResults,
     maxBytes
-  }));
+  }), { kind: 'search-text' });
   const results = batch.results;
   return {
     ok: true,

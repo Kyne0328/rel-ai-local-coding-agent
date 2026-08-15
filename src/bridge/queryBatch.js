@@ -1,4 +1,5 @@
 import { parallel, runPlan, step } from '../executionPlan.js';
+import { createExecutionPlanObserver, recordExecutionPlanMetrics } from '../executionObservability.js';
 
 function resolveQueryTerms(args = {}, options = {}) {
   const singleField = String(options.singleField || 'query');
@@ -43,10 +44,19 @@ function compactBatchResult(value) {
 
 async function runQueryBatch(terms, execute, options = {}) {
   const plan = parallel(
-    terms.map((term, index) => step(`query ${index + 1}`, () => execute(term, index), { metadata: { index, term } })),
+    terms.map((term, index) => step(`query ${index + 1}`, () => execute(term, index), {
+      metadata: { index, term, displayName: term }
+    })),
     { maxConcurrency: options.maxConcurrency || 4, stopOnFailure: true }
   );
-  const outcome = await runPlan(plan, { signal: options.signal, onEvent: options.onEvent });
+  const observer = options.onEvent || createExecutionPlanObserver({
+    source: 'search',
+    title: 'Searching repository',
+    noun: 'searches',
+    category: 'search'
+  });
+  const outcome = await runPlan(plan, { signal: options.signal, onEvent: observer });
+  recordExecutionPlanMetrics(options.kind || 'search', outcome.metrics);
   const failed = outcome.results.find(result => result.ok === false);
   if (failed) throw failed.error || new Error(`Query batch failed at ${failed.name}.`);
   return {
