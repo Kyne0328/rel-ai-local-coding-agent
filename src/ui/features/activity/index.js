@@ -101,7 +101,7 @@ function updateSessionIndex(tasks = []) {
     if (!id) continue;
     next.set(id, {
       id,
-      title: task.title || task.objective || task.currentActivity || 'Work session',
+      title: task.title || task.objective || task.currentActivity || 'Task',
       workspace: task.workspace || '',
       status: task.status || ''
     });
@@ -164,7 +164,7 @@ function buildActivity() {
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Tool</th><th scope="col" class="activity-workspace-column">Workspace</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Action</th><th scope="col" class="activity-workspace-column">Project</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
   queueMicrotask(() => renderActivityFilterBar(root));
   return root;
@@ -195,7 +195,7 @@ function renderActivityFilterBar(scope = document) {
   host.replaceChildren(createFilterBar({
     search: {
       label: 'Search activity',
-      placeholder: 'Search session, activity, tool, workspace, or path',
+      placeholder: 'Search task, activity, action, project, or file',
       value: _filterState.search,
       onInput: value => {
         window.clearTimeout(searchTimer);
@@ -227,12 +227,12 @@ function activeActivityFilters() {
     filters.push({ label, value: display, onRemove: () => removeActivityFilter(key) });
   };
   if (_filterState.timeRange !== '1h') add('timeRange', 'Time', _filterState.timeRange, _filterState.timeRange === 'all' ? 'All time' : _filterState.timeRange);
-  add('workspace', 'Workspace', _filterState.workspace);
-  add('tool', 'Tool', _filterState.tool);
+  add('workspace', 'Project', _filterState.workspace);
+  add('tool', 'Action', _filterState.tool);
   add('status', 'Status', _filterState.status, statusFilterLabel(_filterState.status));
   if (_filterState.task) {
     const session = _sessionIndex.get(_filterState.task);
-    add('task', 'Session', _filterState.task, session?.title || `Session ${_filterState.task.slice(0, 8)}`);
+    add('task', 'Task', _filterState.task, session?.title || `Task ${_filterState.task.slice(0, 8)}`);
   }
   return filters;
 }
@@ -262,15 +262,15 @@ function openActivityFilters() {
           onChange: value => { draft.timeRange = value; }
         }),
         filterSelectField({
-          label: 'Workspace',
+          label: 'Project',
           value: draft.workspace,
-          options: activitySelectOptions('All workspaces', _filterOptions.workspaces, draft.workspace),
+          options: activitySelectOptions('All projects', _filterOptions.workspaces, draft.workspace),
           onChange: value => { draft.workspace = value; }
         }),
         filterSelectField({
-          label: 'Tool',
+          label: 'Action',
           value: draft.tool,
-          options: activitySelectOptions('All tools', _filterOptions.tools, draft.tool),
+          options: activitySelectOptions('All actions', _filterOptions.tools, draft.tool),
           onChange: value => { draft.tool = value; }
         }),
         filterSelectField({
@@ -586,7 +586,7 @@ function openDetail(entry) {
   if (session.id) {
     const context = document.createElement('section');
     context.className = 'activity-detail-section activity-session-context';
-    context.innerHTML = `<h3>Session</h3><strong>${esc(session.title)}</strong><span>${esc([session.workspace, session.shortId].filter(Boolean).join(' · '))}</span><div class="activity-session-actions"><a class="buttonlike secondary" href="${routeHref('tasks', { workspace: session.workspace || entry.workspace, task: session.id })}">Open session</a><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace || entry.workspace, task: session.id, time: 'all' })}">Show only this session</a></div>`;
+    context.innerHTML = `<h3>Task</h3><strong>${esc(session.title)}</strong><span>${esc([session.workspace, session.shortId].filter(Boolean).join(' · '))}</span><div class="activity-session-actions"><a class="buttonlike secondary" href="${routeHref('tasks', { workspace: session.workspace || entry.workspace, task: session.id })}">Open task</a><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace || entry.workspace, task: session.id, time: 'all' })}">Show only this task</a></div>`;
     for (const link of context.querySelectorAll('a')) link.addEventListener('click', closeDrawer);
     content.appendChild(context);
   }

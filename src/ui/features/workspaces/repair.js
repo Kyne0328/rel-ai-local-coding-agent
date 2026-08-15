@@ -15,10 +15,10 @@ export async function openWorkspaceRepair({ workspace } = {}) {
   form.innerHTML = `
     <div class="ws-form-intro">
       <strong>Repair project folder</strong>
-      <span>Rel.AI will keep the workspace name, validation history, and Git safeguards. Only the folder path will change.</span>
+      <span>Rel.AI will keep the project name, check history, and Git safety settings. Only the folder location will change.</span>
     </div>
     <div class="workspace-repair-identity">
-      <span>Workspace</span>
+      <span>Project</span>
       <strong>${esc(workspace.alias)}</strong>
       <small>${esc(workspace.path || 'No path configured')}</small>
     </div>
@@ -151,10 +151,10 @@ function renderPathStatus(element, info) {
   if (!info) { element.textContent = ''; return; }
   const errorFinding = (info.findings || []).find(finding => finding.severity === 'error');
   if (info.isGit) {
-    element.textContent = 'Git repository found. Existing workspace settings will be preserved.';
+    element.textContent = 'Git project found. Your project settings will be kept.';
     element.classList.add('success');
   } else if (info.exists && info.isDirectory) {
-    element.textContent = 'This folder exists but is not a Git repository. It can still be used.';
+    element.textContent = 'This folder is not using Git, but you can still use it.';
     element.classList.add('warn');
   } else if (errorFinding) {
     element.textContent = errorFinding.message;

@@ -69,7 +69,7 @@ try {
   assert.match(result.activityApplied.route, /status=failed/);
   assert.match(result.activityApplied.summary, /events shown/);
   assert.equal(result.activityApplied.freezeExcluded, true);
-  assert.match(result.taskChip, /Remove Session filter/);
+  assert.match(result.taskChip, /Remove Task filter/);
   assert.deepEqual(result.escapeFocus, { closed: true, focusReturned: true });
   assert.equal(result.mobileDrawer.viewport <= 420, true);
   assert.equal(result.mobileDrawer.horizontalOverflow, false);
@@ -85,7 +85,7 @@ try {
   assert.equal(result.diagnostics.applied.badge, 'Filters (2)');
   assert.match(result.diagnostics.applied.summary, /findings.*log entries shown/);
   assert.equal(result.diagnostics.applied.liveTailPressed, 'false');
-  assert.deepEqual(result.diagnostics.applied.reportActions, ['Copy report', 'Export state', 'Open diagnostics folder']);
+  assert.deepEqual(result.diagnostics.applied.reportActions, ['Copy report', 'Export support info', 'Open support folder']);
   assert.match(result.tools.applied.chip, /Validate/);
   assert.equal(result.tools.applied.badge, 'Filters (1)');
   assert.match(result.tools.applied.summary, /tools shown/);
@@ -100,7 +100,7 @@ try {
   assert.equal(result.settings.legacyDensityIgnored, true);
   assert.equal(result.settings.navigationLabel, 'Settings navigation');
   assert.equal(result.settings.currentPageCount, 1);
-  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, scopeName: 'Workspace scope: All workspaces' });
+  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, scopeName: 'Project filter: All projects' });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
   assert.equal(result.connection.detailsDisclosure, true);

@@ -113,7 +113,7 @@ try {
   assert.equal(result.activityInteraction.expanded, true);
   assert.equal(result.activityInteraction.copyButton, true);
   assert.equal(result.activityInteraction.errorWrapped, true);
-  assert.deepEqual(result.activityDesktopGeometry.visibleHeaders, ['Time', 'Tool', 'Workspace', 'Status', 'Message', 'Actions'], JSON.stringify(result.activityDesktopGeometry));
+  assert.deepEqual(result.activityDesktopGeometry.visibleHeaders, ['Time', 'Action', 'Project', 'Status', 'Message', 'Actions'], JSON.stringify(result.activityDesktopGeometry));
   assert.equal(result.activityDesktopGeometry.headerVisible, true, JSON.stringify(result.activityDesktopGeometry));
   assert.equal(result.activityDesktopGeometry.cellVisible, true, JSON.stringify(result.activityDesktopGeometry));
   assert.ok(result.activityDesktopGeometry.headerWidth >= 240, JSON.stringify(result.activityDesktopGeometry));

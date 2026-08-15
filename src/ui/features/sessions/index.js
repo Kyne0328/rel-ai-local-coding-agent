@@ -41,7 +41,7 @@ export function mountTasks(container, data = {}) {
 
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
-  card.innerHTML = '<div class="card-head"><div><h3>Recent sessions</h3></div><div class="card-head-actions"><a class="section-action" href="#activity">Activity</a><a class="section-action" href="#diagnostics">History controls</a></div></div>';
+  card.innerHTML = '<div class="card-head"><div><h3>Recent tasks</h3></div><div class="card-head-actions"><a class="section-action" href="#activity">Activity</a><a class="section-action" href="#diagnostics">Troubleshooting</a></div></div>';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   renderSessionRows(body, sessions, scopeKey);
@@ -125,7 +125,7 @@ function sessionSummary(sessions) {
 }
 
 function sessionCountLabel(sessions, workspace) {
-  return `${sessions.length} session${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${workspace}` : ''}`;
+  return `${sessions.length} task${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${workspace}` : ''}`;
 }
 
 function bindCopyActions(root) {
@@ -143,7 +143,7 @@ function bindCopyActions(root) {
 
 function renderSessionRows(body, sessions, scopeKey) {
   if (!sessions.length) {
-    body.innerHTML = '<div class="empty">No work sessions yet.</div>';
+    body.innerHTML = '<div class="empty">No tasks yet.</div>';
     return;
   }
   const visible = sessions.slice(0, visibleCountFor(scopeKey));
@@ -153,7 +153,7 @@ function renderSessionRows(body, sessions, scopeKey) {
 
 function reconcileSessionRows(body, sessions, scopeKey) {
   if (!sessions.length) {
-    if (!body.querySelector('.empty') || body.querySelectorAll('[data-task-id]').length) body.innerHTML = '<div class="empty">No work sessions yet.</div>';
+    if (!body.querySelector('.empty') || body.querySelectorAll('[data-task-id]').length) body.innerHTML = '<div class="empty">No tasks yet.</div>';
     return;
   }
   body.querySelector('.empty')?.remove();
@@ -230,7 +230,7 @@ function sessionRow(session) {
       <span class="task-row-status">${statusPill(state.label, state.pillClass)}</span>
       <span class="task-row-main">
         <strong>${esc(session.title || operation)}</strong>
-        <span class="task-row-description">${esc(session.workspace || 'workspace')} · ${esc(description)}</span>
+        <span class="task-row-description">${esc(session.workspace || 'project')} · ${esc(description)}</span>
         ${facts ? `<span class="task-row-facts">${esc(facts)}</span>` : ''}
         ${progress}
       </span>
@@ -242,10 +242,10 @@ function sessionRow(session) {
 function sessionDescription(session, live, operation) {
   if (live) return session.currentActivity || session.currentStage || operation || 'Ready for the next step';
   if (session.summary) return session.summary;
-  if (session.status === 'validation_failed') return 'Validation failed';
+  if (session.status === 'validation_failed') return 'Checks failed';
   if (session.status === 'blocked') return session.endReason || 'Blocked';
   if (session.status === 'cancelled') return 'Cancelled before completion';
-  return session.currentActivity || session.currentStage || operation || 'Session ended';
+  return session.currentActivity || session.currentStage || operation || 'Task ended';
 }
 
 function sessionFacts(session, live) {
@@ -254,12 +254,12 @@ function sessionFacts(session, live) {
   const changed = Number(session.changedFileCount || session.changedFiles?.length || 0);
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
   const completed = workSessionStateView(session).status === 'completed';
-  facts.push(`${toolCalls} tool call${toolCalls === 1 ? '' : 's'}`);
+  facts.push(`${toolCalls} action${toolCalls === 1 ? '' : 's'}`);
   facts.push(`${changed} file${changed === 1 ? '' : 's'} edited`);
   if (failures > 0) facts.push(completed
     ? `${failures} recovered failed call${failures === 1 ? '' : 's'}`
     : `${failures} failed call${failures === 1 ? '' : 's'}`);
-  if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('validation failed');
+  if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('checks failed');
   if (session.status === 'waiting_for_approval') facts.push('approval required');
   if (session.status === 'blocked') facts.push('blocked');
   const publish = publishLabel(session);
@@ -342,15 +342,15 @@ async function openSession(session) {
 
   content.innerHTML = `
     <header class="task-detail-header">
-      <div><span class="overview-kicker">Work session</span><h2>${esc(session.title || operationValue)}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
+      <div><span class="overview-kicker">Task</span><h2>${esc(session.title || operationValue)}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
       ${statusPill(state.label, state.pillClass)}
     </header>
     ${live && session.progress ? taskProgressHtml(session.progress, session.status) : ''}
     <div class="task-detail-current${sessionNeedsAttention(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
     <div class="task-detail-grid task-detail-facts">
-      ${detail('Workspace', session.workspace || '—')}
+      ${detail('Project', session.workspace || '—')}
       ${durationDetail(session, live)}
-      ${detail('Tool calls', session.toolCallCount ?? session.calls ?? 0)}
+      ${detail('Actions', session.toolCallCount ?? session.calls ?? 0)}
       ${detail('Files changed', session.changedFileCount || session.changedFiles?.length || 0)}
     </div>
     ${attentionSection(session)}
@@ -365,7 +365,7 @@ async function openSession(session) {
   for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) link.addEventListener('click', closeDrawer);
   bindCopyActions(content);
   const id = sessionIdentifier(session);
-  openDrawer({ title: session.title || `Work session ${id ? id.slice(0, 8) : 'unknown'}`, content, panelClass: 'session-detail-drawer' });
+  openDrawer({ title: session.title || `Task ${id ? id.slice(0, 8) : 'unknown'}`, content, panelClass: 'session-detail-drawer' });
 }
 
 async function loadSessionDetail(session) {
@@ -396,10 +396,10 @@ function attentionSection(session) {
   if (!sessionNeedsAttention(session)) return '';
   const items = [];
   const failures = Number(session.failures || session.failedToolCallCount || 0);
-  if (failures) items.push(`${failures} tool call${failures === 1 ? '' : 's'} failed`);
-  if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Validation failed');
-  if (session.status === 'blocked') items.push(session.endReason || 'Session is blocked');
-  if (session.status === 'failed') items.push(session.endReason || 'The work session ended with an unresolved failure');
+  if (failures) items.push(`${failures} action${failures === 1 ? '' : 's'} failed`);
+  if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Checks failed');
+  if (session.status === 'blocked') items.push(session.endReason || 'Task is blocked');
+  if (session.status === 'failed') items.push(session.endReason || 'The task ended with an unresolved problem');
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
 }
 
@@ -412,11 +412,11 @@ function failureHistorySection(session) {
   const failures = Number(session.failures || session.failedToolCallCount || 0);
   if (!failures || sessionNeedsAttention(session)) return '';
   const completed = workSessionStateView(session).status === 'completed';
-  const callLabel = `${failures} tool call${failures === 1 ? '' : 's'}`;
-  const title = completed ? 'Recovered during session' : 'Earlier failed calls';
+  const callLabel = `${failures} action${failures === 1 ? '' : 's'}`;
+  const title = completed ? 'Recovered during task' : 'Earlier failed actions';
   const copy = completed
-    ? `${callLabel} failed earlier, but the work session later completed. The failures remain visible in Activity as history.`
-    : `${callLabel} failed earlier. They remain visible in Activity as history and do not override the session's current state.`;
+    ? `${callLabel} failed earlier, but the task later completed. The failures remain visible in Activity.`
+    : `${callLabel} failed earlier. They remain visible in Activity and do not change the task's current status.`;
   return `<section class="task-detail-section task-detail-history"><h3>${esc(title)}</h3><p>${esc(copy)}</p></section>`;
 }
 

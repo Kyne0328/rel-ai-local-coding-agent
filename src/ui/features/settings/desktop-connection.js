@@ -9,9 +9,9 @@ let savedState = '';
 
 export function mountDesktopConnection(container) {
   container.id = 'connectionControls';
-  container.innerHTML = '<div class="settings-loading">Loading secure tunnel controls…</div>';
+  container.innerHTML = '<div class="settings-loading">Loading connection settings…</div>';
   if (!window.relaiDesktop?.getSettings || !window.relaiDesktop?.saveSettings) {
-    container.innerHTML = '<div class="empty">Secure tunnel controls are available inside the installed Rel.AI desktop app.</div>';
+    container.innerHTML = '<div class="empty">Connection settings are available inside the installed Rel.AI desktop app.</div>';
     return;
   }
   return loadAndRender(container);
@@ -30,17 +30,17 @@ async function loadAndRender(container) {
     markUnsaved(container, false);
     render(container);
   } catch (error) {
-    container.innerHTML = `<div class="empty">Secure tunnel controls could not be loaded: ${escapeHtml(messageOf(error))}</div>`;
+    container.innerHTML = `<div class="empty">Connection settings could not be loaded: ${escapeHtml(messageOf(error))}</div>`;
   }
 }
 
 function render(container) {
   container.innerHTML = '';
-  container.appendChild(header('OpenAI Secure MCP Tunnel', 'Rel.AI uses one private ChatGPT transport while repository access and tool execution stay on this computer.'));
-  const connection = panel('Tunnel settings');
+  container.appendChild(header('ChatGPT connection', 'Rel.AI connects ChatGPT to your project files while file access and commands stay on this computer.'));
+  const connection = panel('Connection settings');
   connection.el.id = 'tunnelSettings';
-  connection.body.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI tunnel identifier associated with this computer.'));
-  connection.body.appendChild(field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste tunnel runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key is encrypted locally and is never returned to this page.' : 'Create a runtime key for the tunnel in OpenAI Platform.'));
+  connection.body.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI Secure MCP Tunnel ID for this computer.'));
+  connection.body.appendChild(field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.'));
   const advanced = document.createElement('details');
   advanced.className = 'settings-advanced connection-advanced-settings';
   advanced.innerHTML = '<summary>Advanced local settings</summary>';
@@ -53,7 +53,7 @@ function render(container) {
 
   const footer = document.createElement('div');
   footer.className = 'settings-save-row';
-  footer.innerHTML = '<div class="muted">Saving restarts the local MCP service and Secure MCP Tunnel.</div>';
+  footer.innerHTML = '<div class="muted">Saving restarts the local Rel.AI connection.</div>';
   const save = button('Save and restart connection', 'primary', () => saveSettings(container, save));
   footer.appendChild(save);
   container.appendChild(footer);
@@ -70,7 +70,7 @@ async function saveSettings(container, saveButton) {
     state.tunnelApiKey = '';
     state.tunnelApiKeyConfigured = true;
     markUnsaved(container, false);
-    toast('Secure tunnel settings saved. The connection restarted.', { variant: 'success' });
+    toast('Connection settings saved. Rel.AI reconnected.', { variant: 'success' });
     requestDashboardRefresh({ structural: true });
   } catch (error) {
     toast(messageOf(error), { variant: 'error' });
@@ -82,8 +82,8 @@ async function saveSettings(container, saveButton) {
 function validate() {
   if (!Number.isInteger(state.port) || state.port < 1024 || state.port > 65535) return 'Enter a local connection port from 1024 to 65535.';
   if (!/^tunnel_[A-Za-z0-9_-]{8,200}$/.test(state.tunnelId)) return 'Enter a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.';
-  if (!state.tunnelApiKeyConfigured && !state.tunnelApiKey) return 'Enter the OpenAI tunnel runtime API key.';
-  if (state.tunnelApiKey && (state.tunnelApiKey.length < 12 || /\s/.test(state.tunnelApiKey))) return 'Enter a valid OpenAI tunnel runtime API key with no spaces.';
+  if (!state.tunnelApiKeyConfigured && !state.tunnelApiKey) return 'Enter the OpenAI Secure MCP Tunnel runtime API key.';
+  if (state.tunnelApiKey && (state.tunnelApiKey.length < 12 || /\s/.test(state.tunnelApiKey))) return 'Enter a valid runtime API key with no spaces.';
   return '';
 }
 

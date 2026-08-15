@@ -18,8 +18,8 @@ const usageRange = read('src/ui/features/usage/range-model.js');
 const usageData = read('src/ui/features/usage/data.js');
 const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageData}`;
 
-assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Analytics['"]/);
-assert.match(navigationCatalog, /local activity, tool usage, and workspace trends/i);
+assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
+assert.match(navigationCatalog, /See how Rel\.AI is used and where problems happen/i);
 assert.match(dashboard, /usage: element => mountSystemRoute\(element, ['"]usage['"]\)/);
 assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.doesNotMatch(preload, /getGatewayUsage|desktop:gateway:usage/);
@@ -29,33 +29,32 @@ assert.doesNotMatch(ipc, /gateway/i);
 assert.match(usageData, /desktop\.getLocalUsage/);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
-assert.match(usageSource, /Local activity only\. Prompts, paths, command output, and tool results are not stored/i);
+assert.match(usageSource, /Usage is stored on this computer\. Prompts, file paths, command output, and action results are not stored/i);
 assert.match(usageSource, /import \{ esc as escapeHtml \} from '\.\.\/\.\.\/utils\.js'/);
 assert.doesNotMatch(usageSource, /function escapeHtml\(/);
 assert.match(usageRender, /import \{ esc \} from '\.\.\/\.\.\/utils\.js'/);
 assert.doesNotMatch(usageRender, /function esc\(/);
 assert.match(usageSource, /data-usage-status role="status" aria-live="polite" aria-atomic="true"/);
 assert.doesNotMatch(usageSource, /data-usage-content aria-live=/);
-assert.match(usageSource, /Analytics updated for \$\{bounds\.label\}/);
+assert.match(usageSource, /Usage updated for \$\{bounds\.label\}/);
 assert.match(usageRender, /aria-pressed="\$\{i \? 'false' : 'true'\}"/);
 assert.match(usageRender, /setAttribute\('aria-pressed', String\(active\)\)/);
 assert.match(usageRender, /Overall trend \$\{trend\}/, 'Analytics charts must expose the computed trend to assistive technology');
 assert.match(usageRender, /Peak \$\{formatChartValue\(peak, metricLabel\)\}/, 'Analytics charts must expose the peak value to assistive technology');
 
-for (const label of ['Actions', 'Reliable calls', 'System errors', 'Retryable problems', 'Successful actions', 'Average time']) {
-  assert.match(usageCombined, new RegExp(label), `Analytics must render ${label}.`);
+for (const label of ['Actions', 'Reliable actions', 'System errors', 'Retryable problems', 'Successful actions', 'Average time']) {
+  assert.match(usageCombined, new RegExp(label), `Usage must render ${label}.`);
 }
 for (const field of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) {
   assert.match(usageCombined, new RegExp(`\\b${field}\\b`), `Analytics must consume ${field}.`);
 }
-assert.match(usageSource, /Analytics unavailable/);
+assert.match(usageSource, /Usage unavailable/);
 assert.match(usageSource, /Retry/);
 assert.match(usageSource, /Refresh/);
 assert.match(usageRender, /operationSuccessRate/);
 assert.match(usageRender, /recoverableFailures/);
-assert.match(usageCombined, /Failure categories/);
-assert.match(usageCombined, /Raw error messages are not stored/);
-assert.doesNotMatch(usageRender, /Retryable errors|Completed successfully/);
+assert.match(usageCombined, /What went wrong/);
+assert.match(usageCombined, /Detailed error messages are not stored/);
 assert.doesNotMatch(usageRender, /Trend starts now|Completed outcomes|Workspace position|usage-fact-strip|<h3>Outcomes<\/h3>/);
 
 const snapshot = buildUsageModel({
@@ -73,7 +72,7 @@ assert.equal(snapshot.totals.toolCalls, 5);
 assert.equal(snapshot.tools[0].tool, 'relai_read');
 assert.deepEqual(snapshot.failureCategories, [{ category: 'runtime', failures: 1 }]);
 assert.equal(currentUsageMonth(new Date('2026-08-08T00:00:00.000Z')), '2026-08');
-assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Analytics unavailable|invalid requests/);
+assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Usage is unavailable|invalid value/);
 
 const bounds = analyticsBounds('24h', { now: new Date('2026-08-08T12:00:00.000Z') });
 assert.equal(bounds.start.toISOString(), '2026-08-07T12:00:00.000Z');

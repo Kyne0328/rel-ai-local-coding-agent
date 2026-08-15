@@ -22,7 +22,7 @@ const GROUP_KEYS = Object.freeze(['toolCalls', 'successes', 'failures', 'executi
 
 export function analyticsBounds(range = '24h', { now = new Date(), customStart = '', customEnd = '' } = {}) {
   const endNow = new Date(now);
-  if (!Number.isFinite(endNow.getTime())) throw new Error('Analytics range has an invalid current time.');
+  if (!Number.isFinite(endNow.getTime())) throw new Error('The selected Usage range has an invalid time.');
   let start;
   let end = endNow;
   if (range === 'month') {
@@ -59,9 +59,9 @@ export function analyticsMonths(bounds) {
 }
 
 export function normalizeUsageSnapshot(snapshot, requestedMonth = '') {
-  if (!snapshot || typeof snapshot !== 'object' || snapshot.ok === false) throw new Error(String(snapshot?.error || 'Analytics unavailable.'));
+  if (!snapshot || typeof snapshot !== 'object' || snapshot.ok === false) throw new Error(String(snapshot?.error || 'Usage unavailable.'));
   const month = normalizeMonth(snapshot.month || requestedMonth);
-  if (!month) throw new Error('Analytics unavailable for the selected month.');
+  if (!month) throw new Error('Usage is unavailable for the selected month.');
   return {
     source: snapshot.source === 'local' ? 'local' : 'cloud',
     month,
@@ -130,7 +130,7 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
   return {
     source: all.length && all.every(model => model.source === 'local') ? 'local' : 'cloud',
     kind: workspace ? 'workspace' : 'all',
-    label: workspace || 'All workspaces',
+    label: workspace || 'All projects',
     workspace,
     deviceId,
     ...totals,
@@ -173,7 +173,7 @@ export function workspaceOptions(models) {
 }
 
 function normalizeTotals(value) {
-  if (!value || typeof value !== 'object') throw new Error('Analytics unavailable: monthly totals were not returned.');
+  if (!value || typeof value !== 'object') throw new Error('Usage is unavailable because monthly totals were not returned.');
   const result = {};
   for (const key of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) result[key] = exactNumber(value[key], key);
   return { ...result, ...normalizeReliability(value, 'totals') };
@@ -337,6 +337,6 @@ function optionalNumber(value, fallback, field) {
 
 function exactNumber(value, field) {
   const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) throw new Error(`Analytics unavailable: invalid ${field} value.`);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`Usage is unavailable because ${field} has an invalid value.`);
   return number;
 }

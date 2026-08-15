@@ -28,13 +28,13 @@ function renderPathStatus(element, info) {
   if (!info) { element.textContent = ''; return; }
   const errorFinding = (info.findings || []).find(finding => finding.severity === 'error');
   if (info.isGit) {
-    element.textContent = 'Git repository found. Rel.AI will detect available validation commands automatically.';
+    element.textContent = 'Git project found. Rel.AI will find available checks automatically.';
     element.classList.add('success');
   } else if (info.exists && info.isDirectory) {
-    element.textContent = 'This folder exists but is not a Git repository. It can still be added.';
+    element.textContent = 'This folder is not using Git, but you can still add it.';
     element.classList.add('warn');
   } else if (errorFinding) {
-    element.textContent = `${errorFinding.message} You can save this path before cloning the repository.`;
+    element.textContent = `${errorFinding.message} You can save this folder before cloning the project.`;
     element.classList.add('warn');
   } else {
     element.textContent = '';

@@ -2,7 +2,7 @@ import { esc as escapeHtml } from '../../utils.js';
 
 export function chatGptFirstPrompt(workspaceAlias = 'myapp') {
   const alias = String(workspaceAlias || 'myapp').trim() || 'myapp';
-  return `Use Rel.AI MCP on workspace "${alias.replaceAll('"', '\\"')}". Start a work session, snapshot the selected workspace, and inspect its repository structure. Do not modify files yet.`;
+  return `Use Rel.AI MCP with project "${alias.replaceAll('"', '\\"')}". Look through its files and folders and summarize the project structure. Do not change any files yet.`;
 }
 
 export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
@@ -18,10 +18,10 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
   }
   return [
     'In OpenAI Platform, create or select a Secure MCP Tunnel under Organization settings → Tunnels and copy its tunnel_ ID.',
-    'Under Organization settings → API Keys, create a restricted runtime key with Tunnel Read and Use permissions.',
-    'Save the Tunnel ID and runtime key in Rel.AI Connection settings, then keep Rel.AI running until the tunnel reports Connected.',
+    'Under Organization settings → API Keys, create an API key for the tunnel with Tunnel Read and Use permissions.',
+    'Save the Tunnel ID and API key in Rel.AI Connection settings, then keep Rel.AI running until the connection shows Connected.',
     tunnel ? `In ChatGPT, create/add Rel.AI MCP with Connection set to Tunnel, select ${tunnel}, and set Authentication to No authentication.` : 'In ChatGPT, create/add Rel.AI MCP with Connection set to Tunnel, select this computer’s tunnel, and set Authentication to No authentication.',
-    'Enable Rel.AI MCP in the chat, then send the safe first request below.'
+    'Enable Rel.AI MCP in the chat, then send the first test request below.'
   ];
 }
 
@@ -32,8 +32,8 @@ export function createChatGptSetupGuide(options = {}) {
   const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Connect ChatGPT';
   const steps = chatGptGuideSteps({ mode, tunnelId: options.tunnelId });
   guide.innerHTML = `
-    <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI handles the local bearer credential.</span></div>
+    <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI keeps the local connection private.</span></div>
     <ol>${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
-    <div class="chatgpt-first-prompt"><span>Safe first request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
+    <div class="chatgpt-first-prompt"><span>First test request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
   return guide;
 }

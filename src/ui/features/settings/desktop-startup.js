@@ -3,7 +3,7 @@ import { panel, field, toggleControl } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 
 export function desktopStartupPanel(lifecycle) {
-  const startup = panel('Startup and recovery');
+  const startup = panel('Startup');
   startup.el.classList.add('desktop-startup-panel');
   startup.body.setAttribute('aria-live', 'polite');
   if (!lifecycle) {
@@ -24,7 +24,7 @@ export function desktopStartupPanel(lifecycle) {
     'Launch Rel.AI at sign-in',
     toggle,
     launchAtLogin.supported
-      ? 'Starts the installed app in the background so the tray and local service are ready after Windows sign-in.'
+      ? 'Starts Rel.AI in the background after you sign in to Windows so it is ready when you need it.'
       : launchAtLogin.reason || 'This build cannot register itself for Windows sign-in.'
   ));
 
@@ -38,8 +38,8 @@ export function desktopStartupPanel(lifecycle) {
   if (lifecycle.recoveredAfterUncleanShutdown) {
     startup.body.appendChild(notice(
       'warn',
-      'Recovered after an interrupted exit',
-      'The previous desktop process did not record a clean shutdown. Rel.AI preserved its configuration and started normally; review Diagnostics only if the interruption repeats.'
+      'Rel.AI recovered after closing unexpectedly',
+      'Rel.AI did not close normally last time, but your settings were kept and the app started normally. Open Troubleshooting only if this keeps happening.'
     ));
   }
   return startup;

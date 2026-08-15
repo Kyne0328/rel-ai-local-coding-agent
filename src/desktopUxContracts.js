@@ -2,10 +2,10 @@
 
 const TERMINOLOGY = Object.freeze({
   connection: 'Connection',
-  sessions: 'Sessions',
+  sessions: 'Tasks',
   activity: 'Activity',
-  tools: 'Tools',
-  workspace: 'Workspace'
+  tools: 'ChatGPT tools',
+  workspace: 'Project'
 });
 
 const ERROR_CODES = Object.freeze({
@@ -34,28 +34,28 @@ const ERROR_CODES = Object.freeze({
 });
 
 const ERROR_GUIDANCE = Object.freeze({
-  [ERROR_CODES.UNKNOWN]: Object.freeze({ title: 'Unexpected error', recovery: 'Retry the action. Open Diagnostics if the problem continues.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
+  [ERROR_CODES.UNKNOWN]: Object.freeze({ title: 'Something went wrong', recovery: 'Try the action again. Open Troubleshooting if the problem continues.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
   [ERROR_CODES.REQUEST_INVALID]: Object.freeze({ title: 'Request could not be read', recovery: 'Check the submitted values and try again.', actionLabel: 'Review the form', href: '', retryable: true }),
-  [ERROR_CODES.CONFIGURATION_INVALID]: Object.freeze({ title: 'Configuration needs attention', recovery: 'Review Connection settings and correct the invalid value.', actionLabel: 'Open Connection settings', href: '#connection', retryable: true }),
-  [ERROR_CODES.LOCAL_SERVICE_START_FAILED]: Object.freeze({ title: 'Connection service could not start', recovery: 'Open Diagnostics, review the service error, and retry after correcting the cause.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
-  [ERROR_CODES.LOCAL_SERVICE_STOP_FAILED]: Object.freeze({ title: 'Connection service could not stop', recovery: 'Retry once. Restart the desktop app if the process remains active.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
+  [ERROR_CODES.CONFIGURATION_INVALID]: Object.freeze({ title: 'Connection settings need attention', recovery: 'Open Connection settings, fix the highlighted value, and try again.', actionLabel: 'Open Connection settings', href: '#connection', retryable: true }),
+  [ERROR_CODES.LOCAL_SERVICE_START_FAILED]: Object.freeze({ title: 'Rel.AI could not start', recovery: 'Open Troubleshooting, review the error, fix the problem, and try again.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
+  [ERROR_CODES.LOCAL_SERVICE_STOP_FAILED]: Object.freeze({ title: 'Rel.AI could not stop', recovery: 'Try again. Restart the app if Rel.AI is still running.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
   [ERROR_CODES.LOCAL_PORT_IN_USE]: Object.freeze({ title: 'Connection port is already in use', recovery: 'Choose another connection port or stop the process using the configured port.', actionLabel: 'Open Connection settings', href: '#connection', retryable: true }),
-  [ERROR_CODES.SECURE_TUNNEL_FAILED]: Object.freeze({ title: 'Secure tunnel could not start', recovery: 'Review the OpenAI tunnel ID and runtime API key, then restart the connection.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
-  [ERROR_CODES.PUBLIC_ENDPOINT_FAILED]: Object.freeze({ title: 'Secure endpoint could not start', recovery: 'Review the OpenAI Secure MCP Tunnel settings, then restart the connection.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
-  [ERROR_CODES.DASHBOARD_UNAVAILABLE]: Object.freeze({ title: 'Dashboard is unavailable', recovery: 'Retry opening the dashboard. Use the recovery fallback only when the dashboard still cannot load.', actionLabel: 'Retry dashboard', href: '#home', retryable: true }),
-  [ERROR_CODES.WORKSPACE_UNAVAILABLE]: Object.freeze({ title: 'Workspace is unavailable', recovery: 'Correct the workspace path or remove the obsolete workspace entry.', actionLabel: 'Open Workspaces', href: '#workspaces', retryable: true }),
+  [ERROR_CODES.SECURE_TUNNEL_FAILED]: Object.freeze({ title: 'Secure MCP Tunnel could not start', recovery: 'Check the OpenAI Tunnel ID and runtime API key, then reconnect.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.PUBLIC_ENDPOINT_FAILED]: Object.freeze({ title: 'Secure MCP Tunnel could not start', recovery: 'Check the OpenAI Secure MCP Tunnel settings, then reconnect.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.DASHBOARD_UNAVAILABLE]: Object.freeze({ title: 'Dashboard is unavailable', recovery: 'Try opening the dashboard again. Use the backup connection window only if it still does not load.', actionLabel: 'Retry dashboard', href: '#home', retryable: true }),
+  [ERROR_CODES.WORKSPACE_UNAVAILABLE]: Object.freeze({ title: 'Project is unavailable', recovery: 'Fix the project folder or remove the project if you no longer use it.', actionLabel: 'Open Projects', href: '#workspaces', retryable: true }),
   [ERROR_CODES.SETTINGS_SAVE_FAILED]: Object.freeze({ title: 'Settings could not be saved', recovery: 'Review the changed values and retry. Existing saved settings were preserved.', actionLabel: 'Open Settings', href: '#settings', retryable: true }),
-  [ERROR_CODES.DIAGNOSTICS_UNAVAILABLE]: Object.freeze({ title: 'Diagnostics are unavailable', recovery: 'Refresh the dashboard. Restart the connection service if diagnostics still cannot load.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
-  [ERROR_CODES.DIAGNOSTICS_EXPORT_FAILED]: Object.freeze({ title: 'Diagnostic report could not be copied', recovery: 'Retry the copy action or review the report directly on this page.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
-  [ERROR_CODES.STATE_RESET_FAILED]: Object.freeze({ title: 'Stored diagnostic data could not be cleared', recovery: 'Stop active Rel.AI calls and retry the selected reset action.', actionLabel: 'Open Activity', href: '#activity', retryable: true }),
-  [ERROR_CODES.UPDATE_FAILED]: Object.freeze({ title: 'Update failed', recovery: 'Keep the current version and retry the update later.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
-  [ERROR_CODES.UPDATE_NOT_SUPPORTED]: Object.freeze({ title: 'Automatic updates are unavailable', recovery: 'Use the installed Windows app or download the current build from GitHub Releases.', actionLabel: 'Open Application settings', href: '#settings', retryable: false }),
-  [ERROR_CODES.UPDATE_BUSY]: Object.freeze({ title: 'Update action is already running', recovery: 'Wait for the current check, download, or installation step to finish.', actionLabel: 'Open Application settings', href: '#settings', retryable: true }),
-  [ERROR_CODES.UPDATE_INSTALL_BLOCKED]: Object.freeze({ title: 'Update restart is waiting', recovery: 'Let active Rel.AI tool calls finish, then restart to install the downloaded update.', actionLabel: 'Open Sessions', href: '#tasks', retryable: true }),
-  [ERROR_CODES.UPDATE_REQUIRED]: Object.freeze({ title: 'Update required', recovery: 'Install a supported Rel.AI MCP version before starting more MCP work.', actionLabel: 'Open Application settings', href: '#settings', retryable: false }),
-  [ERROR_CODES.STARTUP_SETTING_NOT_SUPPORTED]: Object.freeze({ title: 'Launch at sign-in is unavailable', recovery: 'Use the installed Windows app. Portable and browser builds cannot register a startup entry.', actionLabel: 'Open Application settings', href: '#settings', retryable: false }),
-  [ERROR_CODES.STARTUP_SETTING_FAILED]: Object.freeze({ title: 'Launch at sign-in could not be changed', recovery: 'Retry from Application settings or review Windows startup-app permissions.', actionLabel: 'Open Application settings', href: '#settings', retryable: true }),
-  [ERROR_CODES.LIFECYCLE_STATE_FAILED]: Object.freeze({ title: 'Desktop lifecycle state could not be saved', recovery: 'Rel.AI can continue running, but update and recovery history may be incomplete. Review Diagnostics if this repeats.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true })
+  [ERROR_CODES.DIAGNOSTICS_UNAVAILABLE]: Object.freeze({ title: 'Troubleshooting info is unavailable', recovery: 'Refresh the dashboard. Restart Rel.AI if the troubleshooting page still does not load.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.DIAGNOSTICS_EXPORT_FAILED]: Object.freeze({ title: 'Support report could not be copied', recovery: 'Try copying it again or review the report on this page.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
+  [ERROR_CODES.STATE_RESET_FAILED]: Object.freeze({ title: 'Saved troubleshooting data could not be cleared', recovery: 'Wait for active Rel.AI actions to finish, then try again.', actionLabel: 'Open Activity', href: '#activity', retryable: true }),
+  [ERROR_CODES.UPDATE_FAILED]: Object.freeze({ title: 'Update failed', recovery: 'Keep the current version and retry the update later.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
+  [ERROR_CODES.UPDATE_NOT_SUPPORTED]: Object.freeze({ title: 'Automatic updates are unavailable', recovery: 'Use the installed Windows app or download the current version from GitHub Releases.', actionLabel: 'Open App settings', href: '#settings', retryable: false }),
+  [ERROR_CODES.UPDATE_BUSY]: Object.freeze({ title: 'An update is already in progress', recovery: 'Wait for the current check, download, or installation to finish.', actionLabel: 'Open App settings', href: '#settings', retryable: true }),
+  [ERROR_CODES.UPDATE_INSTALL_BLOCKED]: Object.freeze({ title: 'Update is ready to restart', recovery: 'Let active Rel.AI actions finish, then restart to install the update.', actionLabel: 'Open Tasks', href: '#tasks', retryable: true }),
+  [ERROR_CODES.UPDATE_REQUIRED]: Object.freeze({ title: 'Update required', recovery: 'Install a supported Rel.AI version before starting more tasks.', actionLabel: 'Open App settings', href: '#settings', retryable: false }),
+  [ERROR_CODES.STARTUP_SETTING_NOT_SUPPORTED]: Object.freeze({ title: 'Launch at sign-in is unavailable', recovery: 'Use the installed Windows app. Portable and browser versions cannot start automatically with Windows.', actionLabel: 'Open App settings', href: '#settings', retryable: false }),
+  [ERROR_CODES.STARTUP_SETTING_FAILED]: Object.freeze({ title: 'Launch at sign-in could not be changed', recovery: 'Try again from App settings or check Windows startup-app permissions.', actionLabel: 'Open App settings', href: '#settings', retryable: true }),
+  [ERROR_CODES.LIFECYCLE_STATE_FAILED]: Object.freeze({ title: 'App status could not be saved', recovery: 'Rel.AI can keep running, but some update or recovery history may be missing. Open Troubleshooting if this happens again.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true })
 });
 
 const CONNECTION_STATE_VALUES = Object.freeze({

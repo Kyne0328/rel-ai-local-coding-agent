@@ -25,24 +25,24 @@ function createDesktopTray(deps) {
     if (!tray) return;
     const status = getStatus();
     const menu = Menu.buildFromTemplate([
-      { label: status.serverRunning ? 'Service: running' : 'Service: stopped', enabled: false },
-      { label: `Tunnel: ${status.tunnelStatus || 'stopped'}`, enabled: false },
+      { label: status.serverRunning ? 'Rel.AI: running' : 'Rel.AI: stopped', enabled: false },
+      { label: `Connection: ${status.tunnelStatus || 'stopped'}`, enabled: false },
       { type: 'separator' },
       { label: 'Open Dashboard', click: () => void openDashboard().catch(onError) },
       {
-        label: 'Copy MCP endpoint',
+        label: 'Copy local connection address',
         enabled: Boolean(status.mcpUrl),
         click: () => { if (status.mcpUrl) clipboard.writeText(status.mcpUrl); }
       },
       {
-        label: status.serverRunning ? 'Stop Service' : 'Start Service',
+        label: status.serverRunning ? 'Stop Rel.AI' : 'Start Rel.AI',
         click: () => status.serverRunning
           ? void Promise.resolve(stopServer()).catch(onError)
           : void startServer().catch(onError)
       },
       { type: 'separator' },
       updateMenuItem(),
-      { label: 'Diagnostics', click: () => void openDiagnostics().catch(onError) },
+      { label: 'Troubleshooting', click: () => void openDiagnostics().catch(onError) },
       { label: 'Settings', click: () => void openSettings().catch(onError) },
       { type: 'separator' },
       { label: 'Quit Rel.AI MCP', click: quit }
@@ -59,7 +59,7 @@ function createDesktopTray(deps) {
     if (status.state === 'downloaded') return { label: `Restart to install${version}`, click: () => runUpdateAction(installUpdate) };
     if (status.state === 'available') return { label: `Download update${version}`, click: () => runUpdateAction(downloadUpdate) };
     if (status.state === 'unsupported') return { label: 'Updates require the installed app', enabled: false };
-    return { label: 'Check for Updates', click: () => runUpdateAction(checkForUpdates) };
+    return { label: 'Check for updates', click: () => runUpdateAction(checkForUpdates) };
   }
 
   function runUpdateAction(action) {

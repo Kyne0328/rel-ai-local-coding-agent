@@ -73,8 +73,8 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Status filter"]')?.click()`);
     await waitFor(win, `!document.querySelector('#__activity-filter-bar [aria-label^="Remove Status filter"]') && !location.hash.includes('status=')`);
     await win.webContents.executeJavaScript(`location.hash = '#activity?task=acceptance-failed'`);
-    await waitFor(win, `document.querySelector('#__activity-filter-bar [aria-label^="Remove Session filter"]')`);
-    const taskChip = await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Session filter"]')?.getAttribute('aria-label') || ''`);
+    await waitFor(win, `document.querySelector('#__activity-filter-bar [aria-label^="Remove Task filter"]')`);
+    const taskChip = await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Task filter"]')?.getAttribute('aria-label') || ''`);
     await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar .filter-clear-button')?.click()`);
     await waitFor(win, `document.querySelectorAll('#__activity-filter-bar .filter-chip').length === 0 && !location.hash.includes('?')`);
 
@@ -185,7 +185,7 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#settings'`);
-    await waitFor(win, `document.querySelector('.settings-content select')`);
+    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 3 && document.querySelector('.settings-content select')`);
     const settings = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const order = [...document.querySelectorAll('.settings-nav-button')].map(button => button.textContent.trim());
@@ -223,7 +223,7 @@ app.whenReady().then(async () => {
       const validationMetricRemoved = !document.querySelector('.summary-metrics')?.textContent.includes('Validation ready');
       const detailsTrigger = document.querySelector('[data-repository-details]');
       detailsTrigger?.click();
-      const detailsModal = await waitUntil(() => document.querySelector('#__relai-modal-title')?.textContent.includes('Repository details'));
+      const detailsModal = await waitUntil(() => document.querySelector('#__relai-modal-title')?.textContent.includes('Project details'));
       const detailsInlineVisible = Boolean(document.querySelector('.workspace-details:not([hidden])'));
       document.getElementById('__relai-modal-backdrop')?.click();
       location.hash = '#tasks';
@@ -244,8 +244,8 @@ app.whenReady().then(async () => {
       primaryLabel: document.querySelector('.connection-primary-action')?.textContent.trim() || '',
       primaryTag: document.querySelector('.connection-primary-action > a, .connection-primary-action > button')?.tagName || '',
       detailsDisclosure: Boolean(document.querySelector('.connection-layer-disclosure')),
-      navigationLabels: [...document.querySelectorAll('nav[aria-label]')].map(nav => nav.getAttribute('aria-label'))
       technicalDetailsRemoved: !document.querySelector('.connector-technical-details') && !document.body.innerText.includes('Bounded synchronous fallback'),
+      navigationLabels: [...document.querySelectorAll('nav[aria-label]')].map(nav => nav.getAttribute('aria-label'))
     }))()`);
 
     const usage = await win.webContents.executeJavaScript(`(async () => {
@@ -267,7 +267,7 @@ app.whenReady().then(async () => {
       while (!document.querySelector('.usage-overview') && Date.now() - started < 4000) await delay(50);
       const result = {
         overviewVisible: Boolean(document.querySelector('.usage-overview')),
-        localAggregate: /Local activity only/.test(document.querySelector('[data-usage-page]')?.textContent || ''),
+        localAggregate: /Usage is stored on this computer/.test(document.querySelector('[data-usage-page]')?.textContent || ''),
         modalVisible: Boolean(document.querySelector('#__relai-modal-title')),
         inlineUnavailable: Boolean(document.querySelector('.usage-unavailable'))
       };

@@ -103,8 +103,8 @@ const attention = buildAttention(
   ''
 );
 assert.deepEqual(attention.map(item => item.title), [
-  'Diagnostics need review',
-  'Validation is incomplete'
+  'Problems need attention',
+  'Checks are not set up'
 ]);
 assert.equal(attention[0].tone, 'bad');
 assert.equal(Object.hasOwn(attention[0], 'priority'), false);

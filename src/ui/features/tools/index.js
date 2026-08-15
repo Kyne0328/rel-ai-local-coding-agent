@@ -31,8 +31,8 @@ export function mountTools(container) {
     <div class="section tools-section">
       <div class="section-head">
         <div>
-          <h2>Tools</h2>
-          <p>Browse the Rel.AI capabilities available to ChatGPT for inspection, editing, validation, Git work, and recovery.</p>
+          <h2>ChatGPT tools</h2>
+          <p>See the actions ChatGPT can ask Rel.AI to use for reading files, making changes, running checks, using Git, and fixing problems.</p>
         </div>
         <span class="section-action" id="toolsCount">Loading…</span>
       </div>

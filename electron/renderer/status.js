@@ -28,15 +28,15 @@ function connectionView(status) {
   if (status.serverRunning && status.tunnelStatus === 'running') {
     return {
       key: 'ready', badge: 'Ready', eyebrow: 'Connection ready',
-      title: 'ChatGPT can work on your repositories.',
-      description: 'Rel.AI local coding tools and the OpenAI Secure MCP Tunnel are ready. Use them from ChatGPT web; Rel.AI reports exact tool activity but cannot observe private reasoning or infer overall chat completion.'
+      title: 'Secure MCP Tunnel is ready.',
+      description: 'Rel.AI is running and the tunnel is connected. Keep Rel.AI running while ChatGPT uses this computer.'
     };
   }
   if (status.serverRunning && status.tunnelStatus === 'connecting') {
     return {
-      key: 'connecting', badge: 'Connecting', eyebrow: 'Secure connection',
-      title: 'Connecting OpenAI Secure MCP Tunnel…',
-      description: 'The local service is running while Rel.AI establishes the outbound tunnel.'
+      key: 'connecting', badge: 'Connecting', eyebrow: 'Secure MCP Tunnel',
+      title: 'Starting Secure MCP Tunnel…',
+      description: 'Rel.AI is connecting this computer to OpenAI.'
     };
   }
   if (status.error || status.tunnelStatus === 'failed') {
@@ -47,9 +47,9 @@ function connectionView(status) {
     };
   }
   return {
-    key: 'stopped', badge: 'Stopped', eyebrow: 'Service stopped',
+    key: 'stopped', badge: 'Stopped', eyebrow: 'Rel.AI stopped',
     title: 'Rel.AI is not running.',
-    description: 'Start the service to make your configured workspaces available to ChatGPT.'
+    description: 'Start Rel.AI to make your projects available to ChatGPT.'
   };
 }
 
@@ -63,12 +63,12 @@ function heroView(status) {
 
 function workingHero(activity, taskCount) {
   const title = taskCount > 1
-    ? `${activity.activeCalls || taskCount} Rel.AI tool calls are running.`
+    ? `${activity.activeCalls || taskCount} Rel.AI actions are running.`
     : activity.operation || toolLabel(activity.tool);
   return {
     key: 'working',
     badge: `${activity.activeCalls || taskCount} running`,
-    eyebrow: 'Observed Rel.AI activity',
+    eyebrow: 'Current task',
     title,
     description: activityDescription(activity, false)
   };
@@ -78,8 +78,8 @@ function waitingHero(activity, taskCount) {
   return {
     key: 'waiting',
     badge: `${taskCount} waiting`,
-    eyebrow: 'Observed Rel.AI activity',
-    title: 'No Rel.AI tool call is active.',
+    eyebrow: 'Current task',
+    title: 'Rel.AI is waiting.',
     description: activityDescription(activity, true)
   };
 }
@@ -89,16 +89,16 @@ function activityDescription(activity, waiting) {
   const taskCount = Number(activity.activeTaskCount || tasks.length || 1);
   const activeCalls = Number(activity.activeCalls || 0);
   const location = activityLocation(activity, tasks);
-  if (waiting) return 'ChatGPT may still be reasoning, waiting for approval, or already finished. Rel.AI cannot determine that from tool traffic alone.';
-  if (taskCount > 1) return `${activeCalls} ${pluralize(activeCalls, 'active tool call')} across ${location}. The computer stays awake while calls are running.`;
-  return `${activity.operation || toolLabel(activity.tool)} in ${location}. The computer stays awake until the tool call returns.`;
+  if (waiting) return 'ChatGPT may still be working, waiting for approval, or already finished. Rel.AI only knows when ChatGPT asks it to take an action.';
+  if (taskCount > 1) return `${activeCalls} ${pluralize(activeCalls, 'active action')} across ${location}. The computer stays awake while actions are running.`;
+  return `${activity.operation || toolLabel(activity.tool)} in ${location}. The computer stays awake until the action finishes.`;
 }
 
 function activityLocation(activity, tasks) {
   const workspaces = [...new Set(tasks.map(task => task.workspace).filter(Boolean))];
   if (workspaces.length === 1) return workspaces[0];
-  if (workspaces.length > 1) return `${workspaces.length} workspaces`;
-  return activity.workspace || 'configured workspaces';
+  if (workspaces.length > 1) return `${workspaces.length} projects`;
+  return activity.workspace || 'your projects';
 }
 
 function pluralize(count, singular) {
@@ -106,13 +106,13 @@ function pluralize(count, singular) {
 }
 
 function toolLabel(tool) {
-  if (tool === 'relai_exec') return 'Running a workspace command';
-  if (tool === 'relai_run_checks' || tool === 'relai_http_probe') return 'Validating changes';
+  if (tool === 'relai_exec') return 'Running a project command';
+  if (tool === 'relai_run_checks' || tool === 'relai_http_probe') return 'Checking changes';
   if (tool === 'relai_diff') return 'Reviewing changes';
   if (tool === 'relai_git_draft_pr') return 'Preparing pull request text';
   if (tool === 'relai_git_commit' || tool === 'relai_git_push') return 'Publishing changes';
   if (tool === 'relai_edit' || tool === 'relai_tidy_run' || tool === 'relai_restore_paths' || tool === 'relai_reset_workspace') return 'Applying changes';
-  return 'Inspecting the workspace';
+  return 'Looking through the project';
 }
 
 function updateUI(status) {
@@ -157,10 +157,10 @@ function renderTaskMeta() {
   const taskCount = Number(activity.activeTaskCount || tasks.length || 1);
   const activeCalls = Number(activity.activeCalls || 0);
   const calls = activity.state === 'working'
-    ? `${activeCalls} ${pluralize(activeCalls, 'active call')}`
-    : 'no active Rel.AI call';
+    ? `${activeCalls} ${pluralize(activeCalls, 'active action')}`
+    : 'no active action';
   const workspace = activityLocation(activity, tasks);
-  const taskLabel = `${taskCount} ${pluralize(taskCount, 'logical task')}`;
+  const taskLabel = `${taskCount} ${pluralize(taskCount, 'task')}`;
   element.innerHTML = `<span class="activity-pulse" aria-hidden="true"></span><strong>${escapeText(taskLabel)}</strong><span>${escapeText(workspace)}</span><span>${escapeText(calls)}</span><time id="taskElapsed"></time>`;
   renderTemporalText();
 }
@@ -175,8 +175,8 @@ function renderEndpoint(view) {
     endpoint.className = 'endpoint-box';
     copyButton.disabled = false;
   } else {
-    endpoint.textContent = 'Waiting for tunnel configuration…';
-    if (view.key === 'stopped') endpoint.textContent = 'Configure a Secure MCP Tunnel, then start the service.';
+    endpoint.textContent = 'Waiting for connection setup…';
+    if (view.key === 'stopped') endpoint.textContent = 'Set up the ChatGPT connection, then start Rel.AI.';
     endpoint.className = 'endpoint-box empty';
     copyButton.disabled = true;
   }
@@ -202,7 +202,7 @@ function publicHealthState(tunnelStatus) {
 
 function tunnelDetail(publicState, tunnelId) {
   if (publicState === 'ready' && tunnelId) return tunnelId;
-  if (publicState === 'connecting') return 'Connecting to OpenAI';
+  if (publicState === 'connecting') return 'Connecting Secure MCP Tunnel';
   return tunnelId || 'Not configured';
 }
 
@@ -220,22 +220,22 @@ function renderLastTask() {
   const completed = task.status === 'completed' && task.completionKnown === true;
   card.className = `app-card last-task-card ${failed ? 'attention' : 'completed'}`;
   let icon = '•';
-  let title = 'Last logical task is inactive';
+  let title = 'Last task is inactive';
   if (failed) {
     icon = '!';
-    title = 'Last logical task had a failed call';
+    title = 'Last task had a failed action';
   } else if (completed) {
     icon = '✓';
-    title = 'Task completion reported';
+    title = 'Task completed';
   }
   document.getElementById('lastTaskIcon').textContent = icon;
   document.getElementById('lastTaskTitle').textContent = title;
-  const workspace = task.workspace || 'workspace';
-  const calls = `${task.calls} tool call${task.calls === 1 ? '' : 's'}`;
+  const workspace = task.workspace || 'project';
+  const calls = `${task.calls} action${task.calls === 1 ? '' : 's'}`;
   const failures = failed ? ` · ${task.failures} failed` : '';
   const completion = completed
-    ? ` · ${task.summary || 'final validation passed'}`
-    : ' · overall ChatGPT completion not reported';
+    ? ` · ${task.summary || 'final checks passed'}`
+    : ' · ChatGPT did not report a final result';
   document.getElementById('lastTaskDetail').textContent = `${workspace} · ${calls}${failures}${completion} · ${formatDuration(task.durationMs)}`;
   renderTemporalText();
 }
@@ -243,12 +243,12 @@ function renderLastTask() {
 function renderError(view) {
   const failed = view.key === 'failed';
   document.getElementById('errorPanel').hidden = !failed;
-  document.getElementById('errorMessage').textContent = currentStatus.error || 'OpenAI Secure MCP Tunnel did not become ready.';
+  document.getElementById('errorMessage').textContent = currentStatus.error || 'The Secure MCP Tunnel did not become ready.';
 }
 
 function renderControls() {
   const toggle = document.getElementById('serverToggleBtn');
-  toggle.textContent = currentStatus.serverRunning ? 'Stop service' : 'Start service';
+  toggle.textContent = currentStatus.serverRunning ? 'Stop Rel.AI' : 'Start Rel.AI';
   toggle.className = currentStatus.serverRunning ? 'danger compact-control' : 'primary compact-control';
   document.getElementById('dashboardBtn').disabled = !currentStatus.serverRunning;
   document.getElementById('appVersion').textContent = currentStatus.version ? `v${currentStatus.version}` : '—';
@@ -372,7 +372,7 @@ function normalizeServiceLog(value) {
 function renderServiceLogs() {
   const element = document.getElementById('serviceLog');
   if (!element) return;
-  element.textContent = serviceLogs.length ? serviceLogs.map(formatServiceLog).join('\n') : 'No service logs recorded yet.';
+  element.textContent = serviceLogs.length ? serviceLogs.map(formatServiceLog).join('\n') : 'No app logs recorded yet.';
   requestWindowFit();
 }
 
