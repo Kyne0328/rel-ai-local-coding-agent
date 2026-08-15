@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { normalizeTaskProgress, sanitizeTaskRecord } from './taskObservability.js';
 const MAX_SESSIONS = 500;
+const TASK_HISTORY_VERSION = 3;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
 const MAX_PARSED_CACHE_ENTRIES = 2 * MAX_SESSIONS;
 const DIRECTORY_METADATA_RESCAN_MS = 5000;
@@ -61,9 +62,19 @@ function readSession(directory, id) {
   return metadata ? readCachedSession(file, metadata.identity) : null;
 }
 
-function normalizeStoredSession(session) {
-  const sanitized = sanitizeTaskRecord(session);
-  if (!sanitized) return sanitized;
+function normalizeStoredSession(session, { forWrite = false } = {}) {
+  if (!session || typeof session !== 'object') return null;
+  const id = String(session.id || '').trim();
+  if (!id) return null;
+  if (!forWrite) {
+    if (Number(session.version || 0) !== TASK_HISTORY_VERSION) return null;
+    if (String(session.taskId || '') !== id || String(session.sessionId || '') !== id) return null;
+  }
+  const current = forWrite
+    ? { ...session, id, taskId: id, sessionId: id, version: TASK_HISTORY_VERSION }
+    : session;
+  const sanitized = sanitizeTaskRecord(current);
+  if (!sanitized) return null;
   const resultSummary = sanitized.resultSummary
     || (sanitized.status === 'completed' ? sanitized.summary || '' : '');
   return {
@@ -75,7 +86,8 @@ function normalizeStoredSession(session) {
 
 function writeSession(directory, session) {
   if (!session?.id) return;
-  const sanitized = normalizeStoredSession(session);
+  const sanitized = normalizeStoredSession(session, { forWrite: true });
+  if (!sanitized) throw new Error('Task history writes require a current session record.');
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const target = sessionPath(directory, sanitized.id);
   writeJsonAtomic(target, sanitized, { mode: 0o600, spacing: 0 });
@@ -84,7 +96,8 @@ function writeSession(directory, session) {
 
 async function writeSessionAsync(directory, session) {
   if (!session?.id) return;
-  const sanitized = normalizeStoredSession(session);
+  const sanitized = normalizeStoredSession(session, { forWrite: true });
+  if (!sanitized) throw new Error('Task history writes require a current session record.');
   await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 });
   const target = sessionPath(directory, sanitized.id);
   await writeJsonAtomicAsync(target, sanitized, { mode: 0o600, spacing: 0, durable: false });
@@ -133,6 +146,7 @@ function readCachedSession(file, identity) {
     trimParsedCache();
   } else {
     parsedCache.delete(file);
+    if (parsed && typeof parsed === 'object') fs.rmSync(file, { force: true });
   }
   return session;
 }

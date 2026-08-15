@@ -38,14 +38,13 @@ try {
       ms: 5
     }));
   }
-  assert.equal(fs.existsSync(path.join(historyDir, 'legacy.json')), true, 'schema upgrades must preserve prior session data');
   assert.equal(fs.existsSync(path.join(sandbox, '.task-history-v3')), true, 'current history format marker must be created');
 
   let sessions = readTaskHistory(config, { state: 'idle' }, { limit: 500 });
-  assert.equal(sessions.length, 252);
+  assert.equal(sessions.length, 251);
   assert.equal(sessions[0].id, 'task-250');
-  assert.equal(sessions.some(session => session.id === 'legacy-task'), true, 'legacy records must remain readable with fallbacks');
-  assert.equal(sessions.find(session => session.id === 'legacy-task').title, 'Historical Rel.AI task');
+  assert.equal(sessions.some(session => session.id === 'legacy-task'), false, 'pre-current session records must not be interpreted');
+  assert.equal(fs.existsSync(path.join(historyDir, 'legacy.json')), false, 'pre-current session records must be removed on read');
 
   recordTaskHistoryEvent(config, currentEvent('exact-task', {
     ts: new Date(base + 300000).toISOString(), tool: 'validate.checks', validationStatus: 'passed'
@@ -200,4 +199,4 @@ try {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }
 
-console.log('Persistent task history preserves legacy data and stores exact current task IDs.');
+console.log('Persistent task history hard-cuts pre-current records and stores exact current task IDs.');
