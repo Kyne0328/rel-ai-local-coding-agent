@@ -149,7 +149,9 @@ function createToolActivityTracker(options = {}) {
         validationStatus: String(completion.validationStatus || 'passed'),
         validationLevel: String(completion.validationLevel || ''),
         validationAt: String(completion.validationAt || ''),
-        changedFiles: Array.isArray(completion.changedFiles) ? completion.changedFiles.map(String).filter(Boolean).slice(0, 200) : []
+        changedFiles: Array.isArray(completion.changedFiles) ? completion.changedFiles.map(String).filter(Boolean).slice(0, 200) : [],
+        residualChangedFiles: Array.isArray(completion.residualChangedFiles) ? completion.residualChangedFiles.map(String).filter(Boolean).slice(0, 200) : [],
+        residualState: String(completion.residualState || 'clean')
       };
       notify('completion_requested', task, {
         tool: operation.tool,
@@ -589,6 +591,8 @@ function createToolActivityTracker(options = {}) {
       validationLevel: completion.validationLevel,
       validationAt: completion.validationAt,
       changedFiles: completion.changedFiles,
+      residualChangedFiles: completion.residualChangedFiles,
+      residualState: completion.residualState,
       calls: task.calls,
       toolCallCount: task.calls,
       successfulToolCallCount: task.successes,
