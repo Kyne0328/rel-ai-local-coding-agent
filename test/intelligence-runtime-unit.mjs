@@ -12,7 +12,10 @@ import { repositoryIntelligence } from '../src/repository/intelligence/service.j
 const zoektSource = fs.readFileSync(new URL('../src/repository/intelligence/zoekt.js', import.meta.url), 'utf8');
 const indexBuildSource = fs.readFileSync(new URL('../src/repository/intelligence/indexBuild.js', import.meta.url), 'utf8');
 const queryServiceSource = fs.readFileSync(new URL('../src/repository/intelligence/queryService.js', import.meta.url), 'utf8');
+const lexicalFallbackSource = fs.readFileSync(new URL('../src/repository/intelligence/lexicalFallback.js', import.meta.url), 'utf8');
 assert.doesNotMatch(zoektSource, /spawnSync/, 'Zoekt subprocesses must never block the MCP event loop');
+assert.doesNotMatch(lexicalFallbackSource, /spawnSync/, 'lexical fallback subprocesses must never block the MCP event loop');
+assert.match(lexicalFallbackSource, /await runProcess\(/, 'lexical fallback must use the asynchronous process runner');
 assert.match(zoektSource, /await runProcess\(/, 'Zoekt commands must use the asynchronous process runner');
 assert.match(indexBuildSource, /await rebuildZoektIndex\(/, 'full Zoekt rebuilds must execute inside the Repository Intelligence worker job');
 assert.match(queryServiceSource, /await searchZoekt\(/, 'query-time Zoekt search must remain asynchronous');
