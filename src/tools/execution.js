@@ -5,8 +5,10 @@ import { resolveWorkspace } from '../config.js';
 import {
   finalizeTaskSandbox,
   findTaskSandbox,
+  hasInactiveTaskSandboxes,
   prepareTaskExecutionWorkspace,
   promoteTaskSandbox,
+  reconcileInactiveTaskSandboxes,
   resolveTaskSandboxWorkspace
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
@@ -27,6 +29,12 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const taskId = String(finishActivity?.taskId || effectiveArgs?.work_id || '').trim();
       const sourceWorkspace = effectiveArgs?.workspace ? resolveWorkspace(config, effectiveArgs.workspace) : null;
       const branchChange = isExplicitBranchChange(executionName, effectiveArgs);
+      const activeTasks = sourceWorkspace ? getToolActivity().tasks : [];
+      if (sourceWorkspace && taskId && hasInactiveTaskSandboxes(config, sourceWorkspace.alias, activeTasks, taskId)) {
+        await runWorkspaceOperation(sourceWorkspace.alias, () =>
+          reconcileInactiveTaskSandboxes(sourceWorkspace, config, getToolActivity().tasks, taskId),
+        queueOptions('write', 'workspace', taskId));
+      }
       const hadSandbox = Boolean(sourceWorkspace && taskId && findTaskSandbox(config, sourceWorkspace.alias, taskId));
       let executionWorkspace = sourceWorkspace;
 
@@ -37,7 +45,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             return sourceWorkspace;
           }
           return prepareTaskExecutionWorkspace(sourceWorkspace, config, taskId, executionName, {
-            activeTasks: getToolActivity().tasks,
+            activeTasks,
             forceSource: branchChange
           });
         }, queueOptions('write', 'workspace', taskId));
@@ -54,9 +62,11 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         && effectiveArgs?.complete === true;
       const handlerArgs = deferSandboxCompletion ? { ...physicalArgs, complete: false } : physicalArgs;
 
-      const result = await runWorkspaceOperation(
-        executionName === OP.WORK_CANCEL ? '' : handlerArgs?.workspace,
-        async () => {
+      let result;
+      try {
+        result = await runWorkspaceOperation(
+          executionName === OP.WORK_CANCEL ? '' : handlerArgs?.workspace,
+          async () => {
           sessionStart = await maybeStartSession(config, executionName, effectiveArgs || {}, { taskId });
           if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
           const handled = await definition.handler(config, handlerArgs || {}, {
@@ -80,16 +90,29 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             'relai.tool.duration_ms': Date.now() - started,
             'relai.tool.long_running': definition?.behavior?.longRunning === true
           });
-          return handled;
-        },
-        queueOptions(
-          definition?.annotations?.readOnlyHint === true ? 'read' : 'write',
-          hadSandbox && executionName === OP.WORK_FINISH
-            ? 'workspace'
-            : definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
-          taskId
-        )
-      );
+            return handled;
+          },
+          queueOptions(
+            definition?.annotations?.readOnlyHint === true ? 'read' : 'write',
+            hadSandbox && executionName === OP.WORK_FINISH
+              ? 'workspace'
+              : definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
+            taskId
+          )
+        );
+      } catch (error) {
+        if (executionWorkspace?.taskSandbox === true
+          && !deferSandboxCompletion
+          && SANDBOX_CREATE_OPERATIONS.has(executionName)) {
+          try {
+            await runWorkspaceOperation(sourceWorkspace.alias, () => finalizeTaskSandbox(sourceWorkspace, config, taskId),
+              queueOptions('write', 'workspace', taskId));
+          } catch (cleanupError) {
+            throw cleanupError;
+          }
+        }
+        throw error;
+      }
 
       if (executionWorkspace?.taskSandbox === true) {
         invalidateSessionCacheForCall(config, executionName, handlerArgs || {});

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { allWorkspaceAliases, readConfig, resolveWorkspace } from '../src/config.js';
-import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
+import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry, reconcileInactiveTaskSandboxes } from '../src/parallelTaskSandbox.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
@@ -77,6 +77,14 @@ try {
   assert.equal(readOnlyExec.ok, true);
   assert.equal(sandboxEntries(config).length, 0, 'clearly read-only Git exec calls must not create private worktrees');
 
+  await assert.rejects(
+    () => rawCallTool('relai_edit', {
+      workspace: 'app', work_id: second.work_id, path: 'beta.txt', oldText: 'missing beta\n', newText: 'never written\n'
+    }, context),
+    /not found|context|match/i
+  );
+  assert.equal(sandboxEntries(config).length, 0, 'a thrown sandboxed edit must retire an unchanged private worktree');
+
   const secondEdit = await rawCallTool('relai_edit', {
     workspace: 'app', work_id: second.work_id, path: 'beta.txt', oldText: 'beta\n', newText: 'beta from second\n'
   }, context);
@@ -94,6 +102,16 @@ try {
   assert.equal(sandboxExec.mutationTracking, 'sandbox-baseline');
   assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
   assert.equal(sandboxEntries(config).length, 0, 'successful concurrent exec mutations must not leave code in a hidden worktree');
+
+  const staleEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
+  fs.writeFileSync(path.join(staleEntry.path, 'inactive-recovery.txt'), 'recovered from inactive task\n');
+  const recovery = await reconcileInactiveTaskSandboxes(resolveWorkspace(config, 'app'), config, [
+    { taskId: first.work_id, workspace: 'app', status: 'running', startedAt: 1 }
+  ], first.work_id);
+  assert.deepEqual(recovery.preserved, []);
+  assert.deepEqual(recovery.reconciled.map(item => item.taskId), [second.work_id]);
+  assert.equal(readText(path.join(workspacePath, 'inactive-recovery.txt')), 'recovered from inactive task\n');
+  assert.equal(sandboxEntries(config).length, 0, 'inactive task bytes must be reconciled into the visible tree and the worktree retired');
 
   await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
   const entries = sandboxEntries(config);

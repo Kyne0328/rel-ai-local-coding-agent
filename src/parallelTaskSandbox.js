@@ -537,6 +537,42 @@ function markSandboxUnresolved(config, entry, error, changedFiles = []) {
   writeSandboxRegistry(config, registry);
 }
 
+function inactiveTaskSandboxEntries(config, sourceAlias, activeTasks = [], currentTaskId = '') {
+  const activeIds = new Set(activeWorkspaceTasks(activeTasks, sourceAlias)
+    .map(task => String(task?.taskId || task?.id || '').trim())
+    .filter(Boolean));
+  const current = String(currentTaskId || '').trim();
+  return Object.values(readSandboxRegistry(config).sandboxes || {}).filter(entry =>
+    entry.sourceAlias === sourceAlias
+    && entry.taskId !== current
+    && !activeIds.has(entry.taskId)
+    && !entry.unresolved
+  );
+}
+
+function hasInactiveTaskSandboxes(config, sourceAlias, activeTasks = [], currentTaskId = '') {
+  return inactiveTaskSandboxEntries(config, sourceAlias, activeTasks, currentTaskId).length > 0;
+}
+
+async function reconcileInactiveTaskSandboxes(sourceWorkspace, config, activeTasks = [], currentTaskId = '') {
+  const entries = inactiveTaskSandboxEntries(config, sourceWorkspace.alias, activeTasks, currentTaskId);
+  const reconciled = [];
+  const preserved = [];
+  for (const entry of entries) {
+    try {
+      const result = await finalizeTaskSandbox(sourceWorkspace, config, entry.taskId);
+      reconciled.push({ taskId: entry.taskId, changedFiles: result.changedFiles || [] });
+    } catch (error) {
+      preserved.push({
+        taskId: entry.taskId,
+        code: String(error?.code || 'TASK_SANDBOX_UNRESOLVED'),
+        changedFiles: readSandboxRegistry(config).sandboxes?.[entry.alias]?.unresolved?.changedFiles || []
+      });
+    }
+  }
+  return { reconciled, preserved };
+}
+
 async function discardTaskSandbox(sourceWorkspace, config, taskId) {
   const sourceAlias = typeof sourceWorkspace === 'string' ? sourceWorkspace : sourceWorkspace?.alias;
   const entry = findTaskSandbox(config, sourceAlias, taskId);
@@ -666,9 +702,11 @@ export {
   discardTaskSandbox,
   finalizeTaskSandbox,
   findTaskSandbox,
+  hasInactiveTaskSandboxes,
   prepareTaskExecutionWorkspace,
   promoteTaskSandbox,
   readSandboxRegistry,
+  reconcileInactiveTaskSandboxes,
   resolveTaskSandboxWorkspace,
   shouldPromoteTaskSandbox,
   workspaceSnapshotCommit
