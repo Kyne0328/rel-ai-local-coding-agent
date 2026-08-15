@@ -68,6 +68,8 @@ function makeDefaultConfig() {
 // replaces the read+parse+normalize. Reusing one object also lets downstream callers
 // memoize per-config work by object identity.
 let configCache = null;
+const PUBLIC_CONFIG_SUMMARY_TTL_MS = 1000;
+let publicConfigSummaryCache = null;
 
 function readConfig(options = {}) {
   const configPath = getConfigPath();
@@ -102,6 +104,7 @@ function readConfig(options = {}) {
 // next readConfig re-parses even if the filesystem timestamp did not move.
 function invalidateConfigCache() {
   configCache = null;
+  publicConfigSummaryCache = null;
   clearRealRootCache();
 }
 
@@ -443,7 +446,11 @@ function isSafeWorkspaceAlias(value) {
 }
 
 function publicConfigSummary(config) {
-  return {
+  const now = Date.now();
+  if (publicConfigSummaryCache?.config === config && publicConfigSummaryCache.expiresAt > now) {
+    return publicConfigSummaryCache.value;
+  }
+  const value = {
     configPath: getConfigPath(),
     stateDir: config.stateDir,
     auditLogPath: config.auditLogPath,
@@ -479,6 +486,8 @@ function publicConfigSummary(config) {
       };
     }).sort((a, b) => a.alias.localeCompare(b.alias))
   };
+  publicConfigSummaryCache = { config, value, expiresAt: now + PUBLIC_CONFIG_SUMMARY_TTL_MS };
+  return value;
 }
 
 // publicConfigSummary runs on every dashboard poll and calls these per workspace.

@@ -2,7 +2,7 @@
 
 
 import { resolveWorkspace } from '../config.js';
-import { repoSnapshot, relaiRead, workspaceTidyPlan, workspaceTidyRun, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr } from '../localRepoBridge.js';
+import { repoSnapshot, relaiReadAsync, workspaceTidyPlan, workspaceTidyRun, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr } from '../localRepoBridge.js';
 import { planEdit } from '../executionPlanner.js';
 import { relaiStatus } from './status.js';
 import { completeTask } from './completion.js';
@@ -49,7 +49,7 @@ const HANDLERS = Object.freeze({
     scheduleIntelligenceWarmup(workspace, config);
     return repoSnapshot(workspace, config, args);
   }),
-  read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
+  read: inWorkspace((workspace, config, args, context) => relaiReadAsync(workspace, config, args, context)),
   search: inWorkspace((workspace, config, args, context) => {
     scheduleIntelligenceWarmup(workspace, config);
     return relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context);

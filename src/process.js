@@ -180,8 +180,6 @@ function waitForProcessGroupExit(pid, timeoutMs) {
 function runProcess(command, args, options = {}, config = {}) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
-    let stdout = '';
-    let stderr = '';
     let stdoutBytes = 0;
     let stderrBytes = 0;
     let stdoutTruncated = false;
@@ -193,6 +191,8 @@ function runProcess(command, args, options = {}, config = {}) {
     const maxOutputBytes = Number.isFinite(configuredMaxOutputBytes) && configuredMaxOutputBytes > 0
       ? configuredMaxOutputBytes
       : DEFAULT_MAX_OUTPUT_BYTES;
+    const stdoutBuffer = new BoundedOutputBuffer(maxOutputBytes);
+    const stderrBuffer = new BoundedOutputBuffer(maxOutputBytes);
     const timeoutMs = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
       ? Number(options.timeout)
       : 0;
@@ -243,8 +243,8 @@ function runProcess(command, args, options = {}, config = {}) {
       finish({
         exitCode: typeof code === 'number' ? code : -1,
         signal: signal || (outcome.forced ? 'SIGKILL' : 'SIGTERM'),
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
+        stdout: processOutputText(stdoutBuffer, options.preserveOutputWhitespace),
+        stderr: processOutputText(stderrBuffer, options.preserveOutputWhitespace),
         error: request.error,
         cancelled: request.cancelled === true,
         timedOut: request.timedOut === true,
@@ -256,8 +256,8 @@ function runProcess(command, args, options = {}, config = {}) {
     function requestTermination(request) {
       if (settled || terminationRequest) return;
       terminationRequest = request;
-      stderrTruncated = stderrTruncated || Buffer.byteLength(stderr + request.marker, 'utf8') > maxOutputBytes;
-      stderr = appendLimited(stderr, request.marker, maxOutputBytes);
+      stderrBuffer.append(request.marker);
+      stderrTruncated = stderrBuffer.truncated;
       void terminateProcessTree(child, { graceMs: terminationGraceMs, forceWaitMs })
         .then(outcome => finishTermination(child.exitCode, child.signalCode, outcome))
         .catch(error => finishTermination(-1, undefined, {
@@ -282,16 +282,16 @@ function runProcess(command, args, options = {}, config = {}) {
     }
 
     child.stdout?.on('data', (chunk) => {
-      const text = chunk.toString('utf8');
-      stdoutBytes += Buffer.byteLength(chunk);
-      stdoutTruncated = stdoutTruncated || stdoutBytes > maxOutputBytes;
-      stdout = appendLimited(stdout, text, maxOutputBytes);
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      stdoutBytes += buffer.length;
+      stdoutBuffer.append(buffer);
+      stdoutTruncated = stdoutBuffer.truncated;
     });
     child.stderr?.on('data', (chunk) => {
-      const text = chunk.toString('utf8');
-      stderrBytes += Buffer.byteLength(chunk);
-      stderrTruncated = stderrTruncated || stderrBytes > maxOutputBytes;
-      stderr = appendLimited(stderr, text, maxOutputBytes);
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      stderrBytes += buffer.length;
+      stderrBuffer.append(buffer);
+      stderrTruncated = stderrBuffer.truncated;
     });
     child.on('error', (error) => {
       if (settled) return;
@@ -299,8 +299,8 @@ function runProcess(command, args, options = {}, config = {}) {
       finish({
         exitCode: -1,
         signal: undefined,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
+        stdout: processOutputText(stdoutBuffer, options.preserveOutputWhitespace),
+        stderr: processOutputText(stderrBuffer, options.preserveOutputWhitespace),
         error: error.message,
         spawnError: true,
         timedOut: false
@@ -312,8 +312,8 @@ function runProcess(command, args, options = {}, config = {}) {
       finish({
         exitCode: typeof code === 'number' ? code : -1,
         signal: signal || undefined,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
+        stdout: processOutputText(stdoutBuffer, options.preserveOutputWhitespace),
+        stderr: processOutputText(stderrBuffer, options.preserveOutputWhitespace),
         timedOut: false
       });
     });
@@ -333,6 +333,53 @@ function runProcess(command, args, options = {}, config = {}) {
       if (typeof timer.unref === 'function') timer.unref();
     }
   });
+}
+
+function processOutputText(buffer, preserveWhitespace = false) {
+  const text = buffer.text();
+  return preserveWhitespace ? text : text.trim();
+}
+
+const TRUNCATED_OUTPUT_MARKER = '\n[rel-ai-mcp truncated output]\n';
+const TRUNCATED_OUTPUT_MARKER_BYTES = Buffer.byteLength(TRUNCATED_OUTPUT_MARKER, 'utf8');
+
+class BoundedOutputBuffer {
+  constructor(maxBytes) {
+    this.maxBytes = Math.max(0, Number(maxBytes) || 0);
+    this.chunks = [];
+    this.retainedBytes = 0;
+    this.truncated = false;
+  }
+
+  append(value) {
+    const chunk = Buffer.isBuffer(value) ? value : Buffer.from(String(value || ''), 'utf8');
+    if (!chunk.length) return;
+    this.chunks.push(chunk);
+    this.retainedBytes += chunk.length;
+    if (!this.truncated && this.retainedBytes <= this.maxBytes) return;
+    this.truncated = true;
+    this.trimTo(Math.max(0, this.maxBytes - TRUNCATED_OUTPUT_MARKER_BYTES));
+  }
+
+  trimTo(limit) {
+    while (this.retainedBytes > limit && this.chunks.length) {
+      const excess = this.retainedBytes - limit;
+      const first = this.chunks[0];
+      if (first.length <= excess) {
+        this.chunks.shift();
+        this.retainedBytes -= first.length;
+        continue;
+      }
+      this.chunks[0] = first.subarray(excess);
+      this.retainedBytes -= excess;
+    }
+  }
+
+  text() {
+    const tail = Buffer.concat(this.chunks, this.retainedBytes).toString('utf8');
+    if (!this.truncated) return tail;
+    return TRUNCATED_OUTPUT_MARKER + tail.replace(/^\uFFFD+/u, '');
+  }
 }
 
 function appendLimited(current, next, maxBytes) {

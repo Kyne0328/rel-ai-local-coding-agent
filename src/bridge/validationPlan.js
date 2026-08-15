@@ -90,19 +90,28 @@ async function createValidationFingerprint(workspace, config, suppliedStatus = n
     ...changedFiles,
     ...VALIDATION_CONFIG_PATHS.filter(file => fs.existsSync(path.join(workspace.path, file)))
   ]);
+  // These Git reads are independent once status has identified the relevant paths.
+  // Start them together while local file/check fingerprints are calculated so a
+  // validation fingerprint pays roughly one process-startup window, not three.
+  const headPromise = gitText(workspace.path, ['rev-parse', 'HEAD'], config);
+  const indexHashPromise = gitDigest(workspace.path, ['diff', '--cached', '--binary', '--no-ext-diff'], config);
+  const worktreeHashPromise = gitDigest(workspace.path, ['diff', '--binary', '--no-ext-diff'], config);
+  const relevantFiles = relevantPaths.map(file => fingerprintPath(workspace.path, file));
+  const checks = {
+    quick: detectVerifyChecks(workspace.path, 'quick'),
+    standard: detectVerifyChecks(workspace.path, 'standard'),
+    release: detectVerifyChecks(workspace.path, 'release')
+  };
+  const [head, indexHash, worktreeHash] = await Promise.all([headPromise, indexHashPromise, worktreeHashPromise]);
   const descriptor = {
     version: FINGERPRINT_VERSION,
     workspace: workspace.alias,
-    head: await gitText(workspace.path, ['rev-parse', 'HEAD'], config),
-    indexHash: await gitDigest(workspace.path, ['diff', '--cached', '--binary', '--no-ext-diff'], config),
-    worktreeHash: await gitDigest(workspace.path, ['diff', '--binary', '--no-ext-diff'], config),
+    head,
+    indexHash,
+    worktreeHash,
     changedFiles,
-    relevantFiles: relevantPaths.map(file => fingerprintPath(workspace.path, file)),
-    checks: {
-      quick: detectVerifyChecks(workspace.path, 'quick'),
-      standard: detectVerifyChecks(workspace.path, 'standard'),
-      release: detectVerifyChecks(workspace.path, 'release')
-    },
+    relevantFiles,
+    checks,
     workspaceCommands: workspace.commands || {},
     workspaceTestCommands: workspace.testCommands || {}
   };
@@ -175,7 +184,7 @@ function deriveFocusedChecks(catalog, quickUnits, packageIds, affectedTests, wor
 }
 
 function checkReference(unit) {
-  return unit?.source === 'legacy' ? unit.command : (unit?.id || unit?.command || '');
+  return unit?.source === 'detected' ? unit.command : (unit?.id || unit?.command || '');
 }
 function checkCost(unit) {
   const cost = { small: 1, medium: 2, large: 3 };

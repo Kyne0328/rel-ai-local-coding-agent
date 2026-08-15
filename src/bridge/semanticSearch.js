@@ -42,10 +42,9 @@ async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
   ), {
     signal: context.signal,
     kind: 'search-semantic',
-    // Repository Intelligence currently owns one query worker per index. Keep the
-    // plan serial until that worker itself supports concurrent read jobs; otherwise
-    // promise overlap would be mislabeled as execution parallelism.
-    maxConcurrency: 1
+    // Repository Intelligence owns a bounded two-reader pool per index. Match that
+    // physical capacity so execution metrics describe real SQLite read overlap.
+    maxConcurrency: 2
   });
   const results = enforceBatchBudgets(batch.results, { maxResults: totalMaxResults, maxBytes: totalMaxBytes });
   return {
@@ -57,7 +56,7 @@ async function relaiSemanticSearch(workspace, config, args = {}, context = {}) {
     execution: batch.metrics,
     results: results.map(compactBatchResult),
     ...summarizeBatchResults(results),
-    strategy: 'batched-hybrid-serial-worker',
+    strategy: 'batched-hybrid-read-pool',
     next: 'Batched semantic search completed in one call. Inspect only the strongest returned candidates before widening the search.'
   };
 }

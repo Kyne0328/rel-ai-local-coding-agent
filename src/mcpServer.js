@@ -19,10 +19,12 @@ const MCP_SERVER_INFO = Object.freeze({
   version: pkg.version,
   toolSurfaceVersion: getToolSurfaceManifest().toolSurfaceVersion
 });
+const PUBLIC_TOOL_SCHEMAS = getPublicToolSchemas();
+const TOOL_REGISTRATIONS = new Map(PUBLIC_TOOL_SCHEMAS.map(definition => [definition.name, toolRegistration(definition)]));
 
 function createRelaiMcpServer(options = {}) {
   const config = readConfig();
-  const definitions = getPublicToolSchemas(config);
+  const definitions = PUBLIC_TOOL_SCHEMAS;
   const surface = getToolSurfaceManifest(config);
   const legacyCompatibility = options.legacyCompatibility === true;
   const requestStateCodec = createRelaiRequestStateCodec(config, options.principal);
@@ -70,7 +72,7 @@ function createRelaiMcpServer(options = {}) {
   for (const definition of definitions) {
     registerTool(server, config, definition, requestStateCodec, options);
   }
-  for (const resource of listResources().resources) {
+  for (const resource of listResources(config).resources) {
     server.registerResource(resource.name, resource.uri, {
       description: resource.description,
       mimeType: resource.mimeType,
@@ -81,7 +83,7 @@ function createRelaiMcpServer(options = {}) {
 }
 
 function registerTool(server, config, definition, requestStateCodec, options) {
-  server.registerTool(definition.name, toolRegistration(definition), async (args, context) => {
+  server.registerTool(definition.name, TOOL_REGISTRATIONS.get(definition.name), async (args, context) => {
     const { invokeRelaiTool } = await import('./mcp/toolInvocation.js');
     return invokeRelaiTool({
       config,
