@@ -370,8 +370,37 @@ async function relaiGitCommit(workspace, config, args = {}) {
   };
   if (paths.length > 0) {
     const add = await runProcess("git", ["add", "--", ...paths], { cwd: workspace.path, timeout: 60000 }, config);
-    if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, paths, add: summarizeCommand(add) };
-  } else if (addAll) {
+    if (add.exitCode !== 0) {
+      const indexRestore = await restoreIndex();
+      return {
+        ok: false,
+        workspace: workspace.alias,
+        message,
+        addAll,
+        paths,
+        add: summarizeCommand(add),
+        indexRestored: indexRestore?.exitCode === 0
+      };
+    }
+    const commit = await runProcess("git", ["commit", "--only", "-m", message, "--", ...paths], {
+      cwd: workspace.path,
+      timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000)
+    }, config);
+    if (commit.exitCode !== 0) await restoreIndex();
+    const statusAfter = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
+    return {
+      ok: commit.exitCode === 0,
+      workspace: workspace.alias,
+      message,
+      addAll,
+      paths,
+      ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
+      commit: summarizeCommand(commit),
+      statusBefore,
+      statusAfter
+    };
+  }
+  if (addAll) {
     const add = await runProcess("git", ["add", "-A"], { cwd: workspace.path, timeout: 60000 }, config);
     if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, add: summarizeCommand(add) };
   }
