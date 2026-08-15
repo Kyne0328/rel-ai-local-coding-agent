@@ -205,8 +205,8 @@
       ],
       "icon": "build/icon.png",
       "category": "Development",
-      "synopsis": "Local ChatGPT repository bridge",
-      "description": "Rel.AI MCP connects ChatGPT to approved local development workspaces through a secured desktop-managed MCP service.",
+      "synopsis": "Coding-agent tools for ChatGPT web",
+      "description": "Rel.AI MCP turns ChatGPT web into a repository-capable coding agent by connecting it to approved local development workspaces through a secured desktop-managed MCP service.",
       "vendor": "Kyne",
       "maintainer": "Kyne <Kyne0328@users.noreply.github.com>",
       "executableName": "rel-ai-mcp",
@@ -214,9 +214,9 @@
       "desktop": {
         "entry": {
           "Name": "Rel.AI MCP",
-          "Comment": "Connect ChatGPT to approved local development workspaces",
+          "Comment": "Use ChatGPT web as a coding agent on approved local repositories",
           "Categories": "Development;Utility;",
-          "Keywords": "ChatGPT;MCP;development;repository;",
+          "Keywords": "ChatGPT;MCP;coding-agent;development;repository;",
           "StartupWMClass": "com.relai.mcp",
           "Terminal": false,
           "Type": "Application"

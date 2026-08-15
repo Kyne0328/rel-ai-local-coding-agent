@@ -28,8 +28,8 @@ function connectionView(status) {
   if (status.serverRunning && status.tunnelStatus === 'running') {
     return {
       key: 'ready', badge: 'Ready', eyebrow: 'Connection ready',
-      title: 'Rel.AI is available to ChatGPT.',
-      description: 'The local MCP service and OpenAI Secure MCP Tunnel are ready. Rel.AI reports exact tool activity, but it cannot observe ChatGPT reasoning or infer when the overall chat request is finished.'
+      title: 'ChatGPT can work on your repositories.',
+      description: 'Rel.AI local coding tools and the OpenAI Secure MCP Tunnel are ready. Use them from ChatGPT web; Rel.AI reports exact tool activity but cannot observe private reasoning or infer overall chat completion.'
     };
   }
   if (status.serverRunning && status.tunnelStatus === 'connecting') {

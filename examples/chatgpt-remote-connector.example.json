@@ -1,6 +1,6 @@
 {
   "name": "Rel.AI MCP",
-  "description": "Single-workflow local repo bridge for ChatGPT: snapshot, read, deterministic write, verify, diff, and reset.",
+  "description": "Coding-agent tools for ChatGPT web: inspect, search, edit, run, validate, review, and Git against approved local repositories.",
   "connection": {
     "type": "openai-secure-mcp-tunnel",
     "tunnel_id": "tunnel_REPLACE_ME",

@@ -5,8 +5,8 @@
 <h1 align="center">Rel.AI MCP</h1>
 
 <p align="center">
-  <strong>Repository work you can see, bound, validate, and recover.</strong><br />
-  Rel.AI gives ChatGPT a real local development runtime without turning your computer into an open-ended agent box.
+  <strong>Use ChatGPT web like a coding agent.</strong><br />
+  Rel.AI gives ordinary ChatGPT conversations a real local repository toolbelt: search, edit, run, inspect, validate, review, and Git.
 </p>
 
 <p align="center">
@@ -24,17 +24,29 @@
   <a href="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-mcp?display_name=tag&style=flat-square" alt="Latest release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-mcp?style=flat-square" alt="Apache License 2.0" /></a>
-  <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20Linux-informational?style=flat-square" alt="Windows and Linux" />
+  <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square" alt="Windows, macOS, and Linux" />
   <img src="https://img.shields.io/badge/MCP-2026--07--28-7c3aed?style=flat-square" alt="MCP 2026-07-28" />
 </p>
 
 ---
 
-Rel.AI MCP connects ChatGPT to **repositories you explicitly configure as local workspaces**. ChatGPT can inspect the current checkout, change files, run the project, validate the result, review the diff, and publish Git work when asked. Rel.AI owns the boundary around that work: which repository is available, which task owns a mutation, what evidence is current, what can be published, and what happens after an interruption.
+Rel.AI MCP turns **ChatGPT web into a repository-capable coding agent** for repositories you explicitly configure as local workspaces. ChatGPT remains the conversational interface and reasoning model; Rel.AI supplies the local tools that let it inspect the checkout, change files, run the project, validate results, review diffs, and perform explicit Git work when asked.
 
-It is not a hosted coding VM and it is not a generic remote shell.
+It is not a hosted coding VM, a new model, or a generic remote shell. It is the local development bridge that gives normal ChatGPT conversations hands on real code.
 
 **The repository stays on your computer. The work stays attributable. The result stays reviewable.**
+
+## Why Rel.AI exists
+
+Rel.AI is for developers who prefer the ChatGPT web conversation as their coding interface but still want a Codex-style repository workflow.
+
+OpenAI currently documents three product behaviors that make this useful:
+
+- [ChatGPT Apps follow the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in); Rel.AI does not add a separate per-tool quota.
+- [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits), so using Rel.AI through the ChatGPT app/tool path does not draw from the Codex agentic allowance.
+- [GPT-5.6 Sol powers Medium, High, and Extra High reasoning on eligible plans](https://help.openai.com/en/articles/20001354-gpt-5-6-in-chatgpt). ChatGPT Apps are available with all models except Pro models, so Rel.AI can use app-compatible GPT-5.6 Sol reasoning modes such as High, and Extra High where the plan exposes it, but not GPT-5.6 Sol Pro.
+
+Rel.AI is not Codex and does not emulate Codex internals. The value is simpler: **use the ChatGPT web experience and reasoning modes you already have, then give that conversation a controlled local coding toolbelt.**
 
 ## The Rel.AI contract
 
@@ -84,7 +96,7 @@ The repository remains the source of truth throughout the task. If the workspace
 
 Rel.AI uses one connection model: **OpenAI Secure MCP Tunnel**. Repository files and tool execution stay on the computer running Rel.AI; the tunnel provides the private transport ChatGPT uses to reach its local MCP service.
 
-1. **Install Rel.AI MCP** from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Current desktop packaging targets Windows and Linux.
+1. **Install Rel.AI MCP** from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Current desktop packaging targets Windows, macOS (Intel and Apple Silicon), and Linux.
 2. **Create an OpenAI Secure MCP Tunnel** for this computer and create a runtime API key for that tunnel in OpenAI Platform.
 3. **Configure Rel.AI.** Enter the tunnel ID and runtime API key in the first-run wizard. Rel.AI encrypts the runtime key with Electron `safeStorage` and supervises the bundled OpenAI tunnel client.
 4. **Add a workspace.** Pick a repository folder and give it a short alias such as `myapp`.
@@ -105,7 +117,7 @@ Use Rel.AI MCP on workspace "myapp". Implement this change, run the smallest val
 
 See [One-click setup](docs/ONE_CLICK_SETUP.md) for the installed-app walkthrough and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) for tunnel setup, reconnects, and recovery.
 
-## What Rel.AI gives ChatGPT
+## What turns ChatGPT into a coding agent
 
 ### Repository intelligence before file dumping
 
@@ -143,7 +155,7 @@ Validation can be selected from the task-owned change scope, and fresh evidence 
 
 Rel.AI can review task changes, commit scoped work, push to an existing Git remote, and prepare pull-request draft text. Publishing remains a separate decision from editing. Sensitive staged paths remain explicitly authorized, push targets must already exist in the repository, unsafe Git remote-helper transports are rejected, and pull-request base branches are detected from Git instead of workspace settings.
 
-## Local execution is the point
+## ChatGPT web is the interface. Local execution is the point
 
 OpenAI Secure MCP Tunnel gives ChatGPT a private route to the Rel.AI process without moving the development environment away from the computer that owns the repository.
 
@@ -197,7 +209,7 @@ Rel.AI records observable tool activity and results. It does not claim access to
 
 ## Security is repository-shaped
 
-Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. It assumes you deliberately gave ChatGPT authority over configured repositories and then constrains that authority at repository, task, process, Git, and desktop boundaries.
+Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. It assumes you deliberately gave ChatGPT web coding-agent authority over configured repositories and then constrains that authority at repository, task, process, Git, and desktop boundaries.
 
 Important controls include:
 

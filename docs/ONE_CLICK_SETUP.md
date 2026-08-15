@@ -1,12 +1,12 @@
 # Rel.AI MCP One-Click Setup
 
-This guide covers the packaged desktop application. Rel.AI uses one supported ChatGPT transport: **OpenAI Secure MCP Tunnel**. Repository access and tool execution stay on the computer running Rel.AI.
+This guide covers the packaged desktop application. Rel.AI lets you use ChatGPT web like a repository-capable coding agent through one supported transport: **OpenAI Secure MCP Tunnel**. ChatGPT remains the conversation and reasoning surface; repository access and tool execution stay on the computer running Rel.AI.
 
 ## Before you begin
 
 You need:
 
-- the Rel.AI MCP desktop application;
+- the Rel.AI MCP desktop application for Windows, macOS, or Linux;
 - an OpenAI Secure MCP Tunnel created for this computer;
 - a runtime API key for that tunnel;
 - a ChatGPT plan/workspace that can use the required MCP integration; and
@@ -56,6 +56,8 @@ Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain
 **Connection** shows the configured tunnel ID, whether the runtime key is stored, local MCP health, Secure MCP Tunnel health, and recovery actions. Saving connection settings restarts only the Rel.AI connection service and tunnel client; it does not restart unrelated developer processes.
 
 **Usage** is built from locally observed Rel.AI activity. It is not ChatGPT model-token or billing accounting.
+
+For ChatGPT-side usage, OpenAI documents that Apps follow the normal ChatGPT rate limits for your plan, while Codex usage counts toward agentic usage. Rel.AI therefore does not consume the Codex agentic allowance. GPT-5.6 Sol powers Medium, High, and Extra High reasoning on eligible plans; ChatGPT Apps exclude Pro models, so GPT-5.6 Sol Pro is not available through Rel.AI.
 
 ## Application updates
 

@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
   "version": "0.25.2",
-  "description": "Guarded local repository workflows through a compact Rel.AI MCP connector and bundled workflow skills.",
+  "description": "Use ChatGPT web like a coding agent with guarded local repository tools and bundled Rel.AI workflow skills.",
   "author": {
     "name": "Kyne",
     "url": "https://github.com/Kyne0328"
@@ -11,6 +11,8 @@
   "license": "Apache-2.0",
   "keywords": [
     "mcp",
+    "chatgpt",
+    "chatgpt-web",
     "repository",
     "coding-agent",
     "git"
@@ -19,8 +21,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Rel.AI",
-    "shortDescription": "Guarded local repository workflows",
-    "longDescription": "Inspect, edit, validate, review, and publish configured local repositories through a compact MCP interface with explicit work sessions and approval safeguards.",
+    "shortDescription": "Coding-agent tools for ChatGPT web",
+    "longDescription": "Give ChatGPT web controlled local tools to inspect, edit, run, validate, review, and publish configured repositories through Rel.AI MCP with explicit work sessions and approval safeguards.",
     "developerName": "Kyne",
     "category": "Developer Tools",
     "capabilities": [

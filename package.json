@@ -2,7 +2,7 @@
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
   "version": "0.25.2",
-  "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
+  "description": "Use ChatGPT web like a coding agent with local repository tools for search, edit, run, inspect, validate, review, and Git.",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -126,6 +126,7 @@
   "keywords": [
     "mcp",
     "chatgpt",
+    "chatgpt-web",
     "coding-agent",
     "codex",
     "git",
