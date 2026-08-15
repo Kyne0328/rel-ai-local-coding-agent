@@ -10,7 +10,6 @@ let _generation = 0;
 let _retryCount = 0;
 
 const LIVE_EVENT_TYPES = Object.freeze([
-  'dashboard.bootstrap',
   'task.updated',
   'connection.updated',
   'workspace.updated',
@@ -67,9 +66,14 @@ function _connect() {
   listenSource(source, 'open', () => markLive(source, generation));
   listenSource(source, 'ready', event => {
     if (!isCurrent(source, generation)) return;
-    markLive(source, generation);
     const payload = parseEventData(event);
-    if (payload?.generatedAt) emitState('live', { lastEventAt: Date.parse(payload.generatedAt) || Date.now() });
+    if (!payload) return;
+    markLive(source, generation);
+    emitState('live', {
+      lastEventAt: Date.parse(payload.generatedAt || '') || Date.now(),
+      streamId: String(payload.streamId || ''),
+      revisions: payload.revisions || {}
+    });
   });
   for (const type of LIVE_EVENT_TYPES) {
     listenSource(source, type, event => {

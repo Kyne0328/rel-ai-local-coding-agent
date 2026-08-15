@@ -98,7 +98,7 @@ function startHttpServer(options = {}) {
         flushAuditWrites(),
         flushTaskHistoryPersistence(),
         flushLocalAnalytics(runtimeConfig),
-        stopAllManagedProcesses(runtimeConfig),
+        ...(options.stopManagedProcessesOnClose === false ? [] : [stopAllManagedProcesses(runtimeConfig)]),
         stopAllUiSessions(),
         shutdownTelemetry()
       );

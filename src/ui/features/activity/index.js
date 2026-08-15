@@ -43,7 +43,6 @@ let _nextExpiryAt = Number.POSITIVE_INFINITY;
 let _clockListenerBound = false;
 let _filterOptions = { workspaces: [], tools: [] };
 let _sessionIndex = new Map();
-let _sessionIndexFingerprint = '';
 let _sessionIndexRevision = 0;
 
 export function mountActivity(container, data = {}) {
@@ -90,23 +89,39 @@ export function updateActivityLiveState(data = {}) {
 }
 
 function updateSessionIndex(tasks = []) {
-  const next = new Map();
+  const seen = new Set();
+  let changed = false;
   for (const task of Array.isArray(tasks) ? tasks : []) {
     const id = sessionIdentifier(task);
     if (!id) continue;
-    next.set(id, {
+    seen.add(id);
+    const next = {
       id,
       title: task.title || task.objective || task.currentActivity || 'Task',
       workspace: task.workspace || '',
       status: task.status || ''
-    });
+    };
+    const current = _sessionIndex.get(id);
+    if (!sameSessionView(current, next)) {
+      _sessionIndex.set(id, next);
+      changed = true;
+    }
   }
-  const fingerprint = JSON.stringify([...next.values()].map(item => [item.id, item.title, item.workspace, item.status]));
-  if (fingerprint === _sessionIndexFingerprint) return false;
-  _sessionIndex = next;
-  _sessionIndexFingerprint = fingerprint;
-  _sessionIndexRevision += 1;
-  return true;
+  for (const id of [..._sessionIndex.keys()]) {
+    if (seen.has(id)) continue;
+    _sessionIndex.delete(id);
+    changed = true;
+  }
+  if (changed) _sessionIndexRevision += 1;
+  return changed;
+}
+
+function sameSessionView(left, right) {
+  return Boolean(left)
+    && left.id === right.id
+    && left.title === right.title
+    && left.workspace === right.workspace
+    && left.status === right.status;
 }
 
 function sessionIdentifier(task = {}) {
@@ -552,8 +567,8 @@ function renderActivityRow(entry) {
   const title = entry.title || entry.operation || '';
   const relativeTime = timeAgo(timestamp) || '—';
   const row = document.createElement('tr');
-  row.className = 'clickable-row';
-  if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
+  const eventId = activityEventId(entry);
+  if (_requestedEventId && eventId === _requestedEventId) row.classList.add('activity-requested-row');
   row.innerHTML = `
     <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</td>
     <td class="activity-tool-column truncate mono" title="${esc(title)}">${esc(tool)}</td>
@@ -564,12 +579,8 @@ function renderActivityRow(entry) {
       <span class="activity-message-copy">${esc(message)}</span>
       ${title ? `<span class="activity-message-title">${esc(title)}</span>` : ''}
     </td>
-    <td class="activity-action-column"><button class="secondary activity-row-button" type="button" aria-label="${esc(activityActionLabel(entry))}">›</button></td>`;
-  row.onclick = () => openDetail(entry);
-  row.querySelector('.activity-row-button')?.addEventListener('click', event => {
-    event.stopPropagation();
-    openDetail(entry);
-  });
+    <td class="activity-action-column"><button class="secondary activity-row-button" type="button" data-focus-key="activity-${esc(eventId)}" aria-label="${esc(activityActionLabel(entry))}">Open</button></td>`;
+  row.querySelector('.activity-row-button')?.addEventListener('click', () => openDetail(entry));
   return row;
 }
 

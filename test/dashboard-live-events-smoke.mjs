@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import * as dashboardSessions from '../src/http/dashboardSessions.js';
-import { beginConnectorToolCall, resetToolActivity } from '../src/toolActivity.js';
+import { beginConnectorToolCall, getToolActivity, resetToolActivity } from '../src/toolActivity.js';
 import { resetTaskHistoryCaches } from '../src/taskHistoryStorage.js';
 import { mcpConnectionManager } from '../src/mcp/connectionManager.js';
 
@@ -13,10 +13,12 @@ const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.
 const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');
 
 assert.match(dashboardSource, /: keepalive/, 'dashboard SSE must include a heartbeat');
-for (const eventName of ['dashboard.bootstrap', 'task.updated', 'connection.updated', 'workspace.updated', 'process.updated', 'diagnostics.updated']) {
+for (const eventName of ['task.updated', 'connection.updated', 'workspace.updated', 'process.updated', 'diagnostics.updated']) {
   assert.match(dashboardSource, new RegExp(eventName.replace('.', '\\.')), `server must emit ${eventName}`);
   assert.match(eventClientSource, new RegExp(eventName.replace('.', '\\.')), `client must subscribe to ${eventName}`);
 }
+assert.doesNotMatch(dashboardSource, /dashboard\.bootstrap/, 'SSE must not rebuild the aggregate dashboard snapshot after HTML bootstrap');
+assert.doesNotMatch(eventClientSource, /dashboard\.bootstrap/, 'client must not subscribe to the deleted duplicate bootstrap event');
 assert.doesNotMatch(dashboardSource, /sendSse\(res, ['"]dashboard['"]/, 'legacy broad dashboard SSE events must be deleted');
 assert.match(dashboardSource, /createDashboardTaskEventBatcher/, 'production task updates must be coalesced before SSE publication');
 assert.doesNotMatch(dashboardSource, /DASHBOARD_SNAPSHOT_MAX_WAIT_MS|dashboardStreamPayload|requestedDashboardRevision/);
@@ -26,6 +28,7 @@ assert.doesNotMatch(dashboardClientSource, /relai_dashboard_token|setToken|getTo
 assert.match(eventClientSource, /removeEventListener/, 'SSE listeners must be removed when a source closes');
 assert.match(eventClientSource, /function parseEventData[\s\S]*try[\s\S]*JSON\.parse[\s\S]*catch/, 'SSE payload parsing must fail safely');
 assert.match(dashboardClientSource, /applyLiveEvent\(event\.type, event\.data\)/, 'browser coordinator must apply typed deltas through the canonical store');
+assert.match(dashboardClientSource, /liveCatchUpRequired/, 'browser coordinator must compare ready revisions and fetch only when live events were missed');
 assert.match(dashboardClientSource, /function viewRevisionKey/, 'route invalidation must use explicit revision keys');
 assert.doesNotMatch(dashboardClientSource, /viewFingerprint|createSnapshotGate|snapshot-order/, 'legacy snapshot ordering/fingerprinting must be removed');
 
@@ -58,7 +61,8 @@ process.env.REL_AI_MCP_STATE_DIR = sandbox;
 const { startHttpServer } = await import('../src/httpServer.js');
 const server = startHttpServer({
   host: '127.0.0.1', port: 0, token, exitOnError: false,
-  getDesktopStatus: () => desktopStatus
+  getDesktopStatus: () => desktopStatus,
+  getTaskActivity: () => getToolActivity()
 });
 const controller = new AbortController();
 let responseReader;
@@ -75,6 +79,12 @@ try {
   assert.match(dashboardCookie, /^relai_dashboard_session=/);
   const html = await dashboardResponse.text();
   assert.match(html, /id="initialDashboardData"/, 'HTML bootstrap remains available before SSE connects');
+  const initial = initialDashboardPayload(html);
+  assert.equal(initial.ok, true);
+  assert.ok(initial.live?.streamId, 'HTML bootstrap must carry the live stream identity');
+  assert.deepEqual(Object.keys(initial.live.revisions).sort(), ['connection', 'diagnostics', 'process', 'task', 'workspace']);
+  assert.ok(Array.isArray(initial.tasks));
+  assert.ok(Array.isArray(initial.managedProcesses));
 
   const response = await fetch(`http://127.0.0.1:${address.port}/events`, {
     headers: { cookie: dashboardCookie }, signal: controller.signal
@@ -83,15 +93,10 @@ try {
   responseReader = response.body.getReader();
   const stream = createEventReader(responseReader);
 
-  const ready = await stream.nextType('ready');
-  assert.equal(JSON.parse(ready.data).ok, true);
-  const bootstrapEvent = await stream.nextType('dashboard.bootstrap');
-  const bootstrap = JSON.parse(bootstrapEvent.data);
-  assert.equal(bootstrap.ok, true);
-  assert.ok(bootstrap.streamId);
-  assert.deepEqual(Object.keys(bootstrap.live.revisions).sort(), ['connection', 'diagnostics', 'process', 'task', 'workspace']);
-  assert.ok(Array.isArray(bootstrap.tasks));
-  assert.ok(Array.isArray(bootstrap.managedProcesses));
+  const ready = JSON.parse((await stream.nextType('ready')).data);
+  assert.equal(ready.ok, true);
+  assert.equal(ready.streamId, initial.live.streamId, 'SSE ready must identify the same stream as the HTML bootstrap');
+  assert.deepEqual(Object.keys(ready.revisions).sort(), ['connection', 'diagnostics', 'process', 'task', 'workspace']);
 
   fs.appendFileSync(auditPath, `${JSON.stringify({ ts: new Date().toISOString(), event: 'tool_call', tool: 'relai_read', workspace: 'test', ok: true })}\n`);
   const finishStart = beginConnectorToolCall({
@@ -104,7 +109,7 @@ try {
 
   const taskEvent = JSON.parse((await stream.nextType('task.updated')).data);
   assert.equal(taskEvent.domain, 'task');
-  assert.ok(taskEvent.revision > bootstrap.live.revisions.task);
+  assert.ok(taskEvent.revision > ready.revisions.task);
   assert.ok(taskEvent.taskUpdates.some(task => task.id === taskId));
   assert.ok(Array.isArray(taskEvent.activityEntries), 'task delta must carry only changed activity entries');
   assert.equal(Object.hasOwn(taskEvent, 'release'), false, 'task delta must not rebuild unrelated release state');
@@ -137,10 +142,16 @@ try {
     });
     secondReader = reconnect.body.getReader();
     const secondStream = createEventReader(secondReader);
-    await secondStream.nextType('ready');
-    const reconnectBootstrap = JSON.parse((await secondStream.nextType('dashboard.bootstrap')).data);
-    assert.equal(reconnectBootstrap.streamId, bootstrap.streamId, 'reconnect uses the current server event stream');
-    assert.ok(reconnectBootstrap.tasks.some(task => task.id === taskId), 'reconnect gets a fresh authoritative bootstrap');
+    const reconnectReady = JSON.parse((await secondStream.nextType('ready')).data);
+    assert.equal(reconnectReady.streamId, ready.streamId, 'reconnect uses the current server event stream');
+    assert.ok(reconnectReady.revisions.task >= taskEvent.revision, 'ready metadata must expose revisions needed for catch-up decisions');
+    const catchUpResponse = await fetch(`http://127.0.0.1:${address.port}/api/dashboard/v10?limit=100`, {
+      headers: { cookie: dashboardCookie }
+    });
+    assert.equal(catchUpResponse.status, 200);
+    const catchUp = await catchUpResponse.json();
+    assert.equal(catchUp.live.streamId, reconnectReady.streamId);
+    assert.ok(catchUp.tasks.some(task => task.id === taskId), 'aggregate catch-up fetch must contain the authoritative task state');
   } finally {
     secondController.abort();
     await secondReader?.cancel().catch(() => {});
@@ -157,7 +168,13 @@ try {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }
 
-console.log('Dashboard typed live events and reconnect bootstrap passed.');
+console.log('Dashboard typed live events and revision-based reconnect catch-up passed.');
+
+function initialDashboardPayload(html) {
+  const match = String(html).match(/<script type="application\/json" id="initialDashboardData"[^>]*>([\s\S]*?)<\/script>/);
+  assert.ok(match?.[1], 'HTML bootstrap must contain serialized dashboard data');
+  return JSON.parse(match[1]);
+}
 
 function createEventReader(reader) {
   const decoder = new TextDecoder();

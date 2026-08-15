@@ -59,7 +59,7 @@ async function exerciseSyncLiveView(updateBehavior) {
 }
 
 assert.match(dashboard, /module\.updateSystemLiveState\(root, currentSection\(\), data\)/);
-assert.match(dashboard, /connection: element => mountSystemRoute\(element, 'connection'\)/);
+assert.match(dashboard, /connection: systemSection\('connection'\)/);
 assert.doesNotMatch(dashboard, /settings\/connection/);
 assert.match(system, /updateConnectorLiveState\(content, dashboardState\)/);
 assert.match(connector, /export function updateConnectorLiveState/);
@@ -109,6 +109,8 @@ assert.equal(dashboard.includes('module.updateSystemLiveState(root, currentSecti
 }
 
 const desktopStatusSource = functionSource(dashboard, 'applyDesktopStatus');
+assert.match(desktopStatusSource, /patchLocalConnection/, 'desktop status pushes must update only their owned store slice');
+assert.doesNotMatch(desktopStatusSource, /initStore/, 'desktop status pushes must not replace the whole dashboard store');
 assert.match(desktopStatusSource, /syncLiveView\(data\)/, 'desktop status pushes must use passive route synchronization');
 assert.doesNotMatch(desktopStatusSource, /renderViewIfChanged/, 'desktop status pushes must not structurally rerender the route');
 assert.match(home, /export function updateHomeLiveState/);
@@ -156,7 +158,11 @@ assert.equal(
 const bootSource = functionSource(dashboard, 'boot');
 assert.match(bootSource, /relai:dashboard-refresh', event =>/, 'dashboard refresh events must carry explicit refresh intent');
 assert.match(bootSource, /event\.detail\?\.structural === true/, 'structural refreshes must be opt-in');
-assert.doesNotMatch(bootSource, /visibility-resume', render: true/, 'visibility resume must not force a structural rerender');
+assert.doesNotMatch(bootSource, /visibilitychange[\s\S]*doRefresh/, 'visibility changes must rely on SSE revision catch-up instead of rebuilding the dashboard');
+assert.match(functionSource(dashboard, 'liveCatchUpRequired'), /remoteRevisions/, 'SSE reconnects must compare typed server revisions before refreshing');
+assert.match(functionSource(dashboard, 'lazySection'), /context\.isCurrent/, 'lazy route modules must verify the current router generation before mounting');
+assert.match(dashboard, /data-route-retry/, 'lazy route failures must render a visible retry action');
+assert.doesNotMatch(dashboard, /\.then\(module => module\.mount[^\n]*\.catch\(debugError\)/, 'lazy route failures must not be swallowed by debug-only handlers');
 
 const refreshSource = functionSource(dashboard, 'performRefresh');
 assert.match(refreshSource, /options\.render === true[\s\S]*renderViewIfChanged\(hydrated\)/, 'explicit structural refreshes must retain rerender support');

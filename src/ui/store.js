@@ -1,5 +1,5 @@
-// Canonical dashboard client state. Bootstrap replaces the whole state; typed
-// domain deltas update only their owned projection and are ordered by revision.
+// Canonical dashboard client state. Aggregate refreshes replace the whole state;
+// typed domain deltas update only their owned projection and are ordered by revision.
 let _state = {};
 let _streamId = '';
 let _revisions = emptyRevisions();
@@ -17,12 +17,14 @@ export function init(initial) {
   syncLiveMetadata();
 }
 
-export function applyLiveEvent(type, payload = {}) {
-  if (type === 'dashboard.bootstrap') {
-    init(payload);
-    return { accepted: true, state: _state, domain: 'bootstrap' };
-  }
+export function patchLocalConnection(patch = {}) {
+  if (Object.hasOwn(patch, 'desktopStatus')) _state.desktopStatus = patch.desktopStatus;
+  if (Object.hasOwn(patch, 'connectionState')) _state.connectionState = patch.connectionState;
+  syncLiveMetadata();
+  return _state;
+}
 
+export function applyLiveEvent(type, payload = {}) {
   const domain = domainForEvent(type);
   if (!domain) return { accepted: false, state: _state, domain: '' };
   const streamId = String(payload.streamId || '');
@@ -223,9 +225,10 @@ function domainForEvent(type) {
   if (type === 'connection.updated') return 'connection';
   if (type === 'workspace.updated') return 'workspace';
   if (type === 'process.updated') return 'process';
+  if (type === 'diagnostics.updated') return 'diagnostics';
   return '';
 }
 
 function emptyRevisions() {
-  return { task: 0, connection: 0, workspace: 0, process: 0, config: 0, analytics: 0 };
+  return { task: 0, connection: 0, workspace: 0, process: 0, diagnostics: 0, config: 0, analytics: 0 };
 }
