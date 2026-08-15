@@ -14,10 +14,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><strong>Download Rel.AI</strong></a>
-  · <a href="docs/ONE_CLICK_SETUP.md">Set up</a>
-  · <a href="docs/CONNECTING_TO_CHATGPT.md">Connect ChatGPT</a>
-  · <a href="docs/SECURITY.md">Security</a>
+  <a href="https://kyne0328.github.io/rel-ai-mcp/"><strong>Website</strong></a>
+  · <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><strong>Download Rel.AI</strong></a>
+  · <a href="https://kyne0328.github.io/rel-ai-mcp/#setup">Set up</a>
+  · <a href="https://kyne0328.github.io/rel-ai-mcp/#architecture">How it works</a>
+  · <a href="https://kyne0328.github.io/rel-ai-mcp/#faq">FAQ</a>
 </p>
 
 <p align="center">
@@ -32,7 +33,7 @@
 
 Rel.AI MCP connects **ChatGPT web to local projects you choose**. ChatGPT provides the conversation and reasoning. Rel.AI gives that conversation the tools to find files, edit code, run commands and tests, inspect the result, review changes, and use Git on your computer.
 
-It is not a hosted coding computer, a new AI model, or an unrestricted remote shell. It is a local bridge between ChatGPT and the projects you explicitly add to Rel.AI.
+It is not a hosted coding computer, a new AI model, or a general-purpose remote shell. It is a local bridge between ChatGPT and the projects you explicitly add to Rel.AI.
 
 **Your project stays local. Each task stays separate. You review the result.**
 
@@ -63,7 +64,7 @@ Rel.AI does not currently support Claude, Cursor, Gemini, or other AI clients. S
 | **03** | **Checks confirm the result** | A command saying "done" is not enough. Rel.AI checks the current code before the task is considered complete. |
 | **04** | **Publishing is separate** | Editing code does not automatically commit, push, or prepare pull-request text. Those actions happen only when requested. |
 
-These rules are why Rel.AI is more than a file connector or unrestricted command bridge.
+These rules are why Rel.AI is more than a basic file connector or general-purpose command bridge.
 
 ## One task, end to end
 
