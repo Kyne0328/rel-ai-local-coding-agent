@@ -6,8 +6,7 @@ import path from 'node:path';
 const {
   buildSafeActivityProjection,
   sanitizeCompletionSummary,
-  sanitizeDisplayText,
-  sanitizeTaskRecord
+  sanitizeDisplayText
 } = await import('../src/taskObservability.js');
 const { createToolActivityTracker } = await import('../src/toolActivity.js');
 const {
@@ -102,9 +101,8 @@ try {
     events: [{ eventId: 'legacy-event', summary: `password=${originalSecret}` }]
   }));
   const historical = readTaskHistorySession(config, historicalTaskId);
-  assert.equal(historical.status, 'inactive', 'hard cutover must not reinterpret historical inactive records as current cancellation semantics');
-  assert.equal(JSON.stringify(historical).includes(originalSecret), false);
-  assert.equal(JSON.stringify(sanitizeTaskRecord(historical)).includes(originalSecret), false);
+  assert.equal(historical, null, 'hard cutover must not load unsupported pre-v3 task-history records');
+  assert.equal(fs.existsSync(historicalFile), false, 'unsupported secret-bearing task history must be removed during hard cutover');
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

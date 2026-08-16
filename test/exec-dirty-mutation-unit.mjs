@@ -36,6 +36,15 @@ try {
   const result = await relaiExec(workspace, config, { command });
   assert.equal(result.ok, true);
   assert.deepEqual(result.changedFiles, ['dirty.txt']);
+
+  const commandSecret = 'exec-command-secret-123456';
+  const redacted = await relaiExec(workspace, config, {
+    executable: process.execPath,
+    argv: [scriptPath, 'dirty.txt', `--token=${commandSecret}`]
+  });
+  assert.equal(redacted.ok, true);
+  assert.doesNotMatch(redacted.command, new RegExp(commandSecret));
+  assert.match(redacted.command, /\[REDACTED\]/i);
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

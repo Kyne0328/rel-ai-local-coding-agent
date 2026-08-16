@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  activeProcessesForWorkSession,
   listManagedProcesses,
   readManagedProcess,
   startManagedProcess,
@@ -77,6 +78,16 @@ try {
   assert.equal(started.workSessionId, ownerStart.taskId);
   assert.equal(started.readiness.verified, true);
   assert.equal(started.status, 'running');
+  assert.deepEqual(
+    activeProcessesForWorkSession(config, 'app', ownerStart.taskId).map(item => item.processId),
+    [started.processId],
+    'workflow process discovery must stay scoped to the owning work session'
+  );
+  assert.deepEqual(
+    activeProcessesForWorkSession(config, 'app', otherSession.taskId),
+    [],
+    'another logical task must not receive process records from the same workspace'
+  );
 
   const first = await waitForProcess(started.processId, ownerStart, snapshot =>
     snapshot.stdout.text.includes('READY') && snapshot.stdout.text.includes(`ECHO:${initialInput}`)

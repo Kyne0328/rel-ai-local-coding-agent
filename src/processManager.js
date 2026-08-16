@@ -959,9 +959,12 @@ function fileSize(file) {
   try { return fs.statSync(file).size; } catch { return 0; }
 }
 
-function activeProcessesForWorkspace(config, workspaceAlias) {
+function activeProcessesForWorkSession(config, workspaceAlias, workSessionId) {
+  const sessionId = String(workSessionId || '').trim();
+  if (!sessionId) return [];
   hydrateProcessMetadata(config);
   return [...processes.values()].filter(item => workspaceMatches(item, workspaceAlias)
+    && String(item.workSessionId || '').trim() === sessionId
     && processNeedsTermination(item));
 }
 
@@ -1065,7 +1068,7 @@ function clampNumber(value, min, max, fallback) {
 }
 
 export {
-  activeProcessesForWorkspace,
+  activeProcessesForWorkSession,
   listManagedProcesses,
   managedProcessStateRevision,
   onManagedProcessChange,
