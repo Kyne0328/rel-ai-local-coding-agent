@@ -31,7 +31,8 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     ...process.env,
     REL_AI_MCP_CONFIG: configPath,
     REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_STATE_DIR: stateDir
+    REL_AI_MCP_STATE_DIR: stateDir,
+    REL_AI_MCP_MAX_BODY_BYTES: String(12 * 1024 * 1024)
   }
 });
 let stderr = '';
@@ -93,6 +94,11 @@ try {
   assert.equal(discovery.body.result?.cacheScope, 'private');
   assert.ok(Number.isFinite(discovery.body.result?.ttlMs) && discovery.body.result.ttlMs > 0, 'discovery cache TTL must remain finite and positive');
   assert.equal(discovery.response.headers.get('mcp-session-id'), null);
+
+  const largeConfiguredRequest = await client.request('server/discover', {
+    padding: 'x'.repeat((10 * 1024 * 1024) + (128 * 1024))
+  });
+  assert.notEqual(largeConfiguredRequest.response.status, 413, 'MCP request handling must honor the configured body limit instead of imposing a second 10 MiB cap');
 
   const liveDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(liveDashboard.mcpConnection.status, 'ready');
@@ -157,6 +163,23 @@ try {
   assert.equal(missingExecMode.response.status, 200, JSON.stringify(missingExecMode.body));
   assert.equal(missingExecMode.body.error?.code, -32602, JSON.stringify(missingExecMode.body));
   assert.match(missingExecMode.body.error?.message || '', /command|executable/i, 'task-aware preflight validation must reject a missing relai_exec mode before runtime dispatch');
+
+  const concurrentCalls = await Promise.all(Array.from({ length: 12 }, () => client.request('tools/call', {
+    name: 'relai_exec',
+    arguments: {
+      work_id: workId,
+      executable: process.execPath,
+      argv: ['-e', 'setTimeout(() => {}, 1000)'],
+      timeoutMs: 5_000,
+      maxOutputBytes: 64 * 1024
+    }
+  })));
+  assert.deepEqual(
+    concurrentCalls.map(item => item.response.status),
+    Array(12).fill(200),
+    'independent HTTP requests from one MCP client must not be rejected by an arbitrary transport concurrency gate'
+  );
+
   const cancelled = await client.request('tools/call', {
     name: 'relai_work',
     arguments: { action: 'cancel', work_id: workId, reason: 'HTTP begin regression completed.' }

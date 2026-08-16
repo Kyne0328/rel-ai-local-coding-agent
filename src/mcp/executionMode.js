@@ -14,10 +14,9 @@ const TASK_ELIGIBILITY = Object.freeze({
 });
 const TASK_ELIGIBILITY_VALUES = new Set(Object.values(TASK_ELIGIBILITY));
 const DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS = Object.freeze({
-  // This is a response-shaping budget for clients that support native Tasks.
-  // It must never shorten a tool's own timeout for clients that require synchronous fallback.
-  maxDurationMs: 30_000,
-  maxCapturedOutputBytes: 2 * 1024 * 1024
+  // Bound only how long an HTTP/stdio response stays synchronously occupied.
+  // Tool-specific output limits belong to the tool that produces the output.
+  maxDurationMs: 30_000
 });
 const BOUNDED_SYNCHRONOUS_CLEANUP = Object.freeze({
   abortOnRequestClose: true,
@@ -41,7 +40,6 @@ function selectExecutionMode(options = {}) {
   const synchronous = assessSynchronousExecution({
     canCompleteSynchronously: options.canCompleteSynchronously,
     estimatedDurationMs: options.estimatedDurationMs,
-    estimatedOutputBytes: options.estimatedOutputBytes,
     bounds
   });
   const contract = { capability, taskEligibility, bounds, signal, synchronous };
@@ -90,24 +88,18 @@ function selectExecutionMode(options = {}) {
 function assessSynchronousExecution({
   canCompleteSynchronously,
   estimatedDurationMs,
-  estimatedOutputBytes,
   bounds = DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS
 } = {}) {
   const normalizedBounds = normalizeSynchronousExecutionBounds(bounds);
   const durationMs = optionalNonNegativeNumber(estimatedDurationMs, 'estimatedDurationMs');
-  const outputBytes = optionalNonNegativeNumber(estimatedOutputBytes, 'estimatedOutputBytes');
   const violations = [];
   if (canCompleteSynchronously !== true) violations.push('operation_not_synchronously_safe');
   if (durationMs !== undefined && durationMs > normalizedBounds.maxDurationMs) {
     violations.push('maximum_duration_exceeded');
   }
-  if (outputBytes !== undefined && outputBytes > normalizedBounds.maxCapturedOutputBytes) {
-    violations.push('maximum_captured_output_exceeded');
-  }
   return Object.freeze({
     safe: violations.length === 0,
     estimatedDurationMs: durationMs,
-    estimatedOutputBytes: outputBytes,
     violations: Object.freeze(violations)
   });
 }
@@ -117,8 +109,7 @@ function normalizeSynchronousExecutionBounds(value = DEFAULT_SYNCHRONOUS_EXECUTI
     throw new TypeError('synchronousBounds must be an object.');
   }
   return Object.freeze({
-    maxDurationMs: positiveFiniteNumber(value.maxDurationMs, 'maxDurationMs'),
-    maxCapturedOutputBytes: positiveFiniteNumber(value.maxCapturedOutputBytes, 'maxCapturedOutputBytes')
+    maxDurationMs: positiveFiniteNumber(value.maxDurationMs, 'maxDurationMs')
   });
 }
 

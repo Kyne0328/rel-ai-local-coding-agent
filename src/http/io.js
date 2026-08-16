@@ -24,21 +24,36 @@ function requestError(message, status = 400) {
 }
 
 function readRawBody(req, maxBytes) {
+  const limit = Number(maxBytes);
   return new Promise((resolve, reject) => {
-    // Decode once at the end so split UTF-8 sequences remain intact.
+    const declaredBytes = Number(req.headers?.["content-length"]);
+    if (Number.isSafeInteger(declaredBytes) && declaredBytes >= 0 && declaredBytes > limit) {
+      req.resume?.();
+      reject(requestError(`Request body exceeds ${limit} bytes.`, 413));
+      return;
+    }
+
+    // Buffer bytes until JSON parsing. Keeping native chunks and concatenating once is
+    // measurably faster than incremental string decoding or manual preallocation here.
     const chunks = [];
     let bytes = 0;
+    let rejected = false;
     req.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes > maxBytes) {
-        reject(requestError(`Request body exceeds ${maxBytes} bytes.`, 413));
-        req.destroy();
+      if (rejected) return;
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += buffer.length;
+      if (bytes > limit) {
+        rejected = true;
+        req.resume?.();
+        reject(requestError(`Request body exceeds ${limit} bytes.`, 413));
         return;
       }
-      chunks.push(chunk);
+      chunks.push(buffer);
     });
     req.on("error", reject);
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("end", () => {
+      if (!rejected) resolve(Buffer.concat(chunks, bytes).toString("utf8"));
+    });
   });
 }
 
