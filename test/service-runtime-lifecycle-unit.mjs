@@ -19,9 +19,11 @@ try {
   const localStart = deferred();
   const tunnelStart = deferred();
   let listening = false;
+  let localStartCalls = 0;
   let localStopCalls = 0;
   let tunnelStopCalls = 0;
   let dashboardCloseCalls = 0;
+  let localStopGate = null;
   let currentStatus = { serverRunning: false, tunnelStatus: 'stopped' };
 
   const runtime = createDesktopServiceRuntime({
@@ -39,12 +41,14 @@ try {
       isListening: () => listening,
       updateContext() {},
       async start() {
+        localStartCalls += 1;
         const result = await localStart.promise;
         listening = true;
         return result;
       },
       async stop() {
         localStopCalls += 1;
+        if (localStopGate) await localStopGate.promise;
         listening = false;
         return {
           ok: true,
@@ -62,7 +66,7 @@ try {
     },
     runtimeLogs: { snapshot: () => ({ available: true, revision: 0, count: 0, entries: [] }) },
     secureTunnelRuntime: {
-      snapshot: () => ({ state: 'stopped' }),
+      snapshot: () => ({ state: currentStatus.tunnelStatus || 'stopped' }),
       start: () => tunnelStart.promise,
       async stop() {
         tunnelStopCalls += 1;
@@ -97,6 +101,24 @@ try {
   assert.equal(dashboardCloseCalls, 1);
   assert.equal(listening, false);
   assert.equal(stopped.cleanup.clean, true);
+
+  listening = true;
+  currentStatus = { serverRunning: true, tunnelStatus: 'running' };
+  localStopGate = deferred();
+  const racingStop = runtime.stopServer({ preserveDashboard: true });
+  await new Promise(resolve => setImmediate(resolve));
+  let racingStartSettled = false;
+  const racingStart = runtime.startServer().then(status => {
+    racingStartSettled = true;
+    return status;
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(racingStartSettled, false, 'a start requested during shutdown must wait for the stop transition instead of being lost');
+  assert.equal(localStartCalls, 1, 'the replacement local service must not start until the previous stop finishes');
+  localStopGate.resolve();
+  await racingStop;
+  await racingStart;
+  assert.equal(localStartCalls, 2, 'the deferred start must run after shutdown completes');
 } finally {
   if (previousState === undefined) delete process.env.REL_AI_MCP_STATE_DIR; else process.env.REL_AI_MCP_STATE_DIR = previousState;
   if (previousConfig === undefined) delete process.env.REL_AI_MCP_CONFIG; else process.env.REL_AI_MCP_CONFIG = previousConfig;
