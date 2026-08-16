@@ -75,6 +75,12 @@ assert.equal(isToolSurfaceSourcePath('src/tools/publicOperationSchemas.js'), tru
 assert.equal(isToolSurfaceSourcePath('src/tools/outputValidation.js'), true, 'output validation changes are tool-surface changes');
 assert.equal(isToolSurfaceSourcePath('src/tools/handlers.js'), true, 'handler registration changes are tool-surface changes');
 assert.equal(isToolSurfaceSourcePath('src/tools/compactResult.js'), true, 'connector output compaction changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/execution.js'), true, 'tool execution changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/status.js'), true, 'tool status serialization changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/task.js'), true, 'tool task handlers are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/cancellation.js'), true, 'tool cancellation behavior is a tool-surface change');
+assert.equal(isToolSurfaceSourcePath('src/tools/new-contract-module.js'), true, 'new tool-system files must inherit tool-surface risk without allowlist maintenance');
+assert.equal(isToolSurfaceSourcePath('src/http/mcpTransport.js'), false, 'non-tool-system paths keep their own risk classification');
 
 const publicSchemaByName = new Map(gatewayManifest.tools.map(tool => [tool.name, tool.inputSchema]));
 const resolvedKeys = [];

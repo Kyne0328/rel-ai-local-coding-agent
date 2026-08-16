@@ -23,7 +23,8 @@ function connectorSafeInputSchema(inputSchema) {
   const allOf = [];
   if (Array.isArray(variants) && variants.length) {
     if (variants.every(isActionVariant)) {
-      allOf.push(...variants.map(branch => actionVariantGuard(branch, schema.properties || {})));
+      const sharedRequired = new Set(schema.required || []);
+      allOf.push(...variants.map(branch => actionVariantGuard(branch, schema.properties || {}, sharedRequired)));
     } else {
       allOf.push({ oneOf: variants });
     }
@@ -35,7 +36,7 @@ function isActionVariant(branch) {
   return branch?.properties?.action?.const != null;
 }
 
-function actionVariantGuard(branch, sharedProperties) {
+function actionVariantGuard(branch, sharedProperties, sharedRequired) {
   const {
     type: _type,
     properties = {},
@@ -46,7 +47,7 @@ function actionVariantGuard(branch, sharedProperties) {
   const { action, ...branchProperties } = properties;
   const specificProperties = Object.fromEntries(Object.entries(branchProperties)
     .filter(([name, fieldSchema]) => JSON.stringify(fieldSchema) !== JSON.stringify(sharedProperties[name])));
-  const branchRequired = required.filter(field => field !== 'action');
+  const branchRequired = required.filter(field => field !== 'action' && !sharedRequired.has(field));
   const allowedFields = ['action', ...Object.keys(branchProperties)];
   const forbiddenFields = Object.keys(sharedProperties).filter(field => !allowedFields.includes(field));
   const propertyNames = forbiddenFields.length < allowedFields.length

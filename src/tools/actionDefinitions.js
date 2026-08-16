@@ -265,6 +265,8 @@ function actionBranch(action, mapping) {
 
 function mergePropertySchema(left, right) {
   if (JSON.stringify(left) === JSON.stringify(right)) return left;
+  if (isBoundedSchemaSubset(left, right)) return right;
+  if (isBoundedSchemaSubset(right, left)) return left;
   const variants = [];
   for (const candidate of [left, right]) {
     if (Array.isArray(candidate?.anyOf) && Object.keys(candidate).length === 1) variants.push(...candidate.anyOf);
@@ -279,6 +281,40 @@ function mergePropertySchema(left, right) {
     unique.push(variant);
   }
   return { anyOf: unique };
+}
+
+function isBoundedSchemaSubset(candidate, superset) {
+  if (!candidate || !superset || candidate.type !== superset.type) return false;
+  if (candidate.type === 'number' || candidate.type === 'integer') {
+    if (!hasOnlyKeys(candidate, ['type', 'minimum', 'maximum']) || !hasOnlyKeys(superset, ['type', 'minimum', 'maximum'])) return false;
+    return lowerBound(candidate.minimum) >= lowerBound(superset.minimum)
+      && upperBound(candidate.maximum) <= upperBound(superset.maximum);
+  }
+  if (candidate.type === 'string') {
+    if (!hasOnlyKeys(candidate, ['type', 'minLength', 'maxLength']) || !hasOnlyKeys(superset, ['type', 'minLength', 'maxLength'])) return false;
+    return lowerBound(candidate.minLength, 0) >= lowerBound(superset.minLength, 0)
+      && upperBound(candidate.maxLength) <= upperBound(superset.maxLength);
+  }
+  if (candidate.type === 'array') {
+    if (!hasOnlyKeys(candidate, ['type', 'items', 'minItems', 'maxItems']) || !hasOnlyKeys(superset, ['type', 'items', 'minItems', 'maxItems'])) return false;
+    return lowerBound(candidate.minItems, 0) >= lowerBound(superset.minItems, 0)
+      && upperBound(candidate.maxItems) <= upperBound(superset.maxItems)
+      && isBoundedSchemaSubset(candidate.items, superset.items);
+  }
+  return false;
+}
+
+function hasOnlyKeys(value, allowed) {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value || {}).every(key => allowedKeys.has(key));
+}
+
+function lowerBound(value, fallback = Number.NEGATIVE_INFINITY) {
+  return Number.isFinite(value) ? Number(value) : fallback;
+}
+
+function upperBound(value) {
+  return Number.isFinite(value) ? Number(value) : Number.POSITIVE_INFINITY;
 }
 
 function getPublicActionContract(definition, action) {
