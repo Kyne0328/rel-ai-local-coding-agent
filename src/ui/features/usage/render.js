@@ -2,6 +2,15 @@ import { routeHref } from '../../router.js';
 import { esc } from '../../utils.js';
 import { deltaFor } from './range-model.js';
 
+const METRIC_HELP = Object.freeze({
+  toolCalls: 'Total Rel.AI tool actions recorded in this range. The change compares with the previous equivalent period.',
+  reliabilityRate: 'Share of measured, non-cancelled actions that did not fail because of Rel.AI infrastructure. “pp” means percentage points: 90% to 95% is +5 pp.',
+  infrastructureFailures: 'Actions classified as Rel.AI infrastructure failures. Expected command or check failures and cancellations are excluded.',
+  recoverableFailures: 'Actions that hit a recoverable task or context state and can usually be fixed by retrying or refreshing context.',
+  operationSuccessRate: 'Share of recorded actions where the requested command or check succeeded. Rate changes use percentage points (pp).',
+  averageDuration: 'Average elapsed time per completed action in this range. The change compares with the previous equivalent period when available.'
+});
+
 export function renderUsage(content, { bounds, current, previous }) {
   const fallback = current.usedMonthlyFallback && current.points.every(point => point.toolCalls === 0 && point.requests === 0)
     ? '<p class="usage-series-note">Hourly trends are unavailable for older monthly totals.</p>' : '';
@@ -16,26 +25,52 @@ export function renderUsage(content, { bounds, current, previous }) {
       ? `${failureCategoriesSection(current.failureCategories, current.failures)}${breakdownSection('Devices', current.devices, 'device')}`
       : `<div class="usage-side-by-side">${failureCategoriesSection(current.failureCategories, current.failures)}${activityBarsSection('Project activity', current.workspaces, 'workspace')}</div>`}`;
   wireTimeline(content, current);
+  wireMetricHelp(content);
 }
 
 function analyticsMetrics(scope, previous) {
   const values = key => scope.points.map(point => pointMetric(point, key));
-  const compare = (key, options = {}) => scope.usedMonthlyFallback || options.available === false ? null : deltaFor(scope, previous, key, options);
-  const metric = (label, key, value, detail = '', options = {}) => ({ label, value, detail, delta: compare(key, options), values: options.spark === false ? [] : values(options.sparkKey || key), tone: options.metricTone || '' });
+  const compare = (key, options = {}) => scope.usedMonthlyFallback || options.available === false || options.previousAvailable === false ? null : deltaFor(scope, previous, key, options);
+  const metric = (label, key, value, detail = '', options = {}) => ({ key, label, value, detail, help: METRIC_HELP[key] || '', delta: compare(key, options), values: options.spark === false ? [] : values(options.sparkKey || key), tone: options.metricTone || '' });
   return [
     metric('Actions', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
-    metric('Reliable actions', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} measured actions` : 'Starts measuring with new actions', { rate: true, available: scope.reliabilityCalls > 0, spark: false }),
+    metric('Reliable actions', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} measured actions` : 'Starts measuring with new actions', { rate: true, available: scope.reliabilityCalls > 0, previousAvailable: Number(previous?.reliabilityCalls || 0) > 0, spark: false }),
     metric('System errors', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Rel.AI internal errors only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
     metric('Retryable problems', 'recoverableFailures', integer(scope.recoverableFailures), 'Usually fixed by retrying or refreshing context', { inverse: true }),
-    metric('Successful actions', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'Whether the command or check itself succeeded', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0 }),
-    metric('Average time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed action' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0 })
+    metric('Successful actions', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'Whether the command or check itself succeeded', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0, previousAvailable: Number(previous?.completed || 0) > 0 }),
+    metric('Average time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed action' : '', { inverse: true, sparkKey: 'averageDuration', available: scope.completed > 0, previousAvailable: Number(previous?.completed || 0) > 0 })
   ];
 }
 
 function metricHtml(metric) {
   const delta = metric.delta ? `<small class="usage-delta ${esc(metric.delta.tone || '')}">${esc(metric.delta.text)}</small>` : '';
   const detail = metric.detail ? `<small class="usage-metric-detail">${esc(metric.detail)}</small>` : '';
-  return `<article class="usage-metric ${esc(metric.tone)}"><span>${esc(metric.label)}</span><div class="usage-metric-value"><strong>${esc(metric.value)}</strong>${delta}</div>${detail}${sparkline(metric.values, metric.tone)}</article>`;
+  const helpId = `usage-metric-help-${metric.key}`;
+  const help = metric.help ? `<span class="usage-metric-help"><button type="button" class="usage-metric-help-trigger" aria-label="About ${esc(metric.label)}" aria-describedby="${esc(helpId)}" data-usage-metric-help>i</button><span id="${esc(helpId)}" role="tooltip" class="usage-metric-tooltip">${esc(metric.help)}</span></span>` : '';
+  return `<article class="usage-metric ${esc(metric.tone)}"><div class="usage-metric-label-row"><span class="usage-metric-label">${esc(metric.label)}</span>${help}</div><div class="usage-metric-value"><strong>${esc(metric.value)}</strong>${delta}</div>${detail}${sparkline(metric.values, metric.tone)}</article>`;
+}
+
+function wireMetricHelp(content) {
+  content.querySelectorAll('[data-usage-metric-help]').forEach(button => {
+    const help = button.closest('.usage-metric-help');
+    const metric = button.closest('.usage-metric');
+    if (!help || !metric) return;
+    const setOpen = open => {
+      help.classList.toggle('is-open', open);
+      metric.classList.toggle('help-open', open);
+    };
+    button.addEventListener('pointerenter', () => setOpen(true));
+    button.addEventListener('pointerleave', () => {
+      if (document.activeElement !== button) setOpen(false);
+    });
+    button.addEventListener('focus', () => setOpen(true));
+    button.addEventListener('blur', () => setOpen(false));
+    button.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      event.stopPropagation();
+    });
+  });
 }
 
 function timelineSection(scope) {

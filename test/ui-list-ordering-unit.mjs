@@ -65,16 +65,23 @@ assert.deepEqual(orderSessionsForDisplay(sessions).map(session => session.id), [
 assert.deepEqual(orderSessionsForDisplay([
   { id: 'completed-newest', status: 'completed', completedAt: '2026-07-25T12:04:00.000Z' },
   { id: 'waiting-newer', status: 'waiting', lastActivityAt: '2026-07-25T12:02:00.000Z' },
-  { id: 'working-older', status: 'working', lastActivityAt: '2026-07-25T12:01:00.000Z' },
+  { id: 'working-older', status: 'working', state: 'working', activeCalls: 1, startedAt: '2026-07-25T11:59:00.000Z', lastActivityAt: '2026-07-25T12:01:00.000Z' },
   { id: 'failed-middle', status: 'failed', endedAt: '2026-07-25T12:03:00.000Z' },
   { id: 'inactive-oldest', status: 'inactive', endedAt: '2026-07-25T12:00:00.000Z' }
 ]).map(session => session.id), [
   'working-older',
+  'waiting-newer',
   'completed-newest',
   'failed-middle',
-  'waiting-newer',
   'inactive-oldest'
 ]);
+const stableOngoing = [
+  { id: 'first-open', status: 'planning', state: 'waiting', activeCalls: 0, startedAt: '2026-07-25T10:00:00.000Z', updatedAt: '2026-07-25T10:05:00.000Z' },
+  { id: 'second-working', status: 'working', state: 'working', activeCalls: 1, startedAt: '2026-07-25T10:01:00.000Z', updatedAt: '2026-07-25T10:02:00.000Z' }
+];
+assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.id), ['first-open', 'second-working']);
+stableOngoing[1].updatedAt = '2026-07-25T10:10:00.000Z';
+assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.id), ['first-open', 'second-working'], 'ongoing task activity must not reorder stable task rows');
 assert.deepEqual(orderOverviewTasks(sessions).map(session => session.id), ['newer', 'older', 'invalid']);
 assert.deepEqual(orderActivityEntries([
   { id: 'older', ts: '2026-07-25T10:00:00.000Z' },

@@ -51,6 +51,19 @@ function finishClose(onClose) {
   if (onClose) onClose();
 }
 
+export function updateDrawer({ title, content } = {}) {
+  if (content != null && !(content instanceof Node)) throw new TypeError('Drawer content must be a DOM Node.');
+  const panel = document.getElementById('__relai-drawer-backdrop')?.querySelector('.drawer-panel');
+  const body = panel?.querySelector('.drawer-body');
+  const titleElement = panel?.querySelector('#__relai-drawer-title');
+  if (!panel || !body || !titleElement) return false;
+  const scrollTop = body.scrollTop;
+  if (title !== undefined) titleElement.textContent = title || '';
+  if (content instanceof Node) body.replaceChildren(content);
+  body.scrollTop = scrollTop;
+  return true;
+}
+
 export function closeDrawer() {
   document.getElementById('__relai-drawer-backdrop')?.remove();
   _drawerCleanup?.();

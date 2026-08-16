@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { buildUsageModel, currentUsageMonth } from '../src/ui/features/usage/index.js';
 import { analyticsBounds, analyticsRangeScope } from '../src/ui/features/usage/range-model.js';
 import { loadAnalyticsData } from '../src/ui/features/usage/data.js';
+import { renderUsage } from '../src/ui/features/usage/render.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -16,6 +17,7 @@ const usageSource = read('src/ui/features/usage/index.js');
 const usageRender = read('src/ui/features/usage/render.js');
 const usageRange = read('src/ui/features/usage/range-model.js');
 const usageData = read('src/ui/features/usage/data.js');
+const usageCss = read('src/ui/features/usage/styles.css');
 const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageData}`;
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
@@ -41,6 +43,37 @@ assert.match(usageRender, /aria-pressed="\$\{i \? 'false' : 'true'\}"/);
 assert.match(usageRender, /setAttribute\('aria-pressed', String\(active\)\)/);
 assert.match(usageRender, /Overall trend \$\{trend\}/, 'Analytics charts must expose the computed trend to assistive technology');
 assert.match(usageRender, /Peak \$\{formatChartValue\(peak, metricLabel\)\}/, 'Analytics charts must expose the peak value to assistive technology');
+assert.match(usageRender, /role="tooltip"/, 'Analytics metric help must expose tooltip semantics');
+assert.match(usageRender, /aria-describedby=/, 'Analytics metric help triggers must reference their tooltip text');
+assert.match(usageRender, /event\.key !== 'Escape'/, 'Analytics metric tooltips must be dismissible with Escape');
+assert.match(usageRender, /percentage points: 90% to 95% is \+5 pp/i, 'Rate help must explain percentage points with an example');
+assert.match(usageCss, /\.usage-metric-help\.is-open \.usage-metric-tooltip/, 'Analytics metric tooltips must have an explicit visible state');
+
+const metricRenderTarget = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
+const currentMetricScope = {
+  label: 'All projects', kind: 'all', usedMonthlyFallback: false,
+  toolCalls: 10, reliabilityCalls: 10, reliableCalls: 9.68, reliabilityRate: 96.8,
+  infrastructureFailures: 0, recoverableFailures: 0, failures: 1,
+  completed: 10, operationSuccessRate: 92.7, averageDuration: 6120,
+  points: [], tools: [], workspaces: [], devices: [], failureCategories: []
+};
+const previousWithoutRateBaselines = {
+  toolCalls: 0, reliabilityCalls: 0, reliableCalls: 0, reliabilityRate: 0,
+  infrastructureFailures: 0, recoverableFailures: 0, completed: 0,
+  operationSuccessRate: 0, averageDuration: 0
+};
+renderUsage(metricRenderTarget, { bounds: { label: 'Last 24 hours' }, current: currentMetricScope, previous: previousWithoutRateBaselines });
+assert.match(metricRenderTarget.innerHTML, /usage-metric-help-reliabilityRate/, 'Rate metrics must render contextual help');
+assert.doesNotMatch(metricRenderTarget.innerHTML, /\+96\.8 pp/, 'A missing prior reliability baseline must not be displayed as a 0% comparison');
+assert.doesNotMatch(metricRenderTarget.innerHTML, /\+92\.7 pp/, 'A missing prior success-rate baseline must not be displayed as a 0% comparison');
+
+renderUsage(metricRenderTarget, {
+  bounds: { label: 'Last 24 hours' },
+  current: currentMetricScope,
+  previous: { ...previousWithoutRateBaselines, toolCalls: 10, reliabilityCalls: 10, reliableCalls: 9, reliabilityRate: 90, completed: 10, operationSuccessRate: 90, averageDuration: 7000 }
+});
+assert.match(metricRenderTarget.innerHTML, /\+6\.8 pp/, 'Measured reliability rates must compare in percentage points');
+assert.match(metricRenderTarget.innerHTML, /\+2\.7 pp/, 'Measured success rates must compare in percentage points');
 
 for (const label of ['Actions', 'Reliable actions', 'System errors', 'Retryable problems', 'Successful actions', 'Average time']) {
   assert.match(usageCombined, new RegExp(label), `Usage must render ${label}.`);
