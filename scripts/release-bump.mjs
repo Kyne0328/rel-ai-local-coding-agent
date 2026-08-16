@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { VERSION_JSON_FILES } from './release-surfaces.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
@@ -128,17 +129,22 @@ if (!allowSame && compareVersions(version, current) <= 0) {
   die(`new version ${version} must be greater than current ${current}; pass --allow-same to rewrite the same version`);
 }
 
-const files = [
-  'package.json',
-  'package-lock.json',
-  path.join('electron', 'package.json'),
-  path.join('electron', 'package-lock.json'),
-  path.join('.codex-plugin', 'plugin.json')
-];
-
-for (const file of files) updateJsonVersion(file, version);
+for (const file of VERSION_JSON_FILES) updateJsonVersion(file, version);
 const releaseManifest = readJson('release-manifest.json');
-releaseManifest.applicationVersion = version;
+if (!dryRun) {
+  const runtimeMetadataPath = rel('src', 'runtimeCompatibility.js');
+  if (fs.existsSync(runtimeMetadataPath)) {
+    const { runtimeMetadata } = await import(`${pathToFileURL(runtimeMetadataPath).href}?releaseBump=${Date.now()}`);
+    const runtime = runtimeMetadata();
+    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion']) {
+      releaseManifest[field] = runtime[field];
+    }
+  } else {
+    releaseManifest.applicationVersion = version;
+  }
+} else {
+  releaseManifest.applicationVersion = version;
+}
 writeJson('release-manifest.json', releaseManifest);
 replaceExact(path.join('electron', 'renderer', 'status.html'), `id="appVersion">v${current}</span>`, `id="appVersion">v${version}</span>`);
 if (!noChangelog) insertChangelog(version, date);
