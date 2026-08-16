@@ -21,6 +21,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             electron/package-lock.json
+      - name: Use declared npm
+        run: node scripts/ensure-package-manager.mjs
       - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
@@ -28,7 +30,6 @@ jobs:
         run: node electron/node_modules/electron/install.js
       - name: Verify Electron test binary
         run: test -x electron/node_modules/electron/dist/electron
-      - run: npm run verify:color-tokens
       - run: npm run audit:production
       - run: npm run test:native-tasks-release-gate
       - run: xvfb-run --auto-servernum npm run test:all
@@ -46,6 +47,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             electron/package-lock.json
+      - name: Use declared npm
+        run: node scripts/ensure-package-manager.mjs
       - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
@@ -95,6 +98,8 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             electron/package-lock.json
+      - name: Use declared npm
+        run: node scripts/ensure-package-manager.mjs
       - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron

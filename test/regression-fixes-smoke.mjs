@@ -4,8 +4,8 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import { fileURLToPath } from 'node:url';
+import { availablePort } from './helpers/available-port.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -196,15 +196,3 @@ try {
 
 console.log('Regression fixes smoke test passed.');
 
-function availablePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = address && typeof address !== 'string' ? address.port : 0;
-      server.close(error => error ? reject(error) : resolve(port));
-    });
-  });
-}
