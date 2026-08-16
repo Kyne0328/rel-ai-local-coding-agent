@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import { releaseNotesHtml, supportPolicyView } from '../src/ui/features/settings/desktop-updates.js';
+
+const updateUiSource = fs.readFileSync(new URL('../src/ui/features/settings/desktop-updates.js', import.meta.url), 'utf8');
+assert.match(updateUiSource, /wireActions\(container, installedReleaseNotes\)/, 'update actions must retain bundled installed release notes');
+assert.match(updateUiSource, /renderStatus\(container, result\.status, installedReleaseNotes\)/, 'successful update actions must retain bundled release notes');
+assert.match(updateUiSource, /renderFailure\(container, messageOf\(error\), installedReleaseNotes\)/, 'failed update actions must retain bundled release notes');
 
 assert.equal(supportPolicyView({ state: 'current', currentVersion: '0.25.0', minimumSupportedVersion: '0.25.0' }).label, 'Supported');
 assert.equal(supportPolicyView({ state: 'required', currentVersion: '0.24.9', minimumSupportedVersion: '0.25.0' }).tone, 'bad');

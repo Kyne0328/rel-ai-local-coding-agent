@@ -70,7 +70,7 @@ function renderStatus(container, status = {}, installedReleaseNotes = null) {
       <a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">GitHub Releases</a>
       ${state === 'error' ? '<a class="buttonlike secondary" href="#diagnostics">Troubleshoot</a>' : ''}
     </div>`;
-  wireActions(container);
+  wireActions(container, installedReleaseNotes);
 }
 
 function updateView(state, status, currentVersion, availableVersion) {
@@ -171,13 +171,13 @@ function progressHtml(state, progress) {
     </div>`;
 }
 
-function wireActions(container) {
+function wireActions(container, installedReleaseNotes = null) {
   container.querySelectorAll('[data-update-action]').forEach(button => {
-    button.addEventListener('click', () => runAction(container, button, button.dataset.updateAction));
+    button.addEventListener('click', () => runAction(container, button, button.dataset.updateAction, installedReleaseNotes));
   });
 }
 
-async function runAction(container, button, action) {
+async function runAction(container, button, action, installedReleaseNotes = null) {
   const method = {
     check: 'checkForUpdates',
     download: 'downloadUpdate',
@@ -188,10 +188,10 @@ async function runAction(container, button, action) {
   button.setAttribute('aria-busy', 'true');
   try {
     const result = await window.relaiDesktop[method]();
-    if (result?.status) renderStatus(container, result.status);
+    if (result?.status) renderStatus(container, result.status, installedReleaseNotes);
     if (result?.ok === false) toast(result.error || 'The update action failed.', { variant: 'error' });
   } catch (error) {
-    renderFailure(container, messageOf(error));
+    renderFailure(container, messageOf(error), installedReleaseNotes);
     toast(messageOf(error), { variant: 'error' });
   }
 }

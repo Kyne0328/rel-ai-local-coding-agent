@@ -38,16 +38,11 @@ Required invariants:
 
 The native Tasks source gate is `npm run test:native-tasks-release-gate`.
 
-## 3. Verify the tunnel component
+## 3. Verify pinned native components
 
-```bash
-npm run fetch:tunnel-client
-npm run verify:tunnel-client
-```
+`vendor/tunnel-client/manifest.json` and `vendor/zoekt/manifest.json` pin the reviewed runtime components, provenance, target-specific file sizes, and SHA-256 hashes. `scripts/electron-package.mjs` owns target provisioning: when a required tunnel-client or Zoekt binary is missing or stale, the package command fetches/builds the pinned artifact and then verifies it before Electron Builder runs. CI and local packaging therefore use the same preparation path instead of separate platform setup steps.
 
-`vendor/tunnel-client/manifest.json` pins the reviewed OpenAI tunnel-client version, source, license, per-platform URL, file size, and SHA-256. Fetch and verification fail closed when the downloaded or extracted bytes differ from the manifest.
-
-The application packages only the target platform's binary under `resources/bin/tunnel-client/`. Packaged verification hashes those bytes again.
+The standalone `npm run fetch:tunnel-client`, `npm run verify:tunnel-client`, `npm run fetch:zoekt`, and `npm run verify:zoekt` commands remain available for explicit provenance or cache checks. Packaged verification hashes the selected target binaries again after they are copied into the application.
 
 ## 4. Build and verify the desktop package
 
@@ -95,25 +90,31 @@ npm run verify:updater-artifacts
 npm run generate:sbom
 ```
 
-Release publication requires canonical filenames, matching versions, updater SHA-512 integrity, SHA-256 coverage, SBOM generation, and GitHub attestations. Packaging also verifies that every direct Electron packaging dependency installed under `electron/node_modules` matches the exact version resolved by `electron/package-lock.json`, preventing local builds from silently using stale runtime bytes after a dependency upgrade.
+Release publication requires canonical filenames, matching versions, updater SHA-512 integrity, SHA-256 coverage, SBOM generation, and GitHub attestations. Artifact paths are derived from the Electron Builder `artifactName` configuration through `scripts/release-artifacts.mjs`, so changing a package filename does not require duplicating that filename in workflow YAML or tests. The CycloneDX SBOM is generated from `package-lock.json` rather than the mutable installed dependency tree and then extended with every pinned tunnel-client and Zoekt platform artifact from their manifests. Packaging also verifies that every direct Electron packaging dependency installed under `electron/node_modules` matches the exact version resolved by `electron/package-lock.json`, preventing local builds from silently using stale runtime bytes after a dependency upgrade.
 
-## 8. Manual release checks
+## 8. Installed release validation
 
-Use a disposable Windows VM or dedicated release machine for operations that affect installed applications or require external credentials:
+The release workflow runs installer lifecycle validation only on disposable GitHub-hosted runners after packaging and before publication. Windows installs the immediately previous stable NSIS release, verifies the downloaded asset size and GitHub SHA-256 digest when available, verifies the installed version, writes a user-state sentinel, installs the candidate over the same application identity, confirms state preservation, and runs packaged connector acceptance from the installed application. Linux performs the corresponding DEB install/upgrade check using the stable package identity, verifies the previous asset before execution, validates the installed package version and Chromium sandbox permissions, preserves the user-state sentinel, and runs the same packaged connector acceptance. A first-ever release falls back to fresh-install validation; if a previous stable release exists but its expected upgrade artifact is missing, publication fails rather than silently testing an older release.
 
-- NSIS install and uninstall;
+These jobs intentionally remain outside `npm test` and normal CI because they execute real installers. macOS currently remains package-level validation only: DMGs, unpacked layout, connector acceptance, and Electron fuses are checked, but a production install/update lifecycle is not automated while the application is unsigned.
+
+## 9. Manual and external release checks
+
+Use a disposable release machine for checks that require external credentials or behavior the repository cannot prove locally:
+
+- Windows uninstall behavior when specifically changed;
 - first-run Secure MCP Tunnel configuration;
 - real Tunnel ID/runtime API key connection and reconnect after restart;
 - real ChatGPT Tunnel integration and one read-only workspace request;
 - tool-schema refresh/review after a deliberate schema change;
-- update from the previous published release; and
-- light/dark, narrow-layout, and accessibility review.
+- macOS signing/notarization once signing credentials and policy are introduced; and
+- light/dark, narrow-layout, and accessibility review when release-facing UI changed.
 
 Do not run installer lifecycle tests on the developer machine hosting the active Rel.AI connector.
 
-## 9. Publish
+## 10. Publish
 
-Pushing the version commit to `main` triggers `.github/workflows/release.yml`. Preflight first rejects inconsistent release metadata before any platform package is built. The workflow then builds platform release artifacts, verifies them, prepares checksums and SBOM evidence, and publishes only after the blocking jobs pass. If a prior publication attempt created the version tag but not the GitHub release, a rerun may recover only when that tag resolves to the exact current release commit; a tag pointing elsewhere fails closed.
+Pushing the version commit to `main` triggers `.github/workflows/release.yml`. Preflight first rejects inconsistent release metadata before any platform package is built. The workflow then builds and verifies platform release artifacts. Windows and Linux must additionally pass the disposable fresh-install/upgrade jobs before the combined release can be prepared, attested, and published. If a prior publication attempt created the version tag but not the GitHub release, a rerun may recover only when that tag resolves to the exact current release commit; a tag pointing elsewhere fails closed.
 
 Rel.AI-owned Windows artifacts currently disable certificate auto-discovery and are covered by SHA-256 plus GitHub attestations. The packaged OpenAI tunnel-client bytes must match the reviewed provenance manifest.
 

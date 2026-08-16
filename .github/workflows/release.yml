@@ -137,16 +137,6 @@ jobs:
         run: npm run audit:production
       - name: Audit packaging dependencies
         run: npm run audit:packaging
-      - name: Fetch OpenAI tunnel-client
-        shell: pwsh
-        env:
-          TUNNEL_CLIENT_PLATFORMS: win32
-        run: node scripts/fetch-tunnel-client.mjs
-      - name: Build bundled Zoekt binaries
-        shell: pwsh
-        env:
-          ZOEKT_PLATFORMS: win32
-        run: pwsh scripts/fetch-zoekt.ps1
       - name: Run native Tasks release gate
         run: npm run test:native-tasks-release-gate
       - name: Run tests
@@ -174,7 +164,7 @@ jobs:
           "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Verify hardened Electron fuses
         shell: pwsh
-        run: npm run verify:fuses -- --platform win32 '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
+        run: npm run verify:fuses -- --platform win32
       - name: Verify bundled OpenAI tunnel-client
         shell: pwsh
         env:
@@ -190,17 +180,14 @@ jobs:
         run: npm run generate:sbom
       - name: Report Electron package size
         run: npm run electron:size:windows -- --json dist/electron-size-report.json
+      - name: Resolve Windows release artifact paths
+        id: release-artifacts
+        run: node scripts/release-artifacts.mjs --platform win32 --github-output paths
       - name: Upload Windows release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-release-${{ needs.preflight.outputs.version }}
-          path: |
-            dist/Rel.AI-MCP-Setup-${{ needs.preflight.outputs.version }}.exe
-            dist/Rel.AI-MCP-Portable-${{ needs.preflight.outputs.version }}.exe
-            dist/Rel.AI-MCP-Setup-${{ needs.preflight.outputs.version }}.exe.blockmap
-            dist/latest.yml
-            dist/sbom.cdx.json
-            dist/electron-size-report.json
+          path: ${{ steps.release-artifacts.outputs.paths }}
           if-no-files-found: error
           retention-days: 7
 
@@ -232,14 +219,6 @@ jobs:
         run: node electron/node_modules/electron/install.js
       - name: Verify Electron test binary
         run: test -x electron/node_modules/electron/dist/electron
-      - name: Fetch OpenAI tunnel-client
-        env:
-          TUNNEL_CLIENT_PLATFORMS: linux
-        run: node scripts/fetch-tunnel-client.mjs
-      - name: Build bundled Zoekt binaries
-        env:
-          ZOEKT_PLATFORMS: linux
-        run: bash scripts/fetch-zoekt.sh
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Run Electron platform regression tests
@@ -250,14 +229,21 @@ jobs:
           node test/installer-test-entrypoints-unit.mjs
       - name: Build Linux release
         run: npm run electron:dist:linux
+      - name: Resolve Linux release artifact paths
+        id: release-artifacts
+        shell: bash
+        run: |
+          node scripts/release-artifacts.mjs --platform linux --github-output paths
+          node scripts/release-artifacts.mjs --artifact linuxDeb --github-output deb
       - name: Verify Linux DEB upgrade metadata
         shell: bash
         run: |
           set -euo pipefail
           version='${{ needs.preflight.outputs.version }}'
-          deb="dist/Rel.AI-MCP-${version}-linux-x64.deb"
+          deb='${{ steps.release-artifacts.outputs.deb }}'
+          package_name="$(node -p "require('./electron/package.json').build.deb.packageName")"
           test -f "$deb"
-          test "$(dpkg-deb --field "$deb" Package)" = 'rel-ai-mcp-launcher'
+          test "$(dpkg-deb --field "$deb" Package)" = "$package_name"
           test "$(dpkg-deb --field "$deb" Version)" = "$version"
           test "$(dpkg-deb --field "$deb" Architecture)" = 'amd64'
           dpkg --compare-versions "$(dpkg-deb --field "$deb" Version)" eq "$version"
@@ -271,7 +257,7 @@ jobs:
           test -d "$package_directory"
           echo "path=$package_directory" >> "$GITHUB_OUTPUT"
       - name: Verify hardened Electron fuses
-        run: npm run verify:fuses -- --platform linux '${{ steps.unpacked.outputs.path }}/rel-ai-mcp'
+        run: npm run verify:fuses -- --platform linux
       - name: Verify packaged application layout
         run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify packaged bearer-authenticated MCP flow
@@ -302,11 +288,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-release-${{ needs.preflight.outputs.version }}
-          path: |
-            dist/Rel.AI-MCP-${{ needs.preflight.outputs.version }}-linux-x64.AppImage
-            dist/Rel.AI-MCP-${{ needs.preflight.outputs.version }}-linux-x64.deb
-            dist/latest-linux.yml
-            dist/electron-size-report-linux.json
+          path: ${{ steps.release-artifacts.outputs.paths }}
           if-no-files-found: error
           retention-days: 7
 
@@ -342,16 +324,6 @@ jobs:
       - name: Install Electron dependencies
         run: npm ci
         working-directory: electron
-      - name: Fetch OpenAI tunnel-client
-        env:
-          TUNNEL_CLIENT_PLATFORMS: darwin
-          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
-        run: node scripts/fetch-tunnel-client.mjs
-      - name: Build bundled Zoekt binaries
-        env:
-          ZOEKT_PLATFORMS: darwin
-          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
-        run: bash scripts/fetch-zoekt.sh
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Run Electron platform regression tests
@@ -378,7 +350,7 @@ jobs:
       - name: Verify hardened Electron fuses
         env:
           REL_AI_TARGET_ARCH: ${{ matrix.arch }}
-        run: npm run verify:fuses -- --platform darwin '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.app/Contents/MacOS/Rel.AI MCP'
+        run: npm run verify:fuses -- --platform darwin
       - name: Verify packaged application layout
         env:
           REL_AI_TARGET_ARCH: ${{ matrix.arch }}
@@ -388,13 +360,78 @@ jobs:
           REL_AI_TARGET_PLATFORM: darwin
           REL_AI_TARGET_ARCH: ${{ matrix.arch }}
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Resolve macOS release artifact path
+        id: release-artifacts
+        env:
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        run: node scripts/release-artifacts.mjs --platform darwin --arch '${{ matrix.arch }}' --github-output paths
       - name: Upload macOS release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-release-${{ needs.preflight.outputs.version }}-${{ matrix.arch }}
-          path: dist/Rel.AI-MCP-${{ needs.preflight.outputs.version }}-mac-${{ matrix.arch }}.dmg
+          path: ${{ steps.release-artifacts.outputs.paths }}
           if-no-files-found: error
           retention-days: 7
+
+  windows-install-upgrade:
+    name: Validate Windows install and upgrade
+    needs:
+      - preflight
+      - windows
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install release validation dependencies
+        run: npm ci --ignore-scripts
+      - name: Download Windows release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windows-release-${{ needs.preflight.outputs.version }}
+          path: dist
+      - name: Validate fresh install and in-place upgrade
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REL_AI_RELEASE_INSTALL_TEST: '1'
+          REL_AI_INSTALLER_TEST_ISOLATED: '1'
+          REL_AI_ALLOW_PRODUCTION_INSTALLER_TEST: '1'
+        run: node scripts/validate-installed-release.mjs
+
+  linux-install-upgrade:
+    name: Validate Linux install and upgrade
+    needs:
+      - preflight
+      - linux
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install release validation dependencies
+        run: npm ci --ignore-scripts
+      - name: Download Linux release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-release-${{ needs.preflight.outputs.version }}
+          path: dist
+      - name: Validate fresh install and in-place upgrade
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REL_AI_RELEASE_INSTALL_TEST: '1'
+        run: node scripts/validate-installed-release.mjs
 
   publish:
     name: Publish combined release
@@ -403,6 +440,8 @@ jobs:
       - windows
       - linux
       - mac
+      - windows-install-upgrade
+      - linux-install-upgrade
     if: needs.preflight.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
