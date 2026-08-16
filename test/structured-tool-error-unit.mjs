@@ -99,7 +99,8 @@ try {
   assert.equal(largeFailure.validationStatus, 'failed');
   assert.equal(largeFailure.results[0].exitCode, 1);
   assert.match(largeFailure.results[0].stderr, /failure-detail-/);
-  assert.match(largeFailure.nextAction, /Fix the failing validation/);
+  assert.match(largeFailure.nextAction, /failing (?:check|validation)/i);
+  assert.match(largeFailure.nextAction, /rerun/i);
 
   console.log('Structured tool errors preserve actionable diagnostics, including truncated failures.');
 } finally {

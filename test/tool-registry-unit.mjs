@@ -161,31 +161,31 @@ await invalid('relai_edit', { path: 'README.md', content: '# Missing task\n' });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: 42 });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', overwrite: true });
 
-// The connector-facing schema keeps shared properties flat and enforces the
-// constraints that help callers construct requests: requirements, bounds, and
-// primary modes. Known action-only extras are left to runtime normalization.
+// The connector-facing schema keeps shared properties flat while preserving
+// the same action-specific requirements, bounds, modes, and field ownership
+// enforced by the executable runtime schema.
 await publicValid('relai_work', { action: 'begin', workspace: 'repo' });
 await publicInvalid('relai_work', { action: 'begin' });
-await publicValid('relai_work', { action: 'begin', workspace: 'repo', work_id: 'ignored-known-extra' });
+await publicInvalid('relai_work', { action: 'begin', workspace: 'repo', work_id: 'wrong-action-field' });
 await publicValid('relai_work', { action: 'finish', work_id: 'work', summary: 'Done.' });
 await publicInvalid('relai_work', { action: 'finish', work_id: 'work' });
-await publicValid('relai_work', { action: 'status', title: 'ignored-known-extra' });
+await publicInvalid('relai_work', { action: 'status', title: 'wrong-action-field' });
 
 await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200 });
 await publicValid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
-await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', query: 'ignored-known-extra' });
+await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', query: 'wrong-action-field' });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 201 });
 await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100 });
 await publicValid('relai_search', { action: 'semantic', work_id: 'work', queries: ['needle', 'haystack'], maxResults: 100 });
-await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', pattern: 'ignored-known-extra' });
+await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', pattern: 'wrong-action-field' });
 await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', queries: ['haystack'] });
 await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 101 });
 
 await publicValid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.' });
 await publicInvalid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev' });
 await publicValid('relai_process', { action: 'read', work_id: 'work', processId: 'p' });
-await publicValid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'ignored-known-extra' });
+await publicInvalid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'wrong-action-field' });
 
 await publicInvalid('relai_inspect', { action: 'symbol', work_id: 'work' });
 await publicValid('relai_inspect', { action: 'symbol', work_id: 'work', symbol: 'callTool' });
@@ -201,8 +201,8 @@ await publicValid('relai_ui', { action: 'viewport', work_id: 'work', sessionId: 
 
 await publicValid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
 await publicInvalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
-await publicValid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
-await publicValid('relai_validate', { action: 'checks', work_id: 'work', route: '/health' });
+await publicInvalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
+await publicInvalid('relai_validate', { action: 'checks', work_id: 'work', route: '/health' });
 
 await publicInvalid('relai_changes', { action: 'restore', work_id: 'work' });
 await publicValid('relai_changes', { action: 'restore', work_id: 'work', paths: ['README.md'] });
@@ -213,7 +213,7 @@ await publicValid('relai_changes', { action: 'tidy_run', work_id: 'work', planId
 
 await publicInvalid('relai_publish', { action: 'commit', work_id: 'work' });
 await publicValid('relai_publish', { action: 'commit', work_id: 'work', message: 'Fix schema parity' });
-await publicValid('relai_publish', { action: 'push', work_id: 'work', message: 'ignored-known-extra' });
+await publicInvalid('relai_publish', { action: 'push', work_id: 'work', message: 'wrong-action-field' });
 await publicValid('relai_publish', { action: 'push', work_id: 'work', remote: 'origin' });
 
 await publicValid('relai_exec', { work_id: 'work', command: 'node -v' });
@@ -232,9 +232,9 @@ await assert.rejects(() => validateExecutableOperationInput(OP.VALIDATE_HTTP, { 
 await assert.rejects(() => validateExecutableOperationInput(OP.EXEC, { workspace: 'repo' }), /Input validation error for exec/);
 await assert.rejects(() => validateExecutableOperationInput(OP.EDIT, { workspace: 'repo', path: 'README.md' }), /Input validation error for edit/);
 
-assert.equal(resolveToolOperation('relai_work', { action: 'begin', workspace: 'repo', work_id: 'irrelevant' }).operationArgs.work_id, undefined);
-assert.equal(resolveToolOperation('relai_work', { action: 'status', title: 'irrelevant' }).operationArgs.title, undefined);
-assert.equal(resolveToolOperation('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'irrelevant' }).operationArgs.command, undefined);
+assert.throws(() => resolveToolOperation('relai_work', { action: 'begin', workspace: 'repo', work_id: 'wrong-action-field' }), /Unsupported field 'work_id'/);
+assert.throws(() => resolveToolOperation('relai_work', { action: 'status', title: 'wrong-action-field' }), /Unsupported field 'title'/);
+assert.throws(() => resolveToolOperation('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'wrong-action-field' }), /Unsupported field 'command'/);
 assert.throws(() => resolveToolOperation('relai_process', { action: 'read', work_id: 'work', processId: 'p', unknown: true }), /Unsupported field 'unknown'/);
 assert.equal(resolveToolOperation('relai_validate', { action: 'checks', work_id: 'work' }).operationName, OP.VALIDATE_CHECKS);
 assert.equal(resolveToolOperation('relai_validate', { action: 'http', work_id: 'work', route: '/health' }).operationName, OP.VALIDATE_HTTP);
