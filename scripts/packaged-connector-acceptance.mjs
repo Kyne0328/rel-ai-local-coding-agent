@@ -344,6 +344,28 @@ async function freshFetch(input, init = {}) {
   const body = init.body == null ? null : Buffer.from(String(init.body), 'utf8');
   if (body && !headers.has('content-length')) headers.set('content-length', String(body.length));
 
+  // ECONNREFUSED means the TCP connection was never established, so the server
+  // cannot have observed the request. Retrying that one connect failure is safe
+  // even for POST tool calls; ambiguous failures such as ECONNRESET are never
+  // retried because the request may already have reached the server.
+  const retryDelaysMs = [0, 40, 120, 240];
+  let lastError = null;
+  for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+    if (retryDelaysMs[attempt] > 0) await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt]));
+    try {
+      return await localHttpRequest(target, method, headers, body);
+    } catch (error) {
+      lastError = error;
+      const code = String(error?.code || '').trim();
+      if (code !== 'ECONNREFUSED' || packagedServerExited() || attempt === retryDelaysMs.length - 1) {
+        throw localHttpFailure(target, method, error, attempt + 1);
+      }
+    }
+  }
+  throw localHttpFailure(target, method, lastError, retryDelaysMs.length);
+}
+
+function localHttpRequest(target, method, headers, body) {
   return new Promise((resolve, reject) => {
     const request = http.request(target, {
       method,
@@ -373,16 +395,26 @@ async function freshFetch(input, init = {}) {
         });
       });
     });
-    request.on('error', error => {
-      const code = String(error?.code || '').trim();
-      reject(new Error(
-        `Local HTTP request ${method} ${target.pathname} failed${code ? ` (${code})` : ''}: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      ));
-    });
+    request.on('error', reject);
     if (body) request.write(body);
     request.end();
   });
+}
+
+function packagedServerExited() {
+  return Boolean(child && (child.exitCode != null || child.signalCode != null));
+}
+
+function localHttpFailure(target, method, error, attempts) {
+  const code = String(error?.code || '').trim();
+  const lifecycle = child
+    ? `server pid=${child.pid || 'unknown'} exitCode=${child.exitCode ?? 'running'} signal=${child.signalCode || 'none'} killed=${child.killed === true}`
+    : 'server child unavailable';
+  const stderrTail = stderr.trim().slice(-4000);
+  return new Error(
+    `Local HTTP request ${method} ${target.pathname} failed after ${attempts} attempt${attempts === 1 ? '' : 's'}${code ? ` (${code})` : ''}: ${error instanceof Error ? error.message : String(error)}; ${lifecycle}${stderrTail ? `\nPackaged server stderr:\n${stderrTail}` : ''}`,
+    { cause: error }
+  );
 }
 
 async function waitForHealth() {
