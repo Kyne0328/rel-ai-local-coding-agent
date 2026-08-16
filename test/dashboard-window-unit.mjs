@@ -17,6 +17,7 @@ let permissionCheck = null;
 let openHandler = null;
 let dashboardLoadError = null;
 const webContentsEvents = new Map();
+const originalWriteFile = fs.promises.writeFile;
 let dashboardAuthGeneration = 1;
 let dashboardBootstrap = 'one-time-code';
 const workArea = { x: 0, y: 0, width: 1366, height: 728 };
@@ -223,7 +224,38 @@ try {
   assert.equal(reopened.options.y, 54);
   assert.equal(reopened.options.width, 1080);
   assert.equal(reopened.options.height, 640);
-  await manager.close();
+
+  let releaseFirstBoundsWrite;
+  let firstBoundsWriteStarted;
+  const firstBoundsWrite = new Promise(resolve => { firstBoundsWriteStarted = resolve; });
+  const releaseFirstBounds = new Promise(resolve => { releaseFirstBoundsWrite = resolve; });
+  let stateWriteCount = 0;
+  fs.promises.writeFile = async (target, ...args) => {
+    if (target === path.join(sandbox, 'dashboard-window-state.json') && stateWriteCount++ === 0) {
+      firstBoundsWriteStarted();
+      await releaseFirstBounds;
+    }
+    return originalWriteFile.call(fs.promises, target, ...args);
+  };
+  reopened.normalBounds = { x: 100, y: 60, width: 1040, height: 620 };
+  reopened.emit('move');
+  const debounceKeepAlive = setTimeout(() => {}, 1000);
+  await firstBoundsWrite;
+  clearTimeout(debounceKeepAlive);
+  reopened.normalBounds = { x: 120, y: 70, width: 1020, height: 610 };
+  const closePromise = manager.close();
+  await new Promise(resolve => setImmediate(resolve));
+  releaseFirstBoundsWrite();
+  await closePromise;
+  fs.promises.writeFile = originalWriteFile;
+  const raceSafeSaved = JSON.parse(fs.readFileSync(path.join(sandbox, 'dashboard-window-state.json'), 'utf8'));
+  assert.deepEqual(raceSafeSaved, {
+    version: DASHBOARD_WINDOW_STATE_VERSION,
+    x: 120,
+    y: 70,
+    width: 1020,
+    height: 610
+  }, 'a stale debounced bounds write must not overwrite the final close-time window state');
 
   assert.deepEqual(
     restoreDashboardBounds({ x: 0, y: 0, width: 1240, height: 820 }, fakeScreen),
@@ -237,6 +269,7 @@ try {
   assert.throws(() => validateConnection({ url: 'https://example.com/dashboard' }), /local loopback/);
   assert.throws(() => validateConnection({ url: 'http://127.0.0.1:3333/health' }), /local loopback/);
 } finally {
+  fs.promises.writeFile = originalWriteFile;
   fs.rmSync(sandbox, { recursive: true, force: true });
 }
 

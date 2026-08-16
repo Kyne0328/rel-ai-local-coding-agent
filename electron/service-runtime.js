@@ -18,12 +18,16 @@ function createDesktopServiceRuntime(deps) {
     pushStatus
   } = deps;
   let startPromise = null;
+  let stopPromise = null;
   let localReadyPromise = null;
   let lifecycleToken = 0;
 
   function isListening() { return serviceProcessClient.isListening(); }
 
   async function startServer() {
+    if (stopPromise) {
+      try { await stopPromise; } catch {}
+    }
     if (isListening() && secureTunnelRuntime.snapshot().state === 'running') {
       pushStatus();
       return getCurrentStatus();
@@ -165,7 +169,18 @@ function createDesktopServiceRuntime(deps) {
     }
   }
 
-  async function stopServer(options = {}) {
+  function stopServer(options = {}) {
+    if (stopPromise) return stopPromise;
+    const pendingStop = stop(options);
+    stopPromise = pendingStop;
+    const clearPending = () => {
+      if (stopPromise === pendingStop) stopPromise = null;
+    };
+    void pendingStop.then(clearPending, clearPending);
+    return pendingStop;
+  }
+
+  async function stop(options) {
     const pendingLocalReady = localReadyPromise;
     lifecycleToken += 1;
     startPromise = null;
