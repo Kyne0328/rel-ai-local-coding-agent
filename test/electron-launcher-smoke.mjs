@@ -28,6 +28,7 @@ for (const file of [
   'service-runtime.js',
   'service-process.js',
   'service-process-client.js',
+  'runtime-log-snapshot.js',
   'desktop-settings.js',
   'desktop-status.js',
   'preload.cjs',

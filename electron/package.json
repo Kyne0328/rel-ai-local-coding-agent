@@ -68,6 +68,7 @@
       "window-security.js",
       "local-protocol.js",
       "runtime-log-buffer.js",
+      "runtime-log-snapshot.js",
       "diagnostic-files.js",
       "app-updater.js",
       "app-updater-events.js",
