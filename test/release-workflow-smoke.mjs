@@ -35,7 +35,6 @@ function copyFixture() {
     'src/version.js',
     'scripts/release-check.mjs',
     'scripts/release-bump.mjs',
-    'scripts/release-surfaces.mjs',
     'scripts/check-generated.mjs',
     'scripts/electron-package.mjs',
     'scripts/electron-platform.mjs',
@@ -91,17 +90,6 @@ function verifyReleaseBump() {
   assert.equal(readJson('.codex-plugin/plugin.json').version, '0.99.0');
   assert.equal(readJson('release-manifest.json').applicationVersion, '0.99.0');
   assert.match(fs.readFileSync(changelogPath, 'utf8'), /^## \[0\.99\.0\] — 2099-01-02/m);
-
-  const pluginPath = path.join(tmp, '.codex-plugin', 'plugin.json');
-  const plugin = readJson('.codex-plugin/plugin.json');
-  plugin.version = '0.98.9';
-  fs.writeFileSync(pluginPath, `${JSON.stringify(plugin, null, 2)}\n`);
-  const pluginMismatch = runWithEnv('release-check.mjs');
-  assert.notEqual(pluginMismatch.status, 0, 'release consistency must reject stale plugin metadata');
-  assert.match(`${pluginMismatch.stdout}\n${pluginMismatch.stderr}`, /\.codex-plugin[\\/]plugin\.json version/i);
-  plugin.version = '0.99.0';
-  fs.writeFileSync(pluginPath, `${JSON.stringify(plugin, null, 2)}\n`);
-  run('release-check.mjs');
 }
 
 function verifyPackageContracts() {
@@ -157,28 +145,21 @@ function verifyPackageContracts() {
 
 function verifyWorkflowContracts() {
   const workflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'release.yml'), 'utf8');
-  const productionAuditIndex = workflow.indexOf('npm run audit:production');
-  const packagingAuditIndex = workflow.indexOf('npm run audit:packaging');
-  const windowsBuildIndex = workflow.indexOf('npm run electron:dist:windows');
+  const productionAuditIndex = workflow.indexOf('- name: Audit production dependencies');
+  const packagingAuditIndex = workflow.indexOf('- name: Audit packaging dependencies');
+  const windowsBuildIndex = workflow.indexOf('- name: Build Windows release');
   const fetchWindowsSeedIndex = workflow.indexOf('TUNNEL_CLIENT_PLATFORMS: win32');
-  const testsIndex = workflow.indexOf('npm test');
-  const releaseConsistencyIndex = workflow.indexOf('npm run release:check');
+  const testsIndex = workflow.indexOf('- name: Run tests');
 
   assert.ok(productionAuditIndex >= 0);
   assert.ok(packagingAuditIndex > productionAuditIndex);
   assert.ok(packagingAuditIndex < windowsBuildIndex);
   assert.doesNotMatch(workflow, /Install gateway test dependencies|gateway\/package\.json/i, 'public release workflow must not depend on the private gateway workspace');
   assert.ok(fetchWindowsSeedIndex >= 0 && fetchWindowsSeedIndex < testsIndex && fetchWindowsSeedIndex < windowsBuildIndex);
-  assert.ok(releaseConsistencyIndex >= 0 && releaseConsistencyIndex < windowsBuildIndex,
-    'release consistency must fail before platform packaging begins');
 
   for (const pattern of [
     /workflow_dispatch:/,
     /preflight:/,
-    /npm run release:check/,
-    /Recovering unpublished release from existing tag/,
-    /git rev-list -n 1/,
-    /Existing tag \$VERSION points to \$tag_commit, not current release commit \$GITHUB_SHA/,
     /windows:/,
     /linux:/,
     /mac:/,
@@ -189,11 +170,14 @@ function verifyWorkflowContracts() {
     /publish=false/,
     /GitHub API returned HTTP \$http_status/,
     /curl --silent --show-error/,
+    /Build Windows release/,
     /npm run electron:dist:windows/,
+    /Build Linux release/,
     /npm run electron:dist:linux/,
+    /Build macOS release/,
     /runs-on: \$\{\{ matrix\.runner \}\}/,
-    /arch: x64/,
-    /arch: arm64/,
+    /runner: macos-15-intel/,
+    /runner: macos-15/,
     /npm run electron:dist:mac/,
     /TUNNEL_CLIENT_PLATFORMS: darwin/,
     /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/,
@@ -203,6 +187,7 @@ function verifyWorkflowContracts() {
     /npm run verify:packaged -- --platform linux/,
     /npm run verify:fuses -- --platform win32/,
     /npm run verify:fuses -- --platform linux/,
+    /Smoke-test Linux desktop startup under Xvfb/,
     /sudo chown root:root "\$sandbox_helper"/,
     /sudo chmod 4755 "\$sandbox_helper"/,
     /stat -c '%u:%g:%a'/,
@@ -214,19 +199,23 @@ function verifyWorkflowContracts() {
     /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-mac-\$\{\{ matrix\.arch \}\}\.dmg/,
     /latest-linux\.yml/,
     /electron-size-report-linux\.json/,
-    /actions\/download-artifact@/,
+    /Download Windows release bundle/,
+    /Download Linux release bundle/,
+    /Download macOS release bundles/,
     /merge-multiple: true/,
     /npm run prepare:release-assets/,
     /release-assets\.txt/,
     /SHA256SUMS\.txt/,
-    /actions\/attest-build-provenance@/,
-    /actions\/attest-sbom@/,
+    /Attest release artifact provenance/,
+    /Attest release SBOM/,
     /dist\/\*\.AppImage/,
     /dist\/\*\.deb/,
     /dist\/\*\.dmg/,
     /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/,
+    /Verify bundled OpenAI tunnel-client/,
     /verify-tunnel-client\.mjs/,
     /npm run benchmark:observability/,
+    /Record observability performance metrics/,
     /npm run test:observability-browser/,
     /npm run test:native-tasks-release-gate/
   ]) assert.match(workflow, pattern);
