@@ -110,16 +110,7 @@ function normalizeOperationArguments(publicName, action, entry, args) {
   if (entry.keepAction) allowed.add('action');
   const unsupported = Object.keys(args).filter(field => !allowed.has(field));
   if (unsupported.length) {
-    const publicTool = TOOL_CATALOG.find(item => item.definition.name === publicName);
-    if (!publicTool) throw new Error(`Unknown public tool '${publicName}'.`);
-    const publicFields = new Set([
-      'action',
-      ...publicTool.actions.flatMap(item => item.fields || []),
-      '_operationTaskId'
-    ]);
-    const unknown = unsupported.filter(field => !publicFields.has(field));
-    if (unknown.length) throw new Error(`Unsupported field '${unknown[0]}' for ${publicName} action ${action}.`);
-    for (const field of unsupported) delete args[field];
+    throw new Error(`Unsupported field '${unsupported[0]}' for ${publicName} action ${action}.`);
   }
   for (const field of entry.required || []) {
     if (args[field] === undefined || args[field] === null || args[field] === '') {

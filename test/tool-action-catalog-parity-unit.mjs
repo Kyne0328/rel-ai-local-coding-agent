@@ -9,6 +9,7 @@ import {
   getCatalogToolDefinitions,
   getCatalogTools,
   getOperationDefinition,
+  getOperationDefinitions,
   getToolActionCatalog,
   resolveToolOperation
 } from '../src/tools/actionCatalog.js';
@@ -24,6 +25,11 @@ const currentMetadata = new Map(getToolMetadata().map(item => [item.name, item])
 assert.ok(catalogTools.length > 0, 'the canonical tool catalog must not be empty');
 assert.equal(catalogTools.length, currentDefinitions.length, 'catalog tools and public definitions must stay in parity');
 assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, catalog.length, 'tool/action keys must stay unique');
+assert.deepEqual(
+  [...new Set(catalog.map(entry => entry.operationName))].sort(),
+  getOperationDefinitions().map(operation => operation.name).sort(),
+  'every canonical internal operation must be reachable from the public catalog'
+);
 assert.deepEqual(getCatalogToolDefinitions(), currentDefinitions);
 assert.deepEqual(
   getCatalogToolDefinitions().map(definition => ({
