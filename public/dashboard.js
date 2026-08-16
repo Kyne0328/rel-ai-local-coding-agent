@@ -11,6 +11,7 @@ import { closeDrawer } from './ui/components/drawer.js';
 import { initWindowChrome } from './ui/window-chrome.js';
 import { createDashboardClock } from './ui/clock.js';
 import { initUpdateAvailableModal } from './ui/update-available-modal.js';
+import { initConnectorRefreshModal } from './ui/connector-refresh-modal.js';
 import { initSidebar } from './ui/sidebar.js';
 import { recordRecentWorkspace } from './ui/features/workspaces/recents.js';
 
@@ -24,7 +25,10 @@ const requestedPlatform = ['win32', 'darwin', 'linux', 'other'].includes(launchP
 document.documentElement.dataset.surface = surface;
 document.documentElement.dataset.windowChrome = requestedChrome;
 document.documentElement.dataset.platform = requestedPlatform;
-if (surface === 'desktop') initUpdateAvailableModal();
+if (surface === 'desktop') {
+  initConnectorRefreshModal();
+  initUpdateAvailableModal();
+}
 cleanLaunchQuery();
 restoreRoute();
 

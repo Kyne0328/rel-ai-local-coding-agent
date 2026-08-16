@@ -24,6 +24,7 @@ const files = [
   'electron-updater-config-unit.mjs',
   'update-support-policy-unit.mjs',
   'update-support-policy-http-unit.mjs',
+  'connector-refresh-modal-unit.mjs',
   'electron-dynamic-resource-contract-unit.mjs',
   'electron-product-path-unit.mjs',
   'test-rigidity-audit-unit.mjs',
