@@ -37,10 +37,10 @@ function desktopSetupSteps({
     },
     {
       id: 'chatgpt',
-      title: 'Add Rel.AI to ChatGPT',
-      description: 'In ChatGPT, add Rel.AI MCP, choose Tunnel, select this computer’s tunnel, and choose No authentication.',
+      title: 'Create the Rel.AI connector in ChatGPT',
+      description: 'Save the Rel.AI icon, open the ChatGPT Plugins + connector form, then use Tunnel + No authentication and scan the Rel.AI tools.',
       href: routeMetadata('connection').href,
-      action: 'Connect ChatGPT',
+      action: 'Finish ChatGPT setup',
       complete: chatgptReady,
       locked: !hasWorkspace || !endpointReady
     },

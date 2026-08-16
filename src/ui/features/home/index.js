@@ -1,7 +1,7 @@
 import { pillHtml } from '../../components/pill.js';
 import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
-import { connectionStateFor, connectionSummary, isMcpAuthenticationReady } from '../../connection-state.js';
+import { connectionStateFor, connectionSummary, hasObservedMcpConnection, hasObservedMcpToolCall } from '../../connection-state.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
 import { workSessionStateView } from '../../task-identity.js';
 import { completeDesktopSetup, createDesktopSetupChecklist, desktopSetupItems } from '../onboarding/index.js';
@@ -522,17 +522,11 @@ function desktopSetupState(data = {}) {
   return {
     hasWorkspace: workspaces.length > 0,
     endpointReady: state.localService?.status === 'running' && state.publicEndpoint?.status === 'available',
-    chatgptReady: isMcpAuthenticationReady(state),
-    firstRequestObserved: hasObservedMcpRequest(mcpConnection),
+    chatgptReady: hasObservedMcpConnection(mcpConnection),
+    firstRequestObserved: hasObservedMcpToolCall(mcpConnection),
     connectionMode: 'secure_tunnel',
     workspaceAlias: workspaces[0]?.alias || 'myapp'
   };
-}
-
-function hasObservedMcpRequest(connection = {}) {
-  if (connection.lastRequestAt || connection.lastSuccessfulRequestAt || connection.lastFailedRequestAt) return true;
-  if (Number(connection.activeRequestCount || 0) > 0) return true;
-  return ['active', 'recent', 'connected', 'request_failed', 'idle'].includes(String(connection.activityStatus || connection.status || ''));
 }
 
 async function finalizeSetupChecklist(data = {}) {
