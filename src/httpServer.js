@@ -155,7 +155,7 @@ function authDashboard(ctx) {
   sendJson(ctx.res, 401, errorPayload(
     ERROR_CODES.DASHBOARD_UNAVAILABLE,
     'Dashboard authorization expired. Reopen the dashboard from the Rel.AI desktop app.'
-  ), ctx.ae);
+  ));
   return false;
 }
 function authNone() { return true; }
@@ -176,14 +176,13 @@ const NOT_FOUND_PAYLOAD = {
 
 async function routeRequest(req, res, options) {
   setBaseHeaders(req, res, options);
-  const ae = req.headers["accept-encoding"] || "";
   const parsed = new URL(req.url || "/", "http://127.0.0.1");
 
   if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
   const mcpAccess = getMcpAccess(parsed.pathname);
-  if (mcpAccess.kind !== 'none' && blockMcpForRuntimeAccess(res, ae, options.getRuntimeAccess)) return;
-  const ctx = { req, res, options, parsed, ae, mcpAccess, p: parsed.pathname };
+  if (mcpAccess.kind !== 'none' && blockMcpForRuntimeAccess(res, options.getRuntimeAccess)) return;
+  const ctx = { req, res, options, parsed, mcpAccess, p: parsed.pathname };
 
   if (req.method === "GET") {
     if (await dispatchGet(ctx)) return;
@@ -193,15 +192,15 @@ async function routeRequest(req, res, options) {
     if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpDelete(ctx); return; }
   }
 
-  sendJson(res, 404, NOT_FOUND_PAYLOAD, ae);
+  sendJson(res, 404, NOT_FOUND_PAYLOAD);
 }
 
-function blockMcpForRuntimeAccess(res, ae, getRuntimeAccess) {
+function blockMcpForRuntimeAccess(res, getRuntimeAccess) {
   if (typeof getRuntimeAccess !== 'function') return false;
   let access;
   try { access = getRuntimeAccess(); } catch { return false; }
   if (access?.blocked !== true) return false;
-  sendJson(res, 426, errorPayload(access.errorCode || ERROR_CODES.UPDATE_REQUIRED, access.message || 'Update Rel.AI MCP before continuing MCP work.'), ae);
+  sendJson(res, 426, errorPayload(access.errorCode || ERROR_CODES.UPDATE_REQUIRED, access.message || 'Update Rel.AI MCP before continuing MCP work.'));
   return true;
 }
 

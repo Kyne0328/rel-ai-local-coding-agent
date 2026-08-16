@@ -13,9 +13,9 @@ async function handleApiProcessStop(ctx) {
       processId,
       graceMs: Number(payload.graceMs || 3000)
     });
-    sendJson(ctx.res, 200, result, ctx.ae);
+    sendJson(ctx.res, 200, result);
   } catch (error) {
-    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
   }
 }
 

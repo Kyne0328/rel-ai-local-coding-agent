@@ -61,10 +61,10 @@ try {
   await dashboardLogin.arrayBuffer();
   const dashboardHeaders = { cookie: dashboardCookie };
 
-  const compressed = await fetch(`${base}/api/tools`, { headers: { ...dashboardHeaders, 'accept-encoding': 'gzip' } });
-  assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  const compressedTools = await compressed.json();
-  assert.equal(compressedTools.length, activeToolCount);
+  const uncompressed = await fetch(`${base}/api/tools`, { headers: { ...dashboardHeaders, 'accept-encoding': 'gzip' } });
+  assert.equal(uncompressed.headers.get('content-encoding'), null, 'Rel.AI JSON responses must stay uncompressed even when a local client advertises gzip');
+  const uncompressedTools = await uncompressed.json();
+  assert.equal(uncompressedTools.length, activeToolCount);
 
   const dashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(dashboard.ok, true);

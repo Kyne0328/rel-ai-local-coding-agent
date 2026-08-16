@@ -5,12 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { allWorkspaceAliases, readConfig, resolveWorkspace } from '../src/config.js';
+import { resetFallbackExecutions, startFallbackExecution } from '../src/mcp/fallbackExecutions.js';
 import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { readTaskHistorySession } from '../src/taskHistoryStore.js';
 import { getTaskHistoryDir, resetTaskHistoryCaches, writeSession } from '../src/taskHistoryStorage.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
+import { runWorkspaceOperation } from '../src/workspaceOperationQueue.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-parallel-sandbox-'));
 const workspacePath = path.join(root, 'workspace');
@@ -75,6 +77,45 @@ try {
   assert.deepEqual(firstSessionAfterEdit?.changedFiles, ['alpha.txt'], 'successful visible edits must update the owning session immediately');
   assert.equal(firstSessionAfterEdit?.changedFileCount, 1);
   assert.equal(sandboxEntries(config).length, 0, 'the oldest active task should keep the visible workspace');
+
+  // Detached fallback status is control-plane state and must stay responsive even
+  // when the same primary task currently owns the visible workspace writer lane.
+  let releaseFallback;
+  const fallbackGate = new Promise(resolve => { releaseFallback = resolve; });
+  const fallback = startFallbackExecution({
+    workId: first.work_id,
+    tool: 'relai_exec',
+    workspace: 'app',
+    signature: 'status-while-visible-writer-running',
+    run: async () => {
+      await fallbackGate;
+      return { structuredContent: { ok: true, workspace: 'app', work_id: first.work_id } };
+    }
+  });
+  let releaseVisibleWriter;
+  let markVisibleWriterStarted;
+  const visibleWriterStarted = new Promise(resolve => { markVisibleWriterStarted = resolve; });
+  const visibleWriterGate = new Promise(resolve => { releaseVisibleWriter = resolve; });
+  const visibleWriter = runWorkspaceOperation('app', async () => {
+    markVisibleWriterStarted();
+    await visibleWriterGate;
+  }, { mode: 'write', scope: 'task', taskId: first.work_id });
+  await visibleWriterStarted;
+
+  const backgroundStatus = await Promise.race([
+    rawCallTool('relai_work', {
+      action: 'status', workspace: 'app', work_id: first.work_id
+    }, context),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('background status waited on the visible writer')), 2000))
+  ]);
+  assert.equal(backgroundStatus.backgroundOperation?.status, 'running');
+  assert.equal(backgroundStatus.workspace?.alias, 'app');
+  assert.equal(backgroundStatus.workspace?.repository, undefined, 'running fallback status must avoid repository I/O while bypassing the task writer');
+  releaseVisibleWriter();
+  releaseFallback();
+  await visibleWriter;
+  await fallback.record.promise;
+  resetFallbackExecutions();
 
   const readOnlyExec = await rawCallTool('relai_exec', {
     workspace: 'app', work_id: second.work_id, executable: 'git', argv: ['status', '--short']
@@ -208,6 +249,33 @@ try {
     'the private sandbox must preserve safe untracked source bytes exactly'
   );
 
+  // A follow-up inspection must not sit behind a long private writer until the
+  // connector deadline expires, and it must not read the sandbox while that
+  // writer is mutating it. Serve the synchronized visible workspace instead.
+  let releasePrivateWriter;
+  let markPrivateWriterStarted;
+  const privateWriterStarted = new Promise(resolve => { markPrivateWriterStarted = resolve; });
+  const privateWriterGate = new Promise(resolve => { releasePrivateWriter = resolve; });
+  const privateWriter = runWorkspaceOperation(entries[0].alias, async () => {
+    fs.writeFileSync(path.join(entries[0].path, 'beta.txt'), 'beta private in progress\n');
+    markPrivateWriterStarted();
+    await privateWriterGate;
+  }, { mode: 'write', scope: 'task', taskId: second.work_id });
+  await privateWriterStarted;
+
+  const stableRead = await Promise.race([
+    rawCallTool('relai_read', {
+      workspace: 'app', work_id: second.work_id, paths: ['beta.txt']
+    }, context),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('stable source read waited on the private writer')), 2000))
+  ]);
+  assert.match(stableRead.items?.[0]?.content || '', /beta from second/);
+  assert.doesNotMatch(stableRead.items?.[0]?.content || '', /private in progress/);
+
+  releasePrivateWriter();
+  await privateWriter;
+  fs.writeFileSync(path.join(entries[0].path, 'beta.txt'), 'beta from second\n');
+
   fs.writeFileSync(path.join(entries[0].path, 'incremental.txt'), 'incremental promotion\n');
   const incremental = await promoteTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id, {
     changedFiles: ['incremental.txt']
@@ -215,6 +283,43 @@ try {
   assert.equal(incremental.synchronization, 'reconciled', 'a retained sandbox must first absorb source changes made by the primary task');
   assert.deepEqual(incremental.changedFiles, ['incremental.txt']);
   assert.equal(readText(path.join(workspacePath, 'incremental.txt')), 'incremental promotion\n');
+
+  // Once the baseline is synchronized, an HTTP deadline that expires while a
+  // mutating call waits on the private writer must remove that call from the
+  // queue; it must not execute when the blocker later releases.
+  let releaseAbortWriter;
+  let markAbortWriterStarted;
+  const abortWriterStarted = new Promise(resolve => { markAbortWriterStarted = resolve; });
+  const abortWriterGate = new Promise(resolve => { releaseAbortWriter = resolve; });
+  const abortWriter = runWorkspaceOperation(entries[0].alias, async () => {
+    fs.writeFileSync(path.join(entries[0].path, 'beta.txt'), 'beta private in progress\n');
+    markAbortWriterStarted();
+    await abortWriterGate;
+  }, { mode: 'write', scope: 'task', taskId: second.work_id });
+  await abortWriterStarted;
+
+  const disconnected = new AbortController();
+  const deadEdit = rawCallTool('relai_edit', {
+    workspace: 'app',
+    work_id: second.work_id,
+    path: 'beta.txt',
+    oldText: 'beta private in progress\n',
+    newText: 'this disconnected edit must never run\n'
+  }, { ...context, signal: disconnected.signal });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  disconnected.abort(new Error('connector deadline expired'));
+  await assert.rejects(
+    Promise.race([
+      deadEdit,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('aborted edit remained queued')), 2000))
+    ]),
+    error => error?.code === 'WORKSPACE_OPERATION_ABORTED' || /connector deadline expired/i.test(error?.message || '')
+  );
+  assert.equal(readText(path.join(entries[0].path, 'beta.txt')), 'beta private in progress\n');
+  releaseAbortWriter();
+  await abortWriter;
+  assert.equal(readText(path.join(entries[0].path, 'beta.txt')), 'beta private in progress\n', 'an aborted queued edit must not run after the writer releases');
+  fs.writeFileSync(path.join(entries[0].path, 'beta.txt'), 'beta from second\n');
 
   await assert.rejects(
     () => rawCallTool('relai_exec', {
@@ -330,6 +435,7 @@ try {
   }, context);
 } finally {
   await repositoryIntelligence.shutdown();
+  resetFallbackExecutions();
   resetTaskHistoryCaches();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;

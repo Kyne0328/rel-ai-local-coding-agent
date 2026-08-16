@@ -52,7 +52,7 @@ function handleHealth(ctx) {
     connectedClientCount: mcpConnection.connectedClientCount,
     toolManifestVersion: mcpConnection.toolManifestVersion,
     activeToolCount: mcpConnection.currentActiveToolCount
-  }, ctx.ae);
+  });
 }
 
 function handleStaticAsset(ctx) {
@@ -92,16 +92,16 @@ function handleDashboard(ctx) {
 }
 
 function handleApiSettingsGet(ctx) {
-  sendJson(ctx.res, 200, configEditor.settingsPayload(readConfig()), ctx.ae);
+  sendJson(ctx.res, 200, configEditor.settingsPayload(readConfig()));
 }
 
 function handleApiTools(ctx) {
-  try { sendJson(ctx.res, 200, getToolMetadata(), ctx.ae); }
-  catch (err) { sendJson(ctx.res, 500, errorPayload(ERROR_CODES.UNKNOWN, err.message), ctx.ae); }
+  try { sendJson(ctx.res, 200, getToolMetadata()); }
+  catch (err) { sendJson(ctx.res, 500, errorPayload(ERROR_CODES.UNKNOWN, err.message)); }
 }
 
 function handleOnboardingStatus(ctx) {
-  sendJson(ctx.res, 200, { ok: true, ...getOnboardingStatus() }, ctx.ae);
+  sendJson(ctx.res, 200, { ok: true, ...getOnboardingStatus() });
 }
 
 function handleConnection(ctx) {
@@ -121,7 +121,7 @@ function handleConnection(ctx) {
     mcpAuthentication: readMcpAuthenticationStatus(mcpConnection, {
       staticBearerConfigured: Boolean(ctx.options.token)
     })
-  }, ctx.ae);
+  });
 }
 
 function handleDashboardV10(ctx) {
@@ -132,17 +132,17 @@ function handleDashboardV10(ctx) {
     limit: Number(ctx.parsed.searchParams.get("limit") || 100),
     snapshotRevision: dashboardSourceRevision(ctx.options, config),
     live
-  }, resolveRequireHttpToken(ctx.parsed, config)), ctx.ae);
+  }, resolveRequireHttpToken(ctx.parsed, config)));
 }
 
 async function handleWorkspacePreflight(ctx) {
   const rawPath = ctx.parsed.searchParams.get("path") || "";
-  if (rawPath) { sendJson(ctx.res, 200, workspacePathPreflight(rawPath), ctx.ae); return; }
+  if (rawPath) { sendJson(ctx.res, 200, workspacePathPreflight(rawPath)); return; }
   const config = readConfig();
   sendJson(ctx.res, 200, await release.workspacePreflight(config, {
     workspace: ctx.parsed.searchParams.get("workspace") || "",
     requireClean: ctx.parsed.searchParams.get("requireClean") !== "0"
-  }), ctx.ae);
+  }));
 }
 
 function handleEvents(ctx) { openDashboardEvents(ctx.res, ctx.req, ctx.options); }
@@ -157,7 +157,7 @@ async function handleOnboardingComplete(ctx) {
     handoffPending: payload.handoffPending === true,
     updatedAt: new Date().toISOString()
   });
-  sendJson(ctx.res, 200, { ok: true }, ctx.ae);
+  sendJson(ctx.res, 200, { ok: true });
 }
 
 async function handleApiSettingsPost(ctx) {
@@ -165,7 +165,7 @@ async function handleApiSettingsPost(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const result = configEditor.updateSettings(current, payload);
   await refreshMcpManifest('settings_changed');
-  sendJson(ctx.res, 200, result, ctx.ae);
+  sendJson(ctx.res, 200, result);
 }
 
 async function handleApiWorkspaces(ctx) {
@@ -173,7 +173,7 @@ async function handleApiWorkspaces(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const result = configEditor.updateWorkspace(current, payload);
   await refreshMcpManifest('workspaces_changed');
-  sendJson(ctx.res, 200, result, ctx.ae);
+  sendJson(ctx.res, 200, result);
 }
 
 async function refreshMcpManifest(trigger) {
@@ -453,10 +453,10 @@ ${renderDashboardWindowTitlebar()}
 const handleTaskSession = (ctx) => {
   const config = readConfig();
   const taskId = String(ctx.parsed.searchParams.get("task") || "").trim();
-  if (!taskId) { sendJson(ctx.res, 400, { ok: false, error: "task is required." }, ctx.ae); return; }
+  if (!taskId) { sendJson(ctx.res, 400, { ok: false, error: "task is required." }); return; }
   const session = readTaskHistorySession(config, taskId);
-  if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Work session not found." }, ctx.ae); return; }
-  sendJson(ctx.res, 200, { ok: true, session }, ctx.ae);
+  if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Work session not found." }); return; }
+  sendJson(ctx.res, 200, { ok: true, session });
 };
 
 const handleApiLogs = (ctx) => {
@@ -464,12 +464,12 @@ const handleApiLogs = (ctx) => {
   const limit = Number(ctx.parsed.searchParams.get("limit") || 100);
   const taskActivity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
   const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
-  sendJson(ctx.res, 200, mergeDashboardActivity(productUx.liveLogTail(config, { limit }), tasks, limit), ctx.ae);
+  sendJson(ctx.res, 200, mergeDashboardActivity(productUx.liveLogTail(config, { limit }), tasks, limit));
 };
-const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
-const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, getReleaseNotes(), ctx.ae);
-const handleCautionSummary = (ctx) => sendJson(ctx.res, 200, productUx.cautionSummary(readConfig(), { windowHours: Number(ctx.parsed.searchParams.get("windowHours") || 24) }), ctx.ae);
-const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness(readConfig(), { requireHttpToken: resolveRequireHttpToken(ctx.parsed, readConfig()) }), ctx.ae);
+const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }));
+const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, getReleaseNotes());
+const handleCautionSummary = (ctx) => sendJson(ctx.res, 200, productUx.cautionSummary(readConfig(), { windowHours: Number(ctx.parsed.searchParams.get("windowHours") || 24) }));
+const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness(readConfig(), { requireHttpToken: resolveRequireHttpToken(ctx.parsed, readConfig()) }));
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
+import { hasPendingTaskWriter, runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
 
 const order = [];
 const first = runWorkspaceOperation('repo', async () => {
@@ -145,5 +145,113 @@ await assert.rejects(
 );
 assert.equal(pendingWorkspaceOperations(), 0);
 await runWorkspaceOperation('repo', async () => 'ok', { mode: 'write' });
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(value => { resolve = value; });
+  return { promise, resolve };
+}
+
+async function nextTurn() {
+  await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+// A disconnected request waiting behind a same-task writer must leave the queue
+// immediately and must not execute after the writer eventually releases.
+{
+  const writerStarted = deferred();
+  const releaseWriter = deferred();
+  const writer = runWorkspaceOperation('abort-task', async () => {
+    writerStarted.resolve();
+    await releaseWriter.promise;
+  }, { mode: 'write', scope: 'task', taskId: 'task-abort' });
+  await writerStarted.promise;
+  assert.equal(hasPendingTaskWriter('abort-task', 'task-abort'), true);
+
+  let readerRan = false;
+  const controller = new AbortController();
+  const reader = runWorkspaceOperation('abort-task', async () => {
+    readerRan = true;
+  }, { mode: 'read', scope: 'task', taskId: 'task-abort', signal: controller.signal });
+  await nextTurn();
+  controller.abort(new Error('client disconnected'));
+  await assert.rejects(
+    reader,
+    error => error?.name === 'AbortError'
+      && error?.code === 'WORKSPACE_OPERATION_ABORTED'
+      && /client disconnected/i.test(error.message)
+  );
+  assert.equal(readerRan, false);
+
+  releaseWriter.resolve();
+  await writer;
+  await nextTurn();
+  assert.equal(readerRan, false, 'an aborted waiter must never run after its blocker releases');
+  assert.equal(hasPendingTaskWriter('abort-task', 'task-abort'), false);
+  assert.equal(pendingWorkspaceOperations(), 0);
+}
+
+// Cancellation also applies while a task call is still waiting for the outer
+// workspace barrier, before it can allocate/acquire the task-local lane.
+{
+  const globalStarted = deferred();
+  const releaseGlobal = deferred();
+  const globalWriter = runWorkspaceOperation('abort-global', async () => {
+    globalStarted.resolve();
+    await releaseGlobal.promise;
+  }, { mode: 'write', scope: 'workspace', taskId: 'maintenance' });
+  await globalStarted.promise;
+
+  let taskCallRan = false;
+  const controller = new AbortController();
+  const taskCall = runWorkspaceOperation('abort-global', async () => {
+    taskCallRan = true;
+  }, { mode: 'read', scope: 'task', taskId: 'task-b', signal: controller.signal });
+  await nextTurn();
+  controller.abort(new Error('request deadline expired'));
+  await assert.rejects(taskCall, error => error?.code === 'WORKSPACE_OPERATION_ABORTED');
+  assert.equal(taskCallRan, false);
+
+  releaseGlobal.resolve();
+  await globalWriter;
+  assert.equal(taskCallRan, false);
+  assert.equal(pendingWorkspaceOperations(), 0);
+}
+
+// Stable-read routing must see a writer even while it is queued behind readers.
+{
+  const readerStarted = deferred();
+  const releaseReader = deferred();
+  const reader = runWorkspaceOperation('pending-writer', async () => {
+    readerStarted.resolve();
+    await releaseReader.promise;
+  }, { mode: 'read', scope: 'task', taskId: 'task-c' });
+  await readerStarted.promise;
+
+  const writer = runWorkspaceOperation('pending-writer', async () => {}, {
+    mode: 'write', scope: 'task', taskId: 'task-c'
+  });
+  await nextTurn();
+  assert.equal(hasPendingTaskWriter('pending-writer', 'task-c'), true);
+  releaseReader.resolve();
+  await Promise.all([reader, writer]);
+  assert.equal(hasPendingTaskWriter('pending-writer', 'task-c'), false);
+  assert.equal(pendingWorkspaceOperations(), 0);
+}
+
+// Already-aborted requests fail before their operation starts and leave no lock.
+{
+  const controller = new AbortController();
+  controller.abort(new Error('already closed'));
+  let ran = false;
+  await assert.rejects(
+    runWorkspaceOperation('pre-aborted', async () => { ran = true; }, {
+      mode: 'read', scope: 'task', taskId: 'task-d', signal: controller.signal
+    }),
+    error => error?.code === 'WORKSPACE_OPERATION_ABORTED'
+  );
+  assert.equal(ran, false);
+  assert.equal(pendingWorkspaceOperations(), 0);
+}
 
 console.log('Workspace operation queue tests passed.');

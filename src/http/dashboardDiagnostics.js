@@ -41,29 +41,29 @@ function handleApiDiagnostics(ctx) {
     auditLogs,
     activeCalls: activity.activeCalls || 0
   });
-  sendJson(ctx.res, 200, report, ctx.ae);
+  sendJson(ctx.res, 200, report);
 }
 
 async function handleApiDiagnosticsReset(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const target = String(payload.target || '').trim();
   if (payload.confirm !== true || !['history', 'runtime_logs', 'all'].includes(target)) {
-    sendJson(ctx.res, 400, errorPayload(ERROR_CODES.REQUEST_INVALID, 'Diagnostic reset requires confirm=true and target history, runtime_logs, or all.'), ctx.ae);
+    sendJson(ctx.res, 400, errorPayload(ERROR_CODES.REQUEST_INVALID, 'Diagnostic reset requires confirm=true and target history, runtime_logs, or all.'));
     return;
   }
   if (target === 'all' && String(payload.confirmation || '').trim() !== 'RESET') {
-    sendJson(ctx.res, 400, errorPayload(ERROR_CODES.REQUEST_INVALID, 'Full diagnostic reset requires confirmation=RESET.'), ctx.ae);
+    sendJson(ctx.res, 400, errorPayload(ERROR_CODES.REQUEST_INVALID, 'Full diagnostic reset requires confirmation=RESET.'));
     return;
   }
 
   const activity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
   if ((target === 'history' || target === 'all') && Number(activity.activeCalls || 0) > 0) {
-    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, 'Cannot clear session and activity history while a Rel.AI tool call is running.'), ctx.ae);
+    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, 'Cannot clear session and activity history while a Rel.AI tool call is running.'));
     return;
   }
 
   if ((target === 'runtime_logs' || target === 'all') && typeof ctx.options.clearRuntimeLogs !== 'function') {
-    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, 'Service logs can be cleared only in the Rel.AI desktop app.'), ctx.ae);
+    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, 'Service logs can be cleared only in the Rel.AI desktop app.'));
     return;
   }
 
@@ -71,7 +71,7 @@ async function handleApiDiagnosticsReset(ctx) {
   if (target === 'history' || target === 'all') result.history = await clearHistory(ctx);
   if (target === 'runtime_logs' || target === 'all') result.runtimeLogs = await ctx.options.clearRuntimeLogs();
   result.message = resetMessage(target);
-  sendJson(ctx.res, 200, result, ctx.ae);
+  sendJson(ctx.res, 200, result);
 }
 
 async function clearHistory(ctx) {

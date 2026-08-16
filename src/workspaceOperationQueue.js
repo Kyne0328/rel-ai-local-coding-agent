@@ -8,7 +8,9 @@
 // exclusive across every task.
 //
 // Both levels are FIFO-fair: a waiting writer blocks later readers, preventing
-// workspace-global maintenance and task-local writes from starving.
+// workspace-global maintenance and task-local writes from starving. Waiting calls
+// are abort-aware so a disconnected MCP request never remains queued until an
+// unrelated operation eventually releases its lock.
 
 const locks = new Map();
 
@@ -44,10 +46,33 @@ function admitWaiting(state) {
   }
 }
 
-function acquire(state, mode) {
+function acquire(state, mode, signal) {
+  throwIfAborted(signal);
   const queuedAt = Date.now();
-  return new Promise((resolve) => {
-    state.queue.push({ mode, admit: () => resolve(Date.now() - queuedAt) });
+  return new Promise((resolve, reject) => {
+    const entry = {
+      mode,
+      settled: false,
+      admit: () => {
+        if (entry.settled) return;
+        entry.settled = true;
+        signal?.removeEventListener?.('abort', onAbort);
+        resolve(Date.now() - queuedAt);
+      }
+    };
+    const onAbort = () => {
+      if (entry.settled) return;
+      const index = state.queue.indexOf(entry);
+      if (index < 0) return;
+      state.queue.splice(index, 1);
+      entry.settled = true;
+      signal?.removeEventListener?.('abort', onAbort);
+      reject(workspaceOperationAbortError(signal));
+      admitWaiting(state);
+    };
+
+    state.queue.push(entry);
+    signal?.addEventListener?.('abort', onAbort, { once: true });
     admitWaiting(state);
   });
 }
@@ -56,15 +81,28 @@ function release(key, state, mode) {
   if (mode === READ) state.activeReaders = Math.max(0, state.activeReaders - 1);
   else state.activeWriter = false;
   admitWaiting(state);
+  deleteIdleLock(key, state);
+}
+
+function deleteIdleLock(key, state) {
   if (state.activeReaders === 0 && !state.activeWriter && state.queue.length === 0) {
     locks.delete(key);
   }
 }
 
-async function withLock(key, mode, operation) {
+async function withLock(key, mode, operation, signal) {
   const state = lockStateFor(key);
-  const waitMs = await acquire(state, mode);
+  let waitMs;
   try {
+    waitMs = await acquire(state, mode, signal);
+  } catch (error) {
+    deleteIdleLock(key, state);
+    throw error;
+  }
+  try {
+    // The signal can flip after admission resolves but before this continuation
+    // resumes. In that race, release the acquired lock without invoking work.
+    throwIfAborted(signal);
     return await operation(waitMs, state);
   } finally {
     release(key, state, mode);
@@ -88,6 +126,22 @@ function notifyWait(options, waitMs, details) {
   }
 }
 
+function workspaceOperationAbortError(signal) {
+  const reason = signal?.reason;
+  const message = reason instanceof Error && reason.message
+    ? reason.message
+    : 'Workspace operation was cancelled before execution.';
+  const error = new Error(message, reason instanceof Error ? { cause: reason } : undefined);
+  error.name = 'AbortError';
+  error.code = 'WORKSPACE_OPERATION_ABORTED';
+  error.retryable = true;
+  return error;
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw workspaceOperationAbortError(signal);
+}
+
 /**
  * Run `operation` under hierarchical workspace/task locking.
  *
@@ -98,7 +152,10 @@ function notifyWait(options, waitMs, details) {
  */
 async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
   const workspace = String(workspaceAlias || '').trim();
-  if (!workspace) return operation();
+  if (!workspace) {
+    throwIfAborted(options.signal);
+    return operation();
+  }
 
   const mode = options.mode === READ ? READ : WRITE;
   const taskId = String(options.taskId || '').trim();
@@ -115,7 +172,7 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
         queued: state.queue.length
       });
       return operation();
-    });
+    }, options.signal);
   }
 
   return withLock(outerKey, READ, async (workspaceWaitMs, workspaceState) => {
@@ -130,12 +187,20 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
         queued: workspaceState.queue.length + taskState.queue.length
       });
       return operation();
-    });
-  });
+    }, options.signal);
+  }, options.signal);
+}
+
+function hasPendingTaskWriter(workspaceAlias, taskId) {
+  const workspace = String(workspaceAlias || '').trim();
+  const task = String(taskId || '').trim();
+  if (!workspace || !task) return false;
+  const state = locks.get(taskKey(workspace, task));
+  return Boolean(state?.activeWriter || state?.queue.some(entry => entry.mode === WRITE));
 }
 
 function pendingWorkspaceOperations() {
   return locks.size;
 }
 
-export { runWorkspaceOperation, pendingWorkspaceOperations };
+export { hasPendingTaskWriter, runWorkspaceOperation, pendingWorkspaceOperations };

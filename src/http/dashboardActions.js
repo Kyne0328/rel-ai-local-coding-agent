@@ -5,7 +5,7 @@ import { readConfig } from "../config.js";
 import { readJsonBody, sendJson } from "./io.js";
 async function handleOpenFolder(ctx) {
   if (typeof ctx.options.openFolder !== 'function') {
-    sendJson(ctx.res, 200, { ok: false, unsupported: true, error: 'Opening folders is only available in the Rel.AI desktop app.' }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: false, unsupported: true, error: 'Opening folders is only available in the Rel.AI desktop app.' });
     return;
   }
   try {
@@ -14,9 +14,9 @@ async function handleOpenFolder(ctx) {
     const workspace = config.workspaces?.[String(payload.workspace || '')];
     if (!workspace?.path) throw new Error(`Unknown workspace: ${payload.workspace || '(empty)'}`);
     const openedPath = await ctx.options.openFolder(workspace.path);
-    sendJson(ctx.res, 200, { ok: true, workspace: payload.workspace, path: openedPath }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: true, workspace: payload.workspace, path: openedPath });
   } catch (error) {
-    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -40,7 +40,7 @@ async function handleWorkspaceChecks(ctx) {
       complete: true,
       summary: `Dashboard validation completed for ${workspace}.`
     }, { publicHttpOnly: false });
-    sendJson(ctx.res, 200, result, ctx.ae);
+    sendJson(ctx.res, 200, result);
   } catch (error) {
     if (workId) {
       try {
@@ -49,24 +49,24 @@ async function handleWorkspaceChecks(ctx) {
         }, { publicHttpOnly: false });
       } catch {}
     }
-    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
 async function handlePickFolder(ctx) {
   if (typeof ctx.options.pickFolder !== 'function') {
-    sendJson(ctx.res, 200, { ok: false, unsupported: true, error: 'Native folder picker is only available in the Rel.AI desktop launcher.' }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: false, unsupported: true, error: 'Native folder picker is only available in the Rel.AI desktop launcher.' });
     return;
   }
   try {
     const picked = await ctx.options.pickFolder();
     if (!picked) {
-      sendJson(ctx.res, 200, { ok: false, canceled: true }, ctx.ae);
+      sendJson(ctx.res, 200, { ok: false, canceled: true });
       return;
     }
-    sendJson(ctx.res, 200, { ok: true, ...workspacePathPreflight(picked) }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: true, ...workspacePathPreflight(picked) });
   } catch (error) {
-    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
+    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
   }
 }
 
