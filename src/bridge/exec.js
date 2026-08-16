@@ -198,7 +198,15 @@ function redactCommandForAudit(value) {
     .replace(/\b((?:token|password|passwd|secret|api[-_]?key|auth[-_]?token|authtoken)[A-Za-z0-9_-]*)\s*=\s*("[^"]*"|'[^']*'|\S+)/gi, '$1=[REDACTED]')
     .replace(/(https?:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1[REDACTED]@');
   const maxChars = 180;
-  return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
+  if (text.length <= maxChars) return text;
+  const marker = '[REDACTED]';
+  let clipped = `${text.slice(0, maxChars - 1)}…`;
+  if (text.includes(marker) && !clipped.includes(marker)) {
+    const suffix = `… ${marker}`;
+    const prefixLength = Math.max(0, maxChars - suffix.length);
+    clipped = `${text.slice(0, prefixLength)}${suffix}`;
+  }
+  return clipped;
 }
 
 async function readGitStatusMap(workspace, config) {

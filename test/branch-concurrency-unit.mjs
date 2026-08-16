@@ -29,21 +29,19 @@ function git(...args) {
 function waitForFile(file, timeoutMs = 10_000) {
   if (fs.existsSync(file)) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const directory = path.dirname(file);
     const expected = path.basename(file);
-    const watcher = fs.watch(directory, (_event, filename) => {
-      if (String(filename || '') !== expected && !fs.existsSync(file)) return;
+    const poll = setInterval(() => {
       if (!fs.existsSync(file)) return;
       cleanup();
       resolve();
-    });
+    }, 25);
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error(`Timed out waiting for ${expected}`));
     }, timeoutMs);
     const cleanup = () => {
       clearTimeout(timeout);
-      watcher.close();
+      clearInterval(poll);
     };
     if (fs.existsSync(file)) {
       cleanup();
@@ -56,28 +54,24 @@ try {
   fs.mkdirSync(workspacePath, { recursive: true });
   fs.writeFileSync(path.join(workspacePath, 'base.txt'), 'base\n');
   fs.writeFileSync(path.join(workspacePath, 'branch-gate.mjs'), `
-import fs from 'node:fs';
-import path from 'node:path';
-const started = ${JSON.stringify(startedPath)};
-const release = ${JSON.stringify(releasePath)};
-fs.writeFileSync(started, 'started\\n');
-const finish = () => {
-  if (!fs.existsSync(release)) return false;
-  clearTimeout(timeout);
-  watcher?.close();
-  process.exit(0);
-};
-let watcher = null;
-const timeout = setTimeout(() => {
-  watcher?.close();
-  console.error('branch gate timed out');
-  process.exit(2);
-}, 10_000);
-if (!finish()) {
-  watcher = fs.watch(path.dirname(release), () => { finish(); });
+  import fs from 'node:fs';
+  const started = ${JSON.stringify(startedPath)};
+  const release = ${JSON.stringify(releasePath)};
+  fs.writeFileSync(started, 'started\\n');
+  const finish = () => {
+    if (!fs.existsSync(release)) return false;
+    clearTimeout(timeout);
+    clearInterval(poll);
+    process.exit(0);
+  };
+  const poll = setInterval(finish, 50);
+  const timeout = setTimeout(() => {
+    clearInterval(poll);
+    console.error('branch gate timed out');
+    process.exit(2);
+  }, 10_000);
   finish();
-}
-`);
+  `);
   fs.writeFileSync(path.join(workspacePath, 'branch-marker.mjs'), "import fs from 'node:fs'; fs.writeFileSync('branch-b-ran.txt', 'ran\\n');\n");
   fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ type: 'module' }, null, 2));
 
