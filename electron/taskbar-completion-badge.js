@@ -41,6 +41,7 @@ function createTaskbarCompletionBadge(options = {}) {
   const seenTaskIds = new Set();
   const seenOrder = [];
   const knownWindows = new Set();
+  const badgeImages = new Map();
 
   function markCompleted(task = {}) {
     const taskId = String(task.taskId || task.work_id || task.id || '').trim();
@@ -96,11 +97,17 @@ function createTaskbarCompletionBadge(options = {}) {
     if (!win || win.isDestroyed?.() || typeof win.setOverlayIcon !== 'function') return false;
     knownWindows.add(win);
     if (count === 0) return clearWindowOverlay(win);
-    const image = createBadgeImage(nativeImage, count);
+    const image = badgeImage(count);
     if (!image || image.isEmpty?.()) return false;
     const noun = count === 1 ? 'task' : 'tasks';
     win.setOverlayIcon(image, String(count) + ' completed ' + noun + ' waiting to be viewed');
     return true;
+  }
+
+  function badgeImage(unreadCount) {
+    const key = unreadCount > BADGE_VISIBLE_COUNT_LIMIT ? BADGE_VISIBLE_COUNT_LIMIT + 1 : unreadCount;
+    if (!badgeImages.has(key)) badgeImages.set(key, createBadgeImage(nativeImage, unreadCount));
+    return badgeImages.get(key);
   }
 
   function remember(taskId) {

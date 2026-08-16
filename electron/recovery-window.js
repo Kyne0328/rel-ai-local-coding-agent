@@ -16,6 +16,7 @@ function createRecoveryWindowManager({
   let window = null;
   let rendererReady = false;
   let pendingStatus = null;
+  const pendingLogs = [];
 
   function create() {
     if (window && !window.isDestroyed()) return window;
@@ -37,6 +38,7 @@ function createRecoveryWindowManager({
     });
     window.webContents.on('did-finish-load', () => {
       rendererReady = true;
+      pendingLogs.length = 0;
       onReady();
     });
     window.on('close', event => {
@@ -47,6 +49,7 @@ function createRecoveryWindowManager({
     window.on('closed', () => {
       window = null;
       rendererReady = false;
+      pendingLogs.length = 0;
     });
     return window;
   }
@@ -54,7 +57,10 @@ function createRecoveryWindowManager({
   function show() {
     const recoveryWindow = create();
     recoveryWindow.show();
-    if (rendererReady && pendingStatus !== null) sendStatus(pendingStatus);
+    if (rendererReady) {
+      if (pendingStatus !== null) sendStatus(pendingStatus);
+      flushPendingLogs();
+    }
     recoveryWindow.focus();
     return recoveryWindow;
   }
@@ -87,8 +93,23 @@ function createRecoveryWindowManager({
     close,
     getWindow: () => window && !window.isDestroyed() ? window : null,
     sendStatus,
-    sendLog: log => send('server:log', log)
+    sendLog
   };
+
+  function sendLog(log) {
+    if (!rendererReady || !window || window.isDestroyed()) return;
+    if (!window.isVisible()) {
+      pendingLogs.push(log);
+      if (pendingLogs.length > 100) pendingLogs.splice(0, pendingLogs.length - 100);
+      return;
+    }
+    send('server:log', log);
+  }
+
+  function flushPendingLogs() {
+    if (!rendererReady || !window || window.isDestroyed() || !window.isVisible()) return;
+    for (const log of pendingLogs.splice(0)) send('server:log', log);
+  }
 }
 
 export { createRecoveryWindowManager };
