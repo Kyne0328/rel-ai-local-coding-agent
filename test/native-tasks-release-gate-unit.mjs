@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   RELEASE_GATE_BLOCKERS,
-  RELEASE_GATE_CHECKS
+  RELEASE_GATE_CHECKS,
+  SERIAL_RELEASE_GATE_CHECK_IDS
 } from '../scripts/native-tasks-release-gate.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,6 +22,14 @@ for (const category of [/capability/i, /transport/i, /task lifecycle/i, /ownersh
 }
 for (const check of RELEASE_GATE_CHECKS) {
   assert.ok(fs.existsSync(path.join(root, check.file)), `release-gate test is missing: ${check.file}`);
+}
+assert.equal(new Set(SERIAL_RELEASE_GATE_CHECK_IDS).size, SERIAL_RELEASE_GATE_CHECK_IDS.length,
+  'resource-sensitive release checks must not be duplicated');
+for (const id of SERIAL_RELEASE_GATE_CHECK_IDS) {
+  assert.ok(ids.includes(id), `serial release-gate check is missing from the gate: ${id}`);
+}
+for (const id of ['http_matrix', 'http_discovery', 'http_authentication', 'process_lifecycle', 'process_cancellation']) {
+  assert.ok(SERIAL_RELEASE_GATE_CHECK_IDS.includes(id), `${id} must not compete with other socket/process integration checks in CI`);
 }
 assert.equal(new Set(RELEASE_GATE_BLOCKERS).size, RELEASE_GATE_BLOCKERS.length, 'release blocker classes must be unique');
 for (const blocker of RELEASE_GATE_BLOCKERS) assert.match(blocker, /^[a-z0-9_]+$/, 'release blocker classes must remain machine-readable');

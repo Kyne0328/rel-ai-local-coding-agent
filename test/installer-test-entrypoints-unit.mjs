@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isSecureLinuxSandboxConfiguration } from '../scripts/validate-installed-release.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
 const packageJson = JSON.parse(read('package.json'));
@@ -77,5 +79,18 @@ assert.match(installedReleaseValidation, /REL_AI_RELEASE_INSTALL_TEST/,
   'installed release validation must require an explicit release-only opt in');
 assert.match(installedReleaseValidation, /createInstallerTestContext/,
   'Windows production-identity validation must retain the installer safety guard');
+
+const rootOwnedSetuidSandbox = { uid: 0, mode: 0o104755 };
+const rootOwnedNamespaceSandbox = { uid: 0, mode: 0o100755 };
+assert.equal(isSecureLinuxSandboxConfiguration(rootOwnedSetuidSandbox), true,
+  'electron-builder setuid Chromium sandbox mode must remain valid');
+assert.equal(isSecureLinuxSandboxConfiguration(rootOwnedNamespaceSandbox), true,
+  'electron-builder root-owned non-setuid Chromium sandbox mode must remain valid');
+assert.equal(isSecureLinuxSandboxConfiguration({ uid: 1000, mode: 0o104755 }), false,
+  'setuid Chromium sandbox mode must still require root ownership');
+assert.equal(isSecureLinuxSandboxConfiguration({ uid: 0, mode: 0o100777 }), false,
+  'Chromium sandbox helper must never be group/world writable');
+assert.equal(isSecureLinuxSandboxConfiguration({ uid: 0, mode: 0o100644 }), false,
+  'Chromium sandbox helper must remain executable');
 
 console.log('Cross-platform packaging entry-point isolation regression tests passed.');
