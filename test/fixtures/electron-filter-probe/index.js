@@ -153,7 +153,11 @@ app.whenReady().then(async () => {
       search.value = 'no-diagnostic-match-acceptance'; search.dispatchEvent(new Event('input', { bubbles: true })); await delay(220);
       const searchEmpty = /0 of .* findings.*0 of .* log entries shown/.test(document.querySelector('#diagnosticFilterHost .filter-summary')?.textContent || '');
       document.querySelector('#diagnosticFilterHost .filter-clear-button')?.click();
-      return { cancelPreserved, sourceDisabledForFindings, liveTailStarted, liveTailStopped, searchEmpty, applied };
+      const technicalCodes = [...document.querySelectorAll('[data-diagnostic-detail] p code')];
+      const technicalFindingCodesGated = technicalCodes.length > 0 && technicalCodes.every(code => Boolean(code.closest('details[data-diagnostic-detail]')));
+      const findingSeveritiesReadable = [...document.querySelectorAll('.diagnostic-severity')]
+        .every(element => ['Blocking', 'Warning', 'Recommendation'].includes(element.textContent.trim()));
+      return { cancelPreserved, sourceDisabledForFindings, liveTailStarted, liveTailStopped, searchEmpty, technicalFindingCodesGated, findingSeveritiesReadable, applied };
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#tools'`);
@@ -203,7 +207,12 @@ app.whenReady().then(async () => {
         appearancePreviewRemoved: !document.querySelector('.appearance-preview'),
         legacyDensityIgnored: !document.documentElement.dataset.density,
         navigationLabel: document.querySelector('.settings-rail')?.getAttribute('aria-label') || '',
-        currentPageCount: document.querySelectorAll('.settings-nav-button[aria-current="page"]').length
+        currentPageCount: document.querySelectorAll('.settings-nav-button[aria-current="page"]').length,
+        labelsAssociated: [...document.querySelectorAll('.settings-content .settings-field')].every(field => {
+          const label = field.querySelector(':scope > label');
+          const control = field.querySelector('input, select, textarea');
+          return !control || Boolean(label?.htmlFor && control.id === label.htmlFor);
+        })
       };
     })()`);
 
@@ -267,7 +276,7 @@ app.whenReady().then(async () => {
       while (!document.querySelector('.usage-overview') && Date.now() - started < 4000) await delay(50);
       const result = {
         overviewVisible: Boolean(document.querySelector('.usage-overview')),
-        localAggregate: /Usage is stored on this computer/.test(document.querySelector('[data-usage-page]')?.textContent || ''),
+        localAggregate: /Analytics are stored on this computer/.test(document.querySelector('[data-usage-page]')?.textContent || ''),
         modalVisible: Boolean(document.querySelector('#__relai-modal-title')),
         inlineUnavailable: Boolean(document.querySelector('.usage-unavailable'))
       };

@@ -188,7 +188,7 @@ function renderDiagnosticFilterBar(container) {
   action.type = 'button';
   action.className = `secondary diagnostic-live-tail${liveTailEnabled ? ' active' : ''}`;
   action.dataset.liveTail = '';
-  action.textContent = liveTailEnabled ? 'Live tail on' : 'Live tail off';
+  action.textContent = liveTailEnabled ? 'Live updates on' : 'Live updates off';
   action.setAttribute('aria-pressed', String(liveTailEnabled));
   action.addEventListener('click', () => {
     if (liveTailEnabled) stopLiveTail();
@@ -418,7 +418,7 @@ function announceDiagnosticUpdate(entry) {
 function updateLiveTailButton(container) {
   const button = container.querySelector('[data-live-tail]');
   if (!button) return;
-  button.textContent = liveTailEnabled ? 'Live tail on' : 'Live tail off';
+  button.textContent = liveTailEnabled ? 'Live updates on' : 'Live updates off';
   button.setAttribute('aria-pressed', String(liveTailEnabled));
   button.classList.toggle('active', liveTailEnabled);
 }
@@ -609,17 +609,22 @@ function findingCard(finding) {
       ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
       : '';
   return `<article class="diagnostic-finding ${esc(finding.severity)}">
-    <div class="diagnostic-severity">${esc(finding.severity)}</div>
+    <div class="diagnostic-severity">${esc(findingSeverityLabel(finding.severity))}</div>
     <div class="diagnostic-copy">
-      <div class="diagnostic-code">${esc(finding.code)}</div>
       <h3>${esc(finding.title)}</h3>
       <p><strong>Impact:</strong> ${esc(finding.impact)}</p>
       <p><strong>Recommended action:</strong> ${esc(finding.recommendation)}</p>
       ${findingContext(finding.context)}
       ${action}
-      <details data-diagnostic-detail="${esc(finding.code)}"><summary>Technical details</summary><pre>${esc(JSON.stringify(finding.details || {}, null, 2))}</pre></details>
+      <details data-diagnostic-detail="${esc(finding.code)}"><summary>Technical details</summary><p><strong>Code:</strong> <code>${esc(finding.code)}</code></p><pre>${esc(JSON.stringify(finding.details || {}, null, 2))}</pre></details>
     </div>
   </article>`;
+}
+
+function findingSeverityLabel(severity) {
+  if (severity === 'error') return 'Blocking';
+  if (severity === 'warning') return 'Warning';
+  return 'Recommendation';
 }
 
 function bindFindingActions(root, container) {

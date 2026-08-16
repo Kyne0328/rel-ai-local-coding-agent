@@ -16,6 +16,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity']);
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['connection', 'processes', 'diagnostics', 'tools', 'usage']);
+assert.equal(SYSTEM_NAV_ITEMS.find(item => item.id === 'usage')?.label, 'Analytics', 'the dedicated analytics page must use the same name as Overview links');
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['General', 'App', 'About']);
@@ -121,6 +122,9 @@ assert.match(diagnosticsSource, /role="status" aria-live="polite"/, 'diagnostics
 assert.doesNotMatch(diagnosticsSource, /role="log" aria-live=/, 'the entire changing log must not be an aria-live region');
 assert.match(diagnosticsSource, /captureLogScrollState/, 'diagnostic refreshes must preserve users reading older logs');
 assert.match(diagnosticsSource, /previous\.follow/, 'diagnostic logs should auto-follow only when the user was already near the tail');
+assert.match(diagnosticsSource, /findingSeverityLabel/, 'diagnostic findings should translate internal severities into user-facing labels');
+assert.doesNotMatch(diagnosticsSource, /class="diagnostic-code"/, 'diagnostic finding codes must stay inside Technical details');
+assert.match(diagnosticsSource, /Live updates on/, 'troubleshooting controls should use familiar live-update wording');
 const toolsSource = read('src/ui/features/tools/index.js');
 assert.match(toolsSource, /Tool catalog unavailable/);
 assert.match(toolsSource, /cta: 'Retry'/);
@@ -155,6 +159,8 @@ assert.match(workspaceCards, /data-repository-details=/, 'project cards must kee
 assert.match(workspaceCards, />Project details</, 'Project details must keep its plain product label');
 assert.match(workspaceCards, /workspace-action-menu/, 'lower-frequency project actions should be grouped behind More');
 assert.match(workspaceCards, /data-run-validation=/, 'Run checks must remain directly available on project cards');
+assert.match(workspaceCards, /const title = finding\.message \|\| humanizeFindingCode/, 'project health rows should lead with a user-facing problem description instead of an internal finding code');
+assert.match(workspaceCards, /pillHtml\(findingSeverityLabel\(finding\.severity\), statusClass\(finding\.severity\)\)/, 'project health badges should use the same readable severity language as Troubleshooting');
 assert.match(workspaceActions, /\[data-repository-details\]/, 'the visible Project details action must remain wired');
 assert.match(workspaceActions, /openModal/, 'Project details must open in the shared modal surface');
 assert.match(workspaceActions, /Project details/, 'Project details modal must keep the plain product label');
@@ -165,7 +171,12 @@ for (const source of [workspaceFormSource, workspaceRepairSource]) {
 assert.match(workspaceFormSource, />Project name</, 'project naming must use the same product vocabulary as the Projects page');
 assert.match(workspaceRepairSource, />Repair project folder</, 'project repair must describe the user goal rather than the internal workspace path');
 const connectorSource = read('src/ui/features/settings/connector.js');
+const desktopConnectionSource = read('src/ui/features/settings/desktop-connection.js');
+const settingsSharedSource = read('src/ui/features/settings/shared.js');
 assert.match(connectorSource, /card connection-layer-disclosure connector-details|card connector-details connection-layer-disclosure/, 'Connection layers must share the aligned connector disclosure contract');
+assert.match(connectorSource, /mountDesktopConnection\(controls,\{expanded:String\(state\.publicEndpoint\?\.status\|\|''\)===['"]disabled['"]\}\)/, 'connection credentials should open for initial setup and stay collapsed during normal use');
+assert.match(desktopConnectionSource, /connection-settings-disclosure/, 'low-frequency connection credentials should use progressive disclosure');
+assert.match(settingsSharedSource, /labelElement\.htmlFor = labelTarget\.id/, 'shared settings fields must associate visible labels with their controls');
 assert.doesNotMatch(connectorSource, /connection-status-body[\s\S]{0,600}field-caption[^\n]*Tunnel ID/, 'primary connection status must not duplicate technical setup identifiers');
 assert.match(connectorSource, /action\.href===['"]#diagnostics['"]/, 'connection recovery must not render a duplicate Troubleshooting link beside the primary recovery action');
 assert.match(connectorSource, /data-restart-connection/, 'an unavailable Secure MCP Tunnel must expose the existing desktop restart operation directly');
