@@ -1,7 +1,7 @@
 {
-  "version": 5,
+  "version": 6,
   "stateDir": "/Users/you/.rel-ai-mcp",
-  "auditLogPath": "",
+  "auditLogPath": "\\Users\\you\\.rel-ai-mcp\\audit.jsonl",
   "toolMode": "chatgpt_local_repo",
   "trustedLocalAgent": true,
   "trustedBudgetMultiplier": 2,

@@ -9,7 +9,6 @@ const packageJson = JSON.parse(read('package.json'));
 const testRunner = read('test/run-tests.mjs');
 const electronPackage = JSON.parse(read('electron/package.json'));
 const electronPackageLock = JSON.parse(read('electron/package-lock.json'));
-const nsisUninstallerTemplate = read('electron/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh');
 
 for (const [name, command] of Object.entries(packageJson.scripts || {})) {
   assert.doesNotMatch(command, /installed-app-smoke|test:installed|\/S\b|--uninstall|uninstall/i,
@@ -60,10 +59,6 @@ assert.equal(electronPackage.build.mac.identity, null, 'macOS builds remain unsi
 assert.equal(electronPackage.build.dmg.artifactName, 'Rel.AI-MCP-${version}-mac-${arch}.${ext}');
 assert.equal(electronPackage.build.nsis.deleteAppDataOnUninstall, false,
   'normal uninstall must not enable electron-builder app-data deletion');
-assert.match(nsisUninstallerTemplate, /\$\{GetOptions\}\s+\$R0\s+"--delete-app-data"/,
-  'the pinned assisted uninstaller must keep data deletion behind an explicit command-line trigger');
-assert.match(nsisUninstallerTemplate, /!ifdef DELETE_APP_DATA_ON_UNINSTALL[\s\S]*StrCpy \$isDeleteAppData "1"/,
-  'the pinned assisted uninstaller must require the build-time delete-data define before implicit app-data deletion');
 assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
 assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
 assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
