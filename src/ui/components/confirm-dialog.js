@@ -53,6 +53,6 @@ export function confirmAction({
     });
     cancel.onclick = () => modal.dismiss();
     confirm.onclick = () => settle(true);
-    window.setTimeout(() => confirm.focus(), 0);
+    window.setTimeout(() => (danger ? cancel : confirm).focus(), 0);
   });
 }

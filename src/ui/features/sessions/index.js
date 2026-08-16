@@ -271,8 +271,8 @@ function sessionFacts(session, live) {
   facts.push(`${toolCalls} action${toolCalls === 1 ? '' : 's'}`);
   facts.push(`${changed} file${changed === 1 ? '' : 's'} edited`);
   if (failures > 0) facts.push(completed
-    ? `${failures} recovered failed call${failures === 1 ? '' : 's'}`
-    : `${failures} failed call${failures === 1 ? '' : 's'}`);
+    ? `${failures} recovered failed action${failures === 1 ? '' : 's'}`
+    : `${failures} failed action${failures === 1 ? '' : 's'}`);
   if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('checks failed');
   if (session.status === 'waiting_for_approval') facts.push('approval required');
   if (session.status === 'blocked') facts.push('blocked');

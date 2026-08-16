@@ -17,7 +17,7 @@
 .activity-message-copy { display: -webkit-box; width: 100%; max-width: 100%; min-width: 12ch; overflow: hidden; color: var(--ui-text-primary); font-size: 12px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .activity-message-title { @apply mt-0.5 block truncate text-[11px]; color: var(--ui-text-tertiary); }
 .activity-message-mobile-meta { display: none; min-width: 0; align-items: center; gap: 6px; }
-.activity-message-mobile-meta code { @apply min-w-0 truncate text-[11px]; color: var(--ui-text-secondary); }
+.activity-message-mobile-action { @apply min-w-0 truncate text-[11px]; color: var(--ui-text-secondary); }
 .activity-message-mobile-time { @apply whitespace-nowrap text-[11px]; color: var(--ui-text-tertiary); }
 .activity-message-mobile-meta .status-pill { @apply min-h-7 px-2 text-[11px]; }
 .activity-status-column { @apply whitespace-nowrap; }
@@ -95,6 +95,9 @@
 }
 
 @media (max-width: 240px) {
+  .activity-col-message { width: 68%; }
+  .activity-col-action { width: 32%; }
   .activity-message-mobile-meta { flex-wrap: wrap; gap: 4px; }
-  .activity-page .data-table th, .activity-page .data-table td { padding-inline: 6px; }
+  .activity-page .data-table th, .activity-page .data-table td { padding-inline: 4px; }
+  .activity-row-button { width: 100%; min-width: 0; padding-inline: 2px; font-size: 10px; }
 }

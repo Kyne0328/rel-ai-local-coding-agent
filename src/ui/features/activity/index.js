@@ -13,6 +13,7 @@ import { eventTimestampValue } from '../../../taskEvents.js';
 import {
   activityAbsoluteTime,
   activityActionLabel,
+  activityDisplayAction,
   activityFilterTransition,
   activityMessage,
   activitySessionView,
@@ -564,6 +565,7 @@ function renderActivityRow(entry) {
   const timestamp = eventTimestampValue(entry);
   const absoluteTime = activityAbsoluteTime(entry);
   const tool = toolName(entry);
+  const action = activityDisplayAction(entry);
   const title = entry.title || entry.operation || '';
   const relativeTime = timeAgo(timestamp) || '—';
   const row = document.createElement('tr');
@@ -571,13 +573,13 @@ function renderActivityRow(entry) {
   if (_requestedEventId && eventId === _requestedEventId) row.classList.add('activity-requested-row');
   row.innerHTML = `
     <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</td>
-    <td class="activity-tool-column truncate mono" title="${esc(title)}">${esc(tool)}</td>
+    <td class="activity-tool-column truncate" title="${esc(tool)}">${esc(action)}</td>
     <td class="activity-workspace-column truncate">${esc(entry.workspace || '—')}</td>
     <td class="activity-status-column">${pillHtml(status)}</td>
     <td class="activity-message-column activity-message-cell">
-      <span class="activity-message-mobile-meta">${pillHtml(status)}<code>${esc(tool)}</code><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</span></span>
+      <span class="activity-message-mobile-meta">${pillHtml(status)}<span class="activity-message-mobile-action">${esc(action)}</span><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</span></span>
       <span class="activity-message-copy">${esc(message)}</span>
-      ${title ? `<span class="activity-message-title">${esc(title)}</span>` : ''}
+      ${title && title !== action ? `<span class="activity-message-title">${esc(title)}</span>` : ''}
     </td>
     <td class="activity-action-column"><button class="secondary activity-row-button" type="button" data-focus-key="activity-${esc(eventId)}" aria-label="${esc(activityActionLabel(entry))}">Open</button></td>`;
   row.querySelector('.activity-row-button')?.addEventListener('click', () => openDetail(entry));
