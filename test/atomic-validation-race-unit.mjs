@@ -26,26 +26,22 @@ fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({
 }, null, 2));
 fs.writeFileSync(path.join(workspacePath, 'validation-gate.mjs'), `
 import fs from 'node:fs';
-import path from 'node:path';
 const started = ${JSON.stringify(validationStartedPath)};
 const release = ${JSON.stringify(validationReleasePath)};
 fs.writeFileSync(started, 'ready\\n');
 const finish = () => {
   if (!fs.existsSync(release)) return false;
   clearTimeout(timeout);
-  watcher?.close();
+  clearInterval(poll);
   process.exit(0);
 };
-let watcher = null;
+const poll = setInterval(finish, 50);
 const timeout = setTimeout(() => {
-  watcher?.close();
+  clearInterval(poll);
   console.error('validation gate timed out');
   process.exit(2);
 }, 10_000);
-if (!finish()) {
-  watcher = fs.watch(path.dirname(release), () => { finish(); });
-  finish();
-}
+finish();
 `);
 execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore' });
 execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
@@ -82,21 +78,19 @@ async function startTask(title) {
 function waitForFile(file, timeoutMs = 10_000) {
   if (fs.existsSync(file)) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const directory = path.dirname(file);
     const expected = path.basename(file);
-    const watcher = fs.watch(directory, (_event, filename) => {
-      if (String(filename || '') !== expected && !fs.existsSync(file)) return;
+    const poll = setInterval(() => {
       if (!fs.existsSync(file)) return;
       cleanup();
       resolve();
-    });
+    }, 25);
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error(`Timed out waiting for ${expected}`));
     }, timeoutMs);
     const cleanup = () => {
       clearTimeout(timeout);
-      watcher.close();
+      clearInterval(poll);
     };
     if (fs.existsSync(file)) {
       cleanup();
