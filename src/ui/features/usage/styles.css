@@ -71,8 +71,11 @@
 
 
 /* Analytics visualizer */
-.usage-range-control { @apply grid min-w-[150px] gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
-.usage-range-control select { min-width: 150px; }
+.usage-range-control { @apply grid min-w-0 gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
+.usage-range-switch { @apply flex flex-wrap gap-0.5 rounded-lg p-0.5; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
+.usage-range-switch button { min-width: 44px; min-height: 44px; padding-inline: 10px; border-color: transparent; background: transparent; color: var(--ui-text-secondary); }
+.usage-range-switch button:hover { background: var(--ui-surface-raised); color: var(--ui-text-primary); }
+.usage-range-switch button[aria-pressed="true"] { background: var(--ui-surface-raised); border-color: var(--ui-border-default); color: var(--ui-action-primary); }
 .usage-custom-range { @apply flex items-end gap-2; }
 .usage-custom-range[hidden] { display: none; }
 .usage-custom-range label { @apply grid gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
@@ -114,8 +117,8 @@
   .usage-metric:nth-child(-n+3) { border-bottom: 1px solid var(--ui-border-default); }
 }
 @media (max-width: 760px) {
-  .usage-range-control { @apply min-w-0 flex-1; }
-  .usage-range-control select { min-width: 0; width: 100%; }
+  .usage-range-control { @apply w-full min-w-0; }
+  .usage-range-switch { @apply w-full; }
   .usage-custom-range { @apply w-full; }
   .usage-custom-range label { @apply flex-1; }
   .usage-custom-range input { min-width: 0; width: 100%; }

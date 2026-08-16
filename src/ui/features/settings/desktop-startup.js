@@ -1,5 +1,5 @@
 import { toast } from '../../components/toast.js';
-import { panel, field, toggleControl } from './shared.js';
+import { panel, toggleControl, toggleRow } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 
 export function desktopStartupPanel(lifecycle) {
@@ -20,7 +20,7 @@ export function desktopStartupPanel(lifecycle) {
     if (input) input.disabled = true;
     toggle.setAttribute('aria-disabled', 'true');
   }
-  startup.body.appendChild(field(
+  startup.body.appendChild(toggleRow(
     'Launch Rel.AI at sign-in',
     toggle,
     launchAtLogin.supported

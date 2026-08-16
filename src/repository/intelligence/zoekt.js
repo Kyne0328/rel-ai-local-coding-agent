@@ -83,8 +83,8 @@ async function searchZoekt(workspace, databaseFile, settings, graphIndex, query,
   });
   if (result.spawnError || result.timedOut || result.exitCode !== 0) {
     return {
-      available: !result.spawnError,
-      current: true,
+      available: false,
+      current: state.current,
       reason: processFailureReason(result, 'zoekt'),
       results: []
     };

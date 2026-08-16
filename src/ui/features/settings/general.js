@@ -1,4 +1,4 @@
-import { header, panel, field, selectControl } from './shared.js';
+import { header, panel, field } from './shared.js';
 import { getUiPreferences, setThemePreference } from '../../preferences.js';
 import { desktopNotificationsPanel } from './desktop-notifications.js';
 
@@ -24,9 +24,38 @@ async function loadAndRender(container) {
 
 function renderAppearanceSettings(body) {
   const uiPreferences = getUiPreferences();
-  body.appendChild(field('Theme', selectControl([
-    { value: 'system', label: 'Follow system appearance' },
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' }
-  ], uiPreferences.theme, value => setThemePreference(value)), 'Theme applies to the dashboard. Setup and recovery windows follow your system appearance.'));
+  body.appendChild(field('Theme', themeSwitch(uiPreferences.theme), 'Theme applies to the dashboard. Setup and recovery windows follow your system appearance.'));
+}
+
+function themeSwitch(value) {
+  const options = [
+    ['system', 'Follow system appearance', '<rect x="4" y="5" width="16" height="11" rx="2"/><path d="M8 20h8M12 16v4"/>'],
+    ['dark', 'Dark theme', '<path d="M20 15.2A8 8 0 0 1 8.8 4 8 8 0 1 0 20 15.2Z"/>'],
+    ['light', 'Light theme', '<circle cx="12" cy="12" r="3.5"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>']
+  ];
+  const group = document.createElement('div');
+  group.className = 'theme-switch';
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', 'Theme');
+
+  for (const [optionValue, label, icon] of options) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'theme-switch-option';
+    button.dataset.themeOption = optionValue;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', String(optionValue === value));
+    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>`;
+    group.appendChild(button);
+  }
+  group.onclick = event => {
+    const button = event.target.closest?.('[data-theme-option]');
+    if (!button || !group.contains(button)) return;
+    setThemePreference(button.dataset.themeOption);
+    group.querySelectorAll('[data-theme-option]').forEach(option => {
+      option.setAttribute('aria-pressed', String(option === button));
+    });
+  };
+  return group;
 }

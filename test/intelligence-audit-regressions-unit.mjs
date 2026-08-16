@@ -10,6 +10,7 @@ import { configuredPeers, peerHasStrongRelationshipEvidence, relationshipKey } f
 import { rankWithGraphDiffusion } from '../src/repository/intelligence/graphDiffusion.js';
 import { repositoryFreshness } from '../src/repository/intelligence/state.js';
 import { parseSourceFile } from '../src/repository/intelligence/treeSitter.js';
+import { searchZoekt } from '../src/repository/intelligence/zoekt.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
 import { buildWorkflowEvidenceReceipt, repeatFailureCount } from '../src/workflow/evidence.js';
 import { classifyTaskIntent } from '../src/workflow/intent.js';
@@ -72,6 +73,28 @@ assert.equal(repositoryFreshness({ dirty: false, metadata: null }, { id: 5 }), '
 assert.equal(repositoryFreshness({ dirty: false, metadata: { generation: 4 } }, { id: 5 }), 'cached-unverified');
 assert.equal(repositoryFreshness({ dirty: false, metadata: { generation: 5, freshness: 'partial', truncated: true } }, { id: 5 }), 'partial');
 assert.equal(repositoryFreshness({ dirty: false, metadata: { generation: 5, freshness: 'runtime-stale' } }, { id: 5 }), 'stale');
+
+const zoektFailureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-zoekt-failure-'));
+try {
+  const databaseFile = path.join(zoektFailureRoot, 'graph.db');
+  fs.mkdirSync(path.join(zoektFailureRoot, 'zoekt'), { recursive: true });
+  fs.writeFileSync(path.join(zoektFailureRoot, 'zoekt-meta.json'), JSON.stringify({ fingerprint: 'generation:7' }));
+  const zoektFailure = await searchZoekt(
+    { alias: 'zoekt-failure', path: zoektFailureRoot },
+    databaseFile,
+    { zoektSearchExecutable: process.execPath },
+    { fingerprint: 'generation:7' },
+    'needle',
+    10
+  );
+  assert.equal(zoektFailure.current, true, 'a current Zoekt index should remain identifiable after a query process failure');
+  assert.equal(zoektFailure.available, false,
+    'a failed Zoekt query process must be treated as unavailable so repository search falls back to source-authoritative lexical search');
+  assert.ok(zoektFailure.reason, 'Zoekt query failures must retain a bounded diagnostic reason for observability');
+  assert.deepEqual(zoektFailure.results, []);
+} finally {
+  fs.rmSync(zoektFailureRoot, { recursive: true, force: true });
+}
 
 assert.equal(repeatFailureCount([
   { outcome: 'failed', failureSignature: 'same', mutationGeneration: 4 },
