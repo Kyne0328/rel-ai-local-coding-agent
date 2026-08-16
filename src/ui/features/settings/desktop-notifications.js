@@ -1,5 +1,5 @@
 import { toast } from '../../components/toast.js';
-import { panel, field, toggleControl } from './shared.js';
+import { panel, field, toggleControl, toggleRow } from './shared.js';
 
 const DEFAULTS = {
   enabled: true,
@@ -50,7 +50,7 @@ export function desktopNotificationsPanel(initialState = null) {
       void update({ enabled: value }, value ? 'Desktop notifications enabled.' : 'Desktop notifications disabled.');
     }, { enabled: 'Notifications on', disabled: 'Notifications off' });
     setControlState(master, { disabled: pending, busy: pending });
-    section.body.appendChild(field(
+    section.body.appendChild(toggleRow(
       'Desktop notifications',
       master,
       'Turn all desktop notifications on or off. Your choices below are kept while notifications are off.'
@@ -61,7 +61,7 @@ export function desktopNotificationsPanel(initialState = null) {
         void update({ [item.key]: value }, `${item.label} notifications ${value ? 'enabled' : 'disabled'}.`);
       }, { enabled: 'On', disabled: 'Off' });
       setControlState(control, { disabled: pending || !preferences.enabled, busy: pending });
-      section.body.appendChild(field(item.label, control, item.help));
+      section.body.appendChild(toggleRow(item.label, control, item.help));
     }
 
     if (preferences.ignoredUpdateVersion) {

@@ -3,7 +3,8 @@ import { copyText } from '../../clipboard.js';
 import { runButtonAction } from '../../action-state.js';
 import { toast } from '../../components/toast.js';
 import { createFilterBar } from '../../components/filter-bar.js';
-import { filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
+import { filterRadioField, filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
+import { setStateIconButton, stateIconButton } from '../../components/state-icon-button.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirm-dialog.js';
 import { esc, timeAgo } from '../../utils.js';
@@ -184,17 +185,18 @@ function bindHeaderActions(container) {
 function renderDiagnosticFilterBar(container) {
   const host = container.querySelector('#diagnosticFilterHost');
   if (!host) return;
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.className = `secondary diagnostic-live-tail${liveTailEnabled ? ' active' : ''}`;
-  action.dataset.liveTail = '';
-  action.textContent = liveTailEnabled ? 'Live updates on' : 'Live updates off';
-  action.setAttribute('aria-pressed', String(liveTailEnabled));
-  action.addEventListener('click', () => {
-    if (liveTailEnabled) stopLiveTail();
-    else startLiveTail(container);
-    renderDiagnosticFilterBar(container);
+  const action = stateIconButton({
+    pressed: liveTailEnabled,
+    label: liveTailEnabled ? 'Pause live updates' : 'Start live updates',
+    icon: liveTailEnabled ? 'pause' : 'play',
+    className: 'diagnostic-live-tail',
+    onClick: () => {
+      if (liveTailEnabled) stopLiveTail();
+      else startLiveTail(container);
+      renderDiagnosticFilterBar(container);
+    }
   });
+  action.dataset.liveTail = '';
 
   let searchTimer;
   const view = currentReport ? filteredDiagnosticView(currentReport) : null;
@@ -261,7 +263,7 @@ function openDiagnosticFilters(container) {
         help: draft.scope === 'findings' ? 'Source applies to service and failed activity logs.' : '',
         onChange: value => { draft.source = value; }
       });
-      const scopeField = filterSelectField({
+      const scopeField = filterRadioField({
         label: 'Scope',
         value: draft.scope,
         options: [
@@ -285,14 +287,15 @@ function openDiagnosticFilters(container) {
       });
       fields.append(
         scopeField,
-        filterSelectField({
+        filterRadioField({
           label: 'Severity',
           value: draft.severity,
           options: [
             { value: 'all', label: 'All severities' },
             { value: 'error', label: 'Blocking' },
             { value: 'warning', label: 'Warnings' },
-            { value: 'info', label: 'Recommendations' }
+            { value: 'info', label: 'Recommendations' },
+            { value: 'debug', label: 'Debug logs' }
           ],
           onChange: value => { draft.severity = value; }
         }),
@@ -318,7 +321,7 @@ function scopeLabel(value) {
 }
 
 function severityLabel(value) {
-  return { error: 'Blocking', warning: 'Warnings', info: 'Recommendations' }[value] || value;
+  return { error: 'Blocking', warning: 'Warnings', info: 'Recommendations', debug: 'Debug logs' }[value] || value;
 }
 
 function startLiveTail(container) {
@@ -344,7 +347,7 @@ function handleLiveTailEvent(event) {
   }
   const detail = event.detail || {};
   const change = detail.type === 'diagnostics.updated' ? detail.data?.change : null;
-  if (change?.type === 'append' && change.entry && currentReport?.logs?.runtime) {
+  if (['append', 'replace'].includes(change?.type) && change.entry && currentReport?.logs?.runtime) {
     applyRuntimeLogDelta(change);
     return;
   }
@@ -379,12 +382,23 @@ function applyRuntimeLogDelta(change) {
     return;
   }
   const entries = Array.isArray(runtime.entries) ? runtime.entries : [];
-  runtime.entries = [...entries, change.entry].slice(-100);
-  runtime.count = Math.max(Number(change.count || 0), Number(runtime.count || 0) + 1, runtime.entries.length);
+  if (change.type === 'replace') {
+    const index = Number.isInteger(Number(change.index)) ? Number(change.index) : entries.length - 1;
+    if (index < 0 || index >= entries.length) {
+      scheduleLiveTailRefresh();
+      return;
+    }
+    runtime.entries = [...entries];
+    runtime.entries[index] = change.entry;
+    runtime.count = Math.max(Number(change.count || 0), runtime.entries.length);
+  } else {
+    runtime.entries = [...entries, change.entry].slice(-100);
+    runtime.count = Math.max(Number(change.count || 0), Number(runtime.count || 0) + 1, runtime.entries.length);
+  }
   runtime.revision = incomingRevision || currentRevision;
   updateSourceOptions(currentReport);
   renderDiagnosticLogs(currentContainer);
-  if (['warning', 'error'].includes(change.entry.level)) announceDiagnosticUpdate(change.entry);
+  if (change.type === 'append' && ['warning', 'error'].includes(change.entry.level)) announceDiagnosticUpdate(change.entry);
 }
 
 function finiteRevision(value) {
@@ -417,10 +431,11 @@ function announceDiagnosticUpdate(entry) {
 
 function updateLiveTailButton(container) {
   const button = container.querySelector('[data-live-tail]');
-  if (!button) return;
-  button.textContent = liveTailEnabled ? 'Live updates on' : 'Live updates off';
-  button.setAttribute('aria-pressed', String(liveTailEnabled));
-  button.classList.toggle('active', liveTailEnabled);
+  setStateIconButton(button, {
+    pressed: liveTailEnabled,
+    label: liveTailEnabled ? 'Pause live updates' : 'Start live updates',
+    icon: liveTailEnabled ? 'pause' : 'play'
+  });
 }
 
 function updateSourceOptions(report) {
@@ -536,9 +551,10 @@ function matchesFinding(finding) {
 function matchesLog(entry, kind) {
   const level = kind === 'failed' ? 'error' : entry.level || (entry.error ? 'error' : 'info');
   const source = String(kind === 'failed' ? entry.tool || 'activity' : entry.source || 'desktop');
+  if (filters.severity === 'all' && kind === 'runtime' && level === 'debug') return false;
   if (filters.severity !== 'all' && level !== filters.severity) return false;
   if (filters.source !== 'all' && source !== filters.source) return false;
-  return matchesSearch([source, entry.code, entry.errorCode, entry.message, entry.error, entry.workspace, entry.taskId, entry.eventId]);
+  return matchesSearch([source, entry.component, entry.code, entry.errorCode, entry.message, entry.error, entry.workspace, entry.taskId, entry.eventId, JSON.stringify(entry.details || {})]);
 }
 
 function matchesSearch(values) {
@@ -664,7 +680,7 @@ function logsHtml(logs, view) {
 
 function logPanel(title, entries, emptyText, available, subtitle) {
   const rows = available && entries.length
-    ? entries.map(logRow).join('')
+    ? entries.map((entry, index) => logRow(entry, index)).join('')
     : `<div class="diagnostic-log-empty">${esc(emptyText)}</div>`;
   return `<section class="card diagnostic-log-card">
     <div class="card-head"><div><h3>${esc(title)}</h3>${subtitle ? `<p>${esc(subtitle)}</p>` : ''}</div><span class="section-action">${available ? `${entries.length} shown` : 'Unavailable'}</span></div>
@@ -672,24 +688,46 @@ function logPanel(title, entries, emptyText, available, subtitle) {
   </section>`;
 }
 
-function logRow(entry) {
+function logRow(entry, index) {
   const message = entry.message || entry.error || 'Recorded diagnostic event';
   const source = entry.source || entry.tool || 'activity';
+  const component = entry.component ? `${source}/${entry.component}` : source;
   const level = entry.level || (entry.error ? 'error' : 'info');
-  const context = [
-    entry.code || entry.errorCode ? `Code: ${entry.code || entry.errorCode}` : '',
-    entry.workspace ? `Project: ${entry.workspace}` : '',
-    entry.taskId ? `Task: ${entry.taskId}` : '',
-    entry.eventId ? `Event: ${entry.eventId}` : '',
-    entry.tool && entry.source ? `Tool: ${entry.tool}` : '',
-    entry.operation ? `Operation: ${entry.operation}` : ''
-  ].filter(Boolean).join(' · ');
-  return `<div class="diagnostic-log-row ${esc(level)}">
-    <time>${esc(timeAgo(entry.ts))}</time>
-    <code>${esc(source)}</code>
-    <span>${esc(message)}</span>
-    ${context ? `<small>${esc(context)}</small>` : ''}
-  </div>`;
+  const repeatCount = Math.max(1, Number(entry.repeatCount || 1));
+  const context = {
+    ...(entry.code || entry.errorCode ? { code: entry.code || entry.errorCode } : {}),
+    ...(entry.workspace ? { project: entry.workspace } : {}),
+    ...(entry.taskId ? { task: entry.taskId } : {}),
+    ...(entry.eventId ? { event: entry.eventId } : {}),
+    ...(entry.tool && entry.source ? { tool: entry.tool } : {}),
+    ...(entry.operation ? { operation: entry.operation } : {}),
+    ...(entry.details && typeof entry.details === 'object' ? entry.details : {})
+  };
+  const hasDetails = Object.keys(context).length > 0;
+  const key = `log-${String(entry.ts || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '-')}-${index}`;
+  return `<details class="diagnostic-log-row ${esc(level)}" data-diagnostic-detail="${esc(key)}">
+    <summary class="diagnostic-log-summary">
+      <time datetime="${esc(entry.ts || '')}">${esc(localLogTime(entry.lastTs || entry.ts))}</time>
+      <span class="diagnostic-log-level ${esc(level)}">${esc(levelLabel(level))}</span>
+      <code title="${esc(component)}">${esc(component)}</code>
+      <span class="diagnostic-log-message">${esc(message)}</span>
+      ${repeatCount > 1 ? `<span class="diagnostic-log-repeat">×${repeatCount}</span>` : ''}
+    </summary>
+    ${hasDetails ? `<div class="diagnostic-log-details"><strong>Technical details</strong><pre>${esc(JSON.stringify(context, null, 2))}</pre></div>` : '<div class="diagnostic-log-details"><span>No additional technical details.</span></div>'}
+  </details>`;
+}
+
+function localLogTime(value) {
+  const timestamp = Date.parse(String(value || ''));
+  if (!Number.isFinite(timestamp)) return 'Unknown time';
+  return new Date(timestamp).toLocaleString(undefined, { hour12: false });
+}
+
+function levelLabel(level) {
+  if (level === 'error') return 'Error';
+  if (level === 'warning') return 'Warning';
+  if (level === 'debug') return 'Debug';
+  return 'Info';
 }
 
 function maintenanceHtml(maintenance) {

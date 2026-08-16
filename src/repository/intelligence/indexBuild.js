@@ -61,6 +61,7 @@ async function refreshRepositoryIndex(job, signal) {
   const maxFiles = boundedMaxFiles(job?.maxFiles);
   let db = null;
   let generationId = null;
+  let generationTransactionOpen = false;
   let processedFiles = 0;
   let skippedChangedFiles = 0;
   try {
@@ -85,7 +86,7 @@ async function refreshRepositoryIndex(job, signal) {
     if (scan.requiresFullScan) scan = scanWorkspace(workspace, maxFiles);
     throwIfAborted(signal);
 
-    const changed = job?.kind === 'rebuild' || producerVersionChanged || scan.mode === 'incremental'
+    const changed = job?.kind === 'rebuild' || producerVersionChanged
       ? scan.candidates
       : scan.candidates.filter(candidate => candidateChanged(candidate, manifestByPath.get(candidate.path)));
     const deletionDeferred = scan.mode === 'full' && scan.truncated;
@@ -113,6 +114,8 @@ async function refreshRepositoryIndex(job, signal) {
     let sourceReadFailureCount = 0;
     const generationKind = previousGeneration ? normalizeGenerationKind(job?.kind) : 'build';
     generationId = beginGeneration(db, generationKind);
+    db.exec('BEGIN IMMEDIATE');
+    generationTransactionOpen = true;
     for (let offset = 0; offset < changed.length; offset += WRITE_BATCH_SIZE) {
       throwIfAborted(signal);
       const batch = changed.slice(offset, offset + WRITE_BATCH_SIZE);
@@ -144,31 +147,16 @@ async function refreshRepositoryIndex(job, signal) {
         }
       }
       throwIfAborted(signal);
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        for (const item of parsedBatch) replaceFileFacts(db, generationId, item.candidate, item.parsed, PARSER_VERSION);
-        for (const relativePath of failedPaths) deleteIndexedPath(db, relativePath);
-        db.exec('COMMIT');
-      } catch (error) {
-        try { db.exec('ROLLBACK'); } catch {}
-        throw error;
-      }
+      for (const item of parsedBatch) replaceFileFacts(db, generationId, item.candidate, item.parsed, PARSER_VERSION);
+      for (const relativePath of failedPaths) deleteIndexedPath(db, relativePath);
       processedFiles += parsedBatch.length;
       skippedChangedFiles += failedPaths.length;
     }
     if (deleted.length) {
       throwIfAborted(signal);
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        for (const relativePath of deleted) deleteIndexedPath(db, relativePath);
-        db.exec('COMMIT');
-      } catch (error) {
-        try { db.exec('ROLLBACK'); } catch {}
-        throw error;
-      }
+      for (const relativePath of deleted) deleteIndexedPath(db, relativePath);
     }
     throwIfAborted(signal);
-    db.exec('BEGIN IMMEDIATE');
     try {
       let relationshipSourceIds = null;
       if (relationshipImpact && relationshipScopeSafe) {
@@ -181,8 +169,12 @@ async function refreshRepositoryIndex(job, signal) {
       setIndexProducerVersion(db, runtimeProducerVersion);
       finishGeneration(db, generationId, 'committed', processedFiles + skippedChangedFiles + deleted.length);
       db.exec('COMMIT');
+      generationTransactionOpen = false;
     } catch (error) {
-      try { db.exec('ROLLBACK'); } catch {}
+      if (generationTransactionOpen) {
+        try { db.exec('ROLLBACK'); } catch {}
+        generationTransactionOpen = false;
+      }
       throw error;
     }
     try { db.exec('PRAGMA wal_checkpoint(PASSIVE)'); } catch {}
@@ -201,6 +193,9 @@ async function refreshRepositoryIndex(job, signal) {
     );
     return attachZoektMetadata(metadata, job, workspace, databaseFile, scan, signal);
   } catch (error) {
+    if (db && generationTransactionOpen) {
+      try { db.exec('ROLLBACK'); } catch {}
+    }
     if (db && generationId != null) {
       try { finishGeneration(db, generationId, 'failed', processedFiles, boundedErrorMessage(error)); } catch {}
     }

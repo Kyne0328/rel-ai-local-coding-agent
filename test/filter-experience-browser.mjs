@@ -60,7 +60,8 @@ try {
     summaryRole: 'status',
     dialogLabel: true,
     focusedInside: true,
-    cancelPreserved: true
+    cancelPreserved: true,
+    fixedChoicesVisible: true
   });
   assert.deepEqual(result.activityApplied.chipText.sort(), ['Status: failed ×', 'Time: 24h ×']);
   assert.deepEqual(result.activityApplied.chipLabels.sort(), ['Remove Status filter: failed', 'Remove Time filter: 24h']);
@@ -69,6 +70,8 @@ try {
   assert.match(result.activityApplied.route, /status=failed/);
   assert.match(result.activityApplied.summary, /events shown/);
   assert.equal(result.activityApplied.freezeExcluded, true);
+  assert.equal(result.activityApplied.freezeLabel, 'Freeze live activity');
+  assert.equal(result.activityApplied.freezeIconOnly, true);
   assert.match(result.taskChip, /Remove Task filter/);
   assert.deepEqual(result.escapeFocus, { closed: true, focusReturned: true });
   assert.equal(result.mobileDrawer.viewport <= 420, true);
@@ -77,7 +80,10 @@ try {
   assert.equal(result.mobileDrawer.scrollable, true);
   assert.equal(result.mobileDrawer.actionsReachable, true);
   assert.equal(result.diagnostics.cancelPreserved, true);
+  assert.equal(result.diagnostics.fixedChoicesVisible, true);
   assert.equal(result.diagnostics.sourceDisabledForFindings, true);
+  assert.equal(result.diagnostics.initialLiveTailLabel, 'Start live updates');
+  assert.equal(result.diagnostics.liveTailActiveLabel, 'Pause live updates');
   assert.equal(result.diagnostics.liveTailStarted, true);
   assert.equal(result.diagnostics.liveTailStopped, true);
   assert.equal(result.diagnostics.searchEmpty, true);
@@ -97,13 +103,16 @@ try {
   assert.equal(result.tools.emptyState, true);
   assert.deepEqual(result.settings.order, ['General', 'App', 'About']);
   assert.deepEqual(result.settings.themes.map(item => item.preference), ['dark', 'light', 'system']);
+  assert.deepEqual(result.settings.themeSwitchLabels, ['Follow system appearance', 'Dark theme', 'Light theme']);
+  assert.equal(result.settings.themeSwitchPressedCount, 1);
   assert.equal(result.settings.densityControlRemoved, true);
   assert.equal(result.settings.appearancePreviewRemoved, true);
   assert.equal(result.settings.legacyDensityIgnored, true);
   assert.equal(result.settings.navigationLabel, 'Settings navigation');
   assert.equal(result.settings.currentPageCount, 1);
+  assert.equal(result.settings.tabsVisible, true);
   assert.equal(result.settings.labelsAssociated, true);
-  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, scopeName: 'Project filter: All projects' });
+  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, focusChipLabel: 'Clear selected project filter: app', scopeName: 'Project filter: All projects' });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
   assert.equal(result.connection.detailsDisclosure, true);
@@ -116,6 +125,10 @@ try {
   assert.equal(result.usage.localAggregate, true);
   assert.equal(result.usage.modalVisible, false);
   assert.equal(result.usage.inlineUnavailable, false);
+  assert.deepEqual(result.usage.rangeLabels, ['1h', '24h', '7d', '30d', 'Month', 'Custom']);
+  assert.equal(result.usage.rangePressedCount, 1);
+  assert.equal(result.usage.rangeSelectHidden, true);
+  assert.equal(result.usage.rangeRouteUpdated, true);
   assert.deepEqual(result.responsive.map(item => item.requestedWidth), [980, 760, 520, 420]);
   for (const viewport of result.responsive) {
     assert.ok(Math.abs(viewport.width - viewport.requestedWidth) <= 2, `requested ${viewport.requestedWidth}px but rendered ${viewport.width}px`);

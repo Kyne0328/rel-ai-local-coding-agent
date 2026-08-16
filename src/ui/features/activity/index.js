@@ -1,7 +1,8 @@
 import { fetchJson } from '../../api.js';
 import { closeDrawer, openDrawer } from '../../components/drawer.js';
 import { createFilterBar } from '../../components/filter-bar.js';
-import { filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
+import { filterRadioField, filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
+import { setStateIconButton, stateIconButton } from '../../components/state-icon-button.js';
 import { pillHtml } from '../../components/pill.js';
 import { toast } from '../../components/toast.js';
 import { virtualizeTable } from '../../components/table.js';
@@ -188,22 +189,22 @@ function renderActivityFilterBar(scope = document) {
   const host = scope.querySelector?.('#__activity-filter-bar') || document.getElementById('__activity-filter-bar');
   if (!host) return;
   const filtered = filteredEntries(Date.now());
-  const pause = document.createElement('button');
-  pause.type = 'button';
-  pause.id = '__activity-freeze';
-  pause.className = `secondary activity-freeze${_paused ? ' active' : ''}`;
-  pause.textContent = _paused ? 'Resume live list' : 'Freeze live list';
-  pause.title = 'Freeze the table so new events do not shift rows while you read.';
-  pause.setAttribute('aria-pressed', String(_paused));
-  pause.addEventListener('click', async () => {
-    if (_paused) {
-      await resumeLiveActivity();
-      return;
+  const pause = stateIconButton({
+    pressed: _paused,
+    label: _paused ? 'Resume live activity' : 'Freeze live activity',
+    icon: _paused ? 'play' : 'pause',
+    className: 'activity-freeze',
+    onClick: async () => {
+      if (_paused) {
+        await resumeLiveActivity();
+        return;
+      }
+      _paused = true;
+      updatePauseButton();
+      toast('Live activity is frozen. New events will be applied when you resume.', { variant: 'warn', duration: 2200 });
     }
-    _paused = true;
-    updatePauseButton();
-    toast('Live activity is frozen. New events will be applied when you resume.', { variant: 'warn', duration: 2200 });
   });
+  pause.id = '__activity-freeze';
 
   let searchTimer;
   host.replaceChildren(createFilterBar({
@@ -264,7 +265,7 @@ function openActivityFilters() {
     resetValue: { timeRange: '1h', workspace: '', tool: '', status: '' },
     renderFields(fields, draft) {
       fields.append(
-        filterSelectField({
+        filterRadioField({
           label: 'Time range',
           value: draft.timeRange,
           options: [
@@ -288,7 +289,7 @@ function openActivityFilters() {
           options: activitySelectOptions('All actions', _filterOptions.tools, draft.tool, activityToolLabel),
           onChange: value => { draft.tool = value; }
         }),
-        filterSelectField({
+        filterRadioField({
           label: 'Status',
           value: draft.status,
           options: [
@@ -410,10 +411,11 @@ async function resumeLiveActivity() {
 
 function updatePauseButton() {
   const button = document.getElementById('__activity-freeze');
-  if (!button) return;
-  button.textContent = _paused ? 'Resume live list' : 'Freeze live list';
-  button.classList.toggle('active', _paused);
-  button.setAttribute('aria-pressed', String(_paused));
+  setStateIconButton(button, {
+    pressed: _paused,
+    label: _paused ? 'Resume live activity' : 'Freeze live activity',
+    icon: _paused ? 'play' : 'pause'
+  });
 }
 
 function updateFilterOptions() {

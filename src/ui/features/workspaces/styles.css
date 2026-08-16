@@ -1,5 +1,7 @@
 @layer components {
-.workspace-focus-label { @apply max-w-48 truncate rounded-md px-2.5 py-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-surface-raised); border: 1px solid var(--ui-border-subtle); }
+.workspace-focus-chip { @apply max-w-48 justify-between gap-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-surface-raised); }
+.workspace-focus-chip > span:first-child { @apply min-w-0 truncate; }
+.workspace-focus-chip > span:last-child { @apply shrink-0 text-[15px] leading-none; }
 .workspace-toolbar button[data-add-workspace], .workspace-empty-state button[data-add-workspace] {
   border-color: var(--ui-border-control) !important;
   box-shadow: none;

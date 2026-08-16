@@ -18,14 +18,14 @@ try {
   createFixture(workspaceRoot, fileCount);
   const before = process.memoryUsage().rss;
   const fullStarted = performance.now();
-  const full = await repositoryIntelligence.ensure(workspace, config, { force: true, maxFiles: fileCount });
+  const full = await repositoryIntelligence.ensure(workspace, config, { force: true, watch: false, maxFiles: fileCount });
   const fullBuildMs = performance.now() - fullStarted;
   const afterFull = process.memoryUsage().rss;
 
   const changedPaths = mutateFixture(workspaceRoot, mutationCount);
   repositoryIntelligence.noteMutation(workspace, config, changedPaths);
   const incrementalStarted = performance.now();
-  const incremental = await repositoryIntelligence.ensure(workspace, config, { maxFiles: fileCount });
+  const incremental = await repositoryIntelligence.ensure(workspace, config, { watch: false, maxFiles: fileCount });
   const incrementalRefreshMs = performance.now() - incrementalStarted;
   const afterIncremental = process.memoryUsage().rss;
 
@@ -34,6 +34,9 @@ try {
   }
   if (incremental.changedPathCount !== mutationCount) {
     throw new Error(`Expected ${mutationCount} incrementally refreshed files, got ${incremental.changedPathCount}.`);
+  }
+  if (incremental.scanMode !== 'incremental') {
+    throw new Error(`Expected the mutation benchmark to remain incremental, got ${incremental.scanMode}.`);
   }
 
   const report = {
@@ -47,8 +50,10 @@ try {
     rssAfterFullBytes: afterFull,
     rssAfterIncrementalBytes: afterIncremental,
     workerIsolated: full.workerIsolated === true && incremental.workerIsolated === true,
+    watcherDisabled: true,
     fullScanMode: full.scanMode,
-    incrementalScanMode: incremental.scanMode
+    incrementalScanMode: incremental.scanMode,
+    incrementalCoalescedPassCount: Number(incremental.coalescedPassCount || 1)
   };
 
   if (json) process.stdout.write(`${JSON.stringify(report)}\n`);
@@ -57,6 +62,7 @@ try {
     console.log(`  Full build:          ${report.fullBuildMs} ms (${report.fullFilesPerSecond} files/s)`);
     console.log(`  Incremental refresh: ${report.incrementalRefreshMs} ms for ${mutationCount} files (${report.incrementalFilesPerSecond} files/s)`);
     console.log(`  Worker isolated:     ${report.workerIsolated}`);
+    console.log('  Watcher:             disabled (engine benchmark)');
   }
 } finally {
   repositoryIntelligence.shutdown();

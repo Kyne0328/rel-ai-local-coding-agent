@@ -113,6 +113,15 @@ function messageOf(error) {
 }
 
 $('connectBtn').addEventListener('click', connect);
+$('runtimeKeyToggle').addEventListener('click', () => {
+  const input = $('tunnelApiKeyInput');
+  const button = $('runtimeKeyToggle');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  button.textContent = showing ? 'Show' : 'Hide';
+  button.setAttribute('aria-pressed', String(!showing));
+  input.focus();
+});
 $('cancelWizardBtn').addEventListener('click', () => window.electronAPI.closeWizard());
 document.querySelectorAll('[data-open-openai]').forEach(button => button.addEventListener('click', () => openOpenAISetup(button)));
 for (const [inputId, errorId] of [['tunnelIdInput', 'tunnelIdError'], ['tunnelApiKeyInput', 'runtimeKeyError'], ['portInput', 'portError']]) {

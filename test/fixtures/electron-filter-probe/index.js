@@ -22,6 +22,14 @@ app.whenReady().then(async () => {
 
     const shared = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const setRadio = (root, label, value) => {
+        const field = [...root.querySelectorAll('fieldset')].find(item => item.querySelector('legend')?.textContent.includes(label));
+        const input = [...(field?.querySelectorAll('input[type="radio"]') || [])].find(item => item.value === value);
+        if (!input) return false;
+        input.checked = true;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      };
       const filterButton = document.querySelector('#__activity-filter-bar .filter-open-button');
       const search = document.querySelector('#__activity-filter-bar .filter-search-input');
       filterButton.focus();
@@ -29,22 +37,15 @@ app.whenReady().then(async () => {
       await delay(30);
       const drawer = document.querySelector('.filter-drawer');
       const focusedInside = drawer?.contains(document.activeElement) || false;
-      const status = [...drawer.querySelectorAll('label')].find(label => label.textContent.includes('Status'))?.querySelector('select');
-      status.value = 'failed';
-      status.dispatchEvent(new Event('change', { bubbles: true }));
+      const fixedChoicesVisible = setRadio(drawer, 'Status', 'failed');
       [...drawer.querySelectorAll('button')].find(button => button.textContent.trim() === 'Cancel')?.click();
       await delay(30);
       const cancelPreserved = document.querySelectorAll('#__activity-filter-bar .filter-chip').length === 0;
       filterButton.click();
       await delay(30);
       const second = document.querySelector('.filter-drawer');
-      const select = label => [...second.querySelectorAll('label')].find(item => item.textContent.includes(label))?.querySelector('select');
-      const time = select('Time range');
-      const status2 = select('Status');
-      time.value = '24h';
-      time.dispatchEvent(new Event('change', { bubbles: true }));
-      status2.value = 'failed';
-      status2.dispatchEvent(new Event('change', { bubbles: true }));
+      setRadio(second, 'Time range', '24h');
+      setRadio(second, 'Status', 'failed');
       [...second.querySelectorAll('button')].find(button => /Apply filters/.test(button.textContent))?.click();
       await delay(60);
       return {
@@ -54,7 +55,8 @@ app.whenReady().then(async () => {
         summaryRole: document.querySelector('#__activity-filter-bar .filter-summary')?.getAttribute('role') || '',
         dialogLabel: drawer?.getAttribute('aria-labelledby') === '__relai-drawer-title' && drawer?.getAttribute('role') === 'dialog',
         focusedInside,
-        cancelPreserved
+        cancelPreserved,
+        fixedChoicesVisible
       };
     })()`);
     await waitFor(win, `document.querySelectorAll('#__activity-filter-bar .filter-chip').length === 2 && !document.querySelector('.filter-drawer')`);
@@ -67,7 +69,9 @@ app.whenReady().then(async () => {
         badge: document.querySelector('#__activity-filter-bar .filter-open-button')?.textContent.trim() || '',
         route: location.hash,
         summary: document.querySelector('#__activity-filter-bar .filter-summary')?.textContent.trim() || '',
-        freezeExcluded: freeze?.getAttribute('aria-pressed') === 'false' && !/3/.test(document.querySelector('#__activity-filter-bar .filter-open-button')?.textContent || '')
+        freezeExcluded: freeze?.getAttribute('aria-pressed') === 'false' && !/3/.test(document.querySelector('#__activity-filter-bar .filter-open-button')?.textContent || ''),
+        freezeLabel: freeze?.getAttribute('aria-label') || '',
+        freezeIconOnly: Boolean(freeze?.querySelector('svg') && !freeze.textContent.trim())
       };
     })()`);
     await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Status filter"]')?.click()`);
@@ -116,19 +120,23 @@ app.whenReady().then(async () => {
     await waitFor(win, `document.querySelector('#diagnosticFilterHost .filter-open-button') && document.querySelector('#diagnosticSummary')`);
     const diagnostics = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const setRadio = (root, label, value) => {
+        const field = [...root.querySelectorAll('fieldset')].find(item => item.querySelector('legend')?.textContent.includes(label));
+        const input = [...(field?.querySelectorAll('input[type="radio"]') || [])].find(item => item.value === value);
+        if (!input) return false;
+        input.checked = true;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      };
       const trigger = document.querySelector('#diagnosticFilterHost .filter-open-button');
       trigger.click(); await delay(30);
       let drawer = document.querySelector('.filter-drawer');
-      const getSelect = label => [...drawer.querySelectorAll('label')].find(item => item.textContent.includes(label))?.querySelector('select');
-      let scope = getSelect('Scope');
-      scope.value = 'failed'; scope.dispatchEvent(new Event('change', { bubbles: true }));
+      const fixedChoicesVisible = setRadio(drawer, 'Scope', 'failed');
       [...drawer.querySelectorAll('button')].find(button => button.textContent.trim() === 'Cancel')?.click(); await delay(30);
       const cancelPreserved = document.querySelectorAll('#diagnosticFilterHost .filter-chip').length === 0;
       trigger.click(); await delay(30); drawer = document.querySelector('.filter-drawer');
-      const select2 = label => [...drawer.querySelectorAll('label')].find(item => item.textContent.includes(label))?.querySelector('select');
-      scope = select2('Scope'); const severity = select2('Severity');
-      scope.value = 'failed'; scope.dispatchEvent(new Event('change', { bubbles: true }));
-      severity.value = 'error'; severity.dispatchEvent(new Event('change', { bubbles: true }));
+      setRadio(drawer, 'Scope', 'failed');
+      setRadio(drawer, 'Severity', 'error');
       [...drawer.querySelectorAll('button')].find(button => /Apply filters/.test(button.textContent))?.click(); await delay(80);
       const applied = {
         chips: [...document.querySelectorAll('#diagnosticFilterHost .filter-chip')].map(chip => chip.textContent.trim()),
@@ -139,14 +147,15 @@ app.whenReady().then(async () => {
       };
       document.querySelector('#diagnosticFilterHost .filter-open-button').click(); await delay(30);
       drawer = document.querySelector('.filter-drawer');
-      const findingScope = [...drawer.querySelectorAll('label')].find(item => item.textContent.includes('Scope'))?.querySelector('select');
-      findingScope.value = 'findings'; findingScope.dispatchEvent(new Event('change', { bubbles: true }));
+      setRadio(drawer, 'Scope', 'findings');
       const source = [...drawer.querySelectorAll('label')].find(item => item.textContent.includes('Source'))?.querySelector('select');
       const sourceDisabledForFindings = source?.disabled === true && source.value === 'all';
       [...drawer.querySelectorAll('button')].find(button => button.textContent.trim() === 'Cancel')?.click();
       document.querySelector('#diagnosticFilterHost .filter-clear-button')?.click();
+      const initialLiveTailLabel = document.querySelector('[data-live-tail]')?.getAttribute('aria-label') || '';
       document.querySelector('[data-live-tail]')?.click(); await delay(80);
       const liveTailStarted = document.querySelector('[data-live-tail]')?.getAttribute('aria-pressed') === 'true';
+      const liveTailActiveLabel = document.querySelector('[data-live-tail]')?.getAttribute('aria-label') || '';
       document.querySelector('[data-live-tail]')?.click(); await delay(80);
       const liveTailStopped = document.querySelector('[data-live-tail]')?.getAttribute('aria-pressed') === 'false';
       const search = document.querySelector('#diagnosticFilterHost .filter-search-input');
@@ -157,7 +166,7 @@ app.whenReady().then(async () => {
       const technicalFindingCodesGated = technicalCodes.length > 0 && technicalCodes.every(code => Boolean(code.closest('details[data-diagnostic-detail]')));
       const findingSeveritiesReadable = [...document.querySelectorAll('.diagnostic-severity')]
         .every(element => ['Blocking', 'Warning', 'Recommendation'].includes(element.textContent.trim()));
-      return { cancelPreserved, sourceDisabledForFindings, liveTailStarted, liveTailStopped, searchEmpty, technicalFindingCodesGated, findingSeveritiesReadable, applied };
+      return { cancelPreserved, fixedChoicesVisible, sourceDisabledForFindings, initialLiveTailLabel, liveTailActiveLabel, liveTailStarted, liveTailStopped, searchEmpty, technicalFindingCodesGated, findingSeveritiesReadable, applied };
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#tools'`);
@@ -189,25 +198,28 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#settings'`);
-    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 3 && document.querySelector('.settings-content select')`);
+    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 3 && document.querySelector('.theme-switch')`);
     const settings = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const order = [...document.querySelectorAll('.settings-nav-button')].map(button => button.textContent.trim());
       const selects = [...document.querySelectorAll('.settings-content select')];
-      const theme = selects.find(select => [...select.options].some(option => option.value === 'system'));
+      const theme = document.querySelector('.theme-switch');
       const themes = [];
       for (const value of ['dark', 'light', 'system']) {
-        theme.value = value; theme.dispatchEvent(new Event('change', { bubbles: true })); await delay(20);
+        theme.querySelector('[data-theme-option="' + value + '"]').click(); await delay(20);
         themes.push({ preference: document.documentElement.dataset.themePreference, resolved: document.documentElement.dataset.theme });
       }
       return {
         order,
         themes,
+        themeSwitchLabels: [...theme.querySelectorAll('[data-theme-option]')].map(button => button.getAttribute('aria-label')),
+        themeSwitchPressedCount: theme.querySelectorAll('[aria-pressed="true"]').length,
         densityControlRemoved: !selects.some(select => [...select.options].some(option => option.value === 'compact')),
         appearancePreviewRemoved: !document.querySelector('.appearance-preview'),
         legacyDensityIgnored: !document.documentElement.dataset.density,
         navigationLabel: document.querySelector('.settings-rail')?.getAttribute('aria-label') || '',
         currentPageCount: document.querySelectorAll('.settings-nav-button[aria-current="page"]').length,
+        tabsVisible: getComputedStyle(document.querySelector('.settings-rail')).display !== 'none',
         labelsAssociated: [...document.querySelectorAll('.settings-content .settings-field')].every(field => {
           const label = field.querySelector(':scope > label');
           const control = field.querySelector('input, select, textarea');
@@ -235,6 +247,9 @@ app.whenReady().then(async () => {
       const detailsModal = await waitUntil(() => document.querySelector('#__relai-modal-title')?.textContent.includes('Project details'));
       const detailsInlineVisible = Boolean(document.querySelector('.workspace-details:not([hidden])'));
       document.getElementById('__relai-modal-backdrop')?.click();
+      location.hash = '#workspaces?workspace=app';
+      await waitUntil(() => Boolean(document.querySelector('.workspace-focus-chip')));
+      const focusChipLabel = document.querySelector('.workspace-focus-chip')?.getAttribute('aria-label') || '';
       location.hash = '#tasks';
       await waitUntil(() => Boolean(document.querySelector('.workspace-menu-trigger')));
       return {
@@ -242,6 +257,7 @@ app.whenReady().then(async () => {
         validationMetricRemoved,
         detailsModal,
         detailsInlineVisible,
+        focusChipLabel,
         scopeName: document.querySelector('.workspace-menu-trigger')?.getAttribute('aria-label') || ''
       };
     })()`);
@@ -274,11 +290,18 @@ app.whenReady().then(async () => {
       location.hash = '#usage';
       const started = Date.now();
       while (!document.querySelector('.usage-overview') && Date.now() - started < 4000) await delay(50);
+      const rangeButton = document.querySelector('[data-usage-range-option="7d"]');
+      rangeButton?.click();
+      await delay(80);
       const result = {
         overviewVisible: Boolean(document.querySelector('.usage-overview')),
         localAggregate: /Analytics are stored on this computer/.test(document.querySelector('[data-usage-page]')?.textContent || ''),
         modalVisible: Boolean(document.querySelector('#__relai-modal-title')),
-        inlineUnavailable: Boolean(document.querySelector('.usage-unavailable'))
+        inlineUnavailable: Boolean(document.querySelector('.usage-unavailable')),
+        rangeLabels: [...document.querySelectorAll('[data-usage-range-option]')].map(button => button.textContent.trim()),
+        rangePressedCount: document.querySelectorAll('[data-usage-range-option][aria-pressed="true"]').length,
+        rangeSelectHidden: document.querySelector('[data-usage-range]')?.hidden === true,
+        rangeRouteUpdated: location.hash.includes('range=7d')
       };
       delete window.relaiDesktop;
       return result;
