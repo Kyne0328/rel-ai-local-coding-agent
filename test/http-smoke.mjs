@@ -7,7 +7,7 @@ import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
 import { activeToolCount, activeToolNames, activeToolSurface } from './helpers/tool-surface.mjs';
-import { startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
+import { localHttpFetch as fetch, startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const token = 'http-smoke-token';

@@ -3,6 +3,7 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
+import { localHttpFetch } from './http-test-server.mjs';
 
 export const MCP_VERSION = '2026-07-28';
 
@@ -72,7 +73,7 @@ export async function postMcp(base, {
   capabilities = {},
   extraHeaders = {}
 }) {
-  const response = await fetch(`${base}/mcp`, {
+  const response = await localHttpFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders(method, { token, name, sessionId, protocolVersion, extra: extraHeaders }),
     body: mcpBody(id, method, params, { protocolVersion, clientInfo, capabilities })

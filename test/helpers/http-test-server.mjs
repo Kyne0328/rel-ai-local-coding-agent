@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import http from 'node:http';
 import path from 'node:path';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -65,12 +66,74 @@ async function waitForHealth(child, base, getStderr) {
       throw new Error(`HTTP test server exited before becoming healthy (code ${child.exitCode}).\n${getStderr()}`);
     }
     try {
-      const response = await fetch(`${base}/health`, { headers: { connection: 'close' } });
+      const response = await localHttpFetch(`${base}/health`);
       if (response.ok) return;
     } catch {}
     await delay(50);
   }
   throw new Error(`HTTP test server did not become healthy within ${HEALTH_TIMEOUT_MS}ms.\n${getStderr()}`);
+}
+
+function localHttpFetch(input, init = {}) {
+  const target = new URL(input);
+  if (target.protocol !== 'http:') throw new Error(`Local HTTP test client only accepts http: URLs, got ${target.protocol}`);
+  const method = String(init.method || 'GET').toUpperCase();
+  const headers = new Headers(init.headers || {});
+  headers.set('connection', 'close');
+  headers.set('accept-encoding', 'identity');
+  const body = requestBody(init.body);
+  if (body && !headers.has('content-length')) headers.set('content-length', String(body.length));
+
+  return new Promise((resolve, reject) => {
+    const request = http.request(target, {
+      method,
+      headers: Object.fromEntries(headers.entries()),
+      agent: false
+    }, response => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
+      response.on('error', reject);
+      response.on('end', () => {
+        const responseBody = Buffer.concat(chunks);
+        const responseHeaders = new Headers();
+        for (const [name, value] of Object.entries(response.headers)) {
+          if (Array.isArray(value)) {
+            for (const item of value) responseHeaders.append(name, item);
+          } else if (value != null) {
+            responseHeaders.set(name, String(value));
+          }
+        }
+        const status = Number(response.statusCode || 0);
+        resolve({
+          status,
+          ok: status >= 200 && status < 300,
+          headers: responseHeaders,
+          text: async () => responseBody.toString('utf8'),
+          json: async () => JSON.parse(responseBody.toString('utf8')),
+          arrayBuffer: async () => responseBody.buffer.slice(responseBody.byteOffset, responseBody.byteOffset + responseBody.byteLength)
+        });
+      });
+    });
+    request.on('error', error => {
+      const code = String(error?.code || '').trim();
+      const wrapped = new Error(
+        `Local HTTP request ${method} ${target.pathname} failed${code ? ` (${code})` : ''}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
+      if (code) wrapped.code = code;
+      reject(wrapped);
+    });
+    if (body) request.write(body);
+    request.end();
+  });
+}
+
+function requestBody(value) {
+  if (value == null) return null;
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof ArrayBuffer) return Buffer.from(value);
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  return Buffer.from(String(value), 'utf8');
 }
 
 async function stopHttpTestServer(child) {
@@ -90,4 +153,4 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export { startHttpTestServer, stopHttpTestServer };
+export { localHttpFetch, startHttpTestServer, stopHttpTestServer };
