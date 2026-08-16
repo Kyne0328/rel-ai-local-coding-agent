@@ -40,8 +40,8 @@ assert.match(stdioSmoke, /stdio must advertise native Tasks support/);
 assert.doesNotMatch(stdioSmoke, /stdio must not advertise native Tasks/);
 
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
-assert.match(workflow, /Run native Tasks release gate/);
-assert.match(workflow, /npm run test:native-tasks-release-gate/);
+assert.match(workflow, /npm run test:native-tasks-release-gate/,
+  'release automation must execute the native Tasks safety gate regardless of the human-readable step label');
 
 const docs = fs.readFileSync(path.join(root, 'docs', 'NATIVE_TASKS_RELEASE_GATE.md'), 'utf8');
 assert.match(docs, /HTTP or stdio \| Advertised \| Long, multi-step, or indeterminate \| Native MCP task/);

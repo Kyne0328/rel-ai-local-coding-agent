@@ -3,11 +3,11 @@ import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getTaskHistoryDir, writeSession } from '../src/taskHistoryStorage.js';
+import { availablePort } from './helpers/available-port.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-filter-browser-'));
@@ -170,14 +170,3 @@ function healthRequest(url) {
     request.setTimeout(1000, () => { request.destroy(); resolve(false); });
   });
 }
-async function availablePort() {
-  const probe = net.createServer();
-  probe.listen(0, '127.0.0.1');
-  await once(probe, 'listening');
-  const address = probe.address();
-  const selected = typeof address === 'object' && address ? address.port : 0;
-  await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
-  return selected;
-}
-
-
