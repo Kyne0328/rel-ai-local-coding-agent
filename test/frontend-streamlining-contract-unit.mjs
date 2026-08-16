@@ -76,6 +76,18 @@ assert.deepEqual(
   { kind: 'control', label: 'Set up connection' }
 );
 assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'unavailable' } }),
+  { kind: 'control', label: 'Review connection settings' }
+);
+assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'connecting' } }),
+  { kind: 'none' }
+);
+assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, mcpClient: { status: 'request_failed' } }),
+  { kind: 'route', href: '#diagnostics', label: 'Troubleshoot' }
+);
+assert.deepEqual(
   connectionPrimaryAction(readyConnection),
   { kind: 'route', href: '#tasks', label: 'Open tasks' }
 );
@@ -132,6 +144,8 @@ for (const featureStyle of [
 
 const workspaceCards = read('src/ui/features/workspaces/cards.js');
 const workspaceActions = read('src/ui/features/workspaces/actions.js');
+const workspaceFormSource = read('src/ui/features/workspaces/form.js');
+const workspaceRepairSource = read('src/ui/features/workspaces/repair.js');
 assert.match(workspaceCards, /data-repository-details=/, 'project cards must keep Project details available');
 assert.match(workspaceCards, />Project details</, 'Project details must keep its plain product label');
 assert.match(workspaceCards, /workspace-action-menu/, 'lower-frequency project actions should be grouped behind More');
@@ -140,8 +154,15 @@ assert.match(workspaceActions, /\[data-repository-details\]/, 'the visible Proje
 assert.match(workspaceActions, /openModal/, 'Project details must open in the shared modal surface');
 assert.match(workspaceActions, /Project details/, 'Project details modal must keep the plain product label');
 assert.doesNotMatch(read('src/ui/features/workspaces/details.js'), /<details class="workspace-details">/, 'Project details must not remain an inline disclosure');
+for (const source of [workspaceFormSource, workspaceRepairSource]) {
+  assert.doesNotMatch(source, />Workspace settings<|>Workspace name<|>Add workspace<|>Save workspace<|>Repair workspace path</, 'Project dialogs must not expose internal workspace terminology in primary controls');
+}
+assert.match(workspaceFormSource, />Project name</, 'project naming must use the same product vocabulary as the Projects page');
+assert.match(workspaceRepairSource, />Repair project folder</, 'project repair must describe the user goal rather than the internal workspace path');
 const connectorSource = read('src/ui/features/settings/connector.js');
 assert.match(connectorSource, /card connection-layer-disclosure connector-details|card connector-details connection-layer-disclosure/, 'Connection layers must share the aligned connector disclosure contract');
+assert.doesNotMatch(connectorSource, /connection-status-body[\s\S]{0,600}field-caption[^\n]*Tunnel ID/, 'primary connection status must not duplicate technical setup identifiers');
+assert.match(connectorSource, /action\.href===['"]#diagnostics['"]/, 'connection recovery must not render a duplicate Troubleshooting link beside the primary recovery action');
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/advanced.js')), false, 'technical Advanced settings must not remain in the product surface');
 
 const publicRouteOwners = [

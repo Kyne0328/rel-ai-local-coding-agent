@@ -18,6 +18,7 @@ assert.equal(ready.chatgptReadiness.status, 'ready');
 assert.equal(ready.mcpClient.status, 'no_requests');
 assert.equal(isMcpAuthenticationReady(ready), true);
 assert.equal(connectionSummary(ready).label, 'Ready');
+assert.equal(connectionSummary(ready).message, 'This computer is connected and ready for ChatGPT.');
 const readyLayers = connectionLayerViews(ready);
 assert.equal(readyLayers.find(layer => layer.key === 'chatgptReadiness')?.label, 'Ready');
 assert.equal(readyLayers.find(layer => layer.key === 'mcpClient')?.label, 'Ready');
@@ -27,6 +28,7 @@ const active = connectionStateFor({
   mcpConnection: { status: 'ready', activityStatus: 'active', activeRequestCount: 1, lastRequestMethod: 'tools/call' }
 });
 assert.equal(connectionSummary(active).label, 'Active now');
+assert.equal(connectionSummary(active).title, 'ChatGPT is using Rel.AI');
 assert.equal(connectionSummary(active).tone, 'working');
 
 const recent = connectionStateFor({
@@ -41,6 +43,8 @@ const failed = connectionStateFor({
   mcpConnection: { status: 'ready', activityStatus: 'request_failed', lastRequestMethod: 'tools/call' }
 });
 assert.equal(connectionSummary(failed).label, 'Last request failed');
+assert.equal(connectionSummary(failed).title, 'The last ChatGPT request failed');
+assert.doesNotMatch(connectionSummary(failed).message, /MCP|tools\//i);
 
 const legacyClientState = connectionStateFor({
   ...base,
@@ -60,6 +64,8 @@ const unavailable = connectionStateFor({
 assert.equal(unavailable.chatgptReadiness.status, 'unavailable');
 assert.equal(isMcpAuthenticationReady(unavailable), false);
 assert.equal(connectionSummary(unavailable).label, 'Needs attention');
+assert.equal(connectionSummary(unavailable).title, 'ChatGPT connection unavailable');
+assert.doesNotMatch(connectionSummary(unavailable).message, /Tunnel ID|API key|MCP/i);
 
 assert.deepEqual(connectionLayerViews(recent).map(layer => layer.title), [
   'Local MCP service',
