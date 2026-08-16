@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { flushAuditWrites } from '../src/audit.js';
+import { readConfig } from '../src/config.js';
+import { flushLocalAnalytics } from '../src/localAnalytics.js';
+import { readSandboxRegistry } from '../src/parallelTaskSandbox.js';
+import { classifyStatusOwnership } from '../src/repo/gitOps.js';
+import { gitStatusArgs } from '../src/repo/gitStatus.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
+import { flushTaskHistoryPersistence } from '../src/taskHistoryStore.js';
+import { resetTaskHistoryCaches } from '../src/taskHistoryStorage.js';
+import { resetToolActivity } from '../src/toolActivity.js';
+import { callTool as rawCallTool } from '../src/tools.js';
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-ownership-concurrency-'));
+const workspacePath = path.join(root, 'workspace');
+const stateDir = path.join(root, 'state');
+const configPath = path.join(root, 'config.json');
+const previousConfig = process.env.REL_AI_MCP_CONFIG;
+const context = { principal: 'local:trusted', publicHttpOnly: true, transportType: 'test', transportSessionId: 'ownership-concurrency' };
+const callTool = (name, args) => rawCallTool(name, args, context);
+
+function git(...args) {
+  return execFileSync('git', args, { cwd: workspacePath, encoding: 'utf8' });
+}
+
+try {
+  fs.mkdirSync(path.join(workspacePath, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(workspacePath, 'src', 'base.js'), 'export const base = true;\n');
+  fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ type: 'module' }, null, 2));
+  git('init', '--initial-branch=main');
+  git('config', 'user.email', 'relai@example.test');
+  git('config', 'user.name', 'RelAI Test');
+  git('add', '.');
+  git('commit', '-m', 'fixture');
+
+  fs.writeFileSync(configPath, JSON.stringify({
+    version: 4,
+    stateDir,
+    auditLogPath: path.join(stateDir, 'audit.jsonl'),
+    workspaces: { app: { path: workspacePath, commands: {}, testCommands: {} } }
+  }, null, 2));
+  process.env.REL_AI_MCP_CONFIG = configPath;
+  resetToolActivity();
+
+  const taskA = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none', title: 'Independent writer A' });
+  const taskB = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none', title: 'Independent writer B' });
+
+  await Promise.all([
+    callTool('relai_edit', {
+      workspace: 'app', work_id: taskA.work_id, path: 'src/task-a.js', content: 'export const taskA = true;\n'
+    }),
+    callTool('relai_edit', {
+      workspace: 'app', work_id: taskB.work_id, path: 'src/task-b.js', content: 'export const taskB = true;\n'
+    })
+  ]);
+
+  assert.equal(fs.readFileSync(path.join(workspacePath, 'src', 'task-a.js'), 'utf8').replaceAll('\r\n', '\n'), 'export const taskA = true;\n');
+  assert.equal(fs.readFileSync(path.join(workspacePath, 'src', 'task-b.js'), 'utf8').replaceAll('\r\n', '\n'), 'export const taskB = true;\n');
+
+  const config = readConfig();
+  const workspace = config.workspaces.app;
+  const status = git(...gitStatusArgs());
+  const ownedA = classifyStatusOwnership({ alias: 'app', ...workspace }, config, status, taskA.work_id);
+  const ownedB = classifyStatusOwnership({ alias: 'app', ...workspace }, config, status, taskB.work_id);
+  assert.deepEqual(ownedA.sessionTouched, ['src/task-a.js'], 'task A must not claim task B changes from the shared session baseline');
+  assert.deepEqual(ownedB.sessionTouched, ['src/task-b.js'], 'task B must not claim task A changes from the shared session baseline');
+
+  await Promise.all([
+    callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: taskA.work_id, reason: 'Ownership concurrency coverage complete.' }),
+    callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: taskB.work_id, reason: 'Ownership concurrency coverage complete.' })
+  ]);
+
+  const remainingSandboxes = Object.values(readSandboxRegistry(config).sandboxes)
+    .filter(entry => [taskA.work_id, taskB.work_id].includes(entry.taskId));
+  assert.deepEqual(remainingSandboxes, [], 'cancelled fixture tasks must not leave private worktree registry entries behind');
+
+  console.log('Independent concurrent task ownership remains narrow, visible, and cleanup-safe.');
+} finally {
+  await flushAuditWrites();
+  await flushTaskHistoryPersistence();
+  await flushLocalAnalytics();
+  repositoryIntelligence.shutdown();
+  resetTaskHistoryCaches();
+  resetToolActivity();
+  if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
+  else process.env.REL_AI_MCP_CONFIG = previousConfig;
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+}
+
+process.exit(0);
