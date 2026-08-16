@@ -50,8 +50,8 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   form.className = 'ws-form';
   form.innerHTML = `
     <div class="ws-form-intro">
-      <strong>${isEdit ? 'Workspace settings' : 'Choose a project folder'}</strong>
-      <span>${isEdit ? 'Rename the workspace or change its project folder. Name and path changes are saved together.' : 'Rel.AI uses this folder only when a ChatGPT request names this workspace.'}</span>
+      <strong>${isEdit ? 'Project settings' : 'Choose a project folder'}</strong>
+      <span>${isEdit ? 'Rename the project or change its folder. Name and folder changes are saved together.' : 'Rel.AI uses this folder only when a ChatGPT request names this project.'}</span>
     </div>
 
     <label for="workspacePathInput">Project folder</label>
@@ -61,14 +61,14 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     </div>
     <div class="ws-form-status" data-path-status aria-live="polite"></div>
 
-    <label for="workspaceAliasInput">Workspace name</label>
+    <label for="workspaceAliasInput">Project name</label>
     <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="for example employee-api" autocomplete="off">
     <div class="ws-form-help">Use 1–80 letters, numbers, dots, underscores, or dashes. This is the name used in ChatGPT prompts.</div>
     <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
 
     <div class="ws-form-actions">
       <button type="button" class="secondary" data-cancel>Cancel</button>
-      <button type="submit" class="primary">${isEdit ? 'Save workspace' : 'Add workspace'}</button>
+      <button type="submit" class="primary">${isEdit ? 'Save project' : 'Add project'}</button>
     </div>
   `;
 
@@ -138,7 +138,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     }, () => postJson('/api/pick-folder', {}, { timeout: 0 }));
     if (res?.unsupported) {
       browseBtn.hidden = true;
-      toast('Browse needs the Rel.AI desktop launcher — type the path here instead.', { variant: 'info' });
+      toast('Folder browsing is available in the installed Rel.AI desktop app — type the path here instead.', { variant: 'info' });
       return;
     }
     if (res?.canceled) return;
@@ -161,14 +161,14 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     const alias = String(aliasInput.value || '').trim();
     const wsPath = pathInput.value.trim();
     if (!wsPath) { toast('Choose a project folder.', { variant: 'error' }); pathInput.focus(); return; }
-    if (!alias) { toast('Enter a workspace name.', { variant: 'error' }); aliasInput.focus(); return; }
-    if (!isValidWorkspaceAlias(alias)) { toast('Workspace names may use only 1–80 letters, numbers, dots, underscores, and dashes.', { variant: 'error' }); aliasInput.focus(); return; }
+    if (!alias) { toast('Enter a project name.', { variant: 'error' }); aliasInput.focus(); return; }
+    if (!isValidWorkspaceAlias(alias)) { toast('Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.', { variant: 'error' }); aliasInput.focus(); return; }
     if (syncConflicts()) { conflictEl.focus?.(); return; }
 
     const result = await runButtonAction(submitBtn, {
-      idleText: isEdit ? 'Save workspace' : 'Add workspace',
-      loadingText: 'Saving workspace…',
-      successText: isEdit ? 'Workspace updated' : 'Workspace added',
+      idleText: isEdit ? 'Save project' : 'Add project',
+      loadingText: 'Saving project…',
+      successText: isEdit ? 'Project updated' : 'Project added',
       errorText: 'Save failed'
     }, () => postJson('/api/workspaces', {
       action: 'upsert',
@@ -185,7 +185,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       requestDashboardRefresh({ structural: true });
       if (isEdit && originalAlias !== alias) renameRecentWorkspace(originalAlias, alias);
       recordRecentWorkspace(alias);
-      toast(result.message || `${isEdit ? 'Workspace updated' : 'Workspace added'}: ${alias}`, { variant: 'success' });
+      toast(`${isEdit ? 'Project updated' : 'Project added'}: ${alias}`, { variant: 'success' });
       if (getWorkspaceFilter() === originalAlias && originalAlias !== alias) setWorkspaceFilter(alias);
       else if (typeof onSaved === 'function') onSaved({ result, alias, originalAlias });
       else if (isEdit) navigate('workspaces', { workspace: alias, focus: '1' });
@@ -193,11 +193,11 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       const message = result?.error || 'unknown error';
       conflictEl.hidden = !/already (?:exists|configured)/i.test(message);
       if (!conflictEl.hidden) conflictEl.textContent = message;
-      toast('Could not save workspace: ' + message, { variant: 'error' });
+      toast('Could not save project: ' + message, { variant: 'error' });
     }
   });
 
-  modal = openModal({ title: isEdit ? `Workspace settings · ${ws.alias || ''}` : 'Add workspace', content: form });
+  modal = openModal({ title: isEdit ? `Project settings · ${ws.alias || ''}` : 'Add project', content: form });
   setTimeout(() => {
     try {
       (isEdit ? aliasInput : pathInput).focus();
@@ -217,9 +217,9 @@ function workspaceConflict(workspaces, values) {
   const alias = String(values.alias || '').trim();
   const workspacePath = normalizeWorkspacePath(values.path);
   const originalAlias = String(values.originalAlias || '').trim();
-  if (alias && !isValidWorkspaceAlias(alias)) return 'Workspace names may use only 1–80 letters, numbers, dots, underscores, and dashes.';
+  if (alias && !isValidWorkspaceAlias(alias)) return 'Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.';
   const aliasConflict = workspaces.find(item => item.alias === alias && item.alias !== originalAlias);
-  if (aliasConflict) return `Workspace name '${alias}' is already in use.`;
+  if (aliasConflict) return `Project name '${alias}' is already in use.`;
   const pathConflict = workspacePath
     ? workspaces.find(item => item.alias !== originalAlias && normalizeWorkspacePath(item.path) === workspacePath)
     : null;

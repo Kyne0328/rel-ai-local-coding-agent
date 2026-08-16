@@ -31,7 +31,7 @@ export async function openWorkspaceRepair({ workspace } = {}) {
     <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
     <div class="ws-form-actions">
       <button type="button" class="secondary" data-cancel>Cancel</button>
-      <button type="submit" class="primary">Repair workspace path</button>
+      <button type="submit" class="primary">Repair project folder</button>
     </div>`;
 
   const pathInput = form.querySelector('input[name="path"]');
@@ -49,7 +49,7 @@ export async function openWorkspaceRepair({ workspace } = {}) {
     const pathValue = pathInput.value.trim();
     const duplicate = duplicateWorkspaceForPath(workspaces, pathValue, workspace.alias);
     conflict.hidden = !duplicate;
-    conflict.textContent = duplicate ? `This folder is already configured as workspace '${duplicate.alias}'.` : '';
+    conflict.textContent = duplicate ? `This folder is already configured as project '${duplicate.alias}'.` : '';
     submitButton.disabled = !pathValue || Boolean(duplicate);
     if (!pathValue) {
       renderPathStatus(status, null);
@@ -74,7 +74,7 @@ export async function openWorkspaceRepair({ workspace } = {}) {
     }, () => postJson('/api/pick-folder', {}, { timeout: 0 }));
     if (result?.unsupported) {
       browseButton.hidden = true;
-      toast('Browse needs the Rel.AI desktop launcher — type the path here instead.', { variant: 'info' });
+      toast('Folder browsing is available in the installed Rel.AI desktop app — type the path here instead.', { variant: 'info' });
       return;
     }
     if (result?.ok && result.path) {
@@ -93,13 +93,13 @@ export async function openWorkspaceRepair({ workspace } = {}) {
     if (!newPath) { toast('Choose the new project folder.', { variant: 'error' }); pathInput.focus(); return; }
     if (duplicate) {
       conflict.hidden = false;
-      conflict.textContent = `This folder is already configured as workspace '${duplicate.alias}'.`;
+      conflict.textContent = `This folder is already configured as project '${duplicate.alias}'.`;
       return;
     }
     const result = await runButtonAction(submitButton, {
-      idleText: 'Repair workspace path',
-      loadingText: 'Saving repaired path…',
-      successText: 'Workspace repaired',
+      idleText: 'Repair project folder',
+      loadingText: 'Saving project folder…',
+      successText: 'Project repaired',
       errorText: 'Repair failed'
     }, () => postJson('/api/workspaces', {
       action: 'upsert',
@@ -115,7 +115,7 @@ export async function openWorkspaceRepair({ workspace } = {}) {
         conflict.hidden = false;
         conflict.textContent = message;
       }
-      toast('Could not repair workspace: ' + message, { variant: 'error' });
+      toast('Could not repair project: ' + message, { variant: 'error' });
       return;
     }
     markUnsaved(form, false);
@@ -123,11 +123,11 @@ export async function openWorkspaceRepair({ workspace } = {}) {
     invalidateCache();
     requestDashboardRefresh({ structural: true });
     recordRecentWorkspace(workspace.alias);
-    toast(`Workspace path repaired: ${workspace.alias}`, { variant: 'success' });
+    toast(`Project folder repaired: ${workspace.alias}`, { variant: 'success' });
     navigate('workspaces', { workspace: workspace.alias, focus: '1' });
   });
 
-  modal = openModal({ title: `Repair path · ${workspace.alias}`, content: form });
+  modal = openModal({ title: `Repair project folder · ${workspace.alias}`, content: form });
   setTimeout(() => {
     pathInput.focus();
     pathInput.select();
