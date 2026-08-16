@@ -146,11 +146,11 @@ function verifyPackageContracts() {
 
 function verifyWorkflowContracts() {
   const workflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'release.yml'), 'utf8');
-  const productionAuditIndex = workflow.indexOf('- name: Audit production dependencies');
-  const packagingAuditIndex = workflow.indexOf('- name: Audit packaging dependencies');
-  const windowsBuildIndex = workflow.indexOf('- name: Build Windows release');
+  const productionAuditIndex = workflow.indexOf('npm run audit:production');
+  const packagingAuditIndex = workflow.indexOf('npm run audit:packaging');
+  const windowsBuildIndex = workflow.indexOf('npm run electron:dist:windows');
   const fetchWindowsSeedIndex = workflow.indexOf('TUNNEL_CLIENT_PLATFORMS: win32');
-  const testsIndex = workflow.indexOf('- name: Run tests');
+  const testsIndex = workflow.indexOf('npm test');
 
   assert.ok(productionAuditIndex >= 0);
   assert.ok(packagingAuditIndex > productionAuditIndex);
@@ -171,14 +171,11 @@ function verifyWorkflowContracts() {
     /publish=false/,
     /GitHub API returned HTTP \$http_status/,
     /curl --silent --show-error/,
-    /Build Windows release/,
     /npm run electron:dist:windows/,
-    /Build Linux release/,
     /npm run electron:dist:linux/,
-    /Build macOS release/,
     /runs-on: \$\{\{ matrix\.runner \}\}/,
-    /runner: macos-15-intel/,
-    /runner: macos-15/,
+    /arch: x64/,
+    /arch: arm64/,
     /npm run electron:dist:mac/,
     /TUNNEL_CLIENT_PLATFORMS: darwin/,
     /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/,
@@ -188,7 +185,6 @@ function verifyWorkflowContracts() {
     /npm run verify:packaged -- --platform linux/,
     /npm run verify:fuses -- --platform win32/,
     /npm run verify:fuses -- --platform linux/,
-    /Smoke-test Linux desktop startup under Xvfb/,
     /sudo chown root:root "\$sandbox_helper"/,
     /sudo chmod 4755 "\$sandbox_helper"/,
     /stat -c '%u:%g:%a'/,
@@ -200,23 +196,19 @@ function verifyWorkflowContracts() {
     /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-mac-\$\{\{ matrix\.arch \}\}\.dmg/,
     /latest-linux\.yml/,
     /electron-size-report-linux\.json/,
-    /Download Windows release bundle/,
-    /Download Linux release bundle/,
-    /Download macOS release bundles/,
+    /actions\/download-artifact@/,
     /merge-multiple: true/,
     /npm run prepare:release-assets/,
     /release-assets\.txt/,
     /SHA256SUMS\.txt/,
-    /Attest release artifact provenance/,
-    /Attest release SBOM/,
+    /actions\/attest-build-provenance@/,
+    /actions\/attest-sbom@/,
     /dist\/\*\.AppImage/,
     /dist\/\*\.deb/,
     /dist\/\*\.dmg/,
     /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/,
-    /Verify bundled OpenAI tunnel-client/,
     /verify-tunnel-client\.mjs/,
     /npm run benchmark:observability/,
-    /Record observability performance metrics/,
     /npm run test:observability-browser/,
     /npm run test:native-tasks-release-gate/
   ]) assert.match(workflow, pattern);
