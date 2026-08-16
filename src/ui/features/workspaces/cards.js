@@ -214,11 +214,24 @@ function healthFindingsCard(findings) {
 function findingRow(finding) {
   const alias = finding.workspace || '';
   const actionable = finding.code === 'workspace_unavailable' && alias;
-  const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div class="finding-main"><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div>`;
+  const title = finding.message || humanizeFindingCode(finding.code) || 'Project needs attention';
+  const context = alias ? `Project: ${alias}` : 'Open Troubleshooting for details.';
+  const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div class="finding-main"><div class="item-title">${esc(title)}</div><div class="item-sub">${esc(context)}</div></div>`;
   if (actionable) {
     return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-repair="${esc(alias)}">Fix folder</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
   }
-  return `<a class="list-item finding-link" href="#diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
+  return `<a class="list-item finding-link" href="#diagnostics">${inner}<div class="item-time">${pillHtml(findingSeverityLabel(finding.severity), statusClass(finding.severity))}</div></a>`;
+}
+
+function findingSeverityLabel(severity) {
+  if (severity === 'error') return 'Blocking';
+  if (severity === 'warning') return 'Warning';
+  return 'Recommendation';
+}
+
+function humanizeFindingCode(code) {
+  const text = String(code || '').trim().replaceAll('_', ' ');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
 
 function actionableFindings(health) {

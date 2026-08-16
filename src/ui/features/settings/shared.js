@@ -2,6 +2,8 @@ import { Toggle } from '../../components/toggle.js';
 import { Select } from '../../components/select.js';
 import { esc } from '../../utils.js';
 
+let fieldId = 0;
+
 export function header(title, body) {
   const wrapper = document.createElement('div');
   wrapper.className = 'settings-header';
@@ -27,6 +29,11 @@ export function field(label, control, help) {
   wrapper.className = 'settings-field';
   const labelElement = document.createElement('label');
   labelElement.textContent = label;
+  const labelTarget = labelableControl(control);
+  if (labelTarget) {
+    if (!labelTarget.id) labelTarget.id = `settingsField${++fieldId}`;
+    labelElement.htmlFor = labelTarget.id;
+  }
   wrapper.append(labelElement, control);
   if (help) {
     const paragraph = document.createElement('p');
@@ -35,6 +42,12 @@ export function field(label, control, help) {
     wrapper.appendChild(paragraph);
   }
   return wrapper;
+}
+
+function labelableControl(control) {
+  if (!control) return null;
+  if (control.matches?.('input, select, textarea')) return control;
+  return control.querySelector?.('input, select, textarea') || null;
 }
 
 export function selectControl(options, value, onChange) {
