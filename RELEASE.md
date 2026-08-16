@@ -5,6 +5,7 @@ Rel.AI MCP uses a strict release path so a tag cannot ship mismatched versions, 
 ## 1. Validate source
 
 ```bash
+npm run release:check
 npm run test:native-tasks-release-gate
 npm run test:all
 npm run knip:production
@@ -13,7 +14,7 @@ npm run audit:packaging
 npm run benchmark:observability
 ```
 
-`test:all` builds generated UI assets, performs syntax/lint/type/dependency checks, verifies release consistency, and executes the curated release-critical regression suite. CI and packaging use Node.js 24.
+`release:check` is the authoritative finalized-release metadata gate. It verifies every synchronized version surface, the current changelog entry, release manifest, generated color assets, and current public tool-manifest metadata. `test:all` handles normal development validation without duplicating finalized release metadata checks. CI and packaging use Node.js 24.
 
 When working through Rel.AI itself, use the task-aware validation and diff tools so the evidence remains associated with the current work session.
 
@@ -81,7 +82,7 @@ Then add the dated changelog section and run:
 npm run release:check
 ```
 
-The synchronized surfaces include the root and Electron package manifests/lockfiles, Electron status version, release metadata, plugin metadata where applicable, and changelog.
+The synchronized surfaces include the root and Electron package manifests/lockfiles, plugin metadata, Electron status version, release metadata, and changelog. `scripts/release-surfaces.mjs` is the canonical file list shared by bump, consistency-check, and finalize logic so adding a release version surface does not require unrelated hand-maintained lists. The bump helper also regenerates protocol/tool compatibility fields in `release-manifest.json` from the current runtime contract; hashes and tool counts are not copied by hand.
 
 ## 7. Package-size and artifact gates
 
@@ -94,7 +95,7 @@ npm run verify:updater-artifacts
 npm run generate:sbom
 ```
 
-Release publication requires canonical filenames, matching versions, updater SHA-512 integrity, SHA-256 coverage, SBOM generation, and GitHub attestations.
+Release publication requires canonical filenames, matching versions, updater SHA-512 integrity, SHA-256 coverage, SBOM generation, and GitHub attestations. Packaging also verifies that every direct Electron packaging dependency installed under `electron/node_modules` matches the exact version resolved by `electron/package-lock.json`, preventing local builds from silently using stale runtime bytes after a dependency upgrade.
 
 ## 8. Manual release checks
 
@@ -112,7 +113,7 @@ Do not run installer lifecycle tests on the developer machine hosting the active
 
 ## 9. Publish
 
-Pushing the version commit to `main` triggers `.github/workflows/release.yml`. The workflow builds platform release artifacts, verifies them, prepares checksums and SBOM evidence, and publishes only after the blocking jobs pass.
+Pushing the version commit to `main` triggers `.github/workflows/release.yml`. Preflight first rejects inconsistent release metadata before any platform package is built. The workflow then builds platform release artifacts, verifies them, prepares checksums and SBOM evidence, and publishes only after the blocking jobs pass. If a prior publication attempt created the version tag but not the GitHub release, a rerun may recover only when that tag resolves to the exact current release commit; a tag pointing elsewhere fails closed.
 
 Rel.AI-owned Windows artifacts currently disable certificate auto-discovery and are covered by SHA-256 plus GitHub attestations. The packaged OpenAI tunnel-client bytes must match the reviewed provenance manifest.
 

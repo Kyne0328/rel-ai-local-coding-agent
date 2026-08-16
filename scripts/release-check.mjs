@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { VERSION_JSON_FILES } from './release-surfaces.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
@@ -94,10 +95,7 @@ const packageJson = readJson('package.json');
 const version = packageJson.version;
 expect(validSemver(version), `package.json version must be semver-like x.y.z, got ${version}`);
 
-assertJsonVersion('package.json', version);
-assertJsonVersion('package-lock.json', version);
-assertJsonVersion(path.join('electron', 'package.json'), version);
-assertJsonVersion(path.join('electron', 'package-lock.json'), version);
+for (const relativePath of VERSION_JSON_FILES) assertJsonVersion(relativePath, version);
 assertTunnelClient();
 
 const statusHtml = read(path.join('electron', 'renderer', 'status.html'));
