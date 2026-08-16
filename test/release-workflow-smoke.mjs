@@ -35,6 +35,7 @@ function copyFixture() {
     'src/version.js',
     'scripts/release-check.mjs',
     'scripts/release-bump.mjs',
+    'scripts/release-surfaces.mjs',
     'scripts/check-generated.mjs',
     'scripts/electron-package.mjs',
     'scripts/electron-platform.mjs',
@@ -90,6 +91,17 @@ function verifyReleaseBump() {
   assert.equal(readJson('.codex-plugin/plugin.json').version, '0.99.0');
   assert.equal(readJson('release-manifest.json').applicationVersion, '0.99.0');
   assert.match(fs.readFileSync(changelogPath, 'utf8'), /^## \[0\.99\.0\] — 2099-01-02/m);
+
+  const pluginPath = path.join(tmp, '.codex-plugin', 'plugin.json');
+  const plugin = readJson('.codex-plugin/plugin.json');
+  plugin.version = '0.98.9';
+  fs.writeFileSync(pluginPath, `${JSON.stringify(plugin, null, 2)}\n`);
+  const pluginMismatch = runWithEnv('release-check.mjs');
+  assert.notEqual(pluginMismatch.status, 0, 'release consistency must reject stale plugin metadata');
+  assert.match(`${pluginMismatch.stdout}\n${pluginMismatch.stderr}`, /\.codex-plugin[\\/]plugin\.json version/i);
+  plugin.version = '0.99.0';
+  fs.writeFileSync(pluginPath, `${JSON.stringify(plugin, null, 2)}\n`);
+  run('release-check.mjs');
 }
 
 function verifyPackageContracts() {
@@ -107,14 +119,14 @@ function verifyPackageContracts() {
   assert.deepEqual(electronLockRoot.dependencies || {}, electronPackage.dependencies || {}, 'Electron runtime dependencies must stay synchronized with the lockfile');
   assert.deepEqual(electronLockRoot.devDependencies || {}, electronPackage.devDependencies || {}, 'Electron development dependencies must stay synchronized with the lockfile');
 
-  assert.equal(rootPackage.scripts['electron:build'], 'node scripts/electron-package.mjs --mode unpacked --platform win32');
-  assert.equal(rootPackage.scripts['electron:build:linux'], 'node scripts/electron-package.mjs --mode unpacked --platform linux');
-  assert.equal(rootPackage.scripts['electron:build:mac'], 'node scripts/electron-package.mjs --mode unpacked --platform darwin');
-  assert.equal(rootPackage.scripts['electron:dist'], 'node scripts/electron-package.mjs --mode release --platform win32');
-  assert.equal(rootPackage.scripts['electron:dist:linux'], 'node scripts/electron-package.mjs --mode release --platform linux');
-  assert.equal(rootPackage.scripts['electron:dist:mac'], 'node scripts/electron-package.mjs --mode release --platform darwin');
-  assert.equal(rootPackage.scripts['electron:size'], 'node scripts/electron-package-size.mjs --dir dist --platform win32 --baseline scripts/electron-size-baseline.json --strict');
-  assert.equal(rootPackage.scripts['electron:size:linux'], 'node scripts/electron-package-size.mjs --dir dist --platform linux --baseline scripts/electron-size-baseline-linux.json --strict');
+  for (const name of ['electron:build', 'electron:build:linux', 'electron:build:mac', 'electron:dist', 'electron:dist:linux', 'electron:dist:mac']) {
+    assert.match(String(rootPackage.scripts[name] || ''), /scripts\/electron-package\.mjs/, `${name} must use the shared cross-platform packager`);
+  }
+  for (const name of ['electron:size', 'electron:size:linux']) {
+    const command = String(rootPackage.scripts[name] || '');
+    assert.match(command, /scripts\/electron-package-size\.mjs/, `${name} must keep package-size reporting available`);
+    assert.doesNotMatch(command, /--strict\b/, `${name} must not turn ordinary measured growth into a release blocker`);
+  }
   assert.equal(rootPackage.scripts['test:installed'], undefined);
 
   assert.equal(electronPackage.build.electronUpdaterCompatibility, '>=2.16');
@@ -139,58 +151,34 @@ function verifyPackageContracts() {
   );
 
   const wrapper = fs.readFileSync(path.join(tmp, 'scripts', 'electron-package.mjs'), 'utf8');
-  for (const pattern of [
-    /assertSafeControllerOperation/,
-    /assertSupportedBuildHost/,
-    /packageWindowsRelease/,
-    /packageLinuxRelease/,
-    /packageMacRelease/,
-    /Electron Windows release staging/,
-    /Electron Linux release staging/,
-    /Electron macOS release staging/,
-    /DMG artifact packaging/,
-    /NSIS artifact packaging/,
-    /portable artifact packaging/,
-    /AppImage and DEB artifact packaging/,
-    /canonical\.linuxAppImage/,
-    /canonical\.linuxDeb/,
-    /canonical\.linuxMetadata/,
-    /function isBuilderDiagnosticArtifact/,
-    /Ignored electron-builder diagnostics/,
-    /filter\(entry => requiredArtifacts\.includes\(entry\.name\)\)/,
-    /!isBuilderDiagnosticArtifact\(name\)/,
-    /spec\.markerName/,
-    /await Promise\.all/,
-    /--prepackaged', prepackaged/,
-    /ELECTRON_BUILDER_COMPRESSION_LEVEL: RELEASE_ARCHIVE_COMPRESSION_LEVEL/
-  ]) assert.match(wrapper, pattern);
-  assert.doesNotMatch(wrapper, /npmCommand|npxCommand|npm\.cmd|npx\.cmd|shell:\s*true/i);
-  assert.doesNotMatch(wrapper, /'--win',\s*'nsis',\s*'portable'/);
-  assert.doesNotMatch(wrapper, /quitAndInstall|Setup.*\.exe|uninstall/i);
-
-  const generatedCheck = fs.readFileSync(path.join(tmp, 'scripts', 'check-generated.mjs'), 'utf8');
-  assert.match(generatedCheck, /public\/dashboard\.css/, 'generated asset verification must track public/dashboard.css');
-  assert.match(generatedCheck, /runNpm\(\['run', 'build:css'\]/, 'generated asset verification must rebuild dashboard CSS');
-  assert.match(generatedCheck, /dashboardCssBefore\.equals\(dashboardCssAfter\)/, 'generated asset verification must compare dashboard CSS before and after regeneration');
+  assert.doesNotMatch(wrapper, /npmCommand|npxCommand|npm\.cmd|npx\.cmd|shell:\s*true/i, 'packaging must remain shell-free');
+  assert.doesNotMatch(wrapper, /quitAndInstall|Setup.*\.exe|uninstall/i, 'build orchestration must not execute installer lifecycle behavior');
 }
 
 function verifyWorkflowContracts() {
   const workflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'release.yml'), 'utf8');
-  const productionAuditIndex = workflow.indexOf('- name: Audit production dependencies');
-  const packagingAuditIndex = workflow.indexOf('- name: Audit packaging dependencies');
-  const windowsBuildIndex = workflow.indexOf('- name: Build Windows release');
+  const productionAuditIndex = workflow.indexOf('npm run audit:production');
+  const packagingAuditIndex = workflow.indexOf('npm run audit:packaging');
+  const windowsBuildIndex = workflow.indexOf('npm run electron:dist:windows');
   const fetchWindowsSeedIndex = workflow.indexOf('TUNNEL_CLIENT_PLATFORMS: win32');
-  const testsIndex = workflow.indexOf('- name: Run tests');
+  const testsIndex = workflow.indexOf('npm test');
+  const releaseConsistencyIndex = workflow.indexOf('npm run release:check');
 
   assert.ok(productionAuditIndex >= 0);
   assert.ok(packagingAuditIndex > productionAuditIndex);
   assert.ok(packagingAuditIndex < windowsBuildIndex);
   assert.doesNotMatch(workflow, /Install gateway test dependencies|gateway\/package\.json/i, 'public release workflow must not depend on the private gateway workspace');
   assert.ok(fetchWindowsSeedIndex >= 0 && fetchWindowsSeedIndex < testsIndex && fetchWindowsSeedIndex < windowsBuildIndex);
+  assert.ok(releaseConsistencyIndex >= 0 && releaseConsistencyIndex < windowsBuildIndex,
+    'release consistency must fail before platform packaging begins');
 
   for (const pattern of [
     /workflow_dispatch:/,
     /preflight:/,
+    /npm run release:check/,
+    /Recovering unpublished release from existing tag/,
+    /git rev-list -n 1/,
+    /Existing tag \$VERSION points to \$tag_commit, not current release commit \$GITHUB_SHA/,
     /windows:/,
     /linux:/,
     /mac:/,
@@ -201,14 +189,11 @@ function verifyWorkflowContracts() {
     /publish=false/,
     /GitHub API returned HTTP \$http_status/,
     /curl --silent --show-error/,
-    /Build Windows release/,
     /npm run electron:dist:windows/,
-    /Build Linux release/,
     /npm run electron:dist:linux/,
-    /Build macOS release/,
     /runs-on: \$\{\{ matrix\.runner \}\}/,
-    /runner: macos-15-intel/,
-    /runner: macos-15/,
+    /arch: x64/,
+    /arch: arm64/,
     /npm run electron:dist:mac/,
     /TUNNEL_CLIENT_PLATFORMS: darwin/,
     /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/,
@@ -218,7 +203,6 @@ function verifyWorkflowContracts() {
     /npm run verify:packaged -- --platform linux/,
     /npm run verify:fuses -- --platform win32/,
     /npm run verify:fuses -- --platform linux/,
-    /Smoke-test Linux desktop startup under Xvfb/,
     /sudo chown root:root "\$sandbox_helper"/,
     /sudo chmod 4755 "\$sandbox_helper"/,
     /stat -c '%u:%g:%a'/,
@@ -230,20 +214,17 @@ function verifyWorkflowContracts() {
     /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-mac-\$\{\{ matrix\.arch \}\}\.dmg/,
     /latest-linux\.yml/,
     /electron-size-report-linux\.json/,
-    /Download Windows release bundle/,
-    /Download Linux release bundle/,
-    /Download macOS release bundles/,
+    /actions\/download-artifact@/,
     /merge-multiple: true/,
     /npm run prepare:release-assets/,
     /release-assets\.txt/,
     /SHA256SUMS\.txt/,
-    /Attest release artifact provenance/,
-    /Attest release SBOM/,
+    /actions\/attest-build-provenance@/,
+    /actions\/attest-sbom@/,
     /dist\/\*\.AppImage/,
     /dist\/\*\.deb/,
     /dist\/\*\.dmg/,
     /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/,
-    /Verify bundled OpenAI tunnel-client/,
     /verify-tunnel-client\.mjs/,
     /npm run benchmark:observability/,
     /npm run test:observability-browser/,

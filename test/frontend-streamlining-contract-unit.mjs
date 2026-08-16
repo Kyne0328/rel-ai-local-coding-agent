@@ -109,7 +109,7 @@ assert.match(toolsSource, /Tool catalog unavailable/);
 assert.match(toolsSource, /cta: 'Retry'/);
 assert.match(toolsSource, /result\?\.ok === false \|\| tools == null/, 'tool API failures must not masquerade as an empty catalog');
 const appCss = read('src/ui/styles/app.css');
-assert.match(appCss, /mobile-nav[^}]*grid-template-columns:\s*repeat\(6,minmax\(52px,1fr\)\)/s, 'six top-level mobile destinations must share the responsive navigation row');
+assert.match(appCss, new RegExp(`mobile-nav[^}]*grid-template-columns:\\s*repeat\\(${MOBILE_NAV_ITEMS.length},`, 's'), 'mobile navigation must allocate one grid column per current top-level destination');
 for (const selector of ['.settings-shell', '.connection-page', '.tools-grid', '.diagnostic-page', '.workspace-grid', '.processes-card']) {
   assert.doesNotMatch(appCss, new RegExp(selector.replace('.', '\\.')), `app.css still owns feature selector ${selector}`);
 }

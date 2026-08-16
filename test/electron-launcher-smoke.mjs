@@ -47,8 +47,8 @@ for (const [platform, filter] of [['win', ['manifest.json', 'win32/**']], ['linu
   assert.deepEqual(resource.filter, filter);
   assert.equal(electronPkg.build[platform].extraResources.some(item => /vendor\/ngrok/i.test(String(item.from || ''))), false);
 }
-assert.equal(rootPkg.scripts['fetch:tunnel-client'], 'node scripts/fetch-tunnel-client.mjs');
-assert.equal(rootPkg.scripts['verify:tunnel-client'], 'node scripts/verify-tunnel-client.mjs');
+assert.match(String(rootPkg.scripts['fetch:tunnel-client'] || ''), /scripts\/fetch-tunnel-client\.mjs/, 'fetch:tunnel-client must route to the tunnel-client fetcher');
+assert.match(String(rootPkg.scripts['verify:tunnel-client'] || ''), /scripts\/verify-tunnel-client\.mjs/, 'verify:tunnel-client must route to the tunnel-client verifier');
 assert.equal(rootPkg.scripts['fetch:ngrok'], undefined);
 assert.equal(rootPkg.scripts['verify:ngrok'], undefined);
 

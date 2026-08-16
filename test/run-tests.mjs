@@ -1,6 +1,7 @@
-// Runs the small release-critical regression suite. Broader focused tests remain
-// available through their named npm scripts and direct `node test/<file>` runs,
-// but they do not block every release by default.
+// Runs the everyday behavior and safety regression suite. Release-only workflow,
+// packaging-policy, browser, and implementation-shape checks remain available through
+// named npm scripts or direct `node test/<file>` runs instead of blocking every change.
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -22,16 +23,14 @@ const files = [
   'durable-state-unit.mjs',
   'electron-updater-config-unit.mjs',
   'update-support-policy-unit.mjs',
-  'update-support-policy-integration-unit.mjs',
   'update-support-policy-http-unit.mjs',
   'electron-dynamic-resource-contract-unit.mjs',
   'electron-product-path-unit.mjs',
-  'frontend-streamlining-contract-unit.mjs',
+  'test-rigidity-audit-unit.mjs',
   'http-auth-smoke.mjs',
   'http-smoke.mjs',
   'ipc-security-unit.mjs',
   'package-size-policy-unit.mjs',
-  'release-workflow-smoke.mjs',
   'safety-paths.mjs',
   'smoke.mjs',
   'task-state-unit.mjs',
@@ -59,22 +58,37 @@ const files = [
   'window-security-unit.mjs'
 ];
 
-const failures = [];
-for (const name of files) {
-  const started = Date.now();
-  console.log(`RUN ${name}`);
-  const result = await runTest(name);
-  const seconds = ((Date.now() - started) / 1000).toFixed(1);
-  if (result.exitCode === 0) {
-    console.log(`PASS ${name} (${seconds}s)`);
-  } else {
-    failures.push(name);
-    console.error(`FAIL ${name} (${seconds}s)`);
-    if (result.error) console.error(result.error.message);
-    if (result.stdout) console.error(result.stdout.trim());
-    if (result.stderr) console.error(result.stderr.trim());
+const requestedJobs = Number.parseInt(process.env.REL_AI_TEST_JOBS || '', 10);
+const availableJobs = Math.max(1, Number(os.availableParallelism?.() || os.cpus().length || 1));
+const jobCount = Math.min(files.length, Number.isFinite(requestedJobs) && requestedJobs > 0 ? requestedJobs : Math.min(4, availableJobs));
+const suiteStarted = Date.now();
+const results = new Array(files.length);
+let nextIndex = 0;
+
+await Promise.all(Array.from({ length: jobCount }, async () => {
+  while (true) {
+    const index = nextIndex;
+    nextIndex += 1;
+    if (index >= files.length) return;
+    const name = files[index];
+    const started = Date.now();
+    console.log(`RUN ${name}`);
+    const result = await runTest(name);
+    const durationMs = Date.now() - started;
+    results[index] = { name, durationMs, ...result };
+    const seconds = (durationMs / 1000).toFixed(1);
+    if (result.exitCode === 0) {
+      console.log(`PASS ${name} (${seconds}s)`);
+    } else {
+      console.error(`FAIL ${name} (${seconds}s)`);
+      if (result.error) console.error(result.error.message);
+      if (result.stdout) console.error(result.stdout.trim());
+      if (result.stderr) console.error(result.stderr.trim());
+    }
   }
-}
+}));
+
+const failures = results.filter(result => result.exitCode !== 0);
 
 function runTest(name) {
   return new Promise(resolve => {
@@ -108,8 +122,15 @@ function runTest(name) {
   });
 }
 
-console.log(`\n${files.length - failures.length}/${files.length} test files passed.`);
+const suiteSeconds = ((Date.now() - suiteStarted) / 1000).toFixed(1);
+const slowest = [...results]
+  .sort((left, right) => right.durationMs - left.durationMs)
+  .slice(0, Math.min(5, results.length))
+  .map(result => `${result.name} ${(result.durationMs / 1000).toFixed(1)}s`)
+  .join(', ');
+console.log(`\n${files.length - failures.length}/${files.length} test files passed in ${suiteSeconds}s with ${jobCount} worker${jobCount === 1 ? '' : 's'}.`);
+if (slowest) console.log(`Slowest: ${slowest}`);
 if (failures.length) {
-  console.error(`Failed: ${failures.join(', ')}`);
+  console.error(`Failed: ${failures.map(result => result.name).join(', ')}`);
   process.exit(1);
 }

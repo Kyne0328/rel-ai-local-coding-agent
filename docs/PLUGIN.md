@@ -49,7 +49,7 @@ The built-in set is Rel.AI's development-methodology layer. Framework, language,
 npm ci --ignore-scripts
 npm run validate:plugin
 npm run test:skills
-npm run test:tool-budgets
+npm run measure:tool-surface
 npm run test:plugin
 ```
 

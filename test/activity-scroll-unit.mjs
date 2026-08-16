@@ -26,8 +26,8 @@ assert.match(activityCardRule, /@apply flex min-w-0 flex-col/, 'the event log ca
 assert.match(activityCardRule, /flex:\s*1 0 auto/, 'the event log card must claim remaining Activity height');
 assert.match(activityCardBodyRule, /flex:\s*1 0 auto/, 'the event log body must fill the card');
 assert.match(activityTableWrapRule, /flex:\s*1 0 auto/, 'the event log table wrapper must fill the body');
-assert.match(activityCss, /\.activity-event-card \.table-wrap\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0/, 'the event log wrapper must span the full card width');
-assert.match(activityCss, /\.activity-table\s*\{[^}]*width:\s*100%/, 'the event log table must span the full wrapper width');
+assert.match(activityCss, /\.activity-event-card \.table-wrap\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0/, 'the event log wrapper must span the full card width'); // rigidity-ok: full-width wrapper is the semantic scroll-container invariant
+assert.match(activityCss, /\.activity-table\s*\{[^}]*width:\s*100%/, 'the event log table must span the full wrapper width'); // rigidity-ok: table must fill the horizontal scroll wrapper
 assert.match(tableWrapRule, /overscroll-behavior-x:\s*contain/, 'horizontal table overscroll should remain contained');
 assert.match(tableWrapRule, /overscroll-behavior-y:\s*auto/, 'vertical wheel and touch scrolling must chain to the Activity page');
 assert.doesNotMatch(tableWrapRule, /overscroll-behavior:\s*contain/, 'the table wrapper must not trap vertical page scrolling');

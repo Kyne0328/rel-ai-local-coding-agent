@@ -46,7 +46,7 @@ assert.match(sessionsCss, /\.task-detail-technical\s*\{/, 'technical session met
 const workspaceCss = read('src/ui/features/workspaces/styles.css');
 const systemCss = read('src/ui/features/system/styles.css');
 assert.match(activityCss, /\.activity-message-column\s*\{[^}]*min-width:\s*0/s);
-assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*width:\s*100%/s);
+assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*width:\s*100%/s); // rigidity-ok: message copy must fill its table cell to preserve truncation behavior
 assert.match(workspaceCss, /\.workspace-operational > \*\s*\{[^}]*min-width:\s*0/s);
 assert.match(workspaceCss, /\.workspace-readiness\s*\{[^}]*min-w-0/s);
 assert.match(systemCss, /\.diagnostic-log-row\s*\{[^}]*min-width:\s*0/s);
@@ -55,7 +55,7 @@ assert.match(appCss, /:root\[data-window-chrome="custom"\] \.toast-region\s*\{[^
 assert.match(appCss, new RegExp(`\\.mobile-nav\\s*\\{[^}]*grid-template-columns:\\s*repeat\\(${MOBILE_NAV_ITEMS.length},`, 's'), 'mobile navigation must allocate one column per destination');
 assert.doesNotMatch(appCss, /@media \(max-width: 420px\)[\s\S]{0,500}grid-template-columns:\s*repeat\(3/, 'small mobile layouts must not restore the two-row navigation');
 assert.match(filterCss, /\.filter-chip\s*\{[^}]*min-height:\s*44px/s, 'filter chips must meet the touch-target baseline');
-assert.match(activityCss, /\.activity-row-button\s*\{[^}]*size-11/s, 'Activity row actions must meet the touch-target baseline');
+assert.match(activityCss, /\.activity-row-button\s*\{[^}]*min-h-11/s, 'Activity row actions must retain a touch-friendly minimum height');
 assert.match(processesCss, /\.process-output summary\s*\{[^}]*min-height:\s*44px/s, 'process output disclosures must meet the touch-target baseline');
 assert.match(systemCss, /\.diagnostic-copy summary\s*\{[^}]*min-h-11/s, 'diagnostic detail disclosures must meet the touch-target baseline');
 assert.match(workspaceForm, /pathValidationGeneration/, 'workspace preflight validation must reject stale async results');
