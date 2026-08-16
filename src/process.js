@@ -52,7 +52,7 @@ function isProcessGroupAlive(pidValue) {
 function isProcessTreeAlive(target) {
   const rootPid = processPid(target);
   if (!rootPid) return false;
-  if (process.platform === 'win32') return isPidAlive(rootPid);
+  if (process.platform === 'win32') return isProcessAlive(target);
   return isProcessGroupAlive(rootPid);
 }
 
@@ -63,6 +63,7 @@ function signalProcessTree(target, options = {}) {
   const signal = force ? 'SIGKILL' : String(options.signal || 'SIGTERM');
 
   if (process.platform === 'win32') {
+    if (!isProcessAlive(target)) return false;
     try {
       const args = [...(force ? ['/f'] : []), '/t', '/pid', String(pid)];
       const killer = spawn(TASKKILL_EXE, args, { stdio: 'ignore', windowsHide: true });
@@ -99,35 +100,36 @@ async function terminateProcessTree(target, options = {}) {
   const graceMs = clampMilliseconds(options.graceMs, 0, 30000, DEFAULT_TERMINATION_GRACE_MS);
   const forceWaitMs = clampMilliseconds(options.forceWaitMs, 0, 30000, DEFAULT_FORCE_WAIT_MS);
   const rootPid = processPid(target);
-  const trackedPids = process.platform === 'win32' ? [rootPid] : [];
+  const trackedTargets = process.platform === 'win32' ? [target] : [];
   const treeAlive = process.platform === 'win32'
-    ? isPidAlive(rootPid)
+    ? isProcessAlive(target)
     : isProcessGroupAlive(rootPid);
   if (!treeAlive) {
     return { exited: true, forced: false, gracefulSignalSent: false, forceSignalSent: false };
   }
 
   const gracefulSignalSent = process.platform === 'win32'
-    ? await signalWindowsProcessTree(rootPid)
+    ? await signalWindowsProcessTree(target)
     : signalProcessTree(target, { signal: options.signal || 'SIGTERM' });
   const gracefulExit = process.platform === 'win32'
-    ? await waitForPidSetExit(trackedPids, graceMs)
+    ? await waitForWindowsTargetsExit(trackedTargets, graceMs)
     : await waitForProcessGroupExit(rootPid, graceMs);
   if (gracefulExit) {
     return { exited: true, forced: false, gracefulSignalSent, forceSignalSent: false };
   }
 
   const forceSignalSent = process.platform === 'win32'
-    ? await forceWindowsProcessTree(trackedPids)
+    ? await forceWindowsProcessTree(trackedTargets)
     : signalProcessTree(target, { force: true, signal: 'SIGKILL' });
   const exited = process.platform === 'win32'
-    ? await waitForPidSetExit(trackedPids, forceWaitMs)
+    ? await waitForWindowsTargetsExit(trackedTargets, forceWaitMs)
     : await waitForProcessGroupExit(rootPid, forceWaitMs);
   return { exited, forced: true, gracefulSignalSent, forceSignalSent };
 }
 
-async function signalWindowsProcessTree(pid, force = false) {
-  if (!isPidAlive(pid)) return false;
+async function signalWindowsProcessTree(target, force = false) {
+  const pid = processPid(target);
+  if (!pid || !isProcessAlive(target)) return false;
   return new Promise(resolve => {
     let settled = false;
     const finish = value => {
@@ -142,28 +144,29 @@ async function signalWindowsProcessTree(pid, force = false) {
       });
       killer.once('error', error => {
         debugKill(`[rel-ai-mcp] ${force ? 'force ' : ''}Windows process tree:`, error);
-        finish(!isPidAlive(pid));
+        finish(!isProcessAlive(target));
       });
-      killer.once('close', code => finish(code === 0 || !isPidAlive(pid)));
+      killer.once('close', code => finish(code === 0 || !isProcessAlive(target)));
     } catch (error) {
       debugKill(`[rel-ai-mcp] ${force ? 'force ' : ''}Windows process tree:`, error);
-      finish(!isPidAlive(pid));
+      finish(!isProcessAlive(target));
     }
   });
 }
 
-async function forceWindowsProcessTree(pids) {
+async function forceWindowsProcessTree(targets) {
   let signalSent = false;
-  for (const pid of [...new Set(pids)].reverse()) {
-    if (!isPidAlive(pid)) continue;
-    signalSent = await signalWindowsProcessTree(pid, true) || signalSent;
+  const uniqueTargets = [...new Map(targets.map(target => [processPid(target), target])).values()];
+  for (const target of uniqueTargets.reverse()) {
+    if (!isProcessAlive(target)) continue;
+    signalSent = await signalWindowsProcessTree(target, true) || signalSent;
   }
   return signalSent;
 }
 
-function waitForPidSetExit(pids, timeoutMs) {
-  const uniquePids = [...new Set(pids)];
-  const exited = () => uniquePids.every(pid => !isPidAlive(pid));
+function waitForWindowsTargetsExit(targets, timeoutMs) {
+  const uniqueTargets = [...new Map(targets.map(target => [processPid(target), target])).values()];
+  const exited = () => uniqueTargets.every(target => !isProcessAlive(target));
   if (exited()) return Promise.resolve(true);
   if (timeoutMs <= 0) return Promise.resolve(exited());
   return new Promise(resolve => {

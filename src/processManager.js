@@ -349,12 +349,15 @@ function flushLogBuffer(config, record, stream) {
   record.logBufferBytes[stream] = 0;
   const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
   const totalKey = `${stream}Bytes`;
+  const startKey = `${stream}StartOffset`;
   record.logWritePromises[stream] = record.logWritePromises[stream]
     .then(async () => {
       if (record.discarded) return;
+      const nextTotalBytes = Number(record[totalKey] || 0) + buffer.length;
       await fs.promises.appendFile(file, buffer);
-      record[totalKey] += buffer.length;
-      await trimLog(record, stream);
+      const nextStartOffset = await trimLog(record, stream, nextTotalBytes);
+      record[totalKey] = nextTotalBytes;
+      if (nextStartOffset != null) record[startKey] = nextStartOffset;
       scheduleMetadataPersist(config, record);
     })
     .catch(error => {
@@ -363,12 +366,10 @@ function flushLogBuffer(config, record, stream) {
   return record.logWritePromises[stream];
 }
 
-async function trimLog(record, stream) {
+async function trimLog(record, stream, totalBytes) {
   const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
-  const totalKey = `${stream}Bytes`;
-  const startKey = `${stream}StartOffset`;
   const stat = await fs.promises.stat(file);
-  if (stat.size <= record.maxLogBytes) return;
+  if (stat.size <= record.maxLogBytes) return null;
   const keep = Math.max(1, Math.floor(record.maxLogBytes * 0.75));
   const buffer = Buffer.allocUnsafe(keep);
   const handle = await fs.promises.open(file, 'r');
@@ -378,7 +379,7 @@ async function trimLog(record, stream) {
     await handle.close();
   }
   await fs.promises.writeFile(file, buffer, { mode: 0o600 });
-  record[startKey] = Math.max(0, Number(record[totalKey] || 0) - keep);
+  return Math.max(0, Number(totalBytes || 0) - keep);
 }
 
 function clearScheduledLogFlush(record, stream) {
@@ -438,7 +439,7 @@ function writeManagedProcess(config, args = {}, context = {}) {
 async function stopManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
   assertProcessAccess(config, record, args, context);
-  const duplicate = TERMINAL_STATUSES.has(record.status) && !isProcessTreeAlive(record.pid);
+  const duplicate = TERMINAL_STATUSES.has(record.status);
   if (!duplicate) {
     await stopRecordInternal(config, record, {
       graceMs: clampNumber(args.graceMs, 0, 30000, DEFAULT_STOP_GRACE_MS)
@@ -1027,9 +1028,7 @@ async function cleanupFailedStartup(config, record) {
 function processNeedsTermination(record) {
   if (ACTIVE_STATUSES.has(record.status)) return true;
   if (record.status === 'orphaned') return isProcessTreeAlive(record.pid);
-  return TERMINAL_STATUSES.has(record.status)
-    && record.runtimeId === RUNTIME_ID
-    && isProcessTreeAlive(record.pid);
+  return false;
 }
 
 function onManagedProcessChange(listener) {

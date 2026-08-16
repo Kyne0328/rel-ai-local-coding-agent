@@ -27,6 +27,8 @@ const RELEASE_GATE_CHECKS = Object.freeze([
   check('current_surface_without_tasks', 'Current tool surface remains synchronous without Tasks capability', 'test/chatgpt-local-hard-cutover-smoke.mjs')
 ]);
 
+const EXCLUSIVE_CHECK_IDS = new Set(['process_lifecycle', 'process_cancellation']);
+
 const RELEASE_GATE_BLOCKERS = Object.freeze([
   'tasks_returned_without_negotiation',
   'malformed_capability_fallback',
@@ -55,14 +57,25 @@ async function runReleaseGate(options = {}) {
   const results = new Array(RELEASE_GATE_CHECKS.length);
   let nextIndex = 0;
 
-  if (!jsonOnly) console.log(`Running ${RELEASE_GATE_CHECKS.length} release checks with ${concurrency} workers.`);
-  await Promise.all(Array.from({ length: concurrency }, async () => {
+  const parallelIndexes = RELEASE_GATE_CHECKS
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => !EXCLUSIVE_CHECK_IDS.has(entry.id));
+  const exclusiveIndexes = RELEASE_GATE_CHECKS
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => EXCLUSIVE_CHECK_IDS.has(entry.id));
+
+  if (!jsonOnly) console.log(`Running ${RELEASE_GATE_CHECKS.length} release checks with ${concurrency} workers; process-tree checks run exclusively.`);
+  await Promise.all(Array.from({ length: Math.min(concurrency, parallelIndexes.length) }, async () => {
     while (true) {
-      const index = nextIndex++;
-      if (index >= RELEASE_GATE_CHECKS.length) return;
-      results[index] = await runCheck(RELEASE_GATE_CHECKS[index]);
+      const queueIndex = nextIndex++;
+      if (queueIndex >= parallelIndexes.length) return;
+      const { entry, index } = parallelIndexes[queueIndex];
+      results[index] = await runCheck(entry);
     }
   }));
+  for (const { entry, index } of exclusiveIndexes) {
+    results[index] = await runCheck(entry);
+  }
 
   if (!jsonOnly) {
     for (const result of results) printResult(result);
