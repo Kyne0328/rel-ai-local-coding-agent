@@ -14,6 +14,8 @@ function createRecoveryWindowManager({
   onSecurityError = () => {}
 } = {}) {
   let window = null;
+  let rendererReady = false;
+  let pendingStatus = null;
 
   function create() {
     if (window && !window.isDestroyed()) return window;
@@ -33,19 +35,26 @@ function createRecoveryWindowManager({
     void Promise.resolve(window.loadURL(rendererUrl)).catch(error => {
       onSecurityError(new Error(`Recovery renderer failed to load: ${error instanceof Error ? error.message : String(error)}`));
     });
-    window.webContents.on('did-finish-load', onReady);
+    window.webContents.on('did-finish-load', () => {
+      rendererReady = true;
+      onReady();
+    });
     window.on('close', event => {
       if (isQuitting()) return;
       event.preventDefault();
       window.hide();
     });
-    window.on('closed', () => { window = null; });
+    window.on('closed', () => {
+      window = null;
+      rendererReady = false;
+    });
     return window;
   }
 
   function show() {
     const recoveryWindow = create();
     recoveryWindow.show();
+    if (rendererReady && pendingStatus !== null) sendStatus(pendingStatus);
     recoveryWindow.focus();
     return recoveryWindow;
   }
@@ -64,12 +73,20 @@ function createRecoveryWindowManager({
     if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
   }
 
+  function sendStatus(status) {
+    pendingStatus = status;
+    if (!rendererReady || !window || window.isDestroyed() || !window.isVisible()) return;
+    const latest = pendingStatus;
+    pendingStatus = null;
+    send('server:status', latest);
+  }
+
   return {
     show,
     hide,
     close,
     getWindow: () => window && !window.isDestroyed() ? window : null,
-    sendStatus: status => send('server:status', status),
+    sendStatus,
     sendLog: log => send('server:log', log)
   };
 }
