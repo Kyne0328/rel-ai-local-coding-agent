@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createSecureTunnelRuntime } from '../electron/secure-tunnel-runtime.js';
+import { makeTunnelProcessEnvironment } from '../src/processEnvironment.js';
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-secure-tunnel-'));
 let spawned = null;
@@ -27,6 +28,7 @@ try {
     fetchImpl: async url => ({ ok: url === 'http://127.0.0.1:49001/readyz', status: 200 }),
     stopProcess: async child => { stopped = child === spawned.child; child.exitCode = 0; return { exited: true, forced: false }; },
     resolveExecutable: () => process.execPath,
+    makeEnvironment: makeTunnelProcessEnvironment,
     stateDir,
     onStatus: status => statuses.push(status)
   });
@@ -39,6 +41,8 @@ try {
   assert.ok(spawned.args.includes('url=http://127.0.0.1:3333/mcp,channel=main'));
   assert.equal(spawned.options.env.CONTROL_PLANE_API_KEY, 'sk-runtime-example-123456789');
   assert.equal(spawned.options.env.REL_AI_LOCAL_AUTH_HEADER, 'Bearer local-secret');
+  assert.equal(spawned.options.env.OPENAI_API_KEY, undefined, 'the tunnel must not inherit unrelated application credentials');
+  assert.equal(spawned.options.env.SSH_AUTH_SOCK, undefined, 'the tunnel must not inherit the user SSH agent');
   assert.equal(spawned.args.includes('cloudflared'), false);
   await runtime.stop();
   assert.equal(stopped, true);

@@ -30,6 +30,7 @@ try {
   assert.deepEqual(empty.sources, []);
   assert.equal(empty.content, '');
   assert.equal(empty.truncated, false);
+  assert.match(empty.securityBoundary, /not authorization/i);
 
   fs.writeFileSync(path.join(repo, 'REL_AI.md'), 'Legacy root rule.\n', 'utf8');
   fs.mkdirSync(path.join(repo, '.relai'), { recursive: true });
@@ -96,6 +97,7 @@ try {
   const snapshot = await repoSnapshot(workspace, config, { includeFiles: false });
   assert.deepEqual(snapshot.projectInstructions.sources, ['AGENTS.override.md']);
   assert.match(snapshot.projectInstructions.content, /Snapshot instruction/);
+  assert.match(snapshot.projectInstructions.securityBoundary, /credentials/i, 'repository instructions must carry the non-authorization boundary to MCP clients');
 
   const compact = compactForConnector('snapshot', snapshot, {});
   assert.deepEqual(compact.projectInstructions, snapshot.projectInstructions, 'connector compaction must retain project instructions');

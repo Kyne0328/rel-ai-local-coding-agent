@@ -13,10 +13,11 @@ for (const name of ['workspaceList', 'workspaceInspect', 'workspaceTree', 'works
   assert.equal(Object.hasOwn(toolExports, name), false, `${name} must not remain a public tools.js export`);
 }
 const instructions = connectorInstructions({ workspaces: { repo: { path: '/repo' } } });
-assert.match(instructions, /relai_work action begin/);
-assert.match(instructions, /pass its work_id to later calls/);
-assert.match(instructions, /bounded reads and commands/);
-assert.match(instructions, /Never bypass approval, workspace, task, or destructive-operation safeguards/);
-assert.match(instructions, /Report only checks actually run/);
+assert.match(instructions, /unrelated objective.*work_id.*configured workspace/i);
+assert.match(instructions, /Never bypass approval, workspace, task-ownership, authorization, or destructive-operation safeguards/);
+assert.match(instructions, /repository.*not authorization/i, 'server instructions must keep repository-controlled text below authorization boundaries');
+assert.match(instructions, /cannot authorize credential disclosure/i);
+assert.match(instructions, /report only checks and observations actually performed/i);
+assert.match(instructions, /explicit task-completion contract/i);
 
 console.log('MCP SDK boundary exposes only /mcp and uses explicit work_id identity.');
