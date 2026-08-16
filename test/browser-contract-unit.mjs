@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 
-import { relaiHttpProbe } from "../src/bridge/browser.js";
+import { relaiHttpProbe } from "../src/bridge/httpProbe.js";
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-browser-contract-'));
 const workspaceRoot = path.join(temp, 'repo');

@@ -1,18 +1,6 @@
-const TASK_INTENTS = Object.freeze([
-  'auto',
-  'investigation',
-  'bugfix',
-  'feature',
-  'refactor',
-  'migration',
-  'cleanup',
-  'documentation',
-  'performance',
-  'review',
-  'release',
-  'other'
-]);
-const TASK_INTENT_SET = new Set(TASK_INTENTS);
+import { WORKFLOW_INTENTS } from './contracts.js';
+
+const TASK_INTENT_SET = new Set(WORKFLOW_INTENTS);
 
 function normalizeTaskIntent(value, fallback = 'auto') {
   const intent = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
