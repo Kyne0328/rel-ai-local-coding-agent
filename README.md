@@ -19,6 +19,7 @@
 
 <p align="center">
   <a href="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/pages.yml"><img src="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/pages.yml/badge.svg" alt="Deploy Website to GitHub Pages status" /></a>
   <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-mcp?display_name=tag&style=flat-square" alt="Latest Rel.AI MCP release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-mcp?style=flat-square" alt="Apache License 2.0" /></a>
   <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square" alt="Windows, macOS, and Linux" />
