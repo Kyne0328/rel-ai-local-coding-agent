@@ -44,11 +44,24 @@ const SOURCE_INVARIANTS = Object.freeze([
   ['types/boundaries.d.ts', /ToolLifecycleMetadata|lifecycle\?:\s*ToolLifecycleMetadata/, 'removed-tool-lifecycle-type'],
   ['scripts/electron-size-baseline.json', /"electronVersion"\s*:/, 'decorative-package-baseline-version'],
   ['scripts/electron-size-baseline-linux.json', /"electronVersion"\s*:/, 'decorative-package-baseline-version'],
-  ['test/mcp-legacy-adapter-unit.mjs', /chatgpt-local-compat-smoke\.mjs|Modern protocol:\\s\*/, 'stale-protocol-test-wording']
+  ['test/mcp-legacy-adapter-unit.mjs', /chatgpt-local-compat-smoke\.mjs|Modern protocol:\\s\*/, 'stale-protocol-test-wording'],
+  ['src/release.js', /Authentication:\s*OAuth/i, 'obsolete-oauth-setup-guidance'],
+  ['src/config.js', /\b(?:toolMode|trustedLocalAgent|cleanupOlderThanHours)\b/, 'removed-hard-cutover-config'],
+  ['src/httpServer.js', /\/api\/(?:settings|history\/reset|mcp\/(?:recovery|connection)|health-monitor|caution-summary|readiness)\b/, 'removed-dashboard-http-surface'],
+  ['src/mcp/connectionManager.js', /\b(?:retryConnection|connectedClientCount|connectedPrincipalCount|activeSessions|recentSessions|reconnectAttemptCount|lastRecoveryResult|manualRecoveryRequired|capabilityMismatches|reconnectStarted|reconnectSucceeded|reconnectFailed)\b/, 'removed-stateful-mcp-residue'],
+  ['src/mcp/principal.js', /authMode\s*=\s*['"]oauth['"]|authMode[^\n]*\|\|\s*['"]oauth['"]/, 'removed-oauth-principal-fallback'],
+  ['src/processManager.js', /authMode[^\n]*\|\|\s*['"]oauth['"]/, 'removed-oauth-principal-fallback'],
+  ['src/ui/task-identity.js', /\b(?:oauthRecovery|connectorRecovery|clientTasksCapability|nativeTasksSupported|clientAdvertisedTasks|taskExecutionMode)\b|issuer_disagreement|corrupt_oauth_state|connector_reregistration_required/, 'removed-dashboard-recovery-compatibility'],
+  ['src/ui/preferences.js', /relai:appearance-change/, 'unconsumed-ui-event'],
+  ['src/ui/features/workspaces/recents.js', /relai:workspace-recents-change/, 'unconsumed-ui-event'],
+  ['src/ui/features/settings/desktop-notifications.js', /relai:notification-preferences-change/, 'unconsumed-ui-event']
 ]);
 
 const REMOVED_FILES = Object.freeze([
-  ['scripts/packaging-audit-policy.json', 'obsolete-packaging-audit-exception']
+  ['scripts/packaging-audit-policy.json', 'obsolete-packaging-audit-exception'],
+  ['examples/chatgpt-mcp-config.example.json', 'obsolete-chatgpt-stdio-example'],
+  ['src/ui/components/select.js', 'orphaned-select-component'],
+  ['src/http/dashboardHistory.js', 'superseded-history-reset-handler']
 ]);
 
 function trackedFiles(root) {

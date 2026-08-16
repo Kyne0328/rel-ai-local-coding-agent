@@ -1,13 +1,10 @@
 {
-  "version": 6,
+  "version": 7,
   "stateDir": "/Users/you/.rel-ai-mcp",
-  "auditLogPath": "\\Users\\you\\.rel-ai-mcp\\audit.jsonl",
-  "toolMode": "chatgpt_local_repo",
-  "trustedLocalAgent": true,
+  "auditLogPath": "",
   "trustedBudgetMultiplier": 2,
   "productUx": {
     "staleHours": 24,
-    "cleanupOlderThanHours": 168,
     "enableStateExport": true
   },
   "release": {

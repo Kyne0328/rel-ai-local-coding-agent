@@ -2,22 +2,6 @@ import { isNativeTaskStatus, isTerminalDashboardTaskStatus } from '../taskState.
 
 const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
 
-export const TASK_ENTITY_IDENTIFIERS = Object.freeze({
-  logicalTask: Object.freeze({ label: 'Work session', field: 'work_id', purpose: 'Repository objective spanning multiple tool calls' }),
-  nativeTask: Object.freeze({ label: 'Native MCP task', field: 'taskId', purpose: 'One asynchronous MCP request' }),
-  process: Object.freeze({ label: 'Managed process', field: 'processId', purpose: 'One operating-system process' })
-});
-
-export const DASHBOARD_RUNTIME_HANDOFF_FIELDS = Object.freeze({
-  endpoint: ['reachable', 'url', 'checkedAt', 'errorCode'],
-  oauth: ['state', 'activeIssuer', 'persistedIssuer', 'corruptState', 'reRegistrationRequired', 'recoveryAction'],
-  hostRequest: ['requestId', 'connectionId', 'method', 'startedAt', 'completedAt', 'status', 'clientInfo', 'clientCapabilities', 'clientTasksCapability', 'executionMode'],
-  logicalTask: ['work_id', 'title', 'objective', 'workspace', 'status', 'validation', 'repairable', 'startedAt', 'updatedAt', 'endedAt'],
-  nativeTask: ['taskId', 'status', 'statusMessage', 'createdAt', 'lastUpdatedAt', 'origin', 'logicalTaskId', 'inputRequired', 'resumable', 'errorCode', 'cancelRequested', 'cancellationRequestedAt', 'cancellationAcknowledgedAt', 'result', 'error', 'internal', 'actions'],
-  process: ['processId', 'status', 'commandSummary', 'startedAt', 'endedAt', 'exitCode', 'workSessionId', 'originatingTaskId', 'lifecycle', 'stdoutBytes', 'stderrBytes', 'stdoutTail', 'stderrTail'],
-  connector: ['health', 'registrationId', 'issuer', 'refreshRequired', 'reRegistrationRequired']
-});
-
 export function taskEntityView(value = {}) {
   return {
     logicalTaskId: text(value.work_id || value.logicalTaskId || value.workSessionId || value.id),
@@ -43,14 +27,11 @@ export function clientCapabilityViews(data = {}) {
 
 function clientCapabilityView(value = {}) {
   const support = observedTasksSupport(value);
-  const explicitMode = executionMode(value.executionMode || value.taskExecutionMode || value.clientTasksCapability?.mode || value.mode);
-  const mode = explicitMode !== 'unknown'
-    ? explicitMode
-    : support === 'supported'
-      ? 'native_tasks'
-      : support === 'not_advertised'
-        ? 'bounded_synchronous'
-        : 'unknown';
+  const mode = support === 'supported'
+    ? 'native_tasks'
+    : support === 'not_advertised'
+      ? 'bounded_synchronous'
+      : 'unknown';
   const clientInfo = value.clientInfo && typeof value.clientInfo === 'object' ? value.clientInfo : {};
   const clientName = text(value.clientName || clientInfo.name);
   const clientVersion = text(value.clientVersion || clientInfo.version);
@@ -322,52 +303,14 @@ export function processOutputView(process = {}) {
   };
 }
 
-export function recoveryStateView(value = {}) {
-  const state = text(value.recoveryState || value.nativeTask?.status || value.oauthRecovery?.state || value.connectorRecovery?.state).toLowerCase();
-  const validationFailed = value.validation === 'failed' && value.repairable !== false;
-  if (value.nativeTasksSupported === false) return view('Native Tasks not advertised', 'This client did not advertise native MCP Tasks support. Rel.AI may use bounded synchronous fallback.', 'No server recovery is required.', 'warn');
-  if (state === 'input_required') return view('Input required', 'The native MCP task is paused until the host supplies the requested input.', 'Return to the host request and provide the required input.', 'warn');
-  if (state === 'interrupted_non_resumable') return view('Task interrupted', 'The native task cannot be resumed after interruption.', 'Start a new host request; keep the work session for repair context.', 'bad');
-  if (state === 'cancelled' || state === 'canceled') return view('Native task cancelled', 'The asynchronous MCP request ended without completing.', 'Review the work session before starting another request.', 'warn');
-  if (validationFailed) return view('Validation failed', 'The work session remains repairable under the same work_id.', 'Repair the failure and validate again with the same work session.', 'bad');
-  if (state === 'issuer_disagreement') return view('OAuth issuer mismatch', 'The active issuer differs from the persisted issuer.', 'Use targeted connector recovery; do not reset unrelated registrations.', 'bad');
-  if (state === 'corrupt_oauth_state') return view('OAuth state is corrupt', 'Stored OAuth state could not be read safely.', 'Repair only the affected issuer state, then reauthorize.', 'bad');
-  if (state === 'connector_reregistration_required') return view('Connector refresh required', 'The current connector registration is no longer valid for this endpoint.', 'Refresh or recreate only the affected connector.', 'warn');
-  return null;
-}
-
 function capabilityCandidates(data) {
   const connection = data.mcpConnection && typeof data.mcpConnection === 'object' ? data.mcpConnection : data;
-  const directCollections = [
-    data.taskCapabilityConnections,
-    data.mcpConnections,
-    connection.activeConnections,
-    connection.connections,
-    connection.activeSessions,
-    connection.recentSessions
-  ];
-  const direct = directCollections.flatMap(value => Array.isArray(value) ? value : []);
-  const events = (Array.isArray(connection.recentEvents) ? connection.recentEvents : [])
+  return (Array.isArray(connection.recentEvents) ? connection.recentEvents : [])
     .filter(event => event?.type === 'mcp_request_received')
     .sort((left, right) => timestamp(right) - timestamp(left));
-  if (hasCapabilitySignal(connection)) direct.push(connection);
-  return [...direct, ...events];
-}
-
-function hasCapabilitySignal(value) {
-  return value && typeof value === 'object' && [
-    'clientCapabilities',
-    'clientTasksCapability',
-    'nativeTasksSupported',
-    'clientAdvertisedTasks',
-    'executionMode',
-    'taskExecutionMode'
-  ].some(key => Object.hasOwn(value, key));
 }
 
 function observedTasksSupport(value) {
-  const explicit = explicitSupport(value);
-  if (explicit !== 'unknown') return explicit;
   if (!Object.hasOwn(value || {}, 'clientCapabilities')) return 'unknown';
   const capabilities = value.clientCapabilities;
   if (!capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) return 'unknown';
@@ -375,32 +318,6 @@ function observedTasksSupport(value) {
   const extensions = capabilities.extensions;
   if (!extensions || typeof extensions !== 'object' || Array.isArray(extensions)) return 'unknown';
   return Object.hasOwn(extensions, TASKS_EXTENSION_ID) ? 'supported' : 'not_advertised';
-}
-
-function explicitSupport(value = {}) {
-  const candidates = [
-    value.clientTasksCapability?.supported,
-    value.nativeTasksSupported,
-    value.clientAdvertisedTasks,
-    value.tasksSupported
-  ];
-  for (const candidate of candidates) {
-    if (candidate === true) return 'supported';
-    if (candidate === false) return 'not_advertised';
-  }
-  const state = normalize(typeof value.clientTasksCapability === 'string'
-    ? value.clientTasksCapability
-    : value.clientTasksCapability?.state || value.capabilityState);
-  if (['supported', 'advertised', 'capability_present'].includes(state)) return 'supported';
-  if (['unsupported', 'not_advertised', 'capability_absent'].includes(state)) return 'not_advertised';
-  return 'unknown';
-}
-
-function executionMode(value) {
-  const mode = normalize(value);
-  if (['native_tasks', 'native_asynchronous', 'asynchronous'].includes(mode)) return 'native_tasks';
-  if (['bounded_synchronous', 'synchronous_fallback', 'synchronous'].includes(mode)) return 'bounded_synchronous';
-  return 'unknown';
 }
 
 function dashboardActionUrl(value) {
@@ -419,10 +336,6 @@ function timestamp(value) {
 
 function normalize(value) {
   return text(value).toLowerCase().replace(/[\s-]+/g, '_');
-}
-
-function view(title, message, action, tone) {
-  return { title, message, action, tone };
 }
 
 function text(value) {
