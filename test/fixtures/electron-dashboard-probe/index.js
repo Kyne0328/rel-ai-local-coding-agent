@@ -79,21 +79,40 @@ app.whenReady().then(async () => {
     };
   })()`);
 
-  await waitFor(win, `document.getElementById('lastUpdated')?.textContent.trim() !== 'Updated just now'`, 10_000);
   const liveToolBefore = await win.webContents.executeJavaScript(`(() => {
     window.__relaiProbeSessionsPage = document.querySelector('.sessions-page');
+    window.__relaiProbeLiveToolUpdate = null;
+    window.__relaiProbeLiveToolListener = event => {
+      if (event.detail?.type !== 'connection.updated') return;
+      const recentEvents = event.detail?.data?.mcpConnection?.recentEvents || [];
+      const request = recentEvents.find(item => (
+        item?.type === 'mcp_request_received'
+        && item?.method === 'tools/list'
+        && item?.clientInfo?.name === 'dashboard-live-rendering-acceptance'
+      ));
+      if (!request) return;
+      window.setTimeout(() => {
+        window.__relaiProbeLiveToolUpdate = {
+          type: event.detail.type,
+          requestId: request.requestId || ''
+        };
+      }, 0);
+    };
+    window.addEventListener('relai:diagnostics-live', window.__relaiProbeLiveToolListener);
     return {
       routeReady: Boolean(window.__relaiProbeSessionsPage),
       updated: document.getElementById('lastUpdated')?.textContent.trim() || ''
     };
   })()`);
   fs.writeFileSync(outputPath, JSON.stringify({ stage: 'dashboard_ready', liveToolBefore }, null, 2));
-  await waitFor(win, `document.getElementById('lastUpdated')?.textContent.trim() === 'Updated just now'`, 10_000);
+  await waitFor(win, `Boolean(window.__relaiProbeLiveToolUpdate)`, 10_000);
   const liveToolUpdate = await win.webContents.executeJavaScript(`(() => {
     const current = document.querySelector('.sessions-page');
     const updated = document.getElementById('lastUpdated')?.textContent.trim() || '';
     return {
-      received: updated === 'Updated just now' && updated !== ${JSON.stringify(liveToolBefore.updated)},
+      received: Boolean(window.__relaiProbeLiveToolUpdate),
+      eventType: window.__relaiProbeLiveToolUpdate?.type || '',
+      requestId: window.__relaiProbeLiveToolUpdate?.requestId || '',
       beforeUpdated: ${JSON.stringify(liveToolBefore.updated)},
       afterUpdated: updated,
       sameRouteNode: Boolean(current && current === window.__relaiProbeSessionsPage)
