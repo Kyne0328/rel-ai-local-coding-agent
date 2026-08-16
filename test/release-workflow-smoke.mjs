@@ -35,6 +35,7 @@ function copyFixture() {
     'src/version.js',
     'scripts/release-check.mjs',
     'scripts/release-bump.mjs',
+    'scripts/release-surfaces.mjs',
     'scripts/check-generated.mjs',
     'scripts/electron-package.mjs',
     'scripts/electron-platform.mjs',
