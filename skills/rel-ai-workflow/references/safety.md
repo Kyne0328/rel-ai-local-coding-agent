@@ -6,7 +6,7 @@ Work only inside the configured workspace bound to the current `work_id`. Inspec
 
 ## Approval-gated operations
 
-Never bypass or simulate approval. Preserve the signed request state and retry only with the accepted response. Approval remains required for workspace reset, worktree removal, push, and commits that stage all changes or include sensitive authorization.
+Never bypass or simulate approval. Preserve the signed request state and retry only with the accepted response. Approval remains required for workspace reset, push, and commits that stage all changes or include sensitive authorization.
 
 ## Destructive changes
 
@@ -15,10 +15,6 @@ Prefer focused edits or `relai_changes` action `restore` for listed tracked path
 ## Command execution
 
 Use `relai_exec` for bounded one-shot development commands and `relai_process` for persistent or interactive commands. Do not use either as an unrestricted command router. Respect configured workspace, environment, timeout, output, cancellation, and process-tree limits. A successful command is not final validation unless it ran through the validation operation.
-
-## Worktree removal
-
-List and inspect the worktree first. Resolve dirty files and active managed processes. Do not force removal to bypass those checks. The branch is preserved, but local uncommitted work can still be lost if safeguards are overridden.
 
 ## Commit, push, and pull requests
 

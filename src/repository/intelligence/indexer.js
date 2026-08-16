@@ -408,8 +408,6 @@ function serializableWorkspace(workspace) {
   return {
     alias: String(workspace?.alias || ''),
     path: String(workspace?.path || ''),
-    sourceAlias: String(workspace?.sourceAlias || ''),
-    taskSandbox: workspace?.taskSandbox === true,
     context: {
       includeRoots: Array.isArray(context.includeRoots) ? context.includeRoots : Array.isArray(context.includePaths) ? context.includePaths : [],
       excludePaths: Array.isArray(context.excludePaths) ? context.excludePaths : []

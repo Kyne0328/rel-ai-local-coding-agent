@@ -1,10 +1,8 @@
 'use strict';
 
-import { discardTaskSandbox } from '../parallelTaskSandbox.js';
 import { requestCurrentTaskCancellation, taskError } from '../toolActivity.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
-import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
 
 async function cancelTask(config, args = {}) {
   const taskId = String(args.work_id || '').trim();
@@ -12,7 +10,6 @@ async function cancelTask(config, args = {}) {
 
   const session = readTaskHistorySession(config, taskId);
   if (session?.status === 'cancelled') {
-    await discardCancelledTaskSandbox(config, session, taskId);
     return {
       ok: true,
       work_id: taskId,
@@ -31,8 +28,6 @@ async function cancelTask(config, args = {}) {
     initiator: 'connector_client'
   });
 
-  await discardCancelledTaskSandbox(config, session, taskId);
-
   return {
     ok: true,
     work_id: cancellation.taskId,
@@ -44,15 +39,6 @@ async function cancelTask(config, args = {}) {
     cancelledAt: cancellation.cancelledAt,
     progress: cancellation.progress
   };
-}
-
-async function discardCancelledTaskSandbox(config, session, taskId) {
-  if (!session?.workspace) return;
-  await runWorkspaceOperation(
-    session.workspace,
-    () => discardTaskSandbox(session.workspace, config, taskId),
-    { mode: 'write', scope: 'workspace', taskId }
-  );
 }
 
 export { cancelTask };

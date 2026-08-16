@@ -236,10 +236,9 @@ function openPeerGraph(peer, config, statusOverride = null) {
 
 function configuredPeers(workspace, config) {
   const currentPath = normalizeFsPath(workspace.path);
-  const sourceAlias = workspace?.taskSandbox === true ? String(workspace.sourceAlias || '').trim() : '';
   const peers = [];
   for (const [alias, entry] of Object.entries(config.workspaces || {})) {
-    if (alias === workspace.alias || alias === sourceAlias || !entry?.path) continue;
+    if (alias === workspace.alias || !entry?.path) continue;
     const peerPath = normalizeFsPath(entry.path);
     if (!peerPath || peerPath === currentPath) continue;
     peers.push({ alias, path: entry.path, context: entry.context || {} });

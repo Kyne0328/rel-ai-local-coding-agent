@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 
 import { getOperationDefinition } from '../src/tools/actionDefinitions.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
-import { hasPendingTaskWriter, runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
+import { runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
+
+assert.equal(getOperationDefinition(OP.EDIT)?.behavior?.concurrencyScope, 'workspace', 'relai_edit mutations must use the shared workspace barrier');
+assert.equal(getOperationDefinition(OP.EXEC)?.behavior?.concurrencyScope, 'workspace', 'relai_exec mutating commands must advertise workspace-level coordination');
 
 const order = [];
 const first = runWorkspaceOperation('repo', async () => {
@@ -200,7 +203,6 @@ async function nextTurn() {
     await releaseWriter.promise;
   }, { mode: 'write', scope: 'task', taskId: 'task-abort' });
   await writerStarted.promise;
-  assert.equal(hasPendingTaskWriter('abort-task', 'task-abort'), true);
 
   let readerRan = false;
   const controller = new AbortController();
@@ -221,7 +223,6 @@ async function nextTurn() {
   await writer;
   await nextTurn();
   assert.equal(readerRan, false, 'an aborted waiter must never run after its blocker releases');
-  assert.equal(hasPendingTaskWriter('abort-task', 'task-abort'), false);
   assert.equal(pendingWorkspaceOperations(), 0);
 }
 
@@ -249,27 +250,6 @@ async function nextTurn() {
   releaseGlobal.resolve();
   await globalWriter;
   assert.equal(taskCallRan, false);
-  assert.equal(pendingWorkspaceOperations(), 0);
-}
-
-// Stable-read routing must see a writer even while it is queued behind readers.
-{
-  const readerStarted = deferred();
-  const releaseReader = deferred();
-  const reader = runWorkspaceOperation('pending-writer', async () => {
-    readerStarted.resolve();
-    await releaseReader.promise;
-  }, { mode: 'read', scope: 'task', taskId: 'task-c' });
-  await readerStarted.promise;
-
-  const writer = runWorkspaceOperation('pending-writer', async () => {}, {
-    mode: 'write', scope: 'task', taskId: 'task-c'
-  });
-  await nextTurn();
-  assert.equal(hasPendingTaskWriter('pending-writer', 'task-c'), true);
-  releaseReader.resolve();
-  await Promise.all([reader, writer]);
-  assert.equal(hasPendingTaskWriter('pending-writer', 'task-c'), false);
   assert.equal(pendingWorkspaceOperations(), 0);
 }
 

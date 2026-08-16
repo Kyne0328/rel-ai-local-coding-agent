@@ -11,7 +11,6 @@ import { readProjectInstructions, summarizeProjectInstructions } from './project
 import { normalizeAllowedKeys } from './processEnvironment.js';
 import { writeJsonAtomic } from './durableState.js';
 import { defaultStateDir } from './stateLayout.js';
-import { resolveTaskSandboxWorkspace } from './parallelTaskSandbox.js';
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(defaultStateDir(), "config.json");
 }
@@ -402,12 +401,7 @@ function resolveWorkspace(config, alias) {
     path: realRoot,
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
-    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
-    ...(entry.taskSandbox === true ? {
-      taskSandbox: true,
-      sourceAlias: entry.sourceAlias,
-      sourceBranch: entry.sourceBranch
-    } : {})
+    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
   };
 }
 
@@ -416,8 +410,7 @@ function allWorkspaceAliases(config) {
 }
 
 function workspaceEntryForAlias(config, alias) {
-  if (Object.hasOwn(config.workspaces || {}, alias)) return config.workspaces[alias];
-  return resolveTaskSandboxWorkspace(config, alias);
+  return Object.hasOwn(config.workspaces || {}, alias) ? config.workspaces[alias] : null;
 }
 
 function isSafeWorkspaceAlias(value) {

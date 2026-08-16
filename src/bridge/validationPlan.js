@@ -107,7 +107,7 @@ async function createValidationFingerprint(workspace, config, options = {}) {
   };
   const descriptor = {
     version: FINGERPRINT_VERSION,
-    workspace: workspace.sourceAlias || workspace.alias,
+    workspace: workspace.alias,
     scopePaths,
     relevantFiles,
     checks

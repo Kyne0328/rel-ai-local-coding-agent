@@ -31,7 +31,8 @@ for (const removed of [
   'src/tools/dispatch.js',
   'src/bridge/browser.js',
   'src/operationTasks.js',
-  'src/worktreeManager.js'
+  'src/worktreeManager.js',
+  'src/parallelTaskSandbox.js'
 ]) assert.equal(fs.existsSync(path.join(root, removed)), false, `${removed} must remain removed`);
 
 for (const required of [
