@@ -9,7 +9,7 @@ function git(args, options = {}) {
   return execFileSync(GIT_EXECUTABLE, args, options);
 }
 
-import { ensureSessionStarted, touchSessionPolicy, readSessionPolicy, resolvePolicy, writeSessionPolicy, SESSION_IDLE_TTL_MS } from "../src/policyResolver.js";
+import { ensureSessionStarted, touchSessionPolicy, readSessionPolicy, resolvePolicy, writeSessionPolicy, POLICY_CACHE_RECHECK_MS, SESSION_IDLE_TTL_MS } from "../src/policyResolver.js";
 import { relaiRead, workspaceTidyPlan } from "../src/localRepoBridge.js";
 
 function makeRepo() {
@@ -89,7 +89,8 @@ const sessionFile = (stateDir, alias, taskId) => path.join(stateDir, 'sessions',
   const data = JSON.parse(fs.readFileSync(file, 'utf8'));
   data.updatedAt = new Date(Date.now() - SESSION_IDLE_TTL_MS - 1000).toISOString();
   fs.writeFileSync(file, JSON.stringify(data));
-  assert.equal(readSessionPolicy(config, 'ws', taskId), null, 'stale session must read as expired');
+  await new Promise(resolve => setTimeout(resolve, POLICY_CACHE_RECHECK_MS + 20));
+  assert.equal(readSessionPolicy(config, 'ws', taskId), null, 'stale session must read as expired after the bounded external-file cache window');
   const restarted = await ensureSessionStarted(config, 'ws', workspacePath, { taskId });
   assert.equal(restarted, true, 'expired session must be restartable');
   fs.rmSync(root, { recursive: true, force: true });
@@ -105,6 +106,7 @@ const sessionFile = (stateDir, alias, taskId) => path.join(stateDir, 'sessions',
   const before = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws', taskId), 'utf8'));
   before.updatedAt = new Date(Date.now() - 60_000).toISOString();
   fs.writeFileSync(sessionFile(stateDir, 'ws', taskId), JSON.stringify(before));
+  await new Promise(resolve => setTimeout(resolve, POLICY_CACHE_RECHECK_MS + 20));
   const ok = touchSessionPolicy(config, 'ws', taskId);
   assert.equal(ok, true);
   const after = JSON.parse(fs.readFileSync(sessionFile(stateDir, 'ws', taskId), 'utf8'));

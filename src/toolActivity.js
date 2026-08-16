@@ -15,10 +15,11 @@ import {
   sanitizeTaskRecord
 } from './taskObservability.js';
 import { isTerminalTaskStatus, normalizeLiveTaskStatus } from './taskState.js';
+import { DEFAULT_TASK_STALE_MS, MAX_TASK_STALE_MS, MIN_TASK_STALE_MS } from './taskTiming.js';
 import { canonicalTaskSnapshot, lifecycleChangedFields } from './taskLifecycle.js';
 import { classifyTaskIntent } from './workflow/intent.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
-const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
+const DEFAULT_TASK_IDLE_MS = DEFAULT_TASK_STALE_MS;
 const activityContext = new AsyncLocalStorage();
 
 function createToolActivityTracker(options = {}) {
@@ -915,7 +916,7 @@ function defaultOperation(tool) {
 function resolveIdleMs(value) {
   const configured = Number(value ?? process.env.REL_AI_MCP_TASK_IDLE_MS ?? DEFAULT_TASK_IDLE_MS);
   if (!Number.isFinite(configured)) return DEFAULT_TASK_IDLE_MS;
-  return Math.min(Math.max(configured, 15_000), 10 * 60_000);
+  return Math.min(Math.max(configured, MIN_TASK_STALE_MS), MAX_TASK_STALE_MS);
 }
 
 const defaultTracker = createToolActivityTracker();

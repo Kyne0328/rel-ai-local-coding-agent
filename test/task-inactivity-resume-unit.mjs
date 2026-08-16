@@ -6,7 +6,8 @@ import {
   isTerminalTaskStatus,
   normalizeHistoricalTaskStatus
 } from '../src/taskState.js';
-import { createToolActivityTracker } from '../src/toolActivity.js';
+import { SESSION_IDLE_TTL_MS } from '../src/policyResolver.js';
+import { createToolActivityTracker, DEFAULT_TASK_IDLE_MS } from '../src/toolActivity.js';
 
 assert.equal(CANONICAL_TASK_STATUSES.includes('inactive'), true);
 assert.equal(isTerminalTaskStatus('inactive'), false);
@@ -23,13 +24,15 @@ assert.equal(normalizeHistoricalTaskStatus('cancelled', { completionKnown: false
 assert.equal(normalizeHistoricalTaskStatus('failed', { completionKnown: false, endReason: 'inactivity_window' }), 'inactive');
 assert.equal(normalizeHistoricalTaskStatus('cancelled', { completionKnown: false, endReason: 'explicit_cancellation' }), 'cancelled');
 assert.equal(normalizeHistoricalTaskStatus('completed', { completionKnown: true, endReason: 'explicit_completion' }), 'completed');
+assert.equal(DEFAULT_TASK_IDLE_MS, SESSION_IDLE_TTL_MS, 'task inactivity and session ownership must share one stale threshold');
+assert.ok(DEFAULT_TASK_IDLE_MS >= 60 * 60_000, 'ordinary short idle gaps must remain open rather than being classified as stale/inactive');
 
 let now = 1_000;
 let timerId = 0;
 const timers = new Map();
 const events = [];
 const tracker = createToolActivityTracker({
-  idleMs: 5_000,
+  idleMs: 20_000,
   now: () => now,
   setTimer(callback, delay) { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
   clearTimer(id) { timers.delete(id); }
@@ -40,7 +43,11 @@ const taskId = begin.taskId;
 begin({ ok: true });
 const failed = tracker.beginConnectorToolCall({ tool: 'relai_search', workspace: 'repo', taskId });
 failed({ ok: false, error: 'Recoverable probe failed.' });
-now += 5_000;
+now += 10_000;
+const stillOpen = tracker.getToolActivity().tasks.find(task => task.taskId === taskId);
+assert.equal(stillOpen?.status, 'planning', 'idle work must stay open before the stale threshold');
+assert.equal(stillOpen?.activeCalls, 0);
+now += 10_000;
 for (const timer of [...timers.values()]) timer.callback();
 timers.clear();
 const inactive = tracker.getToolActivity().lastTask;

@@ -20,6 +20,7 @@ git('init');
 git('config', 'user.email', 'relai@example.test');
 git('config', 'user.name', 'RelAI Test');
 fs.writeFileSync(path.join(workspacePath, 'ambient.txt'), 'baseline\n');
+fs.writeFileSync(path.join(workspacePath, 'shared.js'), 'export const shared = 0;\n');
 git('add', '.');
 git('commit', '-m', 'fixture');
 fs.writeFileSync(path.join(workspacePath, 'ambient.txt'), 'pre-existing dirty change\n');
@@ -66,23 +67,37 @@ try {
   assert.ok(initial.baseline.changedFiles.includes('ambient.txt'));
   assert.deepEqual(initial.taskOwnedChangedFiles, []);
   assert.equal(initial.mutationGeneration, 0);
+  assert.deepEqual(taskIntegrity.taskCommitOwnership(config, taskOne, 'app').ownedFiles, []);
+  assert.ok(readWorkspaceIntegrity(config, 'app').uncommittedOwners['ambient.txt']?.some(owner => owner !== taskOne), 'pre-existing dirty work must remain an ambient owner rather than becoming task-owned');
 
   fs.writeFileSync(path.join(workspacePath, 'task-one.js'), 'export const one = 1;\n');
   await recordTaskIntegrityEvent(config, event(taskOne, 'edit', { changedFiles: ['task-one.js'] }));
-  fs.writeFileSync(path.join(workspacePath, 'task-two.js'), 'export const two = 2;\n');
   await recordTaskIntegrityEvent(config, event(taskTwo, 'work.begin'));
+  fs.writeFileSync(path.join(workspacePath, 'task-two.js'), 'export const two = 2;\n');
   await recordTaskIntegrityEvent(config, event(taskTwo, 'edit', { changedFiles: ['task-two.js'] }));
+  fs.writeFileSync(path.join(workspacePath, 'shared.js'), 'export const shared = 1;\n');
+  await recordTaskIntegrityEvent(config, event(taskOne, 'edit', { changedFiles: ['shared.js'] }));
+  fs.writeFileSync(path.join(workspacePath, 'shared.js'), 'export const shared = 2;\n');
+  await recordTaskIntegrityEvent(config, event(taskTwo, 'edit', { changedFiles: ['shared.js'] }));
 
   assert.equal(typeof taskIntegrity.taskOwnedChangedFiles, 'function', 'task integrity must expose exact task-owned changed files');
-  assert.deepEqual(taskIntegrity.taskOwnedChangedFiles(config, taskOne, 'app'), ['task-one.js']);
+  assert.deepEqual(taskIntegrity.taskOwnedChangedFiles(config, taskOne, 'app'), ['task-one.js', 'shared.js']);
+  assert.deepEqual(taskIntegrity.taskCommitOwnership(config, taskOne, 'app'), {
+    ownedFiles: ['shared.js', 'task-one.js'],
+    conflictingFiles: ['shared.js']
+  }, 'current ownership must distinguish exclusive task paths from shared concurrent paths');
 
   const one = readTaskIntegrity(config, taskOne, 'app');
   const two = readTaskIntegrity(config, taskTwo, 'app');
-  assert.deepEqual(one.taskOwnedChangedFiles, ['task-one.js']);
-  assert.deepEqual(two.taskOwnedChangedFiles, ['task-two.js']);
+  assert.deepEqual(one.taskOwnedChangedFiles, ['task-one.js', 'shared.js']);
+  assert.deepEqual(two.taskOwnedChangedFiles, ['task-two.js', 'shared.js']);
   assert.equal(one.taskOwnedChangedFiles.includes('ambient.txt'), false);
   assert.equal(one.taskOwnedChangedFiles.includes('task-two.js'), false);
   assert.equal(two.taskOwnedChangedFiles.includes('task-one.js'), false);
+  assert.deepEqual(taskIntegrity.taskCommitOwnership(config, taskTwo, 'app'), {
+    ownedFiles: ['shared.js', 'task-two.js'],
+    conflictingFiles: ['shared.js']
+  });
 
   await recordTaskIntegrityEvent(config, event(taskOne, 'validate.checks', {
     validationStatus: 'passed',
@@ -147,7 +162,7 @@ try {
   assert.deepEqual(unavailableTracking.taskOwnedChangedFiles, []);
 
   const workspaceState = readWorkspaceIntegrity(config, 'app');
-  assert.equal(workspaceState.generation, 6);
+  assert.equal(workspaceState.generation, 8);
   assert.equal(workspaceState.lastMutation.taskId, embeddedValidationTask);
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
