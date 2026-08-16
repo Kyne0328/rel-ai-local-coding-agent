@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { writeJsonAtomic } from '../durableState.js';
 import { getStateDir } from '../statePaths.js';
 import { workspaceGitStatus } from '../repo/gitOps.js';
 import { relaiCodeInspect } from './codeIntelligence.js';
@@ -212,16 +213,7 @@ function planPath(config, planId) {
 }
 
 function writePlan(config, planId, payload) {
-  fs.mkdirSync(planDirectory(config), { recursive: true, mode: 0o700 });
-  const target = planPath(config, planId);
-  const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  try {
-    fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
-    fs.renameSync(temporary, target);
-  } catch (error) {
-    try { fs.rmSync(temporary, { force: true }); } catch {}
-    throw error;
-  }
+  writeJsonAtomic(planPath(config, planId), payload, { mode: 0o600, spacing: 2 });
 }
 
 function readValidationPlan(config, planId, workspace) {

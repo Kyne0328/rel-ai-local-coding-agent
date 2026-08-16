@@ -29,6 +29,7 @@ for (const removed of [
   'src/tools/compactRegistry.js',
   'src/tools/registry.js',
   'src/tools/dispatch.js',
+  'src/bridge/browser.js',
   'src/operationTasks.js',
   'src/worktreeManager.js'
 ]) assert.equal(fs.existsSync(path.join(root, removed)), false, `${removed} must remain removed`);
@@ -47,6 +48,18 @@ assert.doesNotMatch(runtimeRegistry, /TOOL_SURFACE_VERSION|inputSchema\s*:/, 'th
 
 const connectionGenerations = read('src/mcp/connectionGenerations.js');
 assert.doesNotMatch(connectionGenerations, /fs\.writeFileSync|fs\.renameSync/, 'connection generations must keep durable-state persistence instead of ad hoc file replacement');
+
+const validationPlan = read('src/bridge/validationPlan.js');
+assert.match(validationPlan, /writeJsonAtomic/, 'validation plans must use shared durable-state persistence');
+assert.doesNotMatch(validationPlan, /fs\.writeFileSync|fs\.renameSync/, 'validation plans must not reimplement atomic JSON persistence');
+
+const tidy = read('src/bridge/tidy.js');
+assert.match(tidy, /writeJsonAtomic/, 'tidy plans must use shared durable-state persistence');
+assert.doesNotMatch(tidy, /fs\.writeFileSync/, 'tidy plans must not reimplement JSON persistence');
+
+const workflowIntent = read('src/workflow/intent.js');
+assert.match(workflowIntent, /WORKFLOW_INTENTS.*from '.\/contracts\.js'/, 'workflow intent normalization must consume the canonical workflow intent contract');
+assert.doesNotMatch(workflowIntent, /const TASK_INTENTS\s*=/, 'workflow intents must have one source of truth');
 
 console.log('Architecture ownership and stale-code invariants passed.');
 
