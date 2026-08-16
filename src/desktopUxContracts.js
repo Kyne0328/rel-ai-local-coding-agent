@@ -16,6 +16,10 @@ const ERROR_CODES = Object.freeze({
   LOCAL_SERVICE_STOP_FAILED: 'local_service_stop_failed',
   LOCAL_PORT_IN_USE: 'local_port_in_use',
   SECURE_TUNNEL_FAILED: 'secure_tunnel_failed',
+  TUNNEL_AUTHENTICATION_FAILED: 'tunnel_authentication_failed',
+  TUNNEL_ACCESS_DENIED: 'tunnel_access_denied',
+  TUNNEL_NOT_FOUND: 'tunnel_not_found',
+  TUNNEL_CONNECTION_INTERRUPTED: 'tunnel_connection_interrupted',
   PUBLIC_ENDPOINT_FAILED: 'public_endpoint_failed',
   DASHBOARD_UNAVAILABLE: 'dashboard_unavailable',
   WORKSPACE_UNAVAILABLE: 'workspace_unavailable',
@@ -41,6 +45,10 @@ const ERROR_GUIDANCE = Object.freeze({
   [ERROR_CODES.LOCAL_SERVICE_STOP_FAILED]: Object.freeze({ title: 'Rel.AI could not stop', recovery: 'Try again. Restart the app if Rel.AI is still running.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
   [ERROR_CODES.LOCAL_PORT_IN_USE]: Object.freeze({ title: 'Connection port is already in use', recovery: 'Choose another connection port or stop the process using the configured port.', actionLabel: 'Open Connection settings', href: '#connection', retryable: true }),
   [ERROR_CODES.SECURE_TUNNEL_FAILED]: Object.freeze({ title: 'Secure MCP Tunnel could not start', recovery: 'Check the OpenAI Tunnel ID and runtime API key, then reconnect.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.TUNNEL_AUTHENTICATION_FAILED]: Object.freeze({ title: 'Tunnel runtime key was rejected', recovery: 'Create or copy the correct OpenAI tunnel runtime API key, replace it in Connection, then reconnect.', actionLabel: 'Replace runtime key', href: '#connection', retryable: true }),
+  [ERROR_CODES.TUNNEL_ACCESS_DENIED]: Object.freeze({ title: 'Tunnel access was denied', recovery: 'Use a runtime key with Tunnels Read and Use access for this tunnel, then reconnect.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.TUNNEL_NOT_FOUND]: Object.freeze({ title: 'Secure MCP Tunnel was not found', recovery: 'Check that the Tunnel ID exists in the same OpenAI organization as the runtime key, then reconnect.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED]: Object.freeze({ title: 'Tunnel connection was interrupted', recovery: 'Rel.AI is retrying automatically. Check your network or OpenAI connectivity if the interruption continues.', actionLabel: 'Troubleshoot', href: '#diagnostics', retryable: true }),
   [ERROR_CODES.PUBLIC_ENDPOINT_FAILED]: Object.freeze({ title: 'Secure MCP Tunnel could not start', recovery: 'Check the OpenAI Secure MCP Tunnel settings, then reconnect.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
   [ERROR_CODES.DASHBOARD_UNAVAILABLE]: Object.freeze({ title: 'Dashboard is unavailable', recovery: 'Try opening the dashboard again. Use the backup connection window only if it still does not load.', actionLabel: 'Retry dashboard', href: '#home', retryable: true }),
   [ERROR_CODES.WORKSPACE_UNAVAILABLE]: Object.freeze({ title: 'Project is unavailable', recovery: 'Fix the project folder or remove the project if you no longer use it.', actionLabel: 'Open Projects', href: '#workspaces', retryable: true }),
@@ -60,7 +68,7 @@ const ERROR_GUIDANCE = Object.freeze({
 
 const CONNECTION_STATE_VALUES = Object.freeze({
   localService: Object.freeze(['running', 'starting', 'stopped', 'failed']),
-  publicEndpoint: Object.freeze(['available', 'connecting', 'unavailable', 'disabled']),
+  publicEndpoint: Object.freeze(['available', 'connecting', 'degraded', 'unavailable', 'disabled']),
   chatgptReadiness: Object.freeze(['ready', 'unavailable']),
   dashboardUpdates: Object.freeze(['live', 'connecting', 'reconnecting', 'paused', 'offline'])
 });
@@ -102,7 +110,8 @@ function deriveConnectionState(status = {}) {
 
   let publicEndpointStatus = 'disabled';
   if (status.tunnelStatus === 'running') publicEndpointStatus = 'available';
-  else if (status.tunnelStatus === 'connecting') publicEndpointStatus = 'connecting';
+  else if (['starting', 'locally_ready', 'authenticating', 'connecting'].includes(status.tunnelStatus)) publicEndpointStatus = 'connecting';
+  else if (status.tunnelStatus === 'degraded') publicEndpointStatus = 'degraded';
   else if (status.tunnelStatus === 'failed') publicEndpointStatus = 'unavailable';
 
   const chatgptReadinessStatus = localServiceStatus === 'running' && publicEndpointStatus === 'available'

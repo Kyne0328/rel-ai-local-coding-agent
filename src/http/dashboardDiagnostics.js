@@ -25,8 +25,8 @@ function handleApiDiagnostics(ctx) {
   });
   const desktopStatus = typeof ctx.options.getDesktopStatus === 'function' ? ctx.options.getDesktopStatus() : null;
   const connectionState = desktopStatus?.connectionState || deriveConnectionState(desktopStatus || {
-    serverRunning: true,
-    tunnelStatus: profile.tunnelId ? 'connecting' : 'stopped'
+    serverRunning: false,
+    tunnelStatus: 'stopped'
   });
   const activity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
   const runtimeLogs = typeof ctx.options.getRuntimeLogs === 'function'

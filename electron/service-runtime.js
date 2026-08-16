@@ -1,6 +1,10 @@
 import { normalizePort, normalizeTunnelId, readGuiConfig } from './launcher-utils.js';
 import { desktopStatusFailure, initialDesktopStatus } from './desktop-status.js';
 
+const LOCAL_READY_TIMEOUT_MS = 5_000;
+const LOCAL_READY_POLL_MS = 100;
+const LOCAL_READY_REQUEST_TIMEOUT_MS = 750;
+
 function createDesktopServiceRuntime(deps) {
   const {
     app,
@@ -15,12 +19,17 @@ function createDesktopServiceRuntime(deps) {
     getCurrentStatus,
     setStatus,
     replaceCurrentStatus,
-    pushStatus
+    pushStatus,
+    fetchImpl = globalThis.fetch
   } = deps;
+  if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required.');
+
   let startPromise = null;
   let stopPromise = null;
   let localReadyPromise = null;
   let lifecycleToken = 0;
+  let activePort = 0;
+  let activeToken = '';
 
   function isListening() { return serviceProcessClient.isListening(); }
 
@@ -28,10 +37,16 @@ function createDesktopServiceRuntime(deps) {
     if (stopPromise) {
       try { await stopPromise; } catch {}
     }
-    if (isListening() && secureTunnelRuntime.snapshot().state === 'running') {
-      pushStatus();
-      return getCurrentStatus();
+
+    if (isListening()) {
+      const tunnel = secureTunnelRuntime.snapshot();
+      if (tunnel.state === 'running' || tunnel.processOwned) {
+        pushStatus();
+        return getCurrentStatus();
+      }
+      if (activePort) return restartTunnel();
     }
+
     if (startPromise) return startPromise;
     const runToken = ++lifecycleToken;
     const localReady = deferred();
@@ -49,21 +64,9 @@ function createDesktopServiceRuntime(deps) {
   }
 
   async function start(runToken, markLocalReady) {
-    let guiConfig;
-    let apiKey;
-    try {
-      configModule.ensureConfig();
-      guiConfig = readGuiConfig();
-      guiConfig.port = normalizePort(guiConfig.port || 3333);
-      guiConfig.tunnelId = normalizeTunnelId(guiConfig.tunnelId);
-      apiKey = tunnelCredentials.getApiKey();
-      if (!apiKey) throw new Error('OpenAI tunnel runtime API key is required. Open Connection settings to finish setup.');
-      if (!guiConfig.token) {
-        guiConfig.token = connection.generateToken(32);
-        connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
-      }
-    } catch (error) {
-      setStatus(desktopStatusFailure(errorCodes.CONFIGURATION_INVALID, error, {
+    const prepared = prepareConnectionConfig({ createToken: true });
+    if (!prepared.ok) {
+      setStatus(desktopStatusFailure(errorCodes.CONFIGURATION_INVALID, prepared.error, {
         serverRunning: false,
         tunnelStatus: 'failed',
         tunnelId: '',
@@ -71,8 +74,9 @@ function createDesktopServiceRuntime(deps) {
       }));
       return getCurrentStatus();
     }
+    const { guiConfig, apiKey } = prepared;
 
-    let actualPort;
+    let actualPort = 0;
     try {
       serviceProcessClient.updateContext({ runtimeLogs: runtimeLogs.snapshot() });
       const localService = await serviceProcessClient.start({
@@ -81,7 +85,13 @@ function createDesktopServiceRuntime(deps) {
         token: guiConfig.token
       });
       actualPort = Number(localService.port || guiConfig.port);
+      await waitForLocalApplicationReady(fetchImpl, actualPort, guiConfig.token);
+      activePort = actualPort;
+      activeToken = guiConfig.token;
     } catch (error) {
+      await serviceProcessClient.stop().catch(() => {});
+      activePort = 0;
+      activeToken = '';
       const portInUse = error?.code === 'EADDRINUSE';
       const code = portInUse ? errorCodes.LOCAL_PORT_IN_USE : errorCodes.LOCAL_SERVICE_START_FAILED;
       const failure = portInUse ? `Port ${guiConfig.port} is already in use.` : error;
@@ -97,7 +107,7 @@ function createDesktopServiceRuntime(deps) {
     const localUrl = `http://127.0.0.1:${actualPort}`;
     setStatus({
       serverRunning: true,
-      tunnelStatus: 'connecting',
+      tunnelStatus: 'starting',
       tunnelId: guiConfig.tunnelId,
       tunnelHealthUrl: '',
       mcpUrl: '',
@@ -109,6 +119,56 @@ function createDesktopServiceRuntime(deps) {
     });
     markLocalReady(getCurrentStatus());
 
+    return startTunnel({ runToken, guiConfig, apiKey, actualPort });
+  }
+
+  async function restartTunnel() {
+    if (stopPromise) {
+      try { await stopPromise; } catch {}
+    }
+    if (!isListening() || !activePort) return startServer();
+    if (startPromise) await startPromise.catch(() => {});
+
+    const prepared = prepareConnectionConfig({ createToken: false });
+    if (!prepared.ok) {
+      setStatus(desktopStatusFailure(errorCodes.CONFIGURATION_INVALID, prepared.error, {
+        serverRunning: true,
+        tunnelStatus: 'failed',
+        tunnelId: '',
+        localMcpUrl: `http://127.0.0.1:${activePort}/mcp`
+      }));
+      return getCurrentStatus();
+    }
+    const { guiConfig, apiKey } = prepared;
+    guiConfig.token ||= activeToken;
+    if (!guiConfig.token) {
+      const error = new Error('Rel.AI local authentication is unavailable. Restart the full connection.');
+      setStatus(desktopStatusFailure(errorCodes.CONFIGURATION_INVALID, error, {
+        serverRunning: true,
+        tunnelStatus: 'failed',
+        tunnelId: guiConfig.tunnelId
+      }));
+      return getCurrentStatus();
+    }
+
+    const runToken = ++lifecycleToken;
+    await secureTunnelRuntime.stop().catch(() => {});
+    const localUrl = `http://127.0.0.1:${activePort}`;
+    setStatus({
+      serverRunning: true,
+      tunnelStatus: 'starting',
+      tunnelId: guiConfig.tunnelId,
+      tunnelHealthUrl: '',
+      localMcpUrl: `${localUrl}/mcp`,
+      localUrl,
+      error: '',
+      errorCode: ''
+    });
+    return startTunnel({ runToken, guiConfig, apiKey, actualPort: activePort });
+  }
+
+  async function startTunnel({ runToken, guiConfig, apiKey, actualPort }) {
+    const localUrl = `http://127.0.0.1:${actualPort}`;
     let result;
     try {
       result = await secureTunnelRuntime.start({
@@ -119,12 +179,14 @@ function createDesktopServiceRuntime(deps) {
       });
     } catch (error) {
       if (runToken !== lifecycleToken) return getCurrentStatus();
-      setStatus(desktopStatusFailure(errorCodes.SECURE_TUNNEL_FAILED, error, {
+      setStatus(desktopStatusFailure(tunnelErrorCode(error, errorCodes), error, {
         serverRunning: true,
         tunnelStatus: 'failed',
         tunnelId: guiConfig.tunnelId,
+        tunnelHealthUrl: '',
         mcpUrl: '',
-        localMcpUrl: `${localUrl}/mcp`
+        localMcpUrl: `${localUrl}/mcp`,
+        localUrl
       }));
       return getCurrentStatus();
     }
@@ -152,8 +214,26 @@ function createDesktopServiceRuntime(deps) {
     return getCurrentStatus();
   }
 
+  function prepareConnectionConfig({ createToken }) {
+    try {
+      configModule.ensureConfig();
+      const guiConfig = readGuiConfig();
+      guiConfig.port = normalizePort(guiConfig.port || 3333);
+      guiConfig.tunnelId = normalizeTunnelId(guiConfig.tunnelId);
+      const apiKey = tunnelCredentials.getApiKey();
+      if (!apiKey) throw new Error('OpenAI tunnel runtime API key is required. Open Connection settings to finish setup.');
+      if (!guiConfig.token && createToken) {
+        guiConfig.token = connection.generateToken(32);
+        connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
+      }
+      return { ok: true, guiConfig, apiKey };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }
+
   async function waitUntilListening(timeoutMs = 10_000) {
-    if (isListening()) return getCurrentStatus();
+    if (isListening() && activePort) return getCurrentStatus();
     const pending = localReadyPromise || startPromise;
     if (!pending) return getCurrentStatus();
     let timer = null;
@@ -199,6 +279,8 @@ function createDesktopServiceRuntime(deps) {
       })),
       secureTunnelRuntime.stop().catch(error => ({ stopped: false, exited: false, error: formatError(error) }))
     ]);
+    activePort = 0;
+    activeToken = '';
     if (options.terminateUtility === true) await serviceProcessClient.dispose({ stop: false });
     if (!options.preserveDashboard) await dashboardWindowManager.close();
     const nextStatus = initialDesktopStatus(app.getVersion());
@@ -224,7 +306,38 @@ function createDesktopServiceRuntime(deps) {
     };
   }
 
-  return { startServer, stopServer, isListening, waitUntilListening, buildDashboardConnection };
+  return { startServer, restartTunnel, stopServer, isListening, waitUntilListening, buildDashboardConnection };
+}
+
+async function waitForLocalApplicationReady(fetchImpl, port, token, timeoutMs = LOCAL_READY_TIMEOUT_MS) {
+  const deadline = Date.now() + Math.max(500, Number(timeoutMs || LOCAL_READY_TIMEOUT_MS));
+  let lastError = '';
+  while (Date.now() < deadline) {
+    try {
+      const health = await fetchImpl(`http://127.0.0.1:${port}/health`, {
+        signal: AbortSignal.timeout(LOCAL_READY_REQUEST_TIMEOUT_MS)
+      });
+      const mcp = await fetchImpl(`http://127.0.0.1:${port}/mcp`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(LOCAL_READY_REQUEST_TIMEOUT_MS)
+      });
+      if (health?.ok && Number(mcp?.status || 0) === 405) return true;
+      lastError = `health=${health?.status || 0}, mcp=${mcp?.status || 0}`;
+    } catch (error) {
+      lastError = formatError(error);
+    }
+    await delay(LOCAL_READY_POLL_MS);
+  }
+  throw new Error(`Local Rel.AI service did not become responsive within ${Math.round(timeoutMs / 1000)} seconds${lastError ? `: ${lastError}` : '.'}`);
+}
+
+function tunnelErrorCode(error, errorCodes) {
+  const code = String(error?.code || '');
+  if (code === 'tunnel_authentication_failed') return errorCodes.TUNNEL_AUTHENTICATION_FAILED || code;
+  if (code === 'tunnel_access_denied') return errorCodes.TUNNEL_ACCESS_DENIED || code;
+  if (code === 'tunnel_not_found') return errorCodes.TUNNEL_NOT_FOUND || code;
+  if (code === 'tunnel_connection_interrupted') return errorCodes.TUNNEL_CONNECTION_INTERRUPTED || code;
+  return errorCodes.SECURE_TUNNEL_FAILED;
 }
 
 function deferred() {
@@ -241,8 +354,12 @@ function deferred() {
   };
 }
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function formatError(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-export { createDesktopServiceRuntime };
+export { createDesktopServiceRuntime, waitForLocalApplicationReady };

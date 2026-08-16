@@ -65,8 +65,9 @@ try {
       async close() { dashboardCloseCalls += 1; }
     },
     runtimeLogs: { snapshot: () => ({ available: true, revision: 0, count: 0, entries: [] }) },
+    fetchImpl: async url => ({ ok: url.endsWith('/health'), status: url.endsWith('/mcp') ? 405 : 200 }),
     secureTunnelRuntime: {
-      snapshot: () => ({ state: currentStatus.tunnelStatus || 'stopped' }),
+      snapshot: () => ({ state: currentStatus.tunnelStatus || 'stopped', processOwned: currentStatus.tunnelStatus === 'running' }),
       start: () => tunnelStart.promise,
       async stop() {
         tunnelStopCalls += 1;

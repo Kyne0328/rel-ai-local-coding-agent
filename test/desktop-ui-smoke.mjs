@@ -82,6 +82,8 @@ assert.match(statusHtml, /Recent app logs/);
 assert.match(statusJs, /currentStatus\.tunnelId/);
 assert.match(statusJs, /Tunnel ID copied/);
 assert.match(statusJs, /The Secure MCP Tunnel did not become ready/);
+assert.match(statusJs, /debugLogsToggle/);
+assert.match(statusJs, /tunnelStatus === 'degraded'/);
 assert.match(statusJs, /restartService\(\)/);
 assert.match(statusJs, /relaunchApp\(\)/);
 assert.match(statusJs, /Secure tunnel:/);
@@ -121,7 +123,7 @@ assert.match(desktopConnection, /saved key for this Secure MCP Tunnel is encrypt
 assert.match(desktopConnection, /Save and restart connection/);
 assert.doesNotMatch(desktopConnection, /ngrok|gateway|pairing|approval token/i);
 
-for (const file of ['secure-tunnel-runtime.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));
+for (const file of ['secure-tunnel-runtime.js','tunnel-log-parser.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));
 for (const removed of ['managed-ngrok.js','ngrok-token.js','public-connection-runtime.js','gateway-client.js','gateway-actions.js','gateway-device-identity.js','approval-token.js']) assert.equal(electronPackage.build.files.includes(removed), false);
 assert.ok(electronPackage.build.win.extraResources.some(item => item.from === '../vendor/tunnel-client' && item.to === 'bin/tunnel-client'));
 assert.equal(electronPackage.build.win.extraResources.some(item => /ngrok|gateway/i.test(String(item.from || ''))), false);
@@ -136,7 +138,8 @@ assert.match(main, /taskActivityBlockReason\(toolActivityRuntime\.getStatus\(\),
 assert.match(main, /onReady:\s*hydrateRecoveryWindow/, 'recovery reloads must rehydrate from authoritative desktop state');
 assert.match(main, /runtimeLogs\.snapshot\(\{\s*limit:\s*100\s*\}\)\.entries[\s\S]{0,120}recoveryWindowManager\.sendLog\(entry\)/, 'recovery reloads must restore the bounded recent diagnostic log tail');
 assert.doesNotMatch(main, /waitForLocalService|setTimeout\(poll,\s*20\)/, 'local service readiness must not use a 20ms polling loop');
-assert.match(main, /options\.background \? await pendingStart : await serviceRuntime\.waitUntilListening\(\)/, 'foreground configured startup must show the dashboard while the tunnel continues connecting');
+assert.match(main, /options\.firstRun \|\| options\.background[\s\S]{0,80}\? await pendingStart[\s\S]{0,80}: await serviceRuntime\.waitUntilListening\(\)/, 'first launch must wait for authoritative tunnel startup while later foreground opens may use proven local readiness');
+assert.doesNotMatch(main, /dashboard:\s*false/, 'tunnel state changes must reach the desktop dashboard without manual refresh');
 assert.match(main, /setImmediate\(\(\) => \{[\s\S]*appUpdater\.start\(\)[\s\S]*updateSupportPolicy\.start\(\)/, 'updater policy work should begin after the first useful desktop startup path is scheduled');
 assert.doesNotMatch(main, /createGatewayClient|createPublicConnectionRuntime|createApprovalTokenManager|managedNgrok/);
 assert.match(dashboardJs, /AUTO_RECOVERY_DELAYS_MS/);

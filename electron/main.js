@@ -90,11 +90,14 @@ const setupWindowManager = createSetupWindowManager({
 const secureTunnelRuntime = createSecureTunnelRuntime({
   stopProcess: terminateProcessTree,
   makeEnvironment: makeTunnelProcessEnvironment,
-  onLog: chunk => publicConnectionLog('openai-tunnel', chunk),
+  onLog: entry => publicConnectionLog('openai-tunnel', entry),
   onStatus: status => {
-    if (status.state === 'running') setStatus({ tunnelStatus: 'running', tunnelId: status.tunnelId, tunnelHealthUrl: status.healthUrl, error: '', errorCode: '' }, { dashboard: false });
-    else if (status.state === 'connecting') setStatus({ tunnelStatus: 'connecting', tunnelId: status.tunnelId, error: '', errorCode: '' }, { dashboard: false });
-    else if (status.state === 'failed') setStatus({ tunnelStatus: 'failed', tunnelId: status.tunnelId, error: status.error, errorCode: ERROR_CODES.SECURE_TUNNEL_FAILED }, { dashboard: false });
+    const common = { tunnelStatus: status.state, tunnelId: status.tunnelId, tunnelHealthUrl: status.healthUrl || '' };
+    if (status.state === 'running') setStatus({ ...common, error: '', errorCode: '' });
+    else if (['starting', 'locally_ready', 'authenticating'].includes(status.state)) setStatus({ ...common, error: '', errorCode: '' });
+    else if (status.state === 'degraded') setStatus({ ...common, error: status.error, errorCode: status.errorCode || ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED });
+    else if (status.state === 'failed') setStatus({ ...common, error: status.error, errorCode: status.errorCode || ERROR_CODES.SECURE_TUNNEL_FAILED });
+    else if (status.state === 'stopped') setStatus({ ...common, error: '', errorCode: '' });
   }
 });
 const dashboardWindowManager = createDashboardWindowManager({
@@ -267,7 +270,9 @@ function configuredProcessEnvironmentAllow() {
 function currentDesktopSettings() {
   return readDesktopSettings({
     tunnelApiKeyConfigured: tunnelCredentials.status().apiKeyConfigured,
-    notificationsEnabled: desktopNotifications.getPreferences().enabled
+    notificationsEnabled: desktopNotifications.getPreferences().enabled,
+    tunnelErrorCode: currentStatus.errorCode,
+    tunnelError: currentStatus.error
   });
 }
 
@@ -279,6 +284,8 @@ function updateDesktopSettings(settings) {
     getTunnelApiKey: tunnelCredentials.getApiKey,
     clearTunnelApiKey: tunnelCredentials.clear,
     canRestart: action => taskActivityBlockReason(toolActivityRuntime.getStatus(), action),
+    getCurrentStatus: () => currentStatus,
+    restartTunnel: () => serviceRuntime.restartTunnel(),
     restartDesktop: () => launchConfiguredDesktop({ restart: true })
   });
 }
@@ -387,8 +394,13 @@ function replaceCurrentStatus(next, options = {}) {
   else desktopTray.update();
 }
 
-function publicConnectionLog(source, chunk, options = {}) {
-  const entry = runtimeLogs.append(chunk, { ...options, source });
+function publicConnectionLog(source, value, options = {}) {
+  const payload = value && typeof value === 'object' ? value : { message: value };
+  const entry = runtimeLogs.append(payload.message, {
+    ...payload,
+    ...options,
+    source: payload.source || source
+  });
   if (entry) recoveryWindowManager.sendLog(entry);
 }
 
@@ -450,7 +462,9 @@ async function launchConfiguredDesktop(options = {}) {
   try {
     if (options.restart) await stopServer({ silent: true, preserveDashboard: true });
     const pendingStart = startServer();
-    const status = options.background ? await pendingStart : await serviceRuntime.waitUntilListening();
+    const status = options.firstRun || options.background
+      ? await pendingStart
+      : await serviceRuntime.waitUntilListening();
     if (!serviceRuntime.isListening()) {
       recoveryWindowManager.show();
       return status;
