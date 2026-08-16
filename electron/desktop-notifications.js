@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { importResourceModule } from './resource-path.js';
 
 const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durableState.js');
+const { errorGuidance } = await importResourceModule('src/desktopUxContracts.js');
 
 const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   enabled: true,
@@ -138,9 +139,10 @@ function createDesktopNotifications(options = {}) {
     const currentState = desktopState(current);
     if (previousState === currentState) return false;
     if (currentState === 'error') {
+      const guidance = errorGuidance(current.errorCode);
       return show('errors', {
         title: 'Rel.AI needs attention',
-        body: cleanText(current.error, 220) || 'The desktop service could not complete the requested connection change.'
+        body: cleanText(`${guidance.title}. ${guidance.recovery}`, 220)
       });
     }
     if (currentState === 'ready') {

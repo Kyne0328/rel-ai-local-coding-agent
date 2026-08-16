@@ -22,7 +22,15 @@ try {
   buffer.append('Authorization: Bearer secret-token', { source: 'openai-tunnel', code: 'public_endpoint_failed' });
   buffer.append('{"token":"secret-token"}', { level: 'error' });
   buffer.append('OPENAI_API_KEY=runtime-env-secret', { source: 'local-service' });
-  buffer.append('fourth');
+  buffer.append('fourth', {
+    source: 'desktop-observability',
+    code: 'activity_listener_failed',
+    taskId: 'task-42',
+    eventId: 'event-7',
+    workspace: 'repo',
+    tool: 'relai_read',
+    operation: 'Read src/app.js'
+  });
   await buffer.flush();
 
   const bounded = buffer.snapshot();
@@ -36,6 +44,27 @@ try {
   assert.equal(bounded.persistent, true);
   assert.equal(bounded.entries.length, 3);
   assert.equal(bounded.entries.at(-1).message, 'fourth');
+  assert.deepEqual(
+    {
+      source: bounded.entries.at(-1).source,
+      code: bounded.entries.at(-1).code,
+      taskId: bounded.entries.at(-1).taskId,
+      eventId: bounded.entries.at(-1).eventId,
+      workspace: bounded.entries.at(-1).workspace,
+      tool: bounded.entries.at(-1).tool,
+      operation: bounded.entries.at(-1).operation
+    },
+    {
+      source: 'desktop-observability',
+      code: 'activity_listener_failed',
+      taskId: 'task-42',
+      eventId: 'event-7',
+      workspace: 'repo',
+      tool: 'relai_read',
+      operation: 'Read src/app.js'
+    },
+    'structured correlation must survive the in-memory log path'
+  );
   assert.doesNotMatch(JSON.stringify(bounded), /secret-token|runtime-env-secret/);
   assert.match(JSON.stringify(bounded), /\[redacted\]/);
   assert.equal(fs.existsSync(logPath), true);
@@ -48,6 +77,7 @@ try {
   const restored = createRuntimeLogBuffer({ maxEntries: 3, filePath: logPath });
   assert.equal(restored.snapshot().entries.length, 3);
   assert.equal(restored.snapshot().entries.at(-1).message, 'fourth');
+  assert.equal(restored.snapshot().entries.at(-1).taskId, 'task-42', 'structured correlation must survive restart hydration');
 
   const transitions = createRuntimeLogBuffer({ maxEntries: 10, now: () => '2026-07-25T00:00:00.000Z' });
   transitions.recordStatusTransition({}, { serverRunning: true, tunnelStatus: 'connecting' });
