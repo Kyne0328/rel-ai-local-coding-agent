@@ -7,11 +7,19 @@
 .usage-side-by-side { @apply grid min-w-0 gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .usage-side-by-side > .card { min-width: 0; }
 .usage-loading { @apply rounded-xl border p-5 text-[12px]; color: var(--ui-text-secondary); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
-.usage-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); overflow: hidden; background: var(--ui-surface-primary); }
+.usage-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); overflow: visible; background: var(--ui-surface-primary); }
 .usage-metric { @apply grid min-w-0 gap-1 p-4; border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
 .usage-metric:nth-child(6n) { border-right: 0; }
 .usage-metric:nth-last-child(-n+6) { border-bottom: 0; }
-.usage-metric span { @apply text-[11px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
+.usage-metric-label-row { @apply flex min-w-0 items-center gap-1; }
+.usage-metric-label { @apply text-[11px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
+.usage-metric-help { display: inline-flex; }
+.usage-metric-help-trigger { @apply relative grid shrink-0 place-items-center p-0 text-[10px] font-bold; width: 18px; height: 18px; min-width: 18px; min-height: 18px; border: 1px solid var(--ui-border-control); border-radius: 999px; color: var(--ui-text-tertiary); background: transparent; cursor: help; }
+.usage-metric-help-trigger::before { content: ''; position: absolute; inset: -13px; }
+.usage-metric-help-trigger:hover, .usage-metric-help-trigger:focus-visible { color: var(--ui-text-primary); border-color: var(--ui-text-tertiary); background: var(--ui-surface-secondary); }
+.usage-metric-tooltip { position: absolute; z-index: 20; top: 38px; left: 12px; right: 12px; padding: 8px 10px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); background: var(--ui-surface-raised); color: var(--ui-text-primary); font-size: 11px; font-weight: 500; line-height: 1.45; letter-spacing: normal; text-transform: none; opacity: 0; visibility: hidden; pointer-events: none; }
+.usage-metric-help.is-open .usage-metric-tooltip { opacity: 1; visibility: visible; }
+.usage-metric.help-open { z-index: 10; }
 .usage-metric strong { @apply text-[18px] font-extrabold; overflow-wrap: anywhere; color: var(--ui-text-primary); }
 .usage-breakdown .card-head p { @apply m-0 mt-1 text-[12px]; color: var(--ui-text-secondary); }
 .usage-table-wrap { @apply w-full overflow-x-auto; }
