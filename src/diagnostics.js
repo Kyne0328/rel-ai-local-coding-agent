@@ -32,14 +32,16 @@ function sanitizeDiagnosticValue(value, depth = 0) {
 
 function buildDiagnosticReport(input = {}) {
   const workspace = String(input.workspace || '');
+  const runtime = normalizeRuntimeLogs(input.runtimeLogs);
   const findings = [
     ...healthFindings(input.health, workspace),
     ...connectionFindings(input.connection, input.connectionState),
     ...cautionFindings(input.cautionData, workspace),
-    ...auditPersistenceFindings(input.auditLogs)
+    ...auditPersistenceFindings(input.auditLogs),
+    ...taskHistoryPersistenceFindings(input.taskHistoryPersistence),
+    ...runtimeLogPersistenceFindings(runtime)
   ];
   const ordered = dedupeFindings(findings).sort(compareDiagnosticFindings);
-  const runtime = normalizeRuntimeLogs(input.runtimeLogs);
   const failedActivity = normalizeFailedActivity(input.auditLogs);
   const activeCalls = Number(input.activeCalls || 0);
   const report = {
@@ -165,6 +167,34 @@ function auditPersistenceFindings(auditLogs = {}) {
   })];
 }
 
+function taskHistoryPersistenceFindings(persistence = {}) {
+  if (persistence.healthy !== false) return [];
+  const pending = Math.max(0, Number(persistence.pending || 0));
+  return [diagnosticFinding({
+    severity: 'warning',
+    code: 'task_history_persistence_failed',
+    title: 'Task history is not being saved',
+    impact: `Rel.AI cannot currently save task details to disk.${pending ? ` ${pending} ${pending === 1 ? 'task update remains' : 'task updates remain'} queued in memory while saving is retried.` : ''}`,
+    recommendation: 'Check available disk space and write permissions for the Rel.AI local data folder. Rel.AI retries with bounded backoff and keeps the current in-memory task state available.',
+    action: { label: 'Review troubleshooting', href: '#diagnostics' },
+    details: persistence
+  })];
+}
+
+function runtimeLogPersistenceFindings(runtime = {}) {
+  const persistence = runtime.persistence || {};
+  if (runtime.persistent !== true || persistence.healthy !== false) return [];
+  return [diagnosticFinding({
+    severity: 'warning',
+    code: 'runtime_log_persistence_failed',
+    title: 'App log is not being saved',
+    impact: 'Troubleshooting messages remain available in memory for this app session, but recent app-log detail could be lost after restart.',
+    recommendation: 'Check available disk space and write permissions for the Rel.AI local data folder. Rel.AI will resume saving automatically when the storage problem is resolved.',
+    action: { label: 'Review troubleshooting', href: '#diagnostics' },
+    details: persistence
+  })];
+}
+
 function findingFromCode(code, severity, impact, details) {
   const normalized = normalizeErrorCode(code) || ERROR_CODES.UNKNOWN;
   const guidance = errorGuidance(normalized);
@@ -199,6 +229,12 @@ function normalizeRuntimeLogs(value) {
   return {
     available: value?.available === true,
     persistent: value?.persistent === true,
+    persistence: {
+      healthy: value?.persistence?.healthy !== false,
+      failureCount: Math.max(0, Number(value?.persistence?.failureCount || 0)),
+      lastFailureAt: value?.persistence?.lastFailureAt || null,
+      lastError: sanitizeText(value?.persistence?.lastError || '', 500)
+    },
     revision: Number.isFinite(Number(value?.revision)) ? Math.max(0, Number(value.revision)) : 0,
     count: Number(value?.count ?? entries.length),
     entries: ordered.map(entry => ({

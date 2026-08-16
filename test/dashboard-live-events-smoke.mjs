@@ -13,7 +13,7 @@ const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.
 const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');
 
 assert.match(dashboardSource, /: keepalive/, 'dashboard SSE must include a heartbeat');
-for (const eventName of ['task.updated', 'connection.updated', 'workspace.updated', 'process.updated', 'diagnostics.updated']) {
+for (const eventName of ['task.updated', 'connection.updated', 'workspace.updated', 'process.updated', 'diagnostics.updated', 'dashboard.error']) {
   assert.match(dashboardSource, new RegExp(eventName.replace('.', '\\.')), `server must emit ${eventName}`);
   assert.match(eventClientSource, new RegExp(eventName.replace('.', '\\.')), `client must subscribe to ${eventName}`);
 }
@@ -27,6 +27,9 @@ assert.doesNotMatch(eventClientSource, /token|Authorization|URLSearchParams/, 'S
 assert.doesNotMatch(dashboardClientSource, /relai_dashboard_token|setToken|getToken/, 'dashboard renderer must never persist or read the MCP bearer token');
 assert.match(eventClientSource, /removeEventListener/, 'SSE listeners must be removed when a source closes');
 assert.match(eventClientSource, /function parseEventData[\s\S]*try[\s\S]*JSON\.parse[\s\S]*catch/, 'SSE payload parsing must fail safely');
+assert.match(dashboardSource, /sendSse\(res, ['"]dashboard\.error['"]/, 'application-side SSE failures must not use EventSource\'s reserved transport error event');
+assert.doesNotMatch(dashboardSource, /sendSse\(res, ['"]error['"]/, 'application-side SSE failures must not trigger transport reconnect backoff');
+assert.match(dashboardClientSource, /event\.type === ['"]dashboard\.error['"][\s\S]*recoverDashboard/, 'application-side SSE failures must recover with an authoritative dashboard refresh');
 assert.match(dashboardClientSource, /applyLiveEvent\(event\.type, event\.data\)/, 'browser coordinator must apply typed deltas through the canonical store');
 assert.match(dashboardClientSource, /liveCatchUpRequired/, 'browser coordinator must compare ready revisions and fetch only when live events were missed');
 assert.match(dashboardClientSource, /function viewRevisionKey/, 'route invalidation must use explicit revision keys');

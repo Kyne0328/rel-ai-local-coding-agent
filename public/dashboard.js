@@ -439,7 +439,13 @@ function replayLiveEventsDuringRefresh() {
 }
 
 async function liveOnEvent(event) {
-  if (!event?.type || !event.data || event.data.ok === false) return;
+  if (!event?.type || !event.data) return;
+  if (event.type === 'dashboard.error') {
+    debugError(new Error(event.data.error || 'A live dashboard update failed.'));
+    await recoverDashboard({ source: 'live-event-recovery', render: true });
+    return;
+  }
+  if (event.data.ok === false) return;
   bufferLiveEventDuringRefresh(event);
   window.dispatchEvent(new CustomEvent('relai:diagnostics-live', { detail: event }));
   const applied = applyLiveEvent(event.type, event.data);

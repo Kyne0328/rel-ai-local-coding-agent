@@ -657,7 +657,7 @@ function logsHtml(logs, view) {
   const runtime = logs.runtime || { available: false, entries: [] };
   const runtimeEmpty = runtime.available ? 'No app messages match the current filters.' : 'App logs are available in the desktop app.';
   return `<div class="diagnostic-log-grid" data-diagnostic-region="logs">
-    ${logPanel('App log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? 'Saved locally with sensitive values removed' : '')}
+    ${logPanel('App log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? (runtime.persistence?.healthy === false ? 'Saving locally is currently unavailable; in-memory messages remain visible' : 'Saved locally with sensitive values removed') : '')}
     ${logPanel('Failed activity', view.failed, 'No failed activity matches the current filters.', true, '')}
   </div>`;
 }

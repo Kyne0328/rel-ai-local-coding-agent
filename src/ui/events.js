@@ -14,7 +14,8 @@ const LIVE_EVENT_TYPES = Object.freeze([
   'connection.updated',
   'workspace.updated',
   'process.updated',
-  'diagnostics.updated'
+  'diagnostics.updated',
+  'dashboard.error'
 ]);
 
 export function initEvents(onEvent, onState) {

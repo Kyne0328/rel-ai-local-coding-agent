@@ -14,6 +14,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
   let preparedDirectory = '';
   let writeQueue = Promise.resolve();
   let revision = 0;
+  let persistence = { healthy: true, failureCount: 0, lastFailureAt: null, lastError: '' };
 
   function append(message, options = {}) {
     hydrate();
@@ -39,6 +40,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
       revision,
       count: entries.length,
       persistent: Boolean(resolveFilePath()),
+      persistence: { ...persistence },
       entries: entries.slice(-limit).map(entry => ({ ...entry }))
     };
   }
@@ -112,9 +114,29 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
         preparedDirectory = directory;
       }
       await operation();
+      markPersistenceHealthy();
     }).catch(error => {
+      markPersistenceFailure(error);
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] runtime log persist:', error);
     });
+  }
+
+  function markPersistenceHealthy() {
+    if (persistence.healthy) return;
+    persistence = { ...persistence, healthy: true, lastError: '' };
+    revision += 1;
+    emit({ type: 'persistence', revision, persistence: { ...persistence } });
+  }
+
+  function markPersistenceFailure(error) {
+    persistence = {
+      healthy: false,
+      failureCount: persistence.failureCount + 1,
+      lastFailureAt: new Date().toISOString(),
+      lastError: sanitizeText(error instanceof Error ? error.message : String(error || 'App log persistence failed.'), 500)
+    };
+    revision += 1;
+    emit({ type: 'persistence', revision, persistence: { ...persistence } });
   }
 
   async function flush() {

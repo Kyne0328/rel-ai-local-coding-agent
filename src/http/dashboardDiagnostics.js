@@ -6,6 +6,7 @@ import * as productUx from "../productUx.js";
 import * as connection from "../connectionProfile.js";
 import { deriveConnectionState, ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 import { buildDiagnosticReport } from "../diagnostics.js";
+import { taskHistoryPersistenceSnapshot } from '../taskHistoryStore.js';
 import { readJsonBody, sendJson } from "./io.js";
 
 function handleApiDiagnostics(ctx) {
@@ -39,6 +40,7 @@ function handleApiDiagnostics(ctx) {
     connectionState,
     runtimeLogs,
     auditLogs,
+    taskHistoryPersistence: taskHistoryPersistenceSnapshot(),
     activeCalls: activity.activeCalls || 0
   });
   sendJson(ctx.res, 200, report);
