@@ -211,15 +211,15 @@ async function handleMcpRecovery(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const action = String(payload.action || 'retry');
   if (!['retry', 'restart_transport'].includes(action)) {
-    sendJson(ctx.res, 400, { ok: false, error: 'action must be retry or restart_transport' }, ctx.ae);
+    sendJson(ctx.res, 400, { ok: false, error: 'action must be retry or restart_transport' });
     return;
   }
   const result = await mcpConnectionManager.retryConnection(action);
-  sendJson(ctx.res, 200, { ...result, connection: mcpConnectionManager.snapshot() }, ctx.ae);
+  sendJson(ctx.res, 200, { ...result, connection: mcpConnectionManager.snapshot() });
 }
 
 function handleMcpConnectionState(ctx) {
-  sendJson(ctx.res, 200, { ok: true, connection: mcpConnectionManager.snapshot() }, ctx.ae);
+  sendJson(ctx.res, 200, { ok: true, connection: mcpConnectionManager.snapshot() });
 }
 
 function validateMcpRequestHeaders(headers = {}, message) {
@@ -282,7 +282,7 @@ function sendTransportResponse(ctx, response) {
     ctx.res.end();
     return;
   }
-  sendJson(ctx.res, response.status || 200, response.body, ctx.ae);
+  sendJson(ctx.res, response.status || 200, response.body);
 }
 
 function expectedMcpName(method, params = {}) {
