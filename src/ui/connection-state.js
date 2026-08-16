@@ -44,6 +44,15 @@ export function connectionStateFor(data = {}, dashboardStatus = '') {
 }
 export function withConnectionState(data = {}, dashboardStatus = '') { return { ...data, connectionState: connectionStateFor(data, dashboardStatus) }; }
 export function isMcpAuthenticationReady(state = {}) { return String(state.chatgptReadiness?.status || state.status || '') === 'ready'; }
+export function hasObservedMcpConnection(connection = {}) {
+  if (connection.lastRequestAt || connection.lastSuccessfulRequestAt || connection.lastFailedRequestAt) return true;
+  if (Number(connection.activeRequestCount || 0) > 0) return true;
+  return ['active', 'recent', 'connected', 'request_failed', 'idle'].includes(String(connection.activityStatus || connection.status || ''));
+}
+export function hasObservedMcpToolCall(connection = {}) {
+  if (String(connection.lastRequestMethod || connection.lastMethod || '') === 'tools/call') return true;
+  return Array.isArray(connection.recentEvents) && connection.recentEvents.some(event => String(event?.method || '') === 'tools/call');
+}
 export function connectionLayerViews(state = {}) {
   const normalized = normalizeConnectionState(state);
   return LAYERS.map(([key,title,descriptions]) => { const value=normalized[key]; const [label,tone,description]=descriptions[value.status]||['Unknown','warn','Connection state is unavailable.']; return { key,title,status:value.status,label,tone,description:key==='mcpClient'?requestDescription(value,description):description }; });

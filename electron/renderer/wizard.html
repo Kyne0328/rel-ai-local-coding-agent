@@ -24,10 +24,13 @@
             <span class="wizard-step-number" aria-hidden="true">1</span>
             <div>
               <strong id="tunnelStepTitle">Create your Secure MCP Tunnel</strong>
-              <p>Choose the OpenAI organization and ChatGPT workspace where you will use Rel.AI.</p>
+              <p>Complete the tunnel details carefully so OpenAI connects Rel.AI to the right organization and ChatGPT workspace.</p>
             </div>
           </div>
           <button class="secondary wizard-open-button" type="button" data-open-openai="tunnels">Open OpenAI Tunnels</button>
+          <div class="wizard-field-group">
+            <p class="wizard-field-help"><strong>In OpenAI, complete all tunnel fields:</strong> Name, Description, Organizations, and ChatGPT workspaces. Choose the organization(s) and workspace(s) where you will actually use Rel.AI in ChatGPT.</p>
+          </div>
           <div class="wizard-field-group">
             <label for="tunnelIdInput"><span>Paste Tunnel ID here</span></label>
             <input id="tunnelIdInput" type="text" autocomplete="off" spellcheck="false" placeholder="tunnel_…" aria-describedby="tunnelIdHelp tunnelIdError" aria-invalid="false" required />

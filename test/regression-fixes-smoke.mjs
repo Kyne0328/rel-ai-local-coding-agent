@@ -47,8 +47,10 @@ function read(rel) {
   assert.match(connector, /createChatGptSetupGuide/);
   assert.match(connector, /connectionGuideMode/);
   assert.match(guidance, /Connection set to Tunnel/i);
-  assert.match(guidance, /Authentication to No authentication/i);
-  assert.match(guidance, /existing Rel\.AI MCP plugin\/app instead of creating a duplicate/i);
+  assert.match(guidance, /No authentication/i);
+  assert.match(guidance, /chatgpt\.com\/plugins#settings\/Connectors\?create-connector=true/i);
+  assert.match(guidance, /Scan Tools/i);
+  assert.match(guidance, /existing Rel\.AI MCP connector instead of creating a duplicate/i);
 }
 
 // Dashboard tool metadata stays internally consistent; workspace cards do not

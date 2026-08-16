@@ -13,7 +13,11 @@ Rel.AI encrypts the saved runtime API key with Electron `safeStorage`. The key i
 
 ## Connect ChatGPT
 
-Create or reconnect the Rel.AI MCP integration in ChatGPT using the **Tunnel** connection option and associate it with the Tunnel ID shown in Rel.AI. If the integration already exists, reconnect or refresh it rather than creating a second copy unless you deliberately want a separate tunnel association.
+After the Secure MCP Tunnel connects, Rel.AI opens the **Connection** page for the remaining ChatGPT setup. Save the provided `relai-mcp.png` icon first, then use **Open ChatGPT plugin setup** to open `https://chatgpt.com/plugins#settings/Connectors?create-connector=true`.
+
+Create the connector with **Name: Rel.AI MCP**, **Connection: Tunnel**, the same Tunnel ID shown in Rel.AI, and **Authentication: No authentication**. Click **Scan Tools**, confirm the Rel.AI tools appear, then click **Create**. After creation, open **Manage** and upload the saved Rel.AI icon as the connector logo.
+
+If the integration already exists, reconnect or refresh it rather than creating a second copy unless you deliberately want a separate tunnel association.
 
 After enabling Rel.AI MCP in a chat, start with a read-only request:
 
