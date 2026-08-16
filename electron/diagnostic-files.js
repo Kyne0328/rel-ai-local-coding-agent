@@ -17,7 +17,7 @@ function createDiagnosticFiles({ app, shell, now = () => new Date() } = {}) {
   }
 
   async function openFolder() {
-    const target = ensureDirectory();
+    const target = await ensureDirectory();
     const error = await shell.openPath(target);
     if (error) throw new Error(error);
     return { ok: true, directory: target };
@@ -33,16 +33,16 @@ function createDiagnosticFiles({ app, shell, now = () => new Date() } = {}) {
     };
     const text = JSON.stringify(payload, null, 2);
     if (Buffer.byteLength(text, 'utf8') > 2 * 1024 * 1024) throw new Error('Diagnostic export exceeds the 2 MiB safety limit.');
-    const targetDirectory = ensureDirectory();
+    const targetDirectory = await ensureDirectory();
     const filename = `relai-diagnostic-state-${fileTimestamp(exportedAt)}.json`;
     const target = path.join(targetDirectory, filename);
-    fs.writeFileSync(target, text, { encoding: 'utf8', mode: 0o600 });
+    await fs.promises.writeFile(target, text, { encoding: 'utf8', mode: 0o600 });
     return { ok: true, path: target, directory: targetDirectory, filename };
   }
 
-  function ensureDirectory() {
+  async function ensureDirectory() {
     const target = directory();
-    fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+    await fs.promises.mkdir(target, { recursive: true, mode: 0o700 });
     return target;
   }
 

@@ -1,3 +1,5 @@
+import { applyRuntimeLogChange } from './runtime-log-snapshot.js';
+
 function createServiceProcessClient(options = {}) {
   const {
     utilityProcess,
@@ -32,7 +34,6 @@ function createServiceProcessClient(options = {}) {
 
   async function start(payload = {}) {
     await ensureChild();
-    sendContext();
     const result = await request('start', payload, 15_000);
     activePort = Number(result?.port || 0);
     return result;
@@ -52,6 +53,10 @@ function createServiceProcessClient(options = {}) {
 
   function updateContext(patch = {}) {
     context = { ...context, ...patch };
+    if (patch.runtimeLogChange) {
+      context.runtimeLogs = applyRuntimeLogChange(context.runtimeLogs, patch.runtimeLogChange);
+      delete context.runtimeLogChange;
+    }
     sendContext(patch);
   }
 
@@ -140,6 +145,8 @@ function createServiceProcessClient(options = {}) {
     child = null;
     spawnPromise = null;
     activePort = 0;
+    currentActivity = emptyActivity();
+    publishActivity({ phase: 'snapshot', snapshot: currentActivity });
     rejectPending(new Error(`Rel.AI service process exited with code ${code}.`));
     onExit({ code: Number(code || 0) });
   }

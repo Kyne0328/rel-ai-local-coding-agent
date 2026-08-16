@@ -26,7 +26,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     if (overflow) entries.splice(0, entries.length - maxEntries);
     persist(entry, overflow);
     revision += 1;
-    emit({ type: 'append', revision, entry: { ...entry } });
+    emit({ type: 'append', revision, count: entries.length, maxEntries, entry: { ...entry } });
     return { ...entry };
   }
 
@@ -48,7 +48,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     entries.length = 0;
     rewriteFile();
     revision += 1;
-    emit({ type: 'reset', revision, removed });
+    emit({ type: 'reset', revision, count: 0, maxEntries, removed });
     return { ok: true, removed };
   }
 

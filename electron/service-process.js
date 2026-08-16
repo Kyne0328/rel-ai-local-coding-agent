@@ -1,5 +1,6 @@
 import { closeHttpServer } from './shutdown-coordinator.js';
 import { importResourceModule } from './resource-path.js';
+import { applyRuntimeLogChange } from './runtime-log-snapshot.js';
 
 const parentPort = process.parentPort;
 if (!parentPort) throw new Error('Rel.AI service process requires an Electron utility-process parent port.');
@@ -158,6 +159,7 @@ function updateDesktopContext(next = {}) {
     ...(Object.hasOwn(next, 'runtimeLogs') ? { runtimeLogs: next.runtimeLogs } : {})
   };
   if (next.runtimeLogChange) {
+    desktopContext.runtimeLogs = applyRuntimeLogChange(desktopContext.runtimeLogs, next.runtimeLogChange);
     for (const listener of [...runtimeLogListeners]) {
       try { listener(next.runtimeLogChange); } catch {}
     }

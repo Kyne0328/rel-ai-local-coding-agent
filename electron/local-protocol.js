@@ -65,7 +65,9 @@ function localRendererUrl(fileName, query = {}) {
 
 function resolveLocalRendererPath(target, rendererRoot) {
   try {
-    const url = new URL(String(target || ''));
+    const rawTarget = String(target || '');
+    if (hasParentPathSegment(rawTarget)) return '';
+    const url = new URL(rawTarget);
     if (url.protocol !== `${LOCAL_SCHEME}:` || url.hostname !== LOCAL_HOST || url.username || url.password || url.port) return '';
     const relative = decodeURIComponent(url.pathname).replace(/^\/+/, '');
     if (!relative || relative.includes('/') || relative.includes('\\') || relative.includes('\0')) return '';
@@ -73,10 +75,22 @@ function resolveLocalRendererPath(target, rendererRoot) {
     if (!Object.hasOwn(CONTENT_TYPES, extension)) return '';
     const root = path.resolve(rendererRoot);
     const absolute = path.resolve(root, relative);
-    if (path.dirname(absolute) !== root || !fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return '';
+    if (path.dirname(absolute) !== root) return '';
     return absolute;
   } catch {
     return '';
+  }
+}
+
+function hasParentPathSegment(target) {
+  const schemeIndex = target.indexOf('://');
+  const pathStart = schemeIndex >= 0 ? target.indexOf('/', schemeIndex + 3) : -1;
+  if (pathStart < 0) return false;
+  const rawPath = target.slice(pathStart).split(/[?#]/, 1)[0];
+  try {
+    return decodeURIComponent(rawPath).split('/').includes('..');
+  } catch {
+    return true;
   }
 }
 
