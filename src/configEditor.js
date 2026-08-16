@@ -2,69 +2,8 @@ import * as path from "node:path";
 import { getConfigPath, makeDefaultContextConfig, publicConfigSummary, writeConfig } from './config.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 
-// Only these nested keys may be written through the settings API; anything else is
-// rejected so junk keys never persist into config.json.
-const ALLOWED_SECTION_KEYS = {
-  productUx: new Set(["staleHours", "cleanupOlderThanHours", "enableStateExport"]),
-  release: new Set(["minimumReadinessScore", "requireHttpToken"]),
-  telemetry: new Set(["enabled", "endpoint"])
-};
-
-function settingsPayload(config) {
-  return {
-    ok: true,
-    configPath: getConfigPath(),
-    editable: true,
-    design: "single_local_repo_bridge",
-    config: publicConfigSummary(config)
-  };
-}
-
-function updateSettings(current, payload = {}) {
-  const next = clone(current);
-  const changed = [];
-  const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
-
-  applyAllowedSections(next, values, changed);
-
-  const normalized = writeConfig(next);
-  return {
-    ok: true,
-    changed,
-    message: changed.length ? `Updated ${changed.length} setting(s).` : "No setting changes detected.",
-    configPath: getConfigPath(),
-    config: publicConfigSummary(normalized)
-  };
-}
-
 function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function coerceSettingValue(value, label, currentValue) {
-  if (typeof currentValue === "boolean") {
-    if (typeof value === "boolean") return value;
-    if (String(value).toLowerCase() === "true") return true;
-    if (String(value).toLowerCase() === "false") return false;
-    throw new Error(`${label} must be true or false.`);
-  }
-  if (typeof currentValue === "number") return finiteNumber(value, label);
-  return String(value);
-}
-
-function applyAllowedSection(next, values, section, changed) {
-  if (!values[section] || typeof values[section] !== "object") return;
-  if (!next[section] || typeof next[section] !== "object") next[section] = {};
-  for (const [key, value] of Object.entries(values[section])) {
-    if (!ALLOWED_SECTION_KEYS[section].has(key)) {
-      throw new Error(`Unknown ${section} setting: ${key}. Allowed: ${[...ALLOWED_SECTION_KEYS[section]].join(", ")}.`);
-    }
-    setNestedIfChanged(next, section, key, coerceSettingValue(value, `${section}.${key}`, next[section][key]), changed);
-  }
-}
-
-function applyAllowedSections(next, values, changed) {
-  for (const section of ["productUx", "release", "telemetry"]) applyAllowedSection(next, values, section, changed);
 }
 
 function _handleDeleteWorkspace(alias, payload, next) {
@@ -182,12 +121,4 @@ function validateAlias(alias) {
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(alias)) throw new Error("Workspace alias must be 1-80 characters using letters, numbers, dot, underscore, or dash.");
 }
 
-function setNestedIfChanged(target, section, key, value, changed) {
-  if (!target[section] || typeof target[section] !== "object") target[section] = {};
-  if (JSON.stringify(target[section][key]) !== JSON.stringify(value)) {
-    target[section][key] = value;
-    changed.push(`${section}.${key}`);
-  }
-}
-
-export { settingsPayload, updateSettings, updateWorkspace };
+export { updateWorkspace };

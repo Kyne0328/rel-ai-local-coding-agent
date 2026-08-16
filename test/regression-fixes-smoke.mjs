@@ -97,7 +97,7 @@ function read(rel) {
   assert.match(dashboard, /invalidateCache\(DASHBOARD_DATA_URL\)/);
   assert.match(dashboard, /fetchJson\(DASHBOARD_DATA_URL, \{ cache: 'no-store' \}\)/);
   assert.match(dashboard, /let _refreshPromise = null/);
-  assert.match(dashboard, /finally \{\s*_refreshPromise = null;\s*\}/);
+  assert.match(dashboard, /finally \{[\s\S]{0,400}_refreshPromise = null;/);
   assert.match(dashboardHtml, /onToolActivity\(activity =>/);
   assert.match(dashboardHtml, /sendDomain\('task\.updated', 'task'/);
   assert.match(dashboardHtml, /mcpConnectionManager\.onChange\(snapshot => sendConnection\(snapshot\)\)/);

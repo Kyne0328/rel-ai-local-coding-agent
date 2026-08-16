@@ -156,7 +156,6 @@ console.log('5. relai_exec compacted: OK');
 
 const snapshotCompact = compactForConnector('snapshot', {
   ok: true, workspace: 'app', root: '/repo',
-  toolMode: 'chatgpt_local_repo', trustedLocalAgent: true,
   flow: { mode: 'standard', prepared: {} },
   manifests: ['package.json'],
   manifestContents: { 'package.json': '{"a":1}'.repeat(500) },
@@ -172,8 +171,6 @@ const snapshotCompact = compactForConnector('snapshot', {
 }, {});
 assert.equal(snapshotCompact.manifestContents, undefined, 'manifest full text dropped');
 assert.equal(snapshotCompact.root, undefined, 'connector snapshot must not expose the absolute workspace root');
-assert.equal(snapshotCompact.toolMode, undefined, 'config constant dropped');
-assert.equal(snapshotCompact.trustedLocalAgent, undefined, 'config constant dropped');
 assert.equal(snapshotCompact.flow, undefined, 'prepared-workflow internals dropped');
 assert.equal(snapshotCompact.operationJournal, undefined, 'journal dropped');
 assert.equal(snapshotCompact.writeGuidance, undefined, 'static guidance blob dropped');

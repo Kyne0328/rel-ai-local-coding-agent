@@ -54,10 +54,8 @@ fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir: sandbox,
   auditLogPath: auditPath,
-  toolMode: 'chatgpt_local_repo',
-  trustedLocalAgent: true,
   workspaces: {},
-  productUx: { staleHours: 24, cleanupOlderThanHours: 168, enableStateExport: true }
+  productUx: { staleHours: 24, enableStateExport: true }
 }, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;
 process.env.REL_AI_MCP_STATE_DIR = sandbox;

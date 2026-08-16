@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-history-reset-'));
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-diagnostics-reset-'));
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
 const auditPath = path.join(stateDir, 'audit.jsonl');
-const token = 'history-reset-token';
+const token = 'diagnostics-reset-token';
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
 const previousState = process.env.REL_AI_MCP_STATE_DIR;
 let taskActivity = { activeCalls: 0, activeTaskCount: 0, tasks: [] };
@@ -39,36 +39,28 @@ try {
   const dashboardCookie = String(dashboardLogin.headers.get('set-cookie') || '').split(';')[0];
   assert.match(dashboardCookie, /^relai_dashboard_session=/);
   await dashboardLogin.arrayBuffer();
-  const post = body => fetch(`http://127.0.0.1:${port}/api/history/reset`, {
+  const post = body => fetch(`http://127.0.0.1:${port}/api/diagnostics/reset`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', cookie: dashboardCookie },
     body: JSON.stringify(body)
   });
 
-  const missingConfirm = await post({});
+  const missingConfirm = await post({ target: 'history' });
   assert.equal(missingConfirm.status, 400);
 
   taskActivity = { activeCalls: 1, activeTaskCount: 1, tasks: [{ taskId: 'running-task', status: 'running' }] };
-  const active = await post({ confirm: true });
+  const active = await post({ target: 'history', confirm: true });
   assert.equal(active.status, 409);
   assert.match((await active.json()).error, /1 Rel\.AI task is still active/);
   assert.equal(fs.existsSync(`${auditPath}.1`), true);
 
   taskActivity = { activeCalls: 0, activeTaskCount: 1, tasks: [{ taskId: 'waiting-task', status: 'planning' }] };
-  const waiting = await post({ confirm: true });
+  const waiting = await post({ target: 'history', confirm: true });
   assert.equal(waiting.status, 409, 'a logical task between tool calls must still protect its history');
   assert.equal(resetCalls, 0);
 
-  const diagnosticsWaiting = await fetch(`http://127.0.0.1:${port}/api/diagnostics/reset`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: dashboardCookie },
-    body: JSON.stringify({ target: 'history', confirm: true })
-  });
-  assert.equal(diagnosticsWaiting.status, 409, 'diagnostic history reset must protect the same active logical task');
-  assert.equal(resetCalls, 0);
-
   taskActivity = { activeCalls: 0, activeTaskCount: 0, tasks: [] };
-  const cleared = await post({ confirm: true });
+  const cleared = await post({ target: 'history', confirm: true });
   const payload = await cleared.json();
   assert.equal(cleared.status, 200);
   assert.equal(payload.ok, true);
@@ -84,7 +76,7 @@ try {
   fs.rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('Dashboard history reset safeguards passed.');
+console.log('Dashboard diagnostic history reset safeguards passed.');
 
 function waitForListening(target) {
   if (target.listening) return Promise.resolve();

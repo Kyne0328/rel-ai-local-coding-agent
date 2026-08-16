@@ -48,7 +48,7 @@ try {
   await waitForHealth();
   assert.equal((await fetch(`${base}/health`)).status, 200);
   assert.equal((await fetch(`${base}/dashboard`)).status, 401);
-  const unauthorizedDashboard = await fetch(`${base}/api/settings`);
+  const unauthorizedDashboard = await fetch(`${base}/api/diagnostics`);
   const unauthorizedDashboardBody = await unauthorizedDashboard.json();
   assert.equal(unauthorizedDashboard.status, 401);
   assert.equal(unauthorizedDashboardBody.errorCode, 'dashboard_unavailable');
@@ -60,7 +60,7 @@ try {
   const dashboardCookie = String(dashboardLogin.headers.get('set-cookie') || '').split(';')[0];
   assert.match(dashboardCookie, /^relai_dashboard_session=/);
   await dashboardLogin.arrayBuffer();
-  assert.equal((await fetch(`${base}/api/settings`, { headers: { cookie: dashboardCookie } })).status, 200);
+  assert.equal((await fetch(`${base}/api/diagnostics`, { headers: { cookie: dashboardCookie } })).status, 200);
 
   const challenge = await fetch(`${base}/mcp`, {
     method: 'POST',

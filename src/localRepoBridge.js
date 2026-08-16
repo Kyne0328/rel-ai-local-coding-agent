@@ -50,8 +50,6 @@ async function repoSnapshot(workspace, config, args = {}) {
     ok: true,
     workspace: workspace.alias,
     root: workspace.path,
-    toolMode: config.toolMode || "chatgpt_local_repo",
-    trustedLocalAgent: Boolean(config.trustedLocalAgent),
     manifests: Object.keys(manifests),
     manifestContents: manifests,
     discoveredCommands,
