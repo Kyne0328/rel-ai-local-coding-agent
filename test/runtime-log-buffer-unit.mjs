@@ -43,6 +43,7 @@ try {
   assert.equal(changes.at(-1).count, 3);
   assert.equal(changes.at(-1).maxEntries, 3);
   assert.equal(bounded.persistent, true);
+  assert.equal(bounded.persistence.healthy, true);
   assert.equal(bounded.entries.length, 3);
   assert.equal(bounded.entries.at(-1).message, 'fourth');
   assert.deepEqual(
@@ -90,6 +91,20 @@ try {
   assert.equal(burstDiskEntries.at(-1).message, 'burst-29', 'compaction must retain the newest diagnostic entry');
   assert.deepEqual(burst.snapshot().entries.map(entry => entry.message), ['burst-27', 'burst-28', 'burst-29']);
 
+  const blockedParent = path.join(temp, 'blocked-log-parent');
+  fs.writeFileSync(blockedParent, 'not a directory');
+  const failedChanges = [];
+  const failedPersistence = createRuntimeLogBuffer({ maxEntries: 3, filePath: path.join(blockedParent, 'service.log') });
+  failedPersistence.onChange(change => failedChanges.push(change));
+  failedPersistence.append('still visible in memory');
+  await failedPersistence.flush();
+  const failedSnapshot = failedPersistence.snapshot();
+  assert.equal(failedSnapshot.persistence.healthy, false, 'persistent app-log write failures must remain observable');
+  assert.equal(failedSnapshot.persistence.failureCount, 1);
+  assert.ok(failedSnapshot.persistence.lastError);
+  assert.equal(failedChanges.at(-1).type, 'persistence');
+  assert.equal(failedSnapshot.entries.at(-1).message, 'still visible in memory', 'persistence failure must not discard the in-memory diagnostic log');
+
   const transitions = createRuntimeLogBuffer({ maxEntries: 10, now: () => '2026-07-25T00:00:00.000Z' });
   transitions.recordStatusTransition({}, { serverRunning: true, tunnelStatus: 'connecting' });
   transitions.recordStatusTransition({ serverRunning: true, tunnelStatus: 'connecting' }, { serverRunning: true, tunnelStatus: 'running' });
@@ -125,6 +140,10 @@ try {
   assert.equal(projected.revision, 3);
   assert.equal(projected.count, 0);
   assert.deepEqual(projected.entries, []);
+  projected = applyRuntimeLogChange(projected, { type: 'persistence', revision: 4, persistence: { healthy: false, failureCount: 2, lastError: 'disk unavailable' } });
+  assert.equal(projected.revision, 4);
+  assert.equal(projected.persistence.healthy, false);
+  assert.equal(projected.persistence.failureCount, 2);
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

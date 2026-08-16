@@ -10,11 +10,14 @@ const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
 const TASK_HISTORY_FLUSH_MS = 75;
 const TASK_HISTORY_PRUNE_DELAY_MS = 1500;
+const TASK_HISTORY_RETRY_BASE_MS = 1000;
+const TASK_HISTORY_RETRY_MAX_MS = 15_000;
 const pendingSessions = new Map();
 const pendingPrunes = new Map();
 const volatileWorkflowEvidence = new Map();
 const MAX_VOLATILE_TASKS = 200;
 let activityPersistenceBound = false;
+let taskHistoryPersistenceState = { lastError: '', lastFailureAt: null, retryCount: 0 };
 
 function recordTaskHistoryEvent(config, event) {
   if (!isCurrentTaskEvent(event)) return null;
@@ -411,14 +414,20 @@ function persistSession(directory, session, options = {}) {
       return;
     }
     pendingSessions.delete(key);
-    writeSession(directory, session);
+    try {
+      writeSession(directory, session);
+      recordTaskHistoryPersistenceSuccess();
+    } catch (error) {
+      recordTaskHistoryPersistenceFailure(error, 1);
+      throw error;
+    }
     scheduleTaskHistoryPrune(directory);
     return;
   }
 
   let pending = pendingSessions.get(key);
   if (!pending) {
-    pending = { directory, session, timer: null, writing: false, version: 0, persistedVersion: 0, promise: Promise.resolve() };
+    pending = { directory, session, timer: null, writing: false, version: 0, persistedVersion: 0, retryCount: 0, promise: Promise.resolve(true) };
     pendingSessions.set(key, pending);
   }
   pending.session = session;
@@ -441,21 +450,32 @@ async function flushPendingSession(key, pending) {
   const version = pending.version;
   const snapshot = pending.session;
   let succeeded = false;
+  let failure = null;
   pending.promise = writeSessionAsync(pending.directory, snapshot)
-    .then(() => { succeeded = true; })
+    .then(() => {
+      succeeded = true;
+      return true;
+    })
     .catch(error => {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred task history write:', error);
+      failure = error;
+      return false;
     })
     .finally(() => {
       pending.writing = false;
       if (!succeeded) {
-        schedulePendingSessionFlush(key, pending, 1000);
+        pending.retryCount += 1;
+        recordTaskHistoryPersistenceFailure(failure, pending.retryCount);
+        const retryDelay = Math.min(TASK_HISTORY_RETRY_MAX_MS, TASK_HISTORY_RETRY_BASE_MS * (2 ** Math.min(pending.retryCount - 1, 4)));
+        schedulePendingSessionFlush(key, pending, retryDelay);
+        if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred task history write:', failure);
         return;
       }
+      pending.retryCount = 0;
       pending.persistedVersion = version;
       scheduleTaskHistoryPrune(pending.directory);
       if (pending.version > version) schedulePendingSessionFlush(key, pending, 0);
       else pendingSessions.delete(key);
+      recordTaskHistoryPersistenceSuccess();
     });
   return pending.promise;
 }
@@ -472,16 +492,43 @@ function scheduleTaskHistoryPrune(directory) {
 }
 
 async function flushTaskHistoryPersistence() {
+  const failed = new Set();
   while (pendingSessions.size > 0) {
-    const entries = [...pendingSessions.entries()];
+    const entries = [...pendingSessions.entries()].filter(([key]) => !failed.has(key));
+    if (!entries.length) break;
     for (const [key, pending] of entries) {
       if (pending.timer) {
         clearTimeout(pending.timer);
         pending.timer = null;
       }
-      await flushPendingSession(key, pending);
+      const succeeded = await flushPendingSession(key, pending);
+      if (!succeeded) failed.add(key);
     }
   }
+  return { ok: failed.size === 0, failed: failed.size, pending: pendingSessions.size };
+}
+
+function taskHistoryPersistenceSnapshot() {
+  return {
+    healthy: !taskHistoryPersistenceState.lastError,
+    pending: pendingSessions.size,
+    retryCount: taskHistoryPersistenceState.retryCount,
+    lastFailureAt: taskHistoryPersistenceState.lastFailureAt,
+    lastError: taskHistoryPersistenceState.lastError
+  };
+}
+
+function recordTaskHistoryPersistenceFailure(error, retryCount) {
+  taskHistoryPersistenceState = {
+    lastError: sanitizeDisplayText(error instanceof Error ? error.message : String(error || 'Task history persistence failed.'), 500),
+    lastFailureAt: new Date().toISOString(),
+    retryCount: Math.max(1, Number(retryCount || 1))
+  };
+}
+
+function recordTaskHistoryPersistenceSuccess() {
+  if ([...pendingSessions.values()].some(pending => Number(pending.retryCount || 0) > 0)) return;
+  taskHistoryPersistenceState = { lastError: '', lastFailureAt: null, retryCount: 0 };
 }
 
 function clearTaskHistory(config) {
@@ -497,6 +544,7 @@ function clearTaskHistory(config) {
   pendingPrunes.delete(directory);
   volatileWorkflowEvidence.clear();
   clearStoredTaskHistory(config);
+  recordTaskHistoryPersistenceSuccess();
 }
 
 function emptySession(id) {
@@ -539,4 +587,4 @@ function emptySession(id) {
   };
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };

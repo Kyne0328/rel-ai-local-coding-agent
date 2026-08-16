@@ -10,6 +10,9 @@ function applyRuntimeLogChange(snapshot = {}, change = {}) {
   if (change.type === 'reset') {
     return { ...current, revision, count: 0, entries: [] };
   }
+  if (change.type === 'persistence' && change.persistence && typeof change.persistence === 'object') {
+    return { ...current, revision, persistence: { ...change.persistence } };
+  }
   if (change.type !== 'append' || !change.entry || typeof change.entry !== 'object') return current;
 
   const requestedMaxEntries = Number(change.maxEntries || current.entries.length || change.count || 1);

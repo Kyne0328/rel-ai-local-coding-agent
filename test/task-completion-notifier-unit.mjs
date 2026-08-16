@@ -27,7 +27,7 @@ const runtime = createTaskActivityRuntime({
   toolActivity: tracker,
   powerSaveBlocker: {
     start(type) {
-      assert.equal(type, 'prevent-display-sleep');
+      assert.equal(type, 'prevent-app-suspension');
       const id = nextBlocker++;
       startedBlockers.add(id);
       return id;
@@ -80,7 +80,7 @@ finishRead();
 finishOther();
 assert.equal(runtime.getStatus().state, 'waiting');
 assert.equal(runtime.getStatus().activeTaskCount, 2);
-assert.equal(startedBlockers.size, 1, 'open work sessions must keep the computer awake between tool calls');
+assert.equal(startedBlockers.size, 0, 'open work sessions must allow normal app suspension between connector calls');
 assert.equal(notifications.length, 0, 'successful tool calls must not be presented as completed ChatGPT tasks');
 
 nowValue = 91_000;

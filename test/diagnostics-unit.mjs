@@ -32,6 +32,7 @@ const report = buildDiagnosticReport({
     available: true,
     persistent: true,
     revision: 7,
+    persistence: { healthy: true, failureCount: 0, lastFailureAt: null, lastError: '' },
     entries: [
       { ts: '2026-07-25T00:03:00.000Z', level: 'info', source: 'desktop-observability', code: 'activity_listener_failed', taskId: 'task-runtime-7', eventId: 'event-runtime-7', workspace: 'example', tool: 'relai_read', operation: 'Read src/app.js', message: 'third' },
       { ts: '2026-07-25T00:01:00.000Z', level: 'error', source: 'openai-tunnel', code: 'public_endpoint_failed', message: `{"token":"${secret}"}` },
@@ -60,6 +61,7 @@ assert.equal(report.maintenance.all.blocked, true);
 assert.equal(report.maintenance.all.confirmation, 'RESET');
 assert.equal(report.logs.runtime.persistent, true);
 assert.equal(report.logs.runtime.revision, 7, 'diagnostic snapshots must preserve the runtime-log revision for live replay ordering');
+assert.equal(report.logs.runtime.persistence.healthy, true);
 assert.deepEqual(report.logs.runtime.entries.map(item => item.ts), ['2026-07-25T00:01:00.000Z','2026-07-25T00:02:00.000Z','2026-07-25T00:03:00.000Z']);
 assert.equal(report.logs.runtime.entries.at(-1).code, 'activity_listener_failed', 'technical log codes must not collapse to a generic UI error code');
 assert.equal(report.logs.runtime.entries.at(-1).taskId, 'task-runtime-7');
@@ -79,7 +81,19 @@ assert.doesNotMatch(report.reportText, new RegExp(secret));
 const persistenceFailure = buildDiagnosticReport({
   connection: { tunnelId: 'tunnel_12345678', token: 'set' },
   connectionState: { publicEndpoint: { status: 'available' }, error: null },
-  runtimeLogs: { available: true, entries: [] },
+  runtimeLogs: {
+    available: true,
+    persistent: true,
+    entries: [],
+    persistence: { healthy: false, failureCount: 2, lastFailureAt: '2026-07-25T00:05:30.000Z', lastError: `EACCES token=${secret}` }
+  },
+  taskHistoryPersistence: {
+    healthy: false,
+    pending: 2,
+    retryCount: 3,
+    lastFailureAt: '2026-07-25T00:05:15.000Z',
+    lastError: `ENOSPC password=${secret}`
+  },
   auditLogs: {
     entries: [],
     persistence: {
@@ -97,6 +111,16 @@ assert.ok(persistenceFinding, 'persistent audit write failures must become a vis
 assert.match(persistenceFinding.title, /Activity history/);
 assert.match(persistenceFinding.recommendation, /disk space|write permissions/i);
 assert.doesNotMatch(JSON.stringify(persistenceFinding), new RegExp(secret), 'technical persistence errors must still be sanitized');
+const taskHistoryPersistenceFinding = persistenceFailure.findings.find(item => item.code === 'task_history_persistence_failed');
+assert.ok(taskHistoryPersistenceFinding, 'persistent task-history write failures must become a visible troubleshooting finding');
+assert.match(taskHistoryPersistenceFinding.title, /Task history/);
+assert.match(taskHistoryPersistenceFinding.recommendation, /bounded backoff|disk space|write permissions/i);
+assert.doesNotMatch(JSON.stringify(taskHistoryPersistenceFinding), new RegExp(secret), 'task-history persistence errors must be sanitized');
+const runtimePersistenceFinding = persistenceFailure.findings.find(item => item.code === 'runtime_log_persistence_failed');
+assert.ok(runtimePersistenceFinding, 'persistent app-log write failures must become a visible troubleshooting finding');
+assert.match(runtimePersistenceFinding.title, /App log/);
+assert.match(runtimePersistenceFinding.recommendation, /disk space|write permissions/i);
+assert.doesNotMatch(JSON.stringify(runtimePersistenceFinding), new RegExp(secret), 'app-log persistence errors must be sanitized');
 
 const disconnected = buildDiagnosticReport({
   connection: { tunnelId: '', token: 'set' },
