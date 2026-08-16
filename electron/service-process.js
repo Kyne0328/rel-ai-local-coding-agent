@@ -1,6 +1,7 @@
 import { closeHttpServer } from './shutdown-coordinator.js';
 import { importResourceModule } from './resource-path.js';
 import { applyRuntimeLogChange } from './runtime-log-snapshot.js';
+import { projectServiceActivityEvent, projectServiceActivitySnapshot } from './service-activity-projection.js';
 
 const parentPort = process.parentPort;
 if (!parentPort) throw new Error('Rel.AI service process requires an Electron utility-process parent port.');
@@ -26,7 +27,8 @@ const pendingNativeRequests = new Map();
 const runtimeLogListeners = new Set();
 
 const unsubscribeActivity = toolActivity.onToolActivity(event => {
-  post({ type: 'activity', event: projectActivityEvent(event) });
+  const projected = projectServiceActivityEvent(event);
+  if (projected) post({ type: 'activity', event: projected });
 });
 
 parentPort.on('message', event => {
@@ -64,7 +66,7 @@ async function dispatchRequest(method, payload) {
   if (method === 'start') return startService(payload);
   if (method === 'stop') return stopService();
   if (method === 'dashboard-bootstrap') return createDashboardBootstrap();
-  if (method === 'activity-snapshot') return projectActivitySnapshot(toolActivity.getToolActivity());
+  if (method === 'activity-snapshot') return projectServiceActivitySnapshot(toolActivity.getToolActivity());
   throw new Error(`Unknown service-process request: ${method}`);
 }
 
@@ -198,44 +200,8 @@ function settleNativeRequest(message) {
 function publishActivitySnapshot() {
   post({
     type: 'activity',
-    event: { phase: 'snapshot', snapshot: projectActivitySnapshot(toolActivity.getToolActivity()) }
+    event: { phase: 'snapshot', snapshot: projectServiceActivitySnapshot(toolActivity.getToolActivity()) }
   });
-}
-
-function projectActivityEvent(event = {}) {
-  return {
-    phase: String(event.phase || ''),
-    revision: Number(event.revision || 0),
-    activeConnectorCalls: Math.max(0, Number(event.activeConnectorCalls || 0)),
-    activeCalls: Math.max(0, Number(event.activeCalls || 0)),
-    activeTaskCount: Math.max(0, Number(event.activeTaskCount || 0)),
-    taskId: String(event.taskId || ''),
-    operationId: String(event.operationId || event.activityEvent?.operationId || event.activityEvent?.eventId || ''),
-    workspace: String(event.workspace || event.task?.workspace || ''),
-    tool: String(event.tool || event.task?.lastTool || event.task?.tool || ''),
-    operation: String(event.operation || event.task?.operation || event.task?.lastOperation || ''),
-    ok: event.ok,
-    error: typeof event.error === 'object' ? String(event.error?.message || '') : String(event.error || ''),
-    task: event.task ? projectTask(event.task) : undefined
-  };
-}
-
-function projectActivitySnapshot(activity = {}) {
-  return {
-    ...activity,
-    tasks: Array.isArray(activity.tasks) ? activity.tasks.map(projectTask) : [],
-    lastTask: activity.lastTask ? projectTask(activity.lastTask) : null
-  };
-}
-
-function projectTask(task = {}) {
-  const {
-    events: _events,
-    currentOperations: _currentOperations,
-    principalFingerprint: _principalFingerprint,
-    ...summary
-  } = task || {};
-  return summary;
 }
 
 function waitForListening(server) {

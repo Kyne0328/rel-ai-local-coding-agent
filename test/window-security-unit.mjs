@@ -19,23 +19,37 @@ const preferences = localWindowWebPreferences('preload.cjs', 'relai-test', 'dash
 
 const webHandlers = new Map();
 const sessionHandlers = new Map();
+let downloadListenerRegistrations = 0;
 let permissionRequest = null;
 let permissionCheck = null;
 let openHandler = null;
 const errors = [];
+const sharedSession = {
+  setPermissionRequestHandler: handler => { permissionRequest = handler; },
+  setPermissionCheckHandler: handler => { permissionCheck = handler; },
+  on: (name, handler) => {
+    if (name === 'will-download') downloadListenerRegistrations += 1;
+    sessionHandlers.set(name, handler);
+  }
+};
 const window = {
   webContents: {
-    session: {
-      setPermissionRequestHandler: handler => { permissionRequest = handler; },
-      setPermissionCheckHandler: handler => { permissionCheck = handler; },
-      on: (name, handler) => sessionHandlers.set(name, handler)
-    },
+    session: sharedSession,
     on: (name, handler) => webHandlers.set(name, handler),
     setWindowOpenHandler: handler => { openHandler = handler; }
   }
 };
 
 assert.equal(secureLocalWindow(window, { allowedUrl, onError: error => errors.push(error.message) }), window);
+const recreatedWindow = {
+  webContents: {
+    session: sharedSession,
+    on() {},
+    setWindowOpenHandler() {}
+  }
+};
+secureLocalWindow(recreatedWindow, { allowedUrl });
+assert.equal(downloadListenerRegistrations, 1, 'recreating a window on the same Electron session must not accumulate will-download listeners');
 let permissionGranted = true;
 permissionRequest(null, 'camera', granted => { permissionGranted = granted; });
 assert.equal(permissionGranted, false);
