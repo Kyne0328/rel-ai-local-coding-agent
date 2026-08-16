@@ -10,7 +10,7 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
-import { readRawBody } from '../src/http/io.js';
+import { DEFAULT_MAX_BODY_BYTES, normalizeMaxBodyBytes, readRawBody } from '../src/http/io.js';
 import { createHttpRequestAbortScope, expectedMcpName } from '../src/http/mcpTransport.js';
 import {
   createNativeTask,
@@ -123,6 +123,10 @@ try {
   await assert.rejects(readRawBody(oversizedDeclaredBody, 64), error => error?.status === 413);
   assert.equal(preflightResumed, true, 'oversized request bodies should be drained so the connection can return a structured 413');
   assert.equal(preflightDestroyed, false, 'oversized request bodies must not be force-destroyed before the HTTP response is sent');
+  assert.equal(normalizeMaxBodyBytes(undefined), DEFAULT_MAX_BODY_BYTES);
+  assert.equal(normalizeMaxBodyBytes('not-a-number'), DEFAULT_MAX_BODY_BYTES, 'invalid body limits must fail closed to the bounded default instead of becoming unbounded');
+  assert.equal(normalizeMaxBodyBytes(-1), DEFAULT_MAX_BODY_BYTES);
+  assert.equal(normalizeMaxBodyBytes(12 * 1024 * 1024), 12 * 1024 * 1024, 'valid configured limits must not be arbitrarily clamped');
 
   const externalAbort = new AbortController();
   const aborted = runBoundedExecution(
@@ -162,6 +166,39 @@ try {
   });
   assert.equal(synchronousFallback.body.result?.resultType, undefined, 'clients without Tasks capability must keep the synchronous result path');
   assert.equal(synchronousFallback.body.result?.structuredContent?.exitCode, 0);
+
+  const safeWithoutTasks = await handleTransportTaskRequest(config, request(101, 'tools/call', {
+    name: 'relai_exec',
+    arguments: {
+      work_id: 'short-no-tasks',
+      command: 'echo bounded execution',
+      timeoutMs: 7_500,
+      maxOutputBytes: 64 * 1024
+    }
+  }, {}), {
+    principal: owner,
+    transportType: 'streamable-http',
+    synchronousFallbackGraceMs: 0,
+    executeToolResult: async () => ({ isError: false, structuredContent: { ok: true, exitCode: 7 } })
+  });
+  assert.equal(safeWithoutTasks.body.result?.structuredContent?.exitCode, 7, 'short bounded calls must stay synchronous even when the client does not advertise Tasks');
+  assert.equal(safeWithoutTasks.body.result?.structuredContent?.status, undefined, 'safe calls must not force a follow-up status request');
+
+  const longWithoutTasks = await handleTransportTaskRequest(config, request(102, 'tools/call', {
+    name: 'relai_exec',
+    arguments: {
+      work_id: 'long-no-tasks',
+      command: 'echo detached execution',
+      timeoutMs: 15_000,
+      maxOutputBytes: 64 * 1024
+    }
+  }, {}), {
+    principal: owner,
+    transportType: 'streamable-http',
+    synchronousFallbackGraceMs: 0,
+    executeToolResult: async () => ({ isError: false, structuredContent: { ok: true, exitCode: 0 } })
+  });
+  assert.equal(longWithoutTasks.body.result?.structuredContent?.status, 'running', 'calls outside the safe synchronous envelope must remain detachable for clients without Tasks');
 
   let directArguments = null;
   const directResult = await handleTransportTaskRequest(config, request(102, 'tools/call', {

@@ -77,18 +77,10 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   if (!validated.ok) return errorResponse(message.id, -32602, validated.error);
 
   const bounds = options.synchronousBounds || DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS;
-  const taskCapability = negotiateTasksCapability(capabilities);
   const execute = typeof options.executeToolResult === 'function'
     ? options.executeToolResult
     : executeToolResult;
-  if (taskCapability.valid && !taskCapability.supported) {
-    return runFallbackToolExecution(config, message, validated.value, {
-      ...options,
-      capabilities,
-      execute
-    });
-  }
-  const estimate = synchronousEstimate(name, validated.value, capabilities, bounds, options);
+  const estimate = synchronousEstimate(name, validated.value, bounds, options);
   const selection = selectExecutionMode({
     clientCapabilities: capabilities,
     taskEligibility: TASK_ELIGIBILITY.ELIGIBLE,
@@ -97,7 +89,18 @@ async function handleTransportTaskRequest(config, message, options = {}) {
     synchronousBounds: bounds,
     abortSignals: options.signal ? [options.signal] : []
   });
-  if (!selection.ok) return errorFromPolicy(message.id, selection.error);
+  if (!selection.ok) {
+    if (selection.capability.valid
+      && !selection.capability.supported
+      && selection.error?.reason === 'native_tasks_required') {
+      return runFallbackToolExecution(config, message, validated.value, {
+        ...options,
+        capabilities,
+        execute
+      });
+    }
+    return errorFromPolicy(message.id, selection.error);
+  }
 
   if (selection.mode === TASK_EXECUTION_MODE.NATIVE_TASKS) {
     return startNativeToolExecution(config, message, validated.value, {
@@ -124,8 +127,8 @@ async function handleTransportTaskRequest(config, message, options = {}) {
 
 function shouldInterceptTool(definition, args = {}) {
   // Eligibility is intentionally broader than current client support. Interception
-  // still falls back to normal synchronous execution when the request does not
-  // advertise Native Tasks, so dormant forward-compatible code is not dead code.
+  // keeps short bounded calls synchronous and detaches only calls that do not fit
+  // the safe response window when the client has not advertised Native Tasks.
   return definition?.behavior?.executionClass === 'native_task_eligible'
     && definition?.behavior?.longRunning === true
     && !catalogApprovalRequirement(definition.name, args || {});
@@ -156,14 +159,7 @@ function isTransportTaskRequestCandidate(config, message) {
   }
 }
 
-function synchronousEstimate(_name, args, capabilities, bounds, options = {}) {
-  const tasksSupported = negotiateTasksCapability(capabilities).supported;
-  if (!tasksSupported) {
-    return {
-      safe: options.synchronousFallback !== false,
-      durationMs: bounds.maxDurationMs
-    };
-  }
+function synchronousEstimate(_name, args, bounds, options = {}) {
   const timeoutMs = Number(args?.timeoutMs);
   const explicitBound = Number.isFinite(timeoutMs) && timeoutMs > 0;
   const directDurationLimit = Math.min(bounds.maxDurationMs, 10_000);
@@ -174,7 +170,8 @@ function synchronousEstimate(_name, args, capabilities, bounds, options = {}) {
       : args?.check || args?.command
         ? 1
         : Number.POSITIVE_INFINITY;
-  const safe = explicitBound
+  const safe = options.synchronousFallback !== false
+    && explicitBound
     && timeoutMs <= directDurationLimit
     && commandCount <= 1;
   return {

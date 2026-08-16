@@ -1,7 +1,7 @@
 import * as http from "node:http";
 import { URL } from "node:url";
 import * as connection from "./connectionProfile.js";
-import { setBaseHeaders, sendJson } from "./http/io.js";
+import { normalizeMaxBodyBytes, setBaseHeaders, sendJson } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
@@ -24,8 +24,6 @@ import { resolveConnectionGenerations } from './mcp/connectionGenerations.js';
 import { mcpConnectionManager } from './mcp/connectionManager.js';
 import { SERVER_INSTANCE_ID } from './mcp/context.js';
 
-const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
-
 function startHttpServer(options = {}) {
   const isolated = options.isolated === true
     || Number(options.port) === 0
@@ -40,7 +38,7 @@ function startHttpServer(options = {}) {
   // find the live server. A second instance (a test, a benchmark, a manual
   // `npm run start:http` on another port) would otherwise silently repoint it.
   const writeProfile = !isolated && options.writeProfile !== false && process.env.REL_AI_MCP_NO_PROFILE_WRITE !== "1";
-  const maxBodyBytes = Number(options.maxBodyBytes || process.env.REL_AI_MCP_MAX_BODY_BYTES || DEFAULT_MAX_BODY_BYTES);
+  const maxBodyBytes = normalizeMaxBodyBytes(options.maxBodyBytes ?? process.env.REL_AI_MCP_MAX_BODY_BYTES);
   // Native folder picker, injected by the Electron launcher (the HTTP server runs
   // in the same process). Absent when the server runs standalone — the endpoint then
   // reports unsupported and the dashboard falls back to manual path entry.
