@@ -183,13 +183,17 @@ function createAppUpdater(options = {}) {
   }
 
   function handleUpdaterEventError(error) {
-    if (retryingOperation && isTransientUpdateError(error)) return;
+    // The awaited check/download owns failures while it is running. electron-updater can
+    // emit the same error before rejecting, so handling both paths would duplicate status
+    // changes, logs, and user notifications.
+    if (retryingOperation) return;
     return handleError(error);
   }
 
   function handleError(error) {
-    const message = cleanText(error instanceof Error ? error.message : error, 600) || 'The application update failed.';
-    log(message, { level: 'error', code: codes.failed });
+    const technicalMessage = cleanText(error instanceof Error ? error.message : error, 600) || 'The application update failed.';
+    const message = updateRecoveryMessage(error);
+    log(technicalMessage, { level: 'error', code: codes.failed });
     emit({ state: 'error', errorCode: codes.failed, error: message, progress: null, integrityVerified: false });
     return failure(codes.failed, message, true);
   }
@@ -222,6 +226,17 @@ function isTransientUpdateError(error) {
   const code = cleanText(error?.code, 120).toUpperCase();
   const message = cleanText(error instanceof Error ? error.message : error, 600).toUpperCase();
   return TRANSIENT_UPDATE_ERROR_CODES.some(candidate => code.includes(candidate) || message.includes(candidate));
+}
+
+function updateRecoveryMessage(error) {
+  const technicalMessage = cleanText(error instanceof Error ? error.message : error, 600);
+  if (isTransientUpdateError(error)) {
+    return 'Rel.AI could not reach the update service. Check your internet connection and try again.';
+  }
+  if (/invalid stable version|cannot be trusted|does not match expected version|metadata version/i.test(technicalMessage)) {
+    return 'Rel.AI could not verify this update. Check for updates again. If the problem continues, install the latest release from GitHub Releases.';
+  }
+  return 'Rel.AI could not complete the update. Try again. If the problem continues, open Troubleshooting for technical details.';
 }
 
 export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload };

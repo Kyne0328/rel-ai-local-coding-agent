@@ -3,19 +3,18 @@
 import { ERROR_CODES, errorGuidance, normalizeErrorCode } from "./desktopUxContracts.js";
 
 const SENSITIVE_KEY = /token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret|bootstrap/i;
-const SECRET_TEXT_PATTERNS = [
-  /Bearer\s+[^\s,;]+/gi,
-  /([?&](?:token|bootstrap|code|client_secret)=)[^&#\s]+/gi,
-  /(["']?(?:token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)["']?\s*:\s*)["'][^"']*["']/gi,
-  /\b(token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)\s*[:=]\s*[^\s,;]+/gi
+const SECRET_TEXT_REPLACEMENTS = [
+  [/-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----[\s\S]{0,50000}?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/gi, '[redacted-private-key]'],
+  [/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]'],
+  [/([?&](?:token|bootstrap|code|client_secret)=)[^&#\s]+/gi, '$1[redacted]'],
+  [/(["']?(?:token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)["']?\s*:\s*)["'][^"']*["']/gi, '$1"[redacted]"'],
+  [/\b(token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]'],
+  [/\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|AUTH_CODE|CLIENT_SECRET)[A-Z0-9_]*)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/g, '$1=[redacted]']
 ];
 
 function sanitizeText(value, maxLength = 4000) {
   let text = String(value == null ? '' : value);
-  text = text.replace(SECRET_TEXT_PATTERNS[0], 'Bearer [redacted]');
-  text = text.replace(SECRET_TEXT_PATTERNS[1], '$1[redacted]');
-  text = text.replace(SECRET_TEXT_PATTERNS[2], '$1"[redacted]"');
-  text = text.replace(SECRET_TEXT_PATTERNS[3], '$1=[redacted]');
+  for (const [pattern, replacement] of SECRET_TEXT_REPLACEMENTS) text = text.replace(pattern, replacement);
   if (text.length > maxLength) text = `${text.slice(0, maxLength)}\n[diagnostic text truncated]`;
   return text;
 }
@@ -179,6 +178,7 @@ function normalizeRuntimeLogs(value) {
   return {
     available: value?.available === true,
     persistent: value?.persistent === true,
+    revision: Number.isFinite(Number(value?.revision)) ? Math.max(0, Number(value.revision)) : 0,
     count: Number(value?.count ?? entries.length),
     entries: ordered.map(entry => ({
       ts: entry.ts || null,
