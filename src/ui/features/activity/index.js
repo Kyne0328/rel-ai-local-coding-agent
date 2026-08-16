@@ -14,6 +14,7 @@ import {
   activityAbsoluteTime,
   activityActionLabel,
   activityDisplayAction,
+  activityToolLabel,
   activityFilterTransition,
   activityMessage,
   activitySessionView,
@@ -242,7 +243,7 @@ function activeActivityFilters() {
   };
   if (_filterState.timeRange !== '1h') add('timeRange', 'Time', _filterState.timeRange, _filterState.timeRange === 'all' ? 'All time' : _filterState.timeRange);
   add('workspace', 'Project', _filterState.workspace);
-  add('tool', 'Action', _filterState.tool);
+  add('tool', 'Action', _filterState.tool, activityToolLabel(_filterState.tool));
   add('status', 'Status', _filterState.status, statusFilterLabel(_filterState.status));
   if (_filterState.task) {
     const session = _sessionIndex.get(_filterState.task);
@@ -284,7 +285,7 @@ function openActivityFilters() {
         filterSelectField({
           label: 'Action',
           value: draft.tool,
-          options: activitySelectOptions('All actions', _filterOptions.tools, draft.tool),
+          options: activitySelectOptions('All actions', _filterOptions.tools, draft.tool, activityToolLabel),
           onChange: value => { draft.tool = value; }
         }),
         filterSelectField({
@@ -307,9 +308,9 @@ function openActivityFilters() {
   });
 }
 
-function activitySelectOptions(allLabel, values, selected) {
+function activitySelectOptions(allLabel, values, selected, labelFor = value => value) {
   const options = selected && !values.includes(selected) ? [selected, ...values] : values;
-  return [{ value: '', label: allLabel }, ...options.map(value => ({ value, label: value }))];
+  return [{ value: '', label: allLabel }, ...options.map(value => ({ value, label: labelFor(value) }))];
 }
 
 function applyActivityFilters(draft) {

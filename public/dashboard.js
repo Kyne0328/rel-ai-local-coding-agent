@@ -111,7 +111,7 @@ async function boot() {
     activateRouter(routeRoot);
     updateShell(initial);
   } else {
-    renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the connection service, configuration, and workspace status.');
+    renderDashboardState('loading', 'Loading Rel.AI…', 'Checking your connection and project access.');
   }
   if (initial?.ok === false || !initial) {
     const refreshed = await recoverDashboard({ source: 'boot', render: _routerReady });

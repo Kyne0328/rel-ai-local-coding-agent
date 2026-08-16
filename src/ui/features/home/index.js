@@ -109,7 +109,7 @@ function overviewState(data = {}) {
 }
 
 function buildOverview(data) {
-  const { workspaces, tasks, bridgeState } = overviewState(data);
+  const { workspaces, tasks, findings, bridgeState } = overviewState(data);
   const root = document.createElement('div');
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
@@ -122,7 +122,7 @@ function buildOverview(data) {
 
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
-  grid.appendChild(workspaceSummaryCard(workspaces));
+  grid.appendChild(workspaceSummaryCard(workspaces, findings));
   grid.appendChild(recentTasksCard(tasks));
   root.appendChild(grid);
   return root;
@@ -425,7 +425,7 @@ function formatAnalyticsDuration(value) {
   return `${minutes.toFixed(minutes >= 10 ? 1 : 2)} min`;
 }
 
-function workspaceSummaryCard(workspaces) {
+function workspaceSummaryCard(workspaces, findings) {
   const card = document.createElement('section');
   card.className = 'card';
   card.innerHTML = `<div class="card-head"><h3>Projects</h3><a class="section-action" href="${routeMetadata('workspaces').href}">Manage</a></div>`;
@@ -435,7 +435,7 @@ function workspaceSummaryCard(workspaces) {
     ? workspaces.slice(0, 6).map(ws => `
       <div class="compact-workspace">
         <div><strong>${esc(ws.alias || 'project')}</strong><div class="compact-workspace-path">${esc(ws.path || '')}</div></div>
-        ${pillHtml(hasValidation(ws) ? 'ready' : 'not configured')}
+        ${pillHtml(overviewWorkspaceStatus(ws, findings))}
       </div>`).join('')
     : `<div class="empty">No projects added yet. <a class="buttonlike secondary compact-button" href="${routeMetadata('workspaces').href}">Add your first project</a></div>`;
   card.appendChild(body);
@@ -481,8 +481,12 @@ function statusLabel(status) {
   return String(status || 'open').replaceAll('_', ' ');
 }
 
-function hasValidation(workspace) {
-  return Boolean((workspace.testCommandKeys || []).length || (workspace.discoveredTestCommandKeys || []).length);
+export function overviewWorkspaceStatus(workspace = {}, findings = []) {
+  const alias = String(workspace.alias || '');
+  if (alias && findings.some(finding => finding?.workspace === alias)) return 'needs attention';
+  if (workspace.operational?.exists === false) return 'unavailable';
+  if (workspace.operational?.currentActivity || workspace.sessionPolicy?.sessionActive) return 'active';
+  return 'ready';
 }
 
 function actionableFindings(health) {
