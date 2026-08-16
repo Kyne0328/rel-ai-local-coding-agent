@@ -38,6 +38,8 @@ let _renderRevisionKey = '';
 let _renderFrame = 0;
 let _renderWaiters = [];
 let _deferredViewRender = false;
+let _recoveryNoticeTimer = null;
+const AUTO_RECOVERY_DELAYS_MS = [0, 600, 1600];
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -112,7 +114,7 @@ async function boot() {
     renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the connection service, configuration, and workspace status.');
   }
   if (initial?.ok === false || !initial) {
-    const refreshed = await doRefresh({ source: 'boot', render: _routerReady });
+    const refreshed = await recoverDashboard({ source: 'boot', render: _routerReady });
     if (refreshed?.ok !== false && !_routerReady) activateRouter(routeRoot);
   }
   window.addEventListener('relai:dashboard-refresh', event => doRefresh({
@@ -234,36 +236,176 @@ async function performRefresh(options = {}) {
       else if (options.render === true) await renderViewIfChanged(hydrated);
       else if (options.render !== false) await syncLiveView(hydrated);
       _lastEventAt = Date.now();
+      clearRecoveryNotice({ announce: true });
       return hydrated;
     }
-    return renderRefreshFailure(data);
+    return options.quietFailure === true ? data : renderRefreshFailure(data);
   } catch (error) {
-    return renderRefreshFailure({
+    const failure = {
       ok: false,
       error: error instanceof Error ? error.message : String(error)
-    });
+    };
+    return options.quietFailure === true ? failure : renderRefreshFailure(failure);
   }
 }
 
-function renderRefreshFailure(data) {
+async function recoverDashboard(options = {}) {
+  let latest = { ok: false, error: 'The dashboard could not reach the Rel.AI connection service.' };
+  for (let attempt = 0; attempt < AUTO_RECOVERY_DELAYS_MS.length; attempt += 1) {
+    const delay = AUTO_RECOVERY_DELAYS_MS[attempt];
+    if (delay) await wait(delay);
+    latest = await doRefresh({ ...options, source: options.source || 'automatic-recovery', quietFailure: true });
+    if (latest?.ok !== false) return latest;
+    if (latest?.status === 401) break;
+  }
+  return renderRefreshFailure(latest);
+}
+
+function renderRefreshFailure(data = {}) {
   const message = data?.error || 'The dashboard could not reach the Rel.AI connection service.';
   _shellStatus = { label: data?.status === 401 ? 'Authentication failed' : 'Disconnected', tone: 'bad' };
   renderConnectionStatus();
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = message;
-  if (!_routerReady) renderDashboardState('error', data?.status === 401 ? 'Dashboard authentication failed.' : 'Rel.AI is not responding.', message);
+  const title = data?.status === 401 ? 'Dashboard authentication failed.' : 'Rel.AI is not responding.';
+  if (!_routerReady) renderDashboardState('error', title, message, data);
+  else showRecoveryNotice(title, message, data);
   return data;
 }
 
-function renderDashboardState(kind, title, description) {
+function renderDashboardState(kind, title, description, data = {}) {
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
   if (kind === 'loading') {
     routeRoot.innerHTML = `<div class="dashboard-state" role="status" aria-live="polite" aria-busy="true"><div class="dashboard-state-card"><div class="loading-mark" aria-hidden="true"></div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="skeleton-grid" aria-hidden="true"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div></div></div>`;
     return;
   }
-  routeRoot.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Connection error</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-dashboard-retry>Retry connection</button><a class="buttonlike secondary" href="#diagnostics">Open diagnostics</a></div></div></div>`;
-  routeRoot.querySelector('[data-dashboard-retry]')?.addEventListener('click', () => doRefresh({ source: 'retry', render: true }));
+  routeRoot.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Connection error</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="dashboard-state-actions" data-recovery-actions></div></div></div>`;
+  mountRecoveryActions(routeRoot, data);
+}
+
+function showRecoveryNotice(title, description, data = {}) {
+  const notice = recoveryNoticeElement();
+  if (!notice) return;
+  if (_recoveryNoticeTimer) window.clearTimeout(_recoveryNoticeTimer);
+  _recoveryNoticeTimer = null;
+  notice.hidden = false;
+  notice.className = 'connection-notice bad';
+  notice.setAttribute('role', 'alert');
+  notice.innerHTML = `<strong>${escapeHtml(title)}</strong><div>${escapeHtml(description)}</div><div class="dashboard-state-actions" data-recovery-actions></div>`;
+  mountRecoveryActions(notice, data);
+}
+
+function recoveryNoticeElement() {
+  let notice = document.getElementById('dashboardRecoveryNotice');
+  if (notice) return notice;
+  const routeRoot = ensureRouteRoot();
+  if (!routeRoot?.parentElement) return null;
+  notice = document.createElement('section');
+  notice.id = 'dashboardRecoveryNotice';
+  notice.hidden = true;
+  notice.setAttribute('aria-live', 'polite');
+  routeRoot.parentElement.insertBefore(notice, routeRoot);
+  return notice;
+}
+
+function clearRecoveryNotice(options = {}) {
+  const notice = document.getElementById('dashboardRecoveryNotice');
+  if (!notice || notice.hidden) return;
+  if (_recoveryNoticeTimer) window.clearTimeout(_recoveryNoticeTimer);
+  _recoveryNoticeTimer = null;
+  if (options.announce === true) {
+    notice.className = 'connection-notice';
+    notice.setAttribute('role', 'status');
+    notice.innerHTML = '<strong>Connection restored.</strong><div>Rel.AI is responding again.</div>';
+    _recoveryNoticeTimer = window.setTimeout(() => {
+      notice.hidden = true;
+      _recoveryNoticeTimer = null;
+    }, 3000);
+    return;
+  }
+  notice.hidden = true;
+}
+
+function mountRecoveryActions(container, data = {}) {
+  const actions = container.querySelector('[data-recovery-actions]');
+  if (!actions) return;
+  const recovery = recoveryAction(data);
+  const primary = document.createElement('button');
+  primary.type = 'button';
+  primary.className = 'primary';
+  primary.textContent = recovery.label;
+  primary.addEventListener('click', () => runDashboardRecovery(recovery, data, primary));
+  actions.appendChild(primary);
+
+  if (typeof window.relaiDesktop?.relaunchApp === 'function') {
+    const restart = document.createElement('button');
+    restart.type = 'button';
+    restart.className = 'secondary';
+    restart.textContent = 'Restart Rel.AI';
+    restart.addEventListener('click', () => runAppRelaunch(restart));
+    actions.appendChild(restart);
+  }
+
+  const diagnostics = document.createElement('a');
+  diagnostics.className = 'buttonlike secondary';
+  diagnostics.href = '#diagnostics';
+  diagnostics.textContent = 'Open diagnostics';
+  actions.appendChild(diagnostics);
+}
+
+function recoveryAction(data = {}) {
+  if (data?.status === 401 && typeof window.relaiDesktop?.reloadDashboard === 'function') {
+    return { kind: 'reload', label: 'Reload dashboard', busyLabel: 'Reloading dashboard…' };
+  }
+  if (typeof window.relaiDesktop?.restartService === 'function') {
+    return { kind: 'restart', label: 'Restart connection', busyLabel: 'Restarting connection…' };
+  }
+  return { kind: 'retry', label: 'Retry connection', busyLabel: 'Retrying connection…' };
+}
+
+async function runDashboardRecovery(recovery, data, button) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = recovery.busyLabel;
+  try {
+    if (recovery.kind === 'reload') {
+      await window.relaiDesktop.reloadDashboard(location.hash || '#home');
+      return;
+    }
+    if (recovery.kind === 'restart') {
+      const status = await window.relaiDesktop.restartService();
+      if (status) applyDesktopStatus(status);
+    }
+    await recoverDashboard({ source: 'manual-recovery', render: true });
+  } catch (error) {
+    renderRefreshFailure({ ...data, ok: false, error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+}
+
+async function runAppRelaunch(button) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Restarting Rel.AI…';
+  try {
+    await window.relaiDesktop.relaunchApp();
+  } catch (error) {
+    renderRefreshFailure({ ok: false, error: error instanceof Error ? error.message : String(error) });
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => window.setTimeout(resolve, milliseconds));
 }
 
 async function liveOnEvent(event) {

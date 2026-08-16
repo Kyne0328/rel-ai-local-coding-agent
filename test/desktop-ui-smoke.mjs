@@ -69,24 +69,27 @@ assert.match(wizardJs, /getRecoveryConfig/);
 assert.match(wizardJs, /openOpenAISetup\(destination\)/);
 assert.doesNotMatch(wizardJs, /ngrok|gateway|approvalToken|connectionMode/i);
 
-assert.match(statusHtml, /Backup connection window/);
+assert.match(statusHtml, /Rel\.AI recovery/);
 assert.match(statusHtml, /Secure MCP Tunnel/);
 assert.match(statusHtml, /Copy tunnel ID/);
 assert.match(statusHtml, /id="localHealthCard"/);
 assert.match(statusHtml, /id="publicHealthCard"/);
 assert.match(statusHtml, /id="serverToggleBtn"/);
+assert.match(statusHtml, /id="restartAppBtn"/);
 assert.match(statusHtml, /id="notificationToggleBtn"/);
 assert.match(statusHtml, /Recent app logs/);
 assert.match(statusJs, /currentStatus\.tunnelId/);
 assert.match(statusJs, /Tunnel ID copied/);
 assert.match(statusJs, /The Secure MCP Tunnel did not become ready/);
+assert.match(statusJs, /restartService\(\)/);
+assert.match(statusJs, /relaunchApp\(\)/);
 assert.match(statusJs, /Secure tunnel:/);
 assert.match(statusJs, /Local MCP:/);
 assert.match(statusJs, /safeDiagnosticText/);
 assert.match(statusJs, /Task activity:/);
 assert.doesNotMatch(statusJs, /currentStatus\.mcpUrl|approval token|ngrok|gateway/i);
 
-for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close']) {
+for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close','desktop:restart-service','desktop:reload-dashboard','desktop:relaunch','recovery:restart-service','recovery:relaunch']) {
   assert.match(preload, new RegExp(channel.replaceAll(':', '\\:')));
   assert.match(ipc, new RegExp(channel.replaceAll(':', '\\:')));
 }
@@ -124,10 +127,17 @@ assert.match(main, /createTunnelCredentialStore/);
 assert.match(main, /openDashboardWindow\('#settings'\)/);
 assert.match(main, /openDashboardWindow\('#diagnostics'\)/);
 assert.match(main, /serviceRuntime\.waitUntilListening\(\)/, 'foreground dashboard opening must await the local service readiness promise');
+assert.match(main, /app\.relaunch\(\)/, 'desktop recovery must provide a full application relaunch escape hatch');
+assert.match(main, /taskActivityBlockReason\(toolActivityRuntime\.getStatus\(\), 'restarting Rel\.AI'\)/, 'full app restart must remain guarded while Rel.AI work is active');
 assert.doesNotMatch(main, /waitForLocalService|setTimeout\(poll,\s*20\)/, 'local service readiness must not use a 20ms polling loop');
 assert.match(main, /options\.background \? await pendingStart : await serviceRuntime\.waitUntilListening\(\)/, 'foreground configured startup must show the dashboard while the tunnel continues connecting');
 assert.match(main, /setImmediate\(\(\) => \{[\s\S]*appUpdater\.start\(\)[\s\S]*updateSupportPolicy\.start\(\)/, 'updater policy work should begin after the first useful desktop startup path is scheduled');
 assert.doesNotMatch(main, /createGatewayClient|createPublicConnectionRuntime|createApprovalTokenManager|managedNgrok/);
+assert.match(dashboardJs, /AUTO_RECOVERY_DELAYS_MS/);
+assert.match(dashboardJs, /Restart connection/);
+assert.match(dashboardJs, /Reload dashboard/);
+assert.match(dashboardJs, /Restart Rel\.AI/);
+assert.match(dashboardJs, /Connection restored/);
 assert.match(windowSecurity, /contextIsolation: true/);
 assert.match(windowSecurity, /sandbox: true/);
 assert.match(windowSecurity, /setPermissionRequestHandler/);

@@ -38,7 +38,8 @@ function registerIpcHandlers(deps) {
     getDashboardWindow: deps.getDashboardWindow,
     startServer: deps.startServer,
     stopServer: deps.stopServer,
-    launchConfiguredDesktop: deps.launchConfiguredDesktop
+    launchConfiguredDesktop: deps.launchConfiguredDesktop,
+    relaunchApplication: deps.relaunchApplication
   });
   registerDashboardWindowIpc({
     ipcMain: deps.ipcMain,
@@ -48,7 +49,8 @@ function registerIpcHandlers(deps) {
     minimizeDashboardWindow: deps.minimizeDashboardWindow,
     toggleDashboardMaximize: deps.toggleDashboardMaximize,
     requestDashboardClose: deps.requestDashboardClose,
-    openSettingsWindow: deps.openSettingsWindow
+    openSettingsWindow: deps.openSettingsWindow,
+    openDashboardWindow: deps.openDashboardWindow
   });
   registerAnalyticsIpc({ ipcMain: deps.ipcMain, dashboardOnly, getLocalUsage: deps.getLocalUsage });
   registerDesktopSettingsIpc({
@@ -119,26 +121,27 @@ function registerRecoveryIpc({ ipcMain, windowOnly, getFallbackWindow, openRecov
   ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
 }
 
-function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, launchConfiguredDesktop }) {
+function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, launchConfiguredDesktop, relaunchApplication }) {
   ipcMain.handle('server:start', event => windowOnly(event, getFallbackWindow, 'Service startup', startServer));
   ipcMain.handle('server:stop', event => windowOnly(event, getFallbackWindow, 'Service shutdown', stopServer));
-  ipcMain.on('desktop:restart-service', event => {
-    if (!isSenderWindow(event, getDashboardWindow)) return;
-    Promise.resolve(launchConfiguredDesktop({ restart: true })).catch(logIpcFailure);
-  });
+  ipcMain.handle('recovery:restart-service', event => windowOnly(event, getFallbackWindow, 'Connection restart', () => launchConfiguredDesktop({ restart: true })));
+  ipcMain.handle('desktop:restart-service', event => windowOnly(event, getDashboardWindow, 'Connection restart', () => launchConfiguredDesktop({ restart: true })));
+  ipcMain.handle('recovery:relaunch', event => windowOnly(event, getFallbackWindow, 'Application restart', relaunchApplication));
+  ipcMain.handle('desktop:relaunch', event => windowOnly(event, getDashboardWindow, 'Application restart', relaunchApplication));
   ipcMain.on('desktop:stop-service', event => {
     if (!isSenderWindow(event, getDashboardWindow)) return;
     setImmediate(() => Promise.resolve(stopServer()).catch(logIpcFailure));
   });
 }
 
-function registerDashboardWindowIpc({ ipcMain, dashboardOnly, getCurrentStatus, getDashboardWindowState, minimizeDashboardWindow, toggleDashboardMaximize, requestDashboardClose, openSettingsWindow }) {
+function registerDashboardWindowIpc({ ipcMain, dashboardOnly, getCurrentStatus, getDashboardWindowState, minimizeDashboardWindow, toggleDashboardMaximize, requestDashboardClose, openSettingsWindow, openDashboardWindow }) {
   ipcMain.handle('desktop:get-status', event => dashboardOnly(event, getCurrentStatus));
   ipcMain.handle('desktop:window:get-state', event => dashboardOnly(event, getDashboardWindowState));
   ipcMain.handle('desktop:window:minimize', event => dashboardOnly(event, minimizeDashboardWindow));
   ipcMain.handle('desktop:window:toggle-maximize', event => dashboardOnly(event, toggleDashboardMaximize));
   ipcMain.handle('desktop:window:close', event => dashboardOnly(event, requestDashboardClose));
   ipcMain.handle('desktop:open-settings', event => dashboardOnly(event, openSettingsWindow));
+  ipcMain.handle('desktop:reload-dashboard', (event, routeHash = '') => dashboardOnly(event, () => openDashboardWindow(routeHash)));
 }
 
 function registerSharedUtilityIpc({ ipcMain, BrowserWindow, clipboard, allowedWindows, isSenderWindow, getWizardWindow, getFallbackWindow, getDashboardWindow, fitWindowToContent }) {

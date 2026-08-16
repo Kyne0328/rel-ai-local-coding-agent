@@ -449,6 +449,16 @@ async function launchConfiguredDesktop(options = {}) {
   }
 }
 
+async function relaunchApplication() {
+  const restartBlock = taskActivityBlockReason(toolActivityRuntime.getStatus(), 'restarting Rel.AI');
+  if (restartBlock) throw new Error(restartBlock);
+  isQuitting = true;
+  const shutdown = await shutdownCoordinator.prepare('relaunch');
+  app.relaunch();
+  app.exit(0);
+  return { ok: true, clean: shutdown.clean !== false };
+}
+
 async function quitApplication() {
   isQuitting = true;
   await shutdownCoordinator.prepare('quit');
@@ -479,6 +489,7 @@ registerIpcHandlers({
   startServer,
   stopServer,
   launchConfiguredDesktop,
+  relaunchApplication,
   openSettingsWindow,
   openDashboardWindow,
   getDesktopSettings: currentDesktopSettings,

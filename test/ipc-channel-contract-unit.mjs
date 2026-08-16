@@ -4,6 +4,7 @@ import { registerIpcHandlers } from '../electron/ipc-handlers.js';
 const inventory = {
   'wizard:done': spec('handle', ['wizard'], 'reject'),
   'wizard:cancel': spec('handle', ['wizard'], 'reject'),
+  'wizard:open-openai-setup': spec('handle', ['wizard'], 'reject'),
   'recovery:get-config': spec('handle', ['wizard'], 'reject'),
   'recovery:open-setup': spec('handle', ['fallback'], 'reject'),
   'url:open-dashboard': spec('handle', ['fallback'], 'reject'),
@@ -11,12 +12,17 @@ const inventory = {
   'notifications:set-enabled': spec('handle', ['fallback'], 'reject'),
   'server:start': spec('handle', ['fallback'], 'reject'),
   'server:stop': spec('handle', ['fallback'], 'reject'),
+  'recovery:restart-service': spec('handle', ['fallback'], 'reject'),
+  'recovery:relaunch': spec('handle', ['fallback'], 'reject'),
+  'desktop:restart-service': spec('handle', ['dashboard'], 'reject'),
+  'desktop:relaunch': spec('handle', ['dashboard'], 'reject'),
   'desktop:get-status': spec('handle', ['dashboard'], 'reject'),
   'desktop:window:get-state': spec('handle', ['dashboard'], 'reject'),
   'desktop:window:minimize': spec('handle', ['dashboard'], 'reject'),
   'desktop:window:toggle-maximize': spec('handle', ['dashboard'], 'reject'),
   'desktop:window:close': spec('handle', ['dashboard'], 'reject'),
   'desktop:open-settings': spec('handle', ['dashboard'], 'reject'),
+  'desktop:reload-dashboard': spec('handle', ['dashboard'], 'reject'),
   'desktop:analytics:local': spec('handle', ['dashboard'], 'reject'),
   'desktop:settings:get': spec('handle', ['dashboard'], 'reject'),
   'desktop:settings:save': spec('handle', ['dashboard'], 'reject'),
@@ -33,7 +39,6 @@ const inventory = {
   'desktop:diagnostics:export': spec('handle', ['dashboard'], 'reject'),
   'desktop:diagnostics:open-folder': spec('handle', ['dashboard'], 'reject'),
   'url:copy': spec('handle', ['wizard', 'fallback', 'dashboard'], 'reject'),
-  'desktop:restart-service': spec('on', ['dashboard'], 'ignore'),
   'desktop:stop-service': spec('on', ['dashboard'], 'ignore'),
   'window:fit-content': spec('on', ['wizard', 'fallback'], 'ignore')
 };
@@ -51,6 +56,7 @@ registerIpcHandlers({
   ipcMain,
   BrowserWindow: { fromWebContents: sender => sender?.window || null },
   clipboard: { writeText: value => calls.push(['clipboard', value]) },
+  shell: { openExternal: async value => { calls.push(['openExternal', value]); } },
   getWizardWindow: () => windows.wizard,
   closeWizard: value => calls.push(['closeWizard', value]),
   getFallbackWindow: () => windows.fallback,
@@ -59,6 +65,7 @@ registerIpcHandlers({
   setTunnelApiKey: value => calls.push(['tunnelKey', value]),
   saveLauncherConfig: value => calls.push(['save', value]),
   launchConfiguredDesktop: async value => { calls.push(['launch', value]); return { serverRunning: true, tunnelStatus: 'running' }; },
+  relaunchApplication: async () => { calls.push(['relaunch']); return { ok: true }; },
   openRecoverySetup: () => ({ ok: true }),
   openDashboardWindow: () => ({ ok: true }),
   getNotificationsEnabled: () => true,
@@ -117,9 +124,11 @@ function eventFor(window) { return { sender: { window } }; }
 function argsFor(channel) {
   switch (channel) {
     case 'wizard:done': return [{ tunnelId: 'tunnel_12345678', tunnelApiKey: 'runtime-api-key-value', port: 3333, restart: false }];
+    case 'wizard:open-openai-setup': return ['tunnels'];
     case 'url:copy': return ['safe text'];
     case 'desktop:analytics:local': return ['2026-08'];
     case 'desktop:settings:save': return [{ port: 3333, tunnelId: 'tunnel_12345678' }];
+    case 'desktop:reload-dashboard': return ['#tasks'];
     case 'desktop:startup:set':
     case 'desktop:notifications:set':
     case 'desktop:notification-preferences:set':
