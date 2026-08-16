@@ -31,6 +31,7 @@ const report = buildDiagnosticReport({
   runtimeLogs: {
     available: true,
     persistent: true,
+    revision: 7,
     entries: [
       { ts: '2026-07-25T00:03:00.000Z', level: 'info', source: 'desktop', message: 'third' },
       { ts: '2026-07-25T00:01:00.000Z', level: 'error', source: 'openai-tunnel', code: 'public_endpoint_failed', message: `{"token":"${secret}"}` },
@@ -58,6 +59,7 @@ assert.equal(report.maintenance.all.available, true);
 assert.equal(report.maintenance.all.blocked, true);
 assert.equal(report.maintenance.all.confirmation, 'RESET');
 assert.equal(report.logs.runtime.persistent, true);
+assert.equal(report.logs.runtime.revision, 7, 'diagnostic snapshots must preserve the runtime-log revision for live replay ordering');
 assert.deepEqual(report.logs.runtime.entries.map(item => item.ts), ['2026-07-25T00:01:00.000Z','2026-07-25T00:02:00.000Z','2026-07-25T00:03:00.000Z']);
 assert.equal(report.logs.failedActivity.length, 2);
 assert.equal(report.logs.failedActivity.at(-1).taskId, 'task-42');

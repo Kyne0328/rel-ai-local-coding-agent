@@ -143,11 +143,17 @@ assert.ok(exhaustedCheck.fake.checkCalls > 1, 'transient updater failures should
 assert.ok(exhaustedCheck.fake.checkCalls < exhaustedFailures.length, 'transient updater retries must remain bounded');
 assert.equal(exhaustedCheck.logs.filter(entry => entry.options.code === 'update_failed').length, 1, 'exhausted retries should emit one terminal update failure');
 assert.equal(exhaustedCheck.updater.getStatus().state, 'error');
+assert.match(exhaustedCheck.updater.getStatus().error, /could not reach the update service/i, 'network internals must be converted to recovery guidance');
 
 const nonTransientCheck = createHarness({ checkFailures: [Object.assign(new Error('certificate rejected'), { code: 'ERR_CERT_AUTHORITY_INVALID' })] });
 nonTransientCheck.updater.start();
-assert.equal((await nonTransientCheck.updater.checkForUpdates()).ok, false);
+const nonTransientResult = await nonTransientCheck.updater.checkForUpdates();
+assert.equal(nonTransientResult.ok, false);
 assert.equal(nonTransientCheck.fake.checkCalls, 1, 'non-transient updater failures must fail without retrying');
+assert.equal(nonTransientCheck.logs.filter(entry => entry.options.code === 'update_failed').length, 1, 'an emitted and rejected updater error must have one owner');
+assert.ok(nonTransientCheck.logs.some(entry => entry.message === 'certificate rejected'), 'technical updater detail must remain in diagnostics');
+assert.doesNotMatch(nonTransientResult.error, /certificate rejected/i, 'ordinary UI must not expose raw updater internals');
+assert.match(nonTransientResult.error, /Troubleshooting/i);
 
 valid.fake.emit('update-available', {
   version: '0.21.0',
@@ -264,7 +270,8 @@ const invalidInstalled = createHarness({ currentVersion: 'development' });
 invalidInstalled.updater.start();
 invalidInstalled.fake.emit('update-available', { version: '1.0.0' });
 assert.equal(invalidInstalled.updater.getStatus().state, 'error');
-assert.match(invalidInstalled.updater.getStatus().error, /installed application version is invalid/i);
+assert.match(invalidInstalled.updater.getStatus().error, /could not verify this update/i);
+assert.ok(invalidInstalled.logs.some(entry => /installed application version is invalid/i.test(entry.message)), 'invalid-version detail must remain in diagnostics');
 
 const mismatch = createHarness();
 mismatch.updater.start();
@@ -273,7 +280,8 @@ mismatch.fake.emit('update-downloaded', { version: '0.21.1' });
 assert.equal(mismatch.updater.getStatus().state, 'error');
 assert.equal(mismatch.updater.getStatus().integrityVerified, false);
 assert.equal(mismatch.updater.getStatus().canInstall, false);
-assert.match(mismatch.updater.getStatus().error, /does not match expected version/);
+assert.match(mismatch.updater.getStatus().error, /could not verify this update/i);
+assert.ok(mismatch.logs.some(entry => /does not match expected version/i.test(entry.message)), 'download mismatch detail must remain in diagnostics');
 assert.equal(mismatch.updater.installUpdate().ok, false);
 assert.match(mismatch.updater.installUpdate().error, /Download and verify/);
 

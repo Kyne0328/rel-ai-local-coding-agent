@@ -369,13 +369,25 @@ async function refreshLiveTail() {
 
 function applyRuntimeLogDelta(change) {
   const runtime = currentReport.logs.runtime;
+  const currentRevision = finiteRevision(runtime.revision);
+  const incomingRevision = finiteRevision(change.revision);
+  if (incomingRevision && incomingRevision <= currentRevision) return;
+  if (incomingRevision && incomingRevision > currentRevision + 1) {
+    scheduleLiveTailRefresh();
+    return;
+  }
   const entries = Array.isArray(runtime.entries) ? runtime.entries : [];
   runtime.entries = [...entries, change.entry].slice(-100);
-  runtime.count = Math.max(Number(runtime.count || 0) + 1, runtime.entries.length);
-  runtime.revision = Number(change.revision || runtime.revision || 0);
+  runtime.count = Math.max(Number(change.count || 0), Number(runtime.count || 0) + 1, runtime.entries.length);
+  runtime.revision = incomingRevision || currentRevision;
   updateSourceOptions(currentReport);
   renderDiagnosticLogs(currentContainer);
   if (['warning', 'error'].includes(change.entry.level)) announceDiagnosticUpdate(change.entry);
+}
+
+function finiteRevision(value) {
+  const revision = Number(value);
+  return Number.isFinite(revision) ? Math.max(0, revision) : 0;
 }
 
 function renderDiagnosticLogs(container) {
