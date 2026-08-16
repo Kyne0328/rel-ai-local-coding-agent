@@ -126,7 +126,10 @@ function connectionFindings(connection, state) {
     ));
   }
   const connectionError = state?.error;
-  if (connectionError?.message) findings.push(findingFromCode(connectionError.code, 'error', connectionError.message, connectionError));
+  if (connectionError?.message) {
+    const severity = connectionError.code === ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED ? 'warning' : 'error';
+    findings.push(findingFromCode(connectionError.code, severity, connectionError.message, connectionError));
+  }
   return findings;
 }
 
@@ -242,10 +245,14 @@ function normalizeRuntimeLogs(value) {
     count: Number(value?.count ?? entries.length),
     entries: ordered.map(entry => ({
       ts: entry.ts || null,
-      level: ['error', 'warning', 'info'].includes(entry.level) ? entry.level : 'info',
+      lastTs: entry.lastTs || null,
+      level: ['error', 'warning', 'info', 'debug'].includes(entry.level) ? entry.level : 'info',
       source: sanitizeText(entry.source || 'desktop', 80),
+      component: sanitizeText(entry.component || '', 100),
       code: sanitizeText(entry.code || '', 120),
       message: sanitizeText(entry.message || '', 2000),
+      details: sanitizeDiagnosticValue(entry.details || {}),
+      repeatCount: Math.max(0, Math.floor(Number(entry.repeatCount || 0))),
       taskId: sanitizeText(entry.taskId || '', 160),
       eventId: sanitizeText(entry.eventId || '', 160),
       workspace: sanitizeText(entry.workspace || '', 120),

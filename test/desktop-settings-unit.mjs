@@ -25,7 +25,9 @@ try {
     tunnelId: 'tunnel_example123456',
     tunnelApiKey: '',
     tunnelApiKeyConfigured: true,
-    notificationsEnabled: true
+    notificationsEnabled: true,
+    tunnelErrorCode: '',
+    tunnelError: ''
   });
 
   const runtimeActions = {
@@ -50,6 +52,33 @@ try {
   assert.equal(notificationsEnabled, false);
   assert.equal(restarts, 1);
 
+  let tunnelRestarts = 0;
+  const tunnelOnly = await saveDesktopSettings({ tunnelApiKey: 'sk-runtime-tunnel-only-123456' }, {
+    ...runtimeActions,
+    getCurrentStatus: () => ({ serverRunning: true, tunnelStatus: 'running' }),
+    restartTunnel: async () => { tunnelRestarts += 1; return { serverRunning: true, tunnelStatus: 'running' }; }
+  });
+  assert.equal(tunnelOnly.ok, true);
+  assert.equal(tunnelRestarts, 1, 'runtime-key replacement must restart only the tunnel when the local service is healthy');
+  assert.equal(restarts, 1, 'tunnel-only reconnect must not restart the local service');
+  assert.equal(storedApiKey, 'sk-runtime-tunnel-only-123456');
+
+  const rejected = await saveDesktopSettings({ tunnelApiKey: 'sk-runtime-rejected-123456' }, {
+    ...runtimeActions,
+    getCurrentStatus: () => ({ serverRunning: true, tunnelStatus: 'running' }),
+    restartTunnel: async () => ({
+      serverRunning: true,
+      tunnelStatus: 'failed',
+      errorCode: 'tunnel_authentication_failed',
+      error: 'OpenAI rejected the tunnel runtime API key.'
+    })
+  });
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.saved, true);
+  assert.equal(rejected.errorCode, 'tunnel_authentication_failed');
+  assert.equal(storedApiKey, 'sk-runtime-rejected-123456', 'a rejected replacement key stays saved so the user can explicitly replace it');
+
+  storedApiKey = 'sk-runtime-tunnel-only-123456';
   let failingRestarts = 0;
   await assert.rejects(
     () => saveDesktopSettings({ port: 5555, tunnelId: 'tunnel_failed12345', tunnelApiKey: 'sk-runtime-failed-123456', notificationsEnabled: true }, {
@@ -67,12 +96,12 @@ try {
     /restart failed.*restored/i
   );
   assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123' }, 'failed reconnect must restore launcher config');
-  assert.equal(storedApiKey, 'sk-runtime-replacement-123456', 'failed reconnect must restore the previous encrypted key');
+  assert.equal(storedApiKey, 'sk-runtime-tunnel-only-123456', 'failed full reconnect must restore the previous encrypted key');
   assert.equal(notificationsEnabled, false, 'failed reconnect must restore notification preferences');
   assert.equal(failingRestarts, 2, 'rollback must restart the restored configuration');
 
   await assert.rejects(
-    () => saveDesktopSettings({}, { setTunnelApiKey() {}, canRestart: () => 'Finish or cancel the active Rel.AI task before saving connection settings.', restartDesktop: async () => ({ serverRunning: true }) }),
+    () => saveDesktopSettings({ port: 6666 }, { setTunnelApiKey() {}, canRestart: () => 'Finish or cancel the active Rel.AI task before saving connection settings.', restartDesktop: async () => ({ serverRunning: true }) }),
     /active Rel\.AI task/
   );
   await assert.rejects(() => saveDesktopSettings({}, { setTunnelApiKey() {} }), /restartDesktop is required/);

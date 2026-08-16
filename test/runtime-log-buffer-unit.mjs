@@ -116,6 +116,24 @@ try {
   assert.ok(messages.includes('Local service stopped.'));
   assert.doesNotMatch(JSON.stringify(messages), /secret-token/);
 
+  const grouped = createRuntimeLogBuffer({ maxEntries: 10, now: () => '2026-08-16T05:00:00.000Z' });
+  const groupedChanges = [];
+  grouped.onChange(change => groupedChanges.push(change));
+  grouped.append('Tunnel polling was interrupted. Retrying automatically.', {
+    level: 'warning', source: 'openai-tunnel', component: 'controlplane', code: 'tunnel_connection_interrupted',
+    details: { retryInMs: 10000, lastError: 'unexpected EOF' }
+  });
+  grouped.append('Tunnel polling was interrupted. Retrying automatically.', {
+    level: 'warning', source: 'openai-tunnel', component: 'controlplane', code: 'tunnel_connection_interrupted',
+    details: { retryInMs: 10000, lastError: 'connection reset' }
+  });
+  const groupedSnapshot = grouped.snapshot();
+  assert.equal(groupedSnapshot.count, 1, 'repeated tunnel failures must stay grouped');
+  assert.equal(groupedSnapshot.entries[0].repeatCount, 2);
+  assert.equal(groupedSnapshot.entries[0].component, 'controlplane');
+  assert.equal(groupedSnapshot.entries[0].details.lastError, 'connection reset');
+  assert.deepEqual(groupedChanges.map(change => change.type), ['append', 'replace']);
+
   const cleared = buffer.clear();
   await buffer.flush();
   assert.equal(cleared.ok, true);
@@ -131,17 +149,20 @@ try {
   assert.equal(projected.revision, 2);
   assert.equal(projected.count, 3);
   assert.deepEqual(projected.entries.map(entry => entry.message), ['two', 'three']);
-  const duplicate = applyRuntimeLogChange(projected, { type: 'append', revision: 2, count: 3, maxEntries: 2, entry: { message: 'duplicate' } });
-  assert.equal(duplicate.revision, 2);
+  projected = applyRuntimeLogChange(projected, { type: 'replace', revision: 3, count: 3, index: 1, entry: { message: 'three', repeatCount: 2, details: { retryInMs: 10000 } } });
+  assert.equal(projected.entries[1].repeatCount, 2);
+  assert.equal(projected.entries[1].details.retryInMs, 10000);
+  const duplicate = applyRuntimeLogChange(projected, { type: 'append', revision: 3, count: 3, maxEntries: 2, entry: { message: 'duplicate' } });
+  assert.equal(duplicate.revision, 3);
   assert.deepEqual(duplicate.entries.map(entry => entry.message), ['two', 'three'], 'replayed runtime-log revisions must be idempotent');
-  const staleReset = applyRuntimeLogChange(projected, { type: 'reset', revision: 1, count: 0, maxEntries: 2 });
+  const staleReset = applyRuntimeLogChange(projected, { type: 'reset', revision: 2, count: 0, maxEntries: 2 });
   assert.deepEqual(staleReset.entries.map(entry => entry.message), ['two', 'three'], 'stale resets must not erase newer runtime logs');
-  projected = applyRuntimeLogChange(projected, { type: 'reset', revision: 3, count: 0, maxEntries: 2 });
-  assert.equal(projected.revision, 3);
+  projected = applyRuntimeLogChange(projected, { type: 'reset', revision: 4, count: 0, maxEntries: 2 });
+  assert.equal(projected.revision, 4);
   assert.equal(projected.count, 0);
   assert.deepEqual(projected.entries, []);
-  projected = applyRuntimeLogChange(projected, { type: 'persistence', revision: 4, persistence: { healthy: false, failureCount: 2, lastError: 'disk unavailable' } });
-  assert.equal(projected.revision, 4);
+  projected = applyRuntimeLogChange(projected, { type: 'persistence', revision: 5, persistence: { healthy: false, failureCount: 2, lastError: 'disk unavailable' } });
+  assert.equal(projected.revision, 5);
   assert.equal(projected.persistence.healthy, false);
   assert.equal(projected.persistence.failureCount, 2);
 } finally {

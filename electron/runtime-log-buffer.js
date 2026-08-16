@@ -1,5 +1,3 @@
-
-
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { sanitizeText } from "../src/diagnostics.js";
@@ -24,12 +22,35 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
       message
     });
     if (!entry) return null;
+
+    const previous = entries.at(-1);
+    if (previous && sameRepeatableEvent(previous, entry)) {
+      const repeated = {
+        ...previous,
+        lastTs: entry.ts,
+        repeatCount: Math.max(1, Number(previous.repeatCount || 1)) + 1,
+        ...(Object.keys(entry.details || {}).length ? { details: entry.details } : {})
+      };
+      entries[entries.length - 1] = repeated;
+      rewriteFile();
+      revision += 1;
+      emit({
+        type: 'replace',
+        revision,
+        count: entries.length,
+        maxEntries: entryLimit,
+        index: entries.length - 1,
+        entry: cloneLogEntry(repeated)
+      });
+      return cloneLogEntry(repeated);
+    }
+
     entries.push(entry);
     if (entries.length > entryLimit) entries.splice(0, entries.length - entryLimit);
     persist(entry);
     revision += 1;
-    emit({ type: 'append', revision, count: entries.length, maxEntries: entryLimit, entry: { ...entry } });
-    return { ...entry };
+    emit({ type: 'append', revision, count: entries.length, maxEntries: entryLimit, entry: cloneLogEntry(entry) });
+    return cloneLogEntry(entry);
   }
 
   function snapshot(options = {}) {
@@ -41,7 +62,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
       count: entries.length,
       persistent: Boolean(resolveFilePath()),
       persistence: { ...persistence },
-      entries: entries.slice(-limit).map(entry => ({ ...entry }))
+      entries: entries.slice(-limit).map(cloneLogEntry)
     };
   }
 
@@ -170,17 +191,74 @@ function normalizeEntry(value = {}) {
   const message = sanitizeText(value.message, 4000).trim();
   if (!message) return null;
   const entry = {
-    ts: value.ts || new Date().toISOString(),
+    ts: normalizeTimestamp(value.ts),
     level: normalizeLevel(value.level),
     source: sanitizeLogField(value.source || 'desktop', 80),
     code: sanitizeLogField(value.code, 120),
     message
   };
+  const component = sanitizeLogField(value.component, 100);
+  if (component) entry.component = component;
+  const details = sanitizeDetails(value.details);
+  if (Object.keys(details).length) entry.details = details;
+  const repeatCount = Math.max(0, Math.floor(Number(value.repeatCount || 0)));
+  if (repeatCount > 1) entry.repeatCount = repeatCount;
+  if (value.lastTs) entry.lastTs = normalizeTimestamp(value.lastTs);
   for (const [key, limit] of Object.entries({ taskId: 160, eventId: 160, workspace: 120, tool: 120, operation: 240 })) {
     const field = sanitizeLogField(value[key], limit);
     if (field) entry[key] = field;
   }
   return entry;
+}
+
+function sameRepeatableEvent(left, right) {
+  return left.level === right.level
+    && left.source === right.source
+    && String(left.component || '') === String(right.component || '')
+    && left.code === right.code
+    && left.message === right.message
+    && !left.taskId
+    && !right.taskId
+    && !left.eventId
+    && !right.eventId;
+}
+
+function sanitizeDetails(value, depth = 0) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return {};
+  const output = {};
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, 24)) {
+    const key = sanitizeLogField(rawKey, 80);
+    if (!key || /token|secret|password|authorization|api.?key|credential/i.test(key)) continue;
+    if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+      const nested = sanitizeDetails(rawValue, depth + 1);
+      if (Object.keys(nested).length) output[key] = nested;
+      continue;
+    }
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue)) output[key] = rawValue;
+    else if (typeof rawValue === 'boolean') output[key] = rawValue;
+    else {
+      const text = sanitizeText(rawValue == null ? '' : String(rawValue), 1000).trim();
+      if (text) output[key] = text;
+    }
+  }
+  return output;
+}
+
+function cloneLogEntry(entry) {
+  return {
+    ...entry,
+    ...(entry.details ? { details: structuredCloneSafe(entry.details) } : {})
+  };
+}
+
+function structuredCloneSafe(value) {
+  try { return structuredClone(value); }
+  catch { return JSON.parse(JSON.stringify(value)); }
+}
+
+function normalizeTimestamp(value) {
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
 }
 
 function sanitizeLogField(value, limit) {
@@ -190,6 +268,7 @@ function sanitizeLogField(value, limit) {
 function normalizeLevel(value) {
   if (value === 'error') return 'error';
   if (value === 'warning' || value === 'warn') return 'warning';
+  if (value === 'debug' || value === 'trace') return 'debug';
   return 'info';
 }
 

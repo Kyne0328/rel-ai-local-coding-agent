@@ -113,8 +113,8 @@ function buildDashboardConnectionProjection(_config, options = {}, mcpOverride =
     tunnelProvider: 'openai-secure-mcp'
   });
   const connectionStateInput = desktopStatus || {
-    serverRunning: true,
-    tunnelStatus: profile.tunnelId ? 'connecting' : 'stopped'
+    serverRunning: false,
+    tunnelStatus: 'stopped'
   };
   const mcpConnection = mcpOverride || mcpConnectionManager.snapshot();
   return {
