@@ -143,15 +143,16 @@ try {
   sessions = readTaskHistory(config, { state: 'idle' }, { limit: 500 });
   assert.equal(sessions.some(session => session.id === 'legacy-event'), false);
   assert.equal(sessions.some(session => session.id === 'abandoned-start'), false);
+  assert.equal(readTaskHistorySessionRecord(config, 'abandoned-start'), null, 'start-only abandoned sessions must be deleted after the stale retention window');
   const recoveredCompletion = sessions.find(session => session.id === 'inactive-explicit-completion');
   assert.equal(recoveredCompletion.status, 'completed', 'explicit completion evidence must outrank a stale inactive projection');
   assert.equal(recoveredCompletion.completionKnown, true, 'explicit completion evidence must be recovered instead of erased by inactivity');
   assert.equal(recoveredCompletion.progress.mode, 'complete');
   const workflowCompleted = sessions.find(session => session.id === 'inactive-workflow-complete');
-  assert.equal(workflowCompleted.status, 'completed', 'workflow hard-readiness must outrank stale inactivity after the session is no longer active');
-  assert.equal(workflowCompleted.completionKnown, true, 'workflow hard-readiness must become durable completion evidence');
-  assert.equal(workflowCompleted.endReason, 'workflow_completion');
-  assert.equal(sessions.find(session => session.id === 'inactive-advisory-complete').status, 'inactive', 'workflow stage alone without hard-readiness must not fabricate completion');
+  assert.equal(workflowCompleted.status, 'inactive', 'workflow readiness must not substitute for explicit lifecycle completion');
+  assert.equal(workflowCompleted.completionKnown, false);
+  assert.equal(workflowCompleted.endReason || '', '');
+  assert.equal(sessions.find(session => session.id === 'inactive-advisory-complete').status, 'inactive', 'workflow stage alone must not fabricate completion');
   writeSession(historyDir, {
     id: 'workflow-complete-with-inactive-tracker', taskId: 'workflow-complete-with-inactive-tracker', sessionId: 'workflow-complete-with-inactive-tracker', version: 3,
     title: 'Workflow complete with stale tracker row', status: 'inactive', state: 'inactive', completionKnown: false,
@@ -161,8 +162,8 @@ try {
   });
   const trackerInactive = readTaskHistory(config, { tasks: [{ id: 'workflow-complete-with-inactive-tracker', taskId: 'workflow-complete-with-inactive-tracker', status: 'inactive', state: 'inactive', activeCalls: 0, completionKnown: false, startedAt: new Date(Date.now() - 20 * 60_000).toISOString() }] }, { limit: 500 });
   const trackerOverlayCompletion = trackerInactive.find(session => session.id === 'workflow-complete-with-inactive-tracker');
-  assert.equal(trackerOverlayCompletion.status, 'completed', 'an inactive tracker snapshot must not block persisted workflow completion recovery on first read');
-  assert.equal(trackerOverlayCompletion.completionKnown, true, 'inactive tracker snapshots must not overwrite recovered completion');
+  assert.equal(trackerOverlayCompletion.status, 'inactive', 'an inactive tracker snapshot must remain resumable until explicit lifecycle completion');
+  assert.equal(trackerOverlayCompletion.completionKnown, false);
   const exact = sessions.find(session => session.id === 'exact-task');
   assert.equal(exact.calls, 2);
   assert.equal(exact.status, 'completed');

@@ -63,6 +63,17 @@ function readSession(directory, id) {
   return metadata ? readCachedSession(file, metadata.identity) : null;
 }
 
+function removeSession(directory, id) {
+  const file = sessionPath(directory, id);
+  fs.rmSync(file, { force: true });
+  parsedCache.delete(file);
+  const cached = directoryMetadataCache.get(directory);
+  if (cached) {
+    cached.items.delete(path.basename(file));
+    cached.checkedAt = Date.now();
+  }
+}
+
 function normalizeStoredSession(session, { forWrite = false } = {}) {
   if (!session || typeof session !== 'object') return null;
   const id = String(session.id || '').trim();
@@ -250,4 +261,4 @@ function resetTaskHistoryCaches() {
   for (const directory of [...directoryMetadataCache.keys()]) closeDirectoryMetadataCache(directory);
 }
 
-export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, resetTaskHistoryCaches, writeSession, writeSessionAsync };
+export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, resetTaskHistoryCaches, writeSession, writeSessionAsync };
