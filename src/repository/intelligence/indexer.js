@@ -68,8 +68,8 @@ function noteRepositoryMutation(workspace, config = {}, paths = []) {
     return;
   }
   for (const relativePath of normalized) state.pendingPaths.add(relativePath);
-  if (state.pendingPaths.size > MAX_INCREMENTAL_PATHS) {
-    state.pendingPaths.clear();
+  if (pendingRefreshPathCount(state) > MAX_INCREMENTAL_PATHS) {
+    clearPendingRefreshPaths(state);
     state.fullScanRequired = true;
   }
 }
@@ -85,7 +85,7 @@ function repositoryIndexStatus(workspace, config = {}) {
     dirty: state.dirty,
     active: activeBuilds.has(databaseFile),
     watching: Boolean(state.watcher),
-    pendingPathCount: state.pendingPaths.size,
+    pendingPathCount: pendingRefreshPathCount(state),
     lastError: state.lastError,
     lastFullScanAt: isoTime(state.lastFullScanAt),
     lastReconciledAt: isoTime(state.lastReconciledAt),
@@ -131,6 +131,9 @@ function shutdownRepositoryIndexes() {
 async function runCoalescedIndexing(workspace, config, databaseFile, state, options) {
   let metadata = state.metadata;
   let mode = normalizeMode(options.mode);
+  let coalescedPassCount = 0;
+  let totalChangedPathCount = 0;
+  let totalDeletedPathCount = 0;
   try {
     for (let pass = 0; pass < MAX_COALESCED_PASSES; pass += 1) {
       throwIfAborted(options.signal);
@@ -148,7 +151,17 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
       });
       state.currentCancel = execution.cancel;
       try {
-        metadata = await execution.promise;
+        const passMetadata = await execution.promise;
+        coalescedPassCount += 1;
+        totalChangedPathCount += Number(passMetadata?.changedPathCount || 0);
+        totalDeletedPathCount += Number(passMetadata?.deletedPathCount || 0);
+        metadata = {
+          ...passMetadata,
+          changedPathCount: totalChangedPathCount,
+          deletedPathCount: totalDeletedPathCount,
+          cacheHit: totalChangedPathCount === 0 && totalDeletedPathCount === 0 && passMetadata?.cacheHit === true,
+          ...(coalescedPassCount > 1 ? { coalescedPassCount } : {})
+        };
       } finally {
         if (state.currentCancel === execution.cancel) state.currentCancel = null;
       }
@@ -182,8 +195,8 @@ function consumeRefreshSelection(state, mode, force) {
   const fallbackReconcileDue = !state.watcher
     && (!state.lastFullScanAt || Date.now() - state.lastFullScanAt >= FALLBACK_RECONCILE_INTERVAL_MS);
   const full = force || mode === 'rebuild' || mode === 'recover' || state.fullScanRequired || fallbackReconcileDue;
-  const paths = full ? null : [...state.pendingPaths].slice(0, MAX_INCREMENTAL_PATHS);
-  state.pendingPaths.clear();
+  const paths = full ? null : incrementalRefreshPaths(state);
+  clearPendingRefreshPaths(state);
   state.fullScanRequired = false;
   return { paths };
 }
@@ -335,13 +348,14 @@ function ensureWorkspaceWatcher(workspace, databaseFile, state) {
       state.changeRevision += 1;
       state.dirty = true;
       if (!normalized || eventType === 'rename' || normalized === '.relaiignore') {
-        state.pendingPaths.clear();
+        clearPendingRefreshPaths(state);
         state.fullScanRequired = true;
         return;
       }
-      state.pendingPaths.add(normalized);
-      if (state.pendingPaths.size > MAX_INCREMENTAL_PATHS) {
-        state.pendingPaths.clear();
+      if (watchPathIsDirectory(root, normalized)) state.pendingDirectories.add(normalized);
+      else state.pendingPaths.add(normalized);
+      if (pendingRefreshPathCount(state) > MAX_INCREMENTAL_PATHS) {
+        clearPendingRefreshPaths(state);
         state.fullScanRequired = true;
       }
     });
@@ -370,7 +384,7 @@ function shouldIgnoreWatchPath(root, indexRoot, filename, shouldCollect) {
 function runtimeState(databaseFile) {
   let state = runtimeStates.get(databaseFile);
   if (!state) {
-    state = { metadata: null, dirty: true, changeRevision: 0, lastReconciledAt: 0, lastFullScanAt: 0, watcher: null, pendingPaths: new Set(), fullScanRequired: true, status: 'idle', lastError: null, currentCancel: null };
+    state = { metadata: null, dirty: true, changeRevision: 0, lastReconciledAt: 0, lastFullScanAt: 0, watcher: null, pendingPaths: new Set(), pendingDirectories: new Set(), fullScanRequired: true, status: 'idle', lastError: null, currentCancel: null };
     runtimeStates.set(databaseFile, state);
   }
   return state;
@@ -401,6 +415,26 @@ function serializableWorkspace(workspace) {
       excludePaths: Array.isArray(context.excludePaths) ? context.excludePaths : []
     }
   };
+}
+
+function incrementalRefreshPaths(state) {
+  const exactPaths = [...state.pendingPaths];
+  const directories = [...state.pendingDirectories].filter(directory =>
+    !exactPaths.some(relativePath => relativePath.startsWith(`${directory}/`)));
+  return [...exactPaths, ...directories].slice(0, MAX_INCREMENTAL_PATHS);
+}
+
+function pendingRefreshPathCount(state) {
+  return state.pendingPaths.size + state.pendingDirectories.size;
+}
+
+function clearPendingRefreshPaths(state) {
+  state.pendingPaths.clear();
+  state.pendingDirectories.clear();
+}
+
+function watchPathIsDirectory(root, relativePath) {
+  try { return fs.statSync(path.resolve(root, relativePath)).isDirectory(); } catch { return false; }
 }
 
 function normalizePaths(paths) {

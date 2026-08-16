@@ -27,7 +27,7 @@ function buildWorkspaces(data) {
     <div class="feature-toolbar workspace-toolbar">
       <p>See each project’s status and common actions. Open Project details when you need more technical information.</p>
       <div class="section-head-actions">
-        ${workspaceFilter ? `<span class="workspace-focus-label" title="Selected project: ${esc(workspaceFilter)}">Selected: ${esc(workspaceFilter)}</span><a class="buttonlike secondary compact-button" href="#workspaces">Show all</a>` : ''}
+        ${workspaceFilter ? `<a class="buttonlike secondary compact-button workspace-focus-chip" href="#workspaces" aria-label="Clear selected project filter: ${esc(workspaceFilter)}" title="Show all projects"><span>${esc(workspaceFilter)}</span><span aria-hidden="true">×</span></a>` : ''}
         <span class="feature-count">${allWorkspaces.length} project${allWorkspaces.length === 1 ? '' : 's'}</span>
         <button class="primary" type="button" data-add-workspace>Add project</button>
       </div>

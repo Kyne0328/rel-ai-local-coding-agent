@@ -25,10 +25,13 @@ export async function mountUsage(container) {
             <span>Project</span>
             <select data-usage-workspace><option value="">All projects</option></select>
           </label>
-          <label class="usage-range-control">
+          <div class="usage-range-control">
             <span>Range</span>
-            <select data-usage-range>${ANALYTICS_RANGES.map(([key, label]) => `<option value="${key}"${key === range ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select>
-          </label>
+            <select data-usage-range hidden>${ANALYTICS_RANGES.map(([key, label]) => `<option value="${key}"${key === range ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select>
+            <div class="usage-range-switch" role="group" aria-label="Analytics range">
+              ${ANALYTICS_RANGES.map(([key, label]) => `<button type="button" data-usage-range-option="${key}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}" aria-pressed="${key === range ? 'true' : 'false'}">${escapeHtml(rangeButtonLabel(key, label))}</button>`).join('')}
+            </div>
+          </div>
           <div class="usage-custom-range" data-usage-custom-range ${range === 'custom' ? '' : 'hidden'}>
             <label><span>From</span><input type="date" data-usage-start value="${escapeHtml(params.get('start') || defaults.start)}" /></label>
             <label><span>To</span><input type="date" data-usage-end value="${escapeHtml(params.get('end') || defaults.end)}" /></label>
@@ -46,6 +49,7 @@ export async function mountUsage(container) {
     generation,
     workspaceSelect: root.querySelector('[data-usage-workspace]'),
     rangeSelect: root.querySelector('[data-usage-range]'),
+    rangeButtons: [...root.querySelectorAll('[data-usage-range-option]')],
     customRange: root.querySelector('[data-usage-custom-range]'),
     startInput: root.querySelector('[data-usage-start]'),
     endInput: root.querySelector('[data-usage-end]'),
@@ -59,9 +63,20 @@ export async function mountUsage(container) {
     replaceRouteParams({ workspace: controls.workspaceSelect.value || null, device: null });
     refresh();
   });
+  for (const button of controls.rangeButtons) {
+    button.addEventListener('click', () => {
+      const value = button.dataset.usageRangeOption || '24h';
+      if (controls.rangeSelect.value === value) return;
+      controls.rangeSelect.value = value;
+      controls.rangeSelect.dispatchEvent(new Event('change'));
+    });
+  }
   controls.rangeSelect.addEventListener('change', () => {
     const custom = controls.rangeSelect.value === 'custom';
     controls.customRange.hidden = !custom;
+    for (const button of controls.rangeButtons) {
+      button.setAttribute('aria-pressed', String(button.dataset.usageRangeOption === controls.rangeSelect.value));
+    }
     replaceRouteParams({
       range: controls.rangeSelect.value === '24h' ? null : controls.rangeSelect.value,
       start: custom ? controls.startInput.value : null,
@@ -144,6 +159,10 @@ function syncWorkspaceControl(select, models, workspace) {
 function renderUnavailable(content, message, retry) {
   content.innerHTML = `<section class="usage-unavailable empty-state"><strong>Analytics unavailable</strong><p>${escapeHtml(message || 'Analytics could not be loaded.')}</p><button type="button" class="secondary" data-usage-retry>Retry</button></section>`;
   content.querySelector('[data-usage-retry]')?.addEventListener('click', retry);
+}
+
+function rangeButtonLabel(key, label) {
+  return ({ '1h': '1h', '24h': '24h', '7d': '7d', '30d': '30d', month: 'Month', custom: 'Custom' })[key] || label;
 }
 
 function customDateDefaults(now = new Date()) {

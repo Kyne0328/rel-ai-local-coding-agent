@@ -321,7 +321,7 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
 .setup-principle div span { color: var(--ui-text-secondary); font-size: var(--font-11); line-height: 1.45; }
 .setup-next { min-width: 140px; }
 .password-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
-.password-toggle { min-width: 64px; }
+.password-toggle { min-width: 64px; min-height: 44px; }
 .field-message { min-height: 18px; margin-top: 6px; color: var(--ui-text-secondary); font-size: var(--font-12); }
 .field-message.success { color: var(--ui-status-success-foreground); }
 .field-message.error { color: var(--ui-status-danger-foreground); }

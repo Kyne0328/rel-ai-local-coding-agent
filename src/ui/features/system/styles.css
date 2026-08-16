@@ -83,8 +83,7 @@
 .diagnostic-page-head { @apply min-w-0 items-start; }
 .diagnostic-page-actions { @apply min-w-0 flex-wrap justify-end; }
 .diagnostic-page-actions button { @apply min-w-0; }
-.diagnostic-live-tail { @apply min-w-0 whitespace-nowrap; }
-.diagnostic-live-tail.active { background: var(--ui-selection-background); color: var(--ui-action-primary); }
+.diagnostic-live-tail { @apply min-w-0; }
 .diagnostic-summary, .diagnostic-list { @apply flex min-w-0 flex-col gap-3; }
 .diagnostic-metric { @apply flex items-end justify-between gap-3; }
 .diagnostic-metric span { @apply text-[11px] font-semibold; color: var(--ui-text-secondary); }
@@ -138,7 +137,6 @@
 
 @media (max-width: 980px) {
   .diagnostic-log-grid { grid-template-columns: 1fr; }
-  .diagnostic-live-tail { justify-self: start; }
 }
 
 @media (max-width: 980px) {
@@ -167,12 +165,10 @@
 @container diagnostic-page (max-width: 760px) {
   .diagnostic-page-head { @apply flex-col items-stretch; }
   .diagnostic-page-actions { @apply justify-start; }
-  .diagnostic-live-tail { @apply justify-self-start; }
 }
 @container diagnostic-page (max-width: 480px) {
   .diagnostic-page-actions { @apply grid w-full; grid-template-columns: minmax(0,1fr); }
   .diagnostic-page-actions button { @apply w-full; }
-  .diagnostic-live-tail { @apply w-full justify-self-stretch; }
 }
 
 @layer components {

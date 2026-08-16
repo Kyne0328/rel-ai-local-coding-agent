@@ -32,6 +32,9 @@ assert.equal(normalizeRouteKey('activity?status=succeeded'), 'activity?status=su
 assert.equal(normalizeRouteKey('activity?status=active'), 'activity?status=active');
 assert.equal(normalizeRouteKey('activity?status=failed'), 'activity?status=failed');
 assert.equal(normalizeRouteKey('activity?status=other'), 'activity?status=other');
+assert.equal(normalizeRouteKey('usage?workspace=app&range=7d'), 'usage?workspace=app&range=7d');
+assert.equal(normalizeRouteKey('usage?range=custom&start=2026-08-01&end=2026-08-16'), 'usage?range=custom&start=2026-08-01&end=2026-08-16');
+assert.equal(normalizeRouteKey('usage?range=invalid&start=nope'), 'usage');
 
 const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456' }).join(' ');
 assert.match(createSteps, /tunnel/i);
@@ -102,6 +105,7 @@ const wizard = read('electron/renderer/wizard.html');
 assert.match(wizard, /Connect Rel\.AI to ChatGPT/);
 assert.match(wizard, /id="tunnelIdInput"/);
 assert.match(wizard, /id="tunnelApiKeyInput"/);
+assert.match(wizard, /id="runtimeKeyToggle"[^>]*aria-controls="tunnelApiKeyInput"/, 'setup should let users verify the runtime API key they pasted');
 assert.doesNotMatch(wizard, /ngrok|Cloud gateway|Direct connection|approval token/i);
 
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-validation.js')), false);
@@ -124,7 +128,7 @@ assert.match(diagnosticsSource, /captureLogScrollState/, 'diagnostic refreshes m
 assert.match(diagnosticsSource, /previous\.follow/, 'diagnostic logs should auto-follow only when the user was already near the tail');
 assert.match(diagnosticsSource, /findingSeverityLabel/, 'diagnostic findings should translate internal severities into user-facing labels');
 assert.doesNotMatch(diagnosticsSource, /class="diagnostic-code"/, 'diagnostic finding codes must stay inside Technical details');
-assert.match(diagnosticsSource, /Live updates on/, 'troubleshooting controls should use familiar live-update wording');
+assert.match(diagnosticsSource, /Pause live updates|Start live updates/, 'troubleshooting live updates should remain explicitly labeled for assistive technology');
 const toolsSource = read('src/ui/features/tools/index.js');
 assert.match(toolsSource, /Tool catalog unavailable/);
 assert.match(toolsSource, /cta: 'Retry'/);

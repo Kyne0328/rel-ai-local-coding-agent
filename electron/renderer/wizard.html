@@ -54,7 +54,10 @@
           <button class="secondary wizard-open-button" type="button" data-open-openai="apiKeys">Open OpenAI API Keys</button>
           <div class="wizard-field-group">
             <label for="tunnelApiKeyInput"><span>Paste runtime API key here</span></label>
-            <input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the runtime API key" aria-describedby="runtimeKeyHelp runtimeKeyError" aria-invalid="false" required />
+            <div class="password-field">
+              <input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the runtime API key" aria-describedby="runtimeKeyHelp runtimeKeyError" aria-invalid="false" required />
+              <button class="secondary password-toggle" id="runtimeKeyToggle" type="button" aria-controls="tunnelApiKeyInput" aria-pressed="false">Show</button>
+            </div>
             <p class="wizard-field-help" id="runtimeKeyHelp">Stored securely on this computer.</p>
             <p class="wizard-field-error" id="runtimeKeyError" role="alert" hidden></p>
           </div>

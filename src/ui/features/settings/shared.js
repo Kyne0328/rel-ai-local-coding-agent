@@ -68,6 +68,33 @@ export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled
   return control;
 }
 
+export function toggleRow(label, control, help = '') {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'setting-row settings-toggle-row';
+  const copy = document.createElement('div');
+  copy.className = 'setting-row-copy';
+  const heading = document.createElement('strong');
+  const id = `settingsToggle${++fieldId}`;
+  heading.id = id;
+  heading.textContent = label;
+  copy.appendChild(heading);
+  let description = null;
+  if (help) {
+    description = document.createElement('span');
+    description.id = `${id}Help`;
+    description.textContent = help;
+    copy.appendChild(description);
+  }
+  const input = labelableControl(control);
+  if (input) {
+    input.setAttribute('aria-labelledby', id);
+    if (description) input.setAttribute('aria-describedby', description.id);
+  }
+  control.classList.add('settings-toggle-control');
+  wrapper.append(copy, control);
+  return wrapper;
+}
+
 export function numberControl(value, onChange, { min = 0, max = 1000000, step = 1 } = {}) {
   const element = document.createElement('input');
   element.className = 'settings-number-control';

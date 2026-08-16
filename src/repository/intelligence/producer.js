@@ -4,17 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RUNTIME_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// Only persisted-fact producers belong here; query/ranking changes must not invalidate the on-disk index.
 const INTELLIGENCE_SOURCE_FILES = Object.freeze([
-  'src/repository/intelligence/architecture.js',
-  'src/repository/intelligence/contextPlanner.js',
-  'src/repository/intelligence/crossWorkspace.js',
   'src/repository/intelligence/database.js',
   'src/repository/intelligence/ecosystemResolution.js',
-  'src/repository/intelligence/graphDiffusion.js',
   'src/repository/intelligence/indexBuild.js',
   'src/repository/intelligence/languages.js',
   'src/repository/intelligence/producer.js',
-  'src/repository/intelligence/queryService.js',
   'src/repository/intelligence/relationshipPolicy.js',
   'src/repository/intelligence/treeSitter.js',
   'src/repository/intelligence/resolvers/cFamily.js',

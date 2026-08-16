@@ -19,12 +19,15 @@ const ALLOWED_PARAMS = {
   workspaces: new Set(['workspace', 'focus']),
   processes: new Set(['workspace']),
   activity: new Set(['workspace', 'search', 'time', 'tool', 'status', 'task', 'event']),
-  diagnostics: new Set(['workspace'])
+  diagnostics: new Set(['workspace']),
+  usage: new Set(['workspace', 'range', 'start', 'end'])
 };
 
 const SENSITIVE_PARAM = /(?:token|secret|password|credential|bootstrap|authorization|auth|api[_-]?key|access[_-]?key|refresh[_-]?key)/i;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 const TIME_RANGES = new Set(['15m', '1h', '24h', '7d', 'all']);
+const ANALYTICS_RANGES = new Set(['1h', '24h', '7d', '30d', 'month', 'custom']);
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const STATUSES = new Set(['ok', 'error', 'running', 'succeeded', 'active', 'failed', 'blocked', 'cancelled', 'other']);
 
 export function normalizeRouteKey(value) {
@@ -77,6 +80,8 @@ function sanitizeValue(key, value) {
   if (key === 'workspace') return WORKSPACE_PATTERN.test(text) ? text : '';
   if (key === 'focus') return text === '1' ? '1' : '';
   if (key === 'time') return TIME_RANGES.has(text.toLowerCase()) ? text.toLowerCase() : '';
+  if (key === 'range') return ANALYTICS_RANGES.has(text.toLowerCase()) ? text.toLowerCase() : '';
+  if (key === 'start' || key === 'end') return DATE_PATTERN.test(text) ? text : '';
   if (key === 'status') return STATUSES.has(text.toLowerCase()) ? text.toLowerCase() : '';
   const limit = key === 'search' ? 200 : 160;
   return text.slice(0, limit);

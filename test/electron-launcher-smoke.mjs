@@ -29,6 +29,7 @@ for (const file of [
   'service-process.js',
   'service-process-client.js',
   'runtime-log-snapshot.js',
+  'service-activity-projection.js',
   'desktop-settings.js',
   'desktop-status.js',
   'preload.cjs',
@@ -36,6 +37,20 @@ for (const file of [
   'ipc-security.js',
   'window-security.js'
 ]) assert.ok(electronPkg.build.files.includes(file), `Electron packaging must include ${file}`);
+
+const packagedElectronFiles = new Set(electronPkg.build.files.filter(file => typeof file === 'string' && !file.startsWith('!')));
+for (const file of packagedElectronFiles) {
+  if (file.includes('*') || !/\.(?:cjs|mjs|js)$/.test(file)) continue;
+  const source = fs.readFileSync(path.join(root, 'electron', file), 'utf8');
+  const localImports = [
+    ...source.matchAll(/(?:import|export)\s+(?:.+?\s+from\s+)?['"](\.\/[^'"]+)['"]/g),
+    ...source.matchAll(/import\s*\(\s*['"](\.\/[^'"]+)['"]\s*\)/g)
+  ];
+  for (const match of localImports) {
+    const dependency = path.posix.normalize(path.posix.join(path.posix.dirname(file), match[1]));
+    assert.ok(packagedElectronFiles.has(dependency), `Electron packaging must include ${dependency}, imported by ${file}`);
+  }
+}
 
 for (const removed of ['managed-ngrok.js', 'ngrok-token.js', 'public-connection-runtime.js', 'gateway-client.js', 'gateway-actions.js', 'gateway-device-identity.js', 'approval-token.js']) {
   assert.equal(electronPkg.build.files.includes(removed), false, `Electron packaging must not include removed transport module ${removed}`);
