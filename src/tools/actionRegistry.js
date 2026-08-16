@@ -1,6 +1,7 @@
 // @ts-check
 
 import { z } from 'zod';
+import { OPERATION_DEFINITION_VALUES } from './operationDefinitionValues.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 const PUBLIC_CONTRACT_SCHEMA = z.object({
@@ -38,73 +39,65 @@ const UI_OMIT = Object.freeze({
   stop: ['port', 'host', 'protocol', 'route', 'allowedPorts', 'headless', 'width', 'height', 'timeoutMs', 'interaction', 'target', 'input', 'key', 'selectValue', 'state', 'fullPage', 'maxEntries', 'clear']
 });
 
-const ACTION_REGISTRY = Object.freeze({
-  relai_work: Object.freeze({
-    begin: operation(OP.WORK_BEGIN, { capability: READ }),
-    status: operation(OP.WORK_STATUS, { capability: READ }),
-    finish: operation(OP.WORK_FINISH, { capability: READ }),
-    cancel: operation(OP.WORK_CANCEL, { capability: READ })
-  }),
-  relai_snapshot: Object.freeze({ default: operation(OP.SNAPSHOT, { capability: READ }) }),
-  relai_read: Object.freeze({ default: operation(OP.READ, { capability: READ }) }),
-  relai_search: Object.freeze({
-    text: operation(OP.SEARCH_TEXT, { capability: READ }),
-    semantic: operation(OP.SEARCH_SEMANTIC, { capability: READ })
-  }),
-  relai_inspect: Object.freeze(Object.fromEntries(Object.entries(INSPECT_FIELDS).map(([action, publicContract]) => [
-    action,
-    operation(OP.INSPECT, { capability: READ, keepAction: true, publicContract })
-  ]))),
-  relai_edit: Object.freeze({ default: operation(OP.EDIT, { capability: WRITE }) }),
-  relai_exec: Object.freeze({ default: operation(OP.EXEC, { capability: EXECUTE }) }),
-  relai_process: Object.freeze({
-    start: operation(OP.PROCESS_START, { capability: PROCESS }),
-    read: operation(OP.PROCESS_READ, { capability: READ }),
-    write: operation(OP.PROCESS_WRITE, { capability: PROCESS }),
-    stop: operation(OP.PROCESS_STOP, { capability: PROCESS }),
-    list: operation(OP.PROCESS_LIST, { capability: READ })
-  }),
-  relai_ui: Object.freeze({
-    start: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['port'], omit: UI_OMIT.start }) }),
-    navigate: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'route'], omit: UI_OMIT.navigate }) }),
-    snapshot: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.snapshot }) }),
-    interact: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'interaction', 'target'], omit: UI_OMIT.interact }) }),
-    screenshot: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.screenshot }) }),
-    console: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.console }) }),
-    network: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.network }) }),
-    viewport: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'width', 'height'], omit: UI_OMIT.viewport }) }),
-    reload: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.reload }) }),
-    stop: operation(OP.UI, { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.stop }) })
-  }),
-  relai_validate: Object.freeze({
-    checks: operation(OP.VALIDATE_CHECKS, { capability: EXECUTE }),
-    diagnostics: operation(OP.VALIDATE_DIAGNOSTICS, { capability: EXECUTE }),
-    http: operation(OP.VALIDATE_HTTP, { capability: READ })
-  }),
-  relai_changes: Object.freeze({
-    diff: operation(OP.CHANGES_DIFF, { capability: READ }),
-    restore: operation(OP.CHANGES_RESTORE, { capability: WRITE }),
-    reset: operation(OP.CHANGES_RESET, {
-      capability: WRITE,
-      approval: args => ({ message: `Discard workspace changes using ${args.removeUntracked ? 'RESET_AND_CLEAN' : 'RESET'}?` })
-    }),
-    tidy_plan: operation(OP.CHANGES_TIDY_PLAN, { capability: READ }),
-    tidy_run: operation(OP.CHANGES_TIDY_RUN, { capability: WRITE })
-  }),
-  relai_publish: Object.freeze({
-    commit: operation(OP.PUBLISH_COMMIT, {
-      capability: WRITE,
-      approval: args => (args.addAll === true || args.sensitiveAuthorization
-        ? { message: `Create the requested Git commit${args.addAll ? ' including all current changes' : ''}?` }
-        : null)
-    }),
-    push: operation(OP.PUBLISH_PUSH, {
-      capability: PUBLISH,
-      approval: args => ({ message: `Publish branch ${args.branch || '(current branch)'} to ${args.remote || 'origin'}?` })
-    }),
-    draft_pr: operation(OP.PUBLISH_DRAFT_PR, { capability: READ })
-  })
+// One canonical operation registry owns the internal definition and every public
+// exposure of that operation. Public action lookup is derived below rather than
+// maintained as an independent source of truth.
+const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
+  [OP.WORK_BEGIN]: [expose('relai_work', 'begin', { capability: READ })],
+  [OP.WORK_STATUS]: [expose('relai_work', 'status', { capability: READ })],
+  [OP.WORK_FINISH]: [expose('relai_work', 'finish', { capability: READ })],
+  [OP.WORK_CANCEL]: [expose('relai_work', 'cancel', { capability: READ })],
+  [OP.SNAPSHOT]: [expose('relai_snapshot', 'default', { capability: READ })],
+  [OP.READ]: [expose('relai_read', 'default', { capability: READ })],
+  [OP.SEARCH_TEXT]: [expose('relai_search', 'text', { capability: READ })],
+  [OP.SEARCH_SEMANTIC]: [expose('relai_search', 'semantic', { capability: READ })],
+  [OP.INSPECT]: Object.entries(INSPECT_FIELDS).map(([action, publicContract]) =>
+    expose('relai_inspect', action, { capability: READ, keepAction: true, publicContract })),
+  [OP.EDIT]: [expose('relai_edit', 'default', { capability: WRITE })],
+  [OP.EXEC]: [expose('relai_exec', 'default', { capability: EXECUTE })],
+  [OP.PROCESS_START]: [expose('relai_process', 'start', { capability: PROCESS })],
+  [OP.PROCESS_READ]: [expose('relai_process', 'read', { capability: READ })],
+  [OP.PROCESS_WRITE]: [expose('relai_process', 'write', { capability: PROCESS })],
+  [OP.PROCESS_STOP]: [expose('relai_process', 'stop', { capability: PROCESS })],
+  [OP.PROCESS_LIST]: [expose('relai_process', 'list', { capability: READ })],
+  [OP.UI]: [
+    expose('relai_ui', 'start', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['port'], omit: UI_OMIT.start }) }),
+    expose('relai_ui', 'navigate', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'route'], omit: UI_OMIT.navigate }) }),
+    expose('relai_ui', 'snapshot', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.snapshot }) }),
+    expose('relai_ui', 'interact', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'interaction', 'target'], omit: UI_OMIT.interact }) }),
+    expose('relai_ui', 'screenshot', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.screenshot }) }),
+    expose('relai_ui', 'console', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.console }) }),
+    expose('relai_ui', 'network', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.network }) }),
+    expose('relai_ui', 'viewport', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'width', 'height'], omit: UI_OMIT.viewport }) }),
+    expose('relai_ui', 'reload', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.reload }) }),
+    expose('relai_ui', 'stop', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.stop }) })
+  ],
+  [OP.VALIDATE_CHECKS]: [expose('relai_validate', 'checks', { capability: EXECUTE })],
+  [OP.VALIDATE_DIAGNOSTICS]: [expose('relai_validate', 'diagnostics', { capability: EXECUTE })],
+  [OP.VALIDATE_HTTP]: [expose('relai_validate', 'http', { capability: READ })],
+  [OP.CHANGES_DIFF]: [expose('relai_changes', 'diff', { capability: READ })],
+  [OP.CHANGES_RESTORE]: [expose('relai_changes', 'restore', { capability: WRITE })],
+  [OP.CHANGES_RESET]: [expose('relai_changes', 'reset', {
+    capability: WRITE,
+    approval: args => ({ message: `Discard workspace changes using ${args.removeUntracked ? 'RESET_AND_CLEAN' : 'RESET'}?` })
+  })],
+  [OP.CHANGES_TIDY_PLAN]: [expose('relai_changes', 'tidy_plan', { capability: READ })],
+  [OP.CHANGES_TIDY_RUN]: [expose('relai_changes', 'tidy_run', { capability: WRITE })],
+  [OP.PUBLISH_COMMIT]: [expose('relai_publish', 'commit', {
+    capability: WRITE,
+    approval: args => (args.addAll === true || args.sensitiveAuthorization
+      ? { message: `Create the requested Git commit${args.addAll ? ' including all current changes' : ''}?` }
+      : null)
+  })],
+  [OP.PUBLISH_PUSH]: [expose('relai_publish', 'push', {
+    capability: PUBLISH,
+    approval: args => ({ message: `Publish branch ${args.branch || '(current branch)'} to ${args.remote || 'origin'}?` })
+  })],
+  [OP.PUBLISH_DRAFT_PR]: [expose('relai_publish', 'draft_pr', { capability: READ })]
 });
+
+const OPERATION_REGISTRY = buildOperationRegistry(OPERATION_DEFINITION_VALUES, PUBLIC_BINDINGS_BY_OPERATION);
+const ACTION_REGISTRY = buildActionRegistry(PUBLIC_BINDINGS_BY_OPERATION);
 
 /** @param {Record<string, any>} [value] */
 function contract(value = {}) {
@@ -116,10 +109,11 @@ function contract(value = {}) {
   });
 }
 
-/** @param {string} operationName @param {Record<string, any>} [options] */
-function operation(operationName, options = {}) {
+/** @param {string} publicName @param {string} action @param {Record<string, any>} [options] */
+function expose(publicName, action, options = {}) {
   return Object.freeze({
-    operationName,
+    publicName,
+    action,
     keepAction: options.keepAction === true,
     capability: String(options.capability || ''),
     approval: typeof options.approval === 'function' ? options.approval : null,
@@ -127,9 +121,52 @@ function operation(operationName, options = {}) {
   });
 }
 
+function buildOperationRegistry(definitions, bindingsByOperation) {
+  const definitionNames = new Set(definitions.map(definition => definition.name));
+  for (const operationName of Object.keys(bindingsByOperation)) {
+    if (!definitionNames.has(operationName)) {
+      throw new Error(`Public binding references unknown operation '${operationName}'.`);
+    }
+  }
+  return Object.freeze(definitions.map(definition => {
+    const publicActions = bindingsByOperation[definition.name] || [];
+    if (publicActions.length === 0) {
+      throw new Error(`Operation '${definition.name}' has no public tool/action binding.`);
+    }
+    return Object.freeze({
+      definition: Object.freeze({ ...definition }),
+      publicActions: Object.freeze([...publicActions])
+    });
+  }));
+}
+
+function buildActionRegistry(bindingsByOperation) {
+  const tools = new Map();
+  for (const [operationName, publicActions] of Object.entries(bindingsByOperation)) {
+    for (const exposure of publicActions) {
+      if (!tools.has(exposure.publicName)) tools.set(exposure.publicName, new Map());
+      const actions = tools.get(exposure.publicName);
+      if (actions.has(exposure.action)) {
+        throw new Error(`Duplicate public binding '${exposure.publicName}:${exposure.action}'.`);
+      }
+      actions.set(exposure.action, Object.freeze({
+        operationName,
+        keepAction: exposure.keepAction,
+        capability: exposure.capability,
+        approval: exposure.approval,
+        publicContract: exposure.publicContract
+      }));
+    }
+  }
+  return Object.freeze(Object.fromEntries([...tools].map(([publicName, actions]) => [
+    publicName,
+    Object.freeze(Object.fromEntries(actions))
+  ])));
+}
+
 function isToolSurfaceSourcePath(value) {
   const normalized = String(value || '').trim().replaceAll('\\', '/').replace(/^\.\//, '');
   return normalized.startsWith('src/tools/');
 }
 
-export { ACTION_REGISTRY, isToolSurfaceSourcePath };
+export { ACTION_REGISTRY, OPERATION_REGISTRY, isToolSurfaceSourcePath };

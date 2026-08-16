@@ -47,9 +47,9 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       newText: describe('newText', 'Replacement text paired with oldText. An empty string deletes the matched text.'),
       occurrence: describe('occurrence', 'One-based occurrence to replace when oldText is not unique.'),
       replacements: describe('replacements', 'Several exact oldText/newText replacements in one file.'),
-      content: describe('content', 'Complete replacement content for one file. Use with path; an empty string creates an empty file. For generated content above about 8 KiB or 180 lines, start staged mode before sending the whole payload.'),
+      content: describe('content', 'Complete replacement content for one file. Use with path; an empty string creates an empty file. Large complete-file writes are staged internally when needed.'),
       expectedSha256: describe('expectedSha256', 'Optional stale-write guard for direct, staged, batch, and environment edits.'),
-      updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes. Stage large generated patches from the first request instead of first attempting one oversized payload.'),
+      updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes. Keep one logical patch together when the client transport can carry it.'),
       envAction: describe('envAction', 'Secret-safe environment operation: list, set, remove, or compare.'),
       key: describe('key', 'Environment key used by envAction set or remove.'),
       value: describe('value', 'Environment value used by envAction set. Values are never returned.'),
@@ -59,7 +59,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       level: describe('level', 'Validation level used when runChecks is true.'),
       returnDiff: describe('returnDiff', 'Return a bounded diff after a successful edit.'),
       dryRun: describe('dryRun', 'Validate and preview the edit without changing files.'),
-      stage: describe('stage', 'Chunked content or updateText lifecycle: start, append, commit, or abort. Prefer chunks around 12 KiB so transport limits are avoided before server-side staging can run.'),
+      stage: describe('stage', 'Explicit chunked content or updateText lifecycle: start, append, commit, or abort. Use only when the client transport cannot carry the intended payload in one request; normal large complete-file writes are staged internally.'),
       writeId: describe('writeId', 'Opaque staged-write ID returned by stage start.')
     }
   };
