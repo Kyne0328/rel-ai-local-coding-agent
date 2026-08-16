@@ -24,8 +24,7 @@ assert.equal(normalizeHistoricalTaskStatus('cancelled', { completionKnown: false
 assert.equal(normalizeHistoricalTaskStatus('failed', { completionKnown: false, endReason: 'inactivity_window' }), 'inactive');
 assert.equal(normalizeHistoricalTaskStatus('cancelled', { completionKnown: false, endReason: 'explicit_cancellation' }), 'cancelled');
 assert.equal(normalizeHistoricalTaskStatus('completed', { completionKnown: true, endReason: 'explicit_completion' }), 'completed');
-assert.equal(DEFAULT_TASK_IDLE_MS, SESSION_IDLE_TTL_MS, 'task inactivity and session ownership must share one stale threshold');
-assert.ok(DEFAULT_TASK_IDLE_MS >= 60 * 60_000, 'ordinary short idle gaps must remain open rather than being classified as stale/inactive');
+assert.ok(DEFAULT_TASK_IDLE_MS < SESSION_IDLE_TTL_MS, 'activity inactivity must age out before durable session ownership expires');
 
 let now = 1_000;
 let timerId = 0;

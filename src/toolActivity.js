@@ -15,11 +15,11 @@ import {
   sanitizeTaskRecord
 } from './taskObservability.js';
 import { isTerminalTaskStatus, normalizeLiveTaskStatus } from './taskState.js';
-import { DEFAULT_TASK_STALE_MS, MAX_TASK_STALE_MS, MIN_TASK_STALE_MS } from './taskTiming.js';
+import { DEFAULT_TASK_ACTIVITY_IDLE_MS, MAX_TASK_ACTIVITY_IDLE_MS, MIN_TASK_ACTIVITY_IDLE_MS } from './taskTiming.js';
 import { canonicalTaskSnapshot, lifecycleChangedFields } from './taskLifecycle.js';
 import { classifyTaskIntent } from './workflow/intent.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
-const DEFAULT_TASK_IDLE_MS = DEFAULT_TASK_STALE_MS;
+const DEFAULT_TASK_IDLE_MS = DEFAULT_TASK_ACTIVITY_IDLE_MS;
 const activityContext = new AsyncLocalStorage();
 
 function createToolActivityTracker(options = {}) {
@@ -243,7 +243,16 @@ function createToolActivityTracker(options = {}) {
           : '';
       }
       if (!terminalBeforeFinish && task.activeCalls === 0 && !task.completionRequest) {
-        if (recoverableValidationFailure) {
+        const rejectedTaskStart = current.internalOperation === OP.WORK_BEGIN && result.ok === false && !blockedResult;
+        if (rejectedTaskStart) {
+          task.status = 'failed';
+          task.endReason = 'task_start_rejected';
+          task.terminalReason = task.errorSummary || 'The work session could not be started.';
+          task.endedAt = finishedAt;
+          task.currentStage = 'Could not start';
+          task.currentActivity = task.errorSummary || task.currentActivity;
+          task.progress = { mode: 'indeterminate', label: 'Task could not be started' };
+        } else if (recoverableValidationFailure) {
           task.status = 'validation_failed';
           task.currentStage = 'Validation failed';
           task.progress = incompleteProgress(task.progress, task.status, 'Fix issues and revalidate');
@@ -928,7 +937,7 @@ function defaultOperation(tool) {
 function resolveIdleMs(value) {
   const configured = Number(value ?? process.env.REL_AI_MCP_TASK_IDLE_MS ?? DEFAULT_TASK_IDLE_MS);
   if (!Number.isFinite(configured)) return DEFAULT_TASK_IDLE_MS;
-  return Math.min(Math.max(configured, MIN_TASK_STALE_MS), MAX_TASK_STALE_MS);
+  return Math.min(Math.max(configured, MIN_TASK_ACTIVITY_IDLE_MS), MAX_TASK_ACTIVITY_IDLE_MS);
 }
 
 const defaultTracker = createToolActivityTracker();
