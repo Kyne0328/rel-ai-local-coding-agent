@@ -81,7 +81,7 @@ try {
   assert.equal(direct.action, 'architecture');
   assert.equal(direct.architecture.strategy, 'bounded-file-graph');
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 
