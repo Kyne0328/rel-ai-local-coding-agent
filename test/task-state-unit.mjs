@@ -72,4 +72,26 @@ assert.equal(normalizeHistoricalTaskStatus('inactive', { completionKnown: false,
 assert.equal(normalizeHistoricalTaskStatus('unknown-terminal', { endedAt: Date.now() }), 'cancelled');
 assert.equal(normalizeHistoricalTaskStatus('unknown-active', {}), 'planning');
 
-console.log('Canonical task-state vocabulary, transitions, terminal protection, and historical normalization passed.');
+const { workSessionStateView } = await import('../src/ui/task-identity.js');
+const { isOngoingSession, sessionSummary } = await import('../src/ui/features/sessions/index.js');
+const runningView = workSessionStateView({ status: 'running', state: 'working', activeCalls: 1 });
+assert.equal(runningView.active, true);
+assert.equal(runningView.open, false);
+const openPlanningView = workSessionStateView({ status: 'planning', state: 'waiting', activeCalls: 0 });
+assert.equal(openPlanningView.active, false, 'an idle planning task must not be counted as actively running');
+assert.equal(openPlanningView.open, true, 'an idle planning task must remain explicitly open and resumable');
+assert.equal(isOngoingSession({ status: 'planning', state: 'waiting', activeCalls: 0 }), true, 'open idle work remains ongoing for session rendering');
+assert.equal(workSessionStateView({ status: 'cancelled', activeCalls: 0 }).open, false);
+assert.equal(
+  sessionSummary([
+    { status: 'running', state: 'working', activeCalls: 1 },
+    { status: 'planning', state: 'waiting', activeCalls: 0 },
+    { status: 'inactive', activeCalls: 0 },
+    { status: 'completed', activeCalls: 0 },
+    { status: 'cancelled', activeCalls: 0 }
+  ]),
+  '1 active · 1 open · 1 inactive · 1 completed · 1 cancelled',
+  'session counts must keep running, open idle, inactive, completed, and cancelled work distinct'
+);
+
+console.log('Canonical task-state vocabulary, transitions, terminal protection, historical normalization, and open-idle counting passed.');
