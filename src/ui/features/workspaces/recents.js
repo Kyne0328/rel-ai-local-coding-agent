@@ -14,7 +14,6 @@ export function recordRecentWorkspace(alias) {
   if (!clean) return;
   const next = [clean, ...readStored().filter(item => item !== clean)].slice(0, MAX_RECENT);
   writeStored(next);
-  notify();
 }
 
 export function renameRecentWorkspace(previousAlias, nextAlias) {
@@ -23,14 +22,12 @@ export function renameRecentWorkspace(previousAlias, nextAlias) {
   if (!previous || !next) return;
   const renamed = readStored().map(alias => alias === previous ? next : alias);
   writeStored([...new Set(renamed)].slice(0, MAX_RECENT));
-  notify();
 }
 
 export function removeRecentWorkspace(alias) {
   const clean = String(alias || '').trim();
   if (!clean) return;
   writeStored(readStored().filter(item => item !== clean));
-  notify();
 }
 
 function readStored() {
@@ -44,8 +41,4 @@ function readStored() {
 
 function writeStored(value) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(value)); } catch {}
-}
-
-function notify() {
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('relai:workspace-recents-change'));
 }

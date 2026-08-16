@@ -55,7 +55,6 @@ export function setThemePreference(theme) {
   const normalized = normalizeTheme(theme);
   writeStored(THEME_KEY, normalized);
   applyTheme(normalized);
-  document.dispatchEvent(new CustomEvent('relai:appearance-change', { detail: getUiPreferences() }));
 }
 
 function markPreferencesReady() {

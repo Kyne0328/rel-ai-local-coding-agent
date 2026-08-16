@@ -10,7 +10,7 @@ assert.equal(
   'the privileged dashboard document may navigate within its own route'
 );
 assert.equal(
-  safeOrigin(`${dashboardOrigin}/api/settings`),
+  safeOrigin(`${dashboardOrigin}/api/diagnostics`),
   '',
   'same-origin service routes must not be treated as privileged dashboard documents'
 );

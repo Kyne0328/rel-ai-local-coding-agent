@@ -29,12 +29,12 @@ try {
 
   invalidateConfigCache();
   const config = readConfig();
-  assert.equal(config.version, 6);
+  assert.equal(config.version, 7);
   assert.equal(Object.hasOwn(config.workspaces.app, 'commands'), false);
   assert.equal(Object.hasOwn(config.workspaces.app, 'testCommands'), false);
 
   const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  assert.equal(persisted.version, 6);
+  assert.equal(persisted.version, 7);
   assert.equal(Object.hasOwn(persisted.workspaces.app, 'commands'), false);
   assert.equal(Object.hasOwn(persisted.workspaces.app, 'testCommands'), false);
 

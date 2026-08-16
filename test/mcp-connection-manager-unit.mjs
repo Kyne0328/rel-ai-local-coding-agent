@@ -87,8 +87,8 @@ manager.markReady();
 assert.equal(manager.snapshot().status, 'ready');
 assert.equal(manager.snapshot().activityStatus, 'no_requests');
 assert.equal(manager.snapshot().requestModel, 'stateless');
-assert.equal(manager.snapshot().connectedClientCount, 0);
-assert.deepEqual(manager.snapshot().activeSessions, []);
+assert.equal(Object.hasOwn(manager.snapshot(), 'connectedClientCount'), false);
+assert.equal(Object.hasOwn(manager.snapshot(), 'activeSessions'), false);
 
 now += 100;
 const requestId = manager.beginRequest({
@@ -143,17 +143,13 @@ assert.equal(manager.snapshot().credentialGeneration, 2);
 assert.equal(manager.snapshot().status, 'ready', 'credential rotation must not create or close nonexistent sessions');
 assert.equal(manager.snapshot().activityStatus, 'no_requests');
 assert.equal(manager.snapshot().lastAuthMode, '');
-assert.equal(manager.snapshot().manualRecoveryRequired, false);
+assert.equal(Object.hasOwn(manager.snapshot(), 'manualRecoveryRequired'), false);
 
 manager.noteAuthenticationFailure('invalid_token');
 assert.ok(manager.snapshot().lastAuthenticationFailureAt);
 assert.equal(manager.snapshot().recentEvents.at(-1)?.type, 'authentication_failed');
-
-const recovery = await manager.retryConnection('manual_retry');
-assert.equal(recovery.ok, true);
-assert.equal(recovery.stateless, true);
-assert.equal(recovery.hostActionRequired, false);
-assert.equal(manager.snapshot().lastRecoveryResult, 'not_required_stateless');
+assert.equal(typeof manager.retryConnection, 'undefined');
+assert.equal(Object.hasOwn(manager.snapshot().metrics, 'manualRecoveryRequests'), false);
 
 manager.markFailed(new Error('listen failed'));
 assert.equal(manager.snapshot().status, 'failed');

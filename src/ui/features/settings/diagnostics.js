@@ -590,7 +590,7 @@ function clientCapabilityHtml() {
         <p>${esc(capability.description)}</p>
         <p>${esc(capability.executionLabel)}</p>
       </div>
-      <div class="connection-field"><span class="field-caption">Observed MCP Tasks capability</span><code class="connector-endpoint">nativeTasksSupported: ${supported}</code></div>
+      <div class="connection-field"><span class="field-caption">Observed MCP Tasks capability</span><code class="connector-endpoint">Tasks extension advertised: ${supported}</code></div>
     </div>
   </details>`;
 }
