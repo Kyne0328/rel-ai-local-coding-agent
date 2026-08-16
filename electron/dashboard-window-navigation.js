@@ -22,7 +22,8 @@ function safeUrl(value) {
 }
 
 function safeOrigin(value) {
-  return safeUrl(value)?.origin || '';
+  const target = safeUrl(value);
+  return target?.pathname === '/dashboard' && !target.username && !target.password ? target.origin : '';
 }
 
 function planDashboardNavigation(current, target, options = {}) {

@@ -34,7 +34,7 @@
   },
   "scripts": {
     "start": "node bin/rel-ai-mcp.js",
-    "test:security": "node test/security-process-boundaries-unit.mjs && node test/hard-boundary-unit.mjs && node test/project-instructions-unit.mjs && node test/mcp-task-scope-unit.mjs",
+    "test:security": "node test/security-process-boundaries-unit.mjs && node test/hard-boundary-unit.mjs && node test/project-instructions-unit.mjs && node test/mcp-task-scope-unit.mjs && node test/dashboard-navigation-security-unit.mjs",
     "clean": "node scripts/clean.mjs",
     "clean:electron": "node scripts/clean.mjs --electron",
     "clean:release": "node scripts/clean.mjs --release",

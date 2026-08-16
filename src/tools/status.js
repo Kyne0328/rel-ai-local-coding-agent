@@ -14,6 +14,7 @@ import { workspaceGitStatus } from '../repo/gitOps.js';
 import { runtimeCompatibility } from '../runtimeCompatibility.js';
 import { getToolActivity } from '../toolActivity.js';
 import { fallbackExecutionStatus } from '../mcp/fallbackExecutions.js';
+import { authorizedWorkspaceAliases } from '../mcp/authorizationPolicy.js';
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
@@ -26,7 +27,10 @@ async function relaiStatus(config, args = {}, context = {}) {
   const localDiagnostics = context?.connector !== true;
   const scripts = localDiagnostics ? (safeReadPackageJson().scripts || {}) : {};
   const ci = localDiagnostics ? ciScriptStatus(scripts) : null;
-  const workspaceAliases = allWorkspaceAliases(config);
+  const configuredWorkspaceAliases = allWorkspaceAliases(config);
+  const workspaceAliases = context?.connector === true
+    ? authorizedWorkspaceAliases(context.principal, configuredWorkspaceAliases)
+    : configuredWorkspaceAliases;
   const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id) : null;
   let selectedWorkspace = null;
   if (args.workspace) {
