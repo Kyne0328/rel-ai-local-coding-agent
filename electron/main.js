@@ -59,6 +59,7 @@ const { readLocalUsageSnapshot } = localAnalytics;
 const { shutdownTelemetry } = telemetry;
 let serviceRuntime = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
+let lastServiceContextKey = '';
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const desktopNotifications = createDesktopNotifications({
   app, Notification, iconPath: APP_ICON_PATH, isReady: () => app.isReady(), onNotificationClick: focusActiveWindow,
@@ -129,10 +130,7 @@ const serviceProcessClient = createServiceProcessClient({
     ));
   }
 });
-runtimeLogs.onChange(change => serviceProcessClient.updateContext({
-  runtimeLogs: runtimeLogs.snapshot(),
-  runtimeLogChange: change
-}));
+runtimeLogs.onChange(change => serviceProcessClient.updateContext({ runtimeLogChange: change }));
 const desktopTray = createDesktopTray({
   Tray,
   Menu,
@@ -170,7 +168,6 @@ serviceRuntime = createDesktopServiceRuntime({
   secureTunnelRuntime,
   tunnelCredentials,
   errorCodes: ERROR_CODES,
-  getRuntimeAccess: updateRuntimeAccess,
   getCurrentStatus: () => currentStatus,
   setStatus,
   replaceCurrentStatus,
@@ -311,7 +308,6 @@ function pushStatus(options = {}) {
 function setTaskActivityStatus(taskActivity) {
   currentStatus = normalizeDesktopStatus({ ...currentStatus, taskActivity });
   recoveryWindowManager.sendStatus(currentStatus);
-  syncServiceContext();
 }
 
 function combinedUpdateStatus(baseStatus = appUpdater?.getStatus()) {
@@ -379,13 +375,17 @@ function publicConnectionLog(source, chunk, options = {}) {
 }
 
 function syncServiceContext() {
-  serviceProcessClient.updateContext({
-    status: currentStatus,
-    runtimeAccess: updateRuntimeAccess()
-  });
+  const { taskActivity: _taskActivity, ...status } = currentStatus;
+  const context = { status, runtimeAccess: updateRuntimeAccess() };
+  const key = JSON.stringify(context);
+  if (key === lastServiceContextKey) return false;
+  lastServiceContextKey = key;
+  serviceProcessClient.updateContext(context);
+  return true;
 }
 
 function startServer() {
+  syncServiceContext();
   return serviceRuntime.startServer();
 }
 

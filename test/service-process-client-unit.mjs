@@ -80,7 +80,9 @@ assert.equal(forks.length, 1);
 assert.equal(forks[0].options.serviceName, 'Rel.AI MCP Service');
 assert.equal(forks[0].options.stdio, 'pipe');
 assert.equal(forks[0].options.cwd, '/app');
-assert.ok(child.sent.some(message => message.type === 'context' && message.context.status?.serverRunning === false));
+const initialContextMessages = child.sent.filter(message => message.type === 'context');
+assert.equal(initialContextMessages.length, 1, 'service startup must send the retained desktop context only once');
+assert.equal(initialContextMessages[0].context.status?.serverRunning, false);
 
 child.emit('message', {
   type: 'activity',
@@ -92,6 +94,17 @@ child.emit('message', {
 assert.equal(client.activitySource.getToolActivity().state, 'working');
 assert.equal(client.activitySource.getToolActivity().tasks[0].id, 'task-1');
 assert.equal(activityEvents.length, 1);
+
+client.updateContext({
+  runtimeLogs: { available: true, revision: 1, count: 1, entries: [{ message: 'first' }] }
+});
+client.updateContext({
+  runtimeLogChange: { type: 'append', revision: 2, count: 2, maxEntries: 3, entry: { message: 'second' } }
+});
+const logDeltaMessage = child.sent.at(-1);
+assert.equal(logDeltaMessage.type, 'context');
+assert.equal(logDeltaMessage.context.runtimeLogChange.entry.message, 'second');
+assert.equal(Object.hasOwn(logDeltaMessage.context, 'runtimeLogs'), false, 'log changes must cross the utility-process boundary as deltas');
 
 child.emit('message', { type: 'native-request', id: 'native-1', method: 'openFolder', payload: { path: '/repo' } });
 await new Promise(resolve => setImmediate(resolve));
@@ -109,6 +122,20 @@ assert.equal(bootstrap.bootstrap, 'bootstrap-token');
 const stopped = await client.stop();
 assert.equal(stopped.cleanup.clean, true);
 assert.equal(client.isListening(), false);
+
+const exitedChild = child;
+exitedChild.emit('exit', 1);
+assert.equal(client.isListening(), false);
+assert.equal(client.activitySource.getToolActivity().state, 'idle', 'an exited service process must not leave stale active desktop work');
+assert.equal(activityEvents.at(-1).phase, 'snapshot');
+assert.equal(activityEvents.at(-1).snapshot.state, 'idle');
+
+await client.start({ host: '127.0.0.1', port: 3333, token: 'secret' });
+assert.equal(forks.length, 2);
+const respawnContext = child.sent.find(message => message.type === 'context');
+assert.equal(respawnContext.context.runtimeLogs.revision, 2, 'a respawned service must receive the reconstructed current log snapshot');
+assert.deepEqual(respawnContext.context.runtimeLogs.entries.map(entry => entry.message), ['first', 'second']);
+assert.equal(Object.hasOwn(respawnContext.context, 'runtimeLogChange'), false);
 
 await client.dispose({ stop: false });
 assert.equal(child.killed, true);

@@ -12,7 +12,6 @@ function createDesktopServiceRuntime(deps) {
     secureTunnelRuntime,
     tunnelCredentials,
     errorCodes,
-    getRuntimeAccess,
     getCurrentStatus,
     setStatus,
     replaceCurrentStatus,
@@ -71,11 +70,7 @@ function createDesktopServiceRuntime(deps) {
 
     let actualPort;
     try {
-      serviceProcessClient.updateContext({
-        status: getCurrentStatus(),
-        runtimeAccess: getRuntimeAccess(),
-        runtimeLogs: runtimeLogs.snapshot()
-      });
+      serviceProcessClient.updateContext({ runtimeLogs: runtimeLogs.snapshot() });
       const localService = await serviceProcessClient.start({
         host: '127.0.0.1',
         port: guiConfig.port,

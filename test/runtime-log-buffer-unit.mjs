@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createRuntimeLogBuffer } from "../electron/runtime-log-buffer.js";
+import { applyRuntimeLogChange } from '../electron/runtime-log-snapshot.js';
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-runtime-logs-'));
 const logPath = path.join(temp, 'diagnostics', 'service.log');
@@ -29,6 +30,8 @@ try {
   assert.equal(changes.length, 4);
   assert.equal(changes.at(-1).type, 'append');
   assert.equal(changes.at(-1).entry.message, 'fourth');
+  assert.equal(changes.at(-1).count, 3);
+  assert.equal(changes.at(-1).maxEntries, 3);
   assert.equal(bounded.persistent, true);
   assert.equal(bounded.entries.length, 3);
   assert.equal(bounded.entries.at(-1).message, 'fourth');
@@ -65,6 +68,16 @@ try {
   unsubscribe();
   assert.equal(buffer.snapshot().count, 0);
   assert.equal(fs.readFileSync(logPath, 'utf8'), '');
+
+  let projected = { available: true, revision: 1, count: 2, entries: [{ message: 'one' }, { message: 'two' }] };
+  projected = applyRuntimeLogChange(projected, { type: 'append', revision: 2, count: 3, maxEntries: 2, entry: { message: 'three' } });
+  assert.equal(projected.revision, 2);
+  assert.equal(projected.count, 3);
+  assert.deepEqual(projected.entries.map(entry => entry.message), ['two', 'three']);
+  projected = applyRuntimeLogChange(projected, { type: 'reset', revision: 3, count: 0, maxEntries: 2 });
+  assert.equal(projected.revision, 3);
+  assert.equal(projected.count, 0);
+  assert.deepEqual(projected.entries, []);
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }
