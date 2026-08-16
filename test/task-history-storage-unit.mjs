@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { listSessions, readSession, resetTaskHistoryCaches, writeSession } from "../src/taskHistoryStorage.js";
+import { watchPathFor } from '../src/watchPath.js';
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-history-storage-'));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -12,6 +13,10 @@ const id = 'shared-task';
 const file = path.join(directory, `${crypto.createHash('sha256').update(id).digest('hex')}.json`);
 
 try {
+  assert.equal(watchPathFor(directory, 'linux'), directory, 'non-Windows watch paths must remain unchanged');
+  assert.equal(watchPathFor(directory, 'win32'), fs.realpathSync.native(directory),
+    'Windows watch paths must use native long-path resolution before reaching libuv');
+
   writeSession(directory, { id, workspace: 'repo', summary: 'before' });
   assert.equal(listSessions(directory, 10)[0]?.summary, 'before');
 

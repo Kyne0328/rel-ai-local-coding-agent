@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
 import { collectOptionsFromWorkspace, createCollectionPathFilter, isPathInside, realRootOf } from '../../safety.js';
+import { watchPathFor } from '../../watchPath.js';
 import { repositoryIndexPath } from './database.js';
 import { DEFAULT_MAX_INDEX_FILES } from './indexBuild.js';
 import { recentIntelligenceDiagnostics, recordIntelligenceDiagnostic } from './state.js';
@@ -334,10 +335,10 @@ async function cancelAndDrain(databaseFile, reason) {
 
 function ensureWorkspaceWatcher(workspace, databaseFile, state) {
   if (state.watcher) return;
-  const root = realRootOf(workspace.path);
   const indexRoot = path.dirname(databaseFile);
-  let shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
   try {
+    const root = watchPathFor(realRootOf(workspace.path));
+    let shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
     state.watcher = fs.watch(root, { recursive: true, persistent: false }, (eventType, filename) => {
       const normalized = normalizeWatchPath(filename);
       if (normalized === '.relaiignore') {
