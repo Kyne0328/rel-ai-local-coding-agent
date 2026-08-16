@@ -29,7 +29,7 @@ function copyFixture() {
     '.codex-plugin/plugin.json',
     'electron/package.json',
     'electron/package-lock.json',
-    'electron/build/installer-header.bmp',
+    'electron/build/installer-icon.ico',
     'electron/renderer/status.html',
     'electron/scripts/verify-fuses.js',
     'src/packageMetadata.js',
@@ -123,13 +123,9 @@ function verifyPackageContracts() {
   assert.deepEqual(electronPackage.build.electronLanguages, ['en-US']);
   assert.deepEqual(electronPackage.build.win.target, ['nsis', 'portable']);
   assert.equal(electronPackage.build.win.icon, 'build/icon.png');
-  assert.equal(electronPackage.build.nsis.installerIcon, undefined, 'the Setup executable must inherit the normal app icon');
-  assert.equal(electronPackage.build.nsis.installerHeader, 'build/installer-header.bmp');
-  const installerHeader = fs.readFileSync(path.join(tmp, 'electron', electronPackage.build.nsis.installerHeader));
-  assert.equal(installerHeader.toString('ascii', 0, 2), 'BM');
-  assert.equal(installerHeader.readInt32LE(18), 150);
-  assert.equal(installerHeader.readInt32LE(22), 57);
-  assert.equal(installerHeader.readUInt16LE(28), 24);
+  assert.equal(electronPackage.build.nsis.installerIcon, 'build/installer-icon.ico');
+  const installerIcon = fs.readFileSync(path.join(tmp, 'electron', electronPackage.build.nsis.installerIcon));
+  assert.deepEqual([...installerIcon.subarray(0, 4)], [0, 0, 1, 0], 'the dedicated Windows installer icon must remain a valid ICO asset');
   assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
   assert.deepEqual(electronPackage.build.mac.target, ['dmg']);
   assert.equal(electronPackage.build.mac.identity, null);

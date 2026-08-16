@@ -19,6 +19,7 @@ fs.writeFileSync(path.join(workspace, 'README.md'), '# Smoke\n');
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("smoke")\n');
 fs.writeFileSync(path.join(workspace, 'src', 'helper.js'), 'function smokeValue() { return 1; }\nmodule.exports = { smokeValue };\n');
 fs.writeFileSync(path.join(workspace, 'exec-smoke.js'), "process.stdout.write('exec-smoke-ok');\n");
+fs.writeFileSync(path.join(workspace, 'create-artifact.js'), "require('node:fs').writeFileSync('session-artifact.txt', 'temporary\\n');\n");
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({
   scripts: { check: 'node --check src/index.js' }
 }, null, 2));
@@ -151,10 +152,12 @@ try {
     throw new Error('Structured delete failed.');
   }
 
-  fs.writeFileSync(path.join(workspace, 'session-artifact.txt'), 'temporary\n');
+  taskCall(18, 'relai_exec', { workspace: 'smoke', command: 'node create-artifact.js' });
+  const artifactExec = structuredContentOf(await client.waitFor(18));
+  if (!artifactExec.changedFiles?.includes('session-artifact.txt')) throw new Error('Task-owned exec did not attribute its untracked artifact.');
   taskCall(10, 'relai_work', { action: 'status', workspace: 'smoke' });
   const status = structuredContentOf(await client.waitFor(10));
-  if (!status.workspace?.repository?.sessionChangedFiles?.includes('session-artifact.txt')) throw new Error('Session ownership missing untracked artifact.');
+  if (!status.workspace?.repository?.sessionChangedFiles?.includes('session-artifact.txt')) throw new Error('Session ownership missing task-owned untracked artifact.');
 
   taskCall(11, 'relai_changes', { action: 'tidy_plan', workspace: 'smoke' });
   const plan = structuredContentOf(await client.waitFor(11));
@@ -194,7 +197,7 @@ try {
   if (completed.summary !== 'Completed and validated the public workflow smoke task.') throw new Error('Atomic workflow completion lost its summary.');
 
   taskId = '';
-  taskCall(32, 'relai_work', { action: 'begin', workspace: 'smoke' });
+  taskCall(32, 'relai_work', { action: 'begin', workspace: 'smoke', bootstrap: 'full' });
   const graphBootstrapped = structuredContentOf(await client.waitFor(32));
   taskId = graphBootstrapped.work_id;
   if (!graphBootstrapped.bootstrap?.repositoryIntelligence?.available) throw new Error('Warm Repository Intelligence context was not included in work bootstrap.');

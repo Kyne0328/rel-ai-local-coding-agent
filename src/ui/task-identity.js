@@ -49,10 +49,8 @@ function clientCapabilityView(value = {}) {
       capabilityState: support,
       capabilityLabel: 'Native MCP Tasks: Supported',
       executionMode: mode,
-      executionLabel: mode === 'bounded_synchronous'
-        ? 'Execution mode: Bounded synchronous fallback'
-        : 'Execution mode: Native asynchronous',
-      description: 'The client advertised the MCP Tasks extension for this observed connection.',
+      executionLabel: 'Eligible long work: Native MCP task',
+      description: 'The client advertised the MCP Tasks extension. Short bounded operations still complete directly.',
       pill: 'supported',
       pillClass: 'ok'
     };
@@ -65,10 +63,8 @@ function clientCapabilityView(value = {}) {
       capabilityState: support,
       capabilityLabel: 'Native MCP Tasks: Not advertised by client',
       executionMode: mode,
-      executionLabel: mode === 'native_tasks'
-        ? 'Execution mode: Native asynchronous'
-        : 'Execution mode: Bounded synchronous fallback',
-      description: 'This is a client capability choice, not a Rel.AI server failure.',
+      executionLabel: 'Eligible long work: Work-session continuation',
+      description: 'Short bounded operations complete directly. Longer eligible operations can continue under the same work session and be checked by work_id.',
       pill: 'not advertised',
       pillClass: 'warn'
     };
@@ -80,11 +76,7 @@ function clientCapabilityView(value = {}) {
     capabilityState: 'unknown',
     capabilityLabel: 'Native MCP Tasks: Unknown',
     executionMode: mode,
-    executionLabel: mode === 'native_tasks'
-      ? 'Execution mode: Native asynchronous'
-      : mode === 'bounded_synchronous'
-        ? 'Execution mode: Bounded synchronous fallback'
-        : 'Execution mode: Unknown',
+    executionLabel: 'Eligible long work: Capability unknown',
     description: 'No client capability advertisement is present in the current dashboard data.',
     pill: 'unknown',
     pillClass: ''

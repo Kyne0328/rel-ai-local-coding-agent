@@ -45,7 +45,7 @@ The public Rel.AI runtime no longer exposes a local OAuth authorization server. 
 
 Modern MCP behavior targets `2026-07-28`. HTTP also retains the SDK-supported stateless ChatGPT `2025-11-25` initialize flow. Rel.AI does not issue `MCP-Session-Id`; JSON-RPC batches, removed tool aliases, and initialize-based stdio are not supported.
 
-Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/tasks`. Clients without Tasks support receive bounded synchronous execution for eligible operations.
+Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/tasks`. Short bounded operations complete directly. When a client does not advertise Tasks, longer eligible operations can return a running result and continue under the same Rel.AI `work_id`; use `relai_work` with `action:"status"` to retrieve the eventual result.
 
 ## Reconnects and tool changes
 

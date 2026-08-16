@@ -45,7 +45,8 @@ assert.match(workflow, /npm run test:native-tasks-release-gate/,
 
 const docs = fs.readFileSync(path.join(root, 'docs', 'NATIVE_TASKS_RELEASE_GATE.md'), 'utf8');
 assert.match(docs, /HTTP or stdio \| Advertised \| Long, multi-step, or indeterminate \| Native MCP task/);
-assert.match(docs, /HTTP or stdio \| Not advertised \| Within synchronous limits \| Bounded synchronous result/);
+assert.match(docs, /HTTP or stdio \| Not advertised \| Within synchronous limits \| Bounded direct result/);
+assert.match(docs, /HTTP or stdio \| Not advertised \| Outside the safe direct-response window \| Running work-session result; continue under the same `work_id`/);
 assert.match(docs, /HTTP also accepts ChatGPT's SDK-supported stateless `2025-11-25` initialize flow/i);
 assert.match(docs, /no response is emitted for JSON-RPC notifications/i);
 assert.match(docs, /server identity metadata/i);
