@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot } from '../src/localAnalytics.js';
+import { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot, readLocalUsageSnapshotAsync } from '../src/localAnalytics.js';
 import { failureCategoryFromCode } from '../src/analyticsFailureCategory.js';
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-local-analytics-'));
@@ -35,8 +35,18 @@ try {
   assert.deepEqual(snapshot.workspaceFailureCategorySeries, [{ hour: '2026-08-08T11', deviceId: 'local-device', workspace: 'repo', workspaceKey: 'local-device::repo', category: 'policy', failures: 1 }]);
 
   await flushLocalAnalytics(config);
-  const persisted = fs.readFileSync(path.join(stateDir, 'analytics', 'local', '2026-08.json'), 'utf8');
+  const analyticsFile = path.join(stateDir, 'analytics', 'local', '2026-08.json');
+  const persisted = fs.readFileSync(analyticsFile, 'utf8');
   for (const secret of ['SECRET_PROMPT', 'SECRET_PATH', 'SECRET_RESULT', 'SECRET_COMMAND', 'SECRET_ERROR_MESSAGE', 'SENSITIVE_PATH_RESTRICTED']) assert.equal(persisted.includes(secret), false, `local analytics must not persist ${secret}`);
+
+  const external = JSON.parse(persisted);
+  external.totals.requests = 9;
+  external.totals.toolCalls = 9;
+  external.totals.successes = 8;
+  fs.writeFileSync(analyticsFile, `${JSON.stringify(external)}\n`);
+  assert.equal(readLocalUsageSnapshot(config, '2026-08').totals.toolCalls, 3, 'the runtime aggregate path may retain its process-local write cache');
+  const freshSnapshot = await readLocalUsageSnapshotAsync(config, '2026-08');
+  assert.equal(freshSnapshot.totals.toolCalls, 9, 'desktop analytics reads must bypass another process cache and observe persisted state');
 } finally {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
