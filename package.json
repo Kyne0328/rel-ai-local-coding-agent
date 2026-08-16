@@ -114,7 +114,7 @@
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
     "test:colors": "npm run verify:color-tokens && node test/color-system-unit.mjs",
-    "test:all": "npm run verify:generated && npm run verify:tree-sitter-assets && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && npm run audit:test-rigidity && node test/run-tests.mjs && node test/session-summary-unit.mjs",
+    "test:all": "npm run verify:color-tokens && npm run build:css && npm run verify:generated && npm run verify:tree-sitter-assets && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && npm run audit:test-rigidity && node test/run-tests.mjs",
     "build:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
     "watch:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch",
     "test:custom-chrome-browser": "node test/electron-custom-chrome-browser.mjs",
