@@ -13,6 +13,9 @@ function getAuditPath(config = {}) {
 const MAX_AUDIT_BYTES = 5 * 1024 * 1024;
 const READ_TAIL_BYTES = 256 * 1024;
 const AUDIT_FLUSH_DELAY_MS = 50;
+const AUDIT_RETRY_BASE_MS = 500;
+const AUDIT_RETRY_MAX_MS = 15_000;
+const MAX_PENDING_AUDIT_ENTRIES = 1000;
 const auditWriteStates = new Map();
 
 async function logAudit(config, event) {
@@ -48,11 +51,15 @@ async function safeLogAudit(config, event, options = {}) {
 function enqueueAuditWrite(auditPath, entry) {
   let state = auditWriteStates.get(auditPath);
   if (!state) {
-    state = { pending: [], inFlight: [], timer: null, promise: Promise.resolve(), clearing: false };
+    state = {
+      pending: [], inFlight: [], timer: null, promise: Promise.resolve(), clearing: false,
+      retryCount: 0, lastError: '', lastFailureAt: null, droppedEntries: 0
+    };
     auditWriteStates.set(auditPath, state);
   }
   if (state.clearing) return;
   state.pending.push(entry);
+  trimPendingAuditEntries(state);
   if (state.timer) return;
   state.timer = setTimeout(() => {
     state.timer = null;
@@ -71,16 +78,28 @@ function flushAuditState(auditPath, state) {
       await rotateIfNeededAsync(auditPath);
       await fs.promises.appendFile(auditPath, batch.map(entry => `${JSON.stringify(entry)}\n`).join(''), { mode: 0o600 });
       removeInFlight(state, batch);
+      state.retryCount = 0;
+      state.lastError = '';
+      state.lastFailureAt = null;
     })
     .catch(error => {
       removeInFlight(state, batch);
       state.pending.unshift(...batch);
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred audit write:', error);
-      if (!state.clearing && !state.timer) {
+      trimPendingAuditEntries(state);
+      state.retryCount += 1;
+      state.lastError = sanitizeDisplayText(error instanceof Error ? error.message : String(error || 'Audit persistence failed.'), 500);
+      state.lastFailureAt = new Date().toISOString();
+      if (process.env.REL_AI_MCP_DEBUG && (state.retryCount === 1 || state.retryCount % 10 === 0)) {
+        console.error('[rel-ai-mcp] deferred audit write:', error);
+      }
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = null;
+      if (!state.clearing) {
+        const retryDelay = Math.min(AUDIT_RETRY_MAX_MS, AUDIT_RETRY_BASE_MS * (2 ** Math.min(state.retryCount - 1, 5)));
         state.timer = setTimeout(() => {
           state.timer = null;
           void flushAuditState(auditPath, state);
-        }, 500);
+        }, retryDelay);
         state.timer.unref?.();
       }
     });
@@ -90,6 +109,27 @@ function flushAuditState(auditPath, state) {
 function removeInFlight(state, batch) {
   const ids = new Set(batch.map(entry => entry.auditId));
   state.inFlight = state.inFlight.filter(entry => !ids.has(entry.auditId));
+}
+
+function trimPendingAuditEntries(state) {
+  const overflow = Math.max(0, state.pending.length - MAX_PENDING_AUDIT_ENTRIES);
+  if (!overflow) return;
+  state.pending.splice(0, overflow);
+  state.droppedEntries += overflow;
+}
+
+function auditPersistenceSnapshot(state) {
+  if (!state) {
+    return { healthy: true, pending: 0, retryCount: 0, droppedEntries: 0, lastError: '', lastFailureAt: null };
+  }
+  return {
+    healthy: !state.lastError && state.droppedEntries === 0,
+    pending: state.pending.length + state.inFlight.length,
+    retryCount: state.retryCount,
+    droppedEntries: state.droppedEntries,
+    lastError: state.lastError,
+    lastFailureAt: state.lastFailureAt
+  };
 }
 
 async function rotateIfNeededAsync(auditPath) {
@@ -154,7 +194,7 @@ function readAudit(config, options = {}) {
   const entries = dedupeAuditEntries([...persistedEntries, ...queuedEntries])
     .filter(entry => (!taskId || entry.taskId === taskId) && (!workspace || entry.workspace === workspace))
     .slice(-limit);
-  return { path: auditPath, entries };
+  return { path: auditPath, entries, persistence: auditPersistenceSnapshot(state) };
 }
 
 function dedupeAuditEntries(entries) {

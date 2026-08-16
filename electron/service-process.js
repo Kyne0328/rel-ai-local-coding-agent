@@ -210,6 +210,7 @@ function projectActivityEvent(event = {}) {
     activeCalls: Math.max(0, Number(event.activeCalls || 0)),
     activeTaskCount: Math.max(0, Number(event.activeTaskCount || 0)),
     taskId: String(event.taskId || ''),
+    operationId: String(event.operationId || event.activityEvent?.operationId || event.activityEvent?.eventId || ''),
     workspace: String(event.workspace || event.task?.workspace || ''),
     tool: String(event.tool || event.task?.lastTool || event.task?.tool || ''),
     operation: String(event.operation || event.task?.operation || event.task?.lastOperation || ''),

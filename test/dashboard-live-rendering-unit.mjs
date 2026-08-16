@@ -96,7 +96,7 @@ const processes = read('src/ui/features/processes/index.js');
 const activity = read('src/ui/features/activity/index.js');
 
 assert.match(dashboard, /async function updateLiveView/);
-assert.equal(dashboard.includes('await syncLiveView(hydrated);'), true);
+assert.equal(dashboard.includes('await syncLiveView(refreshed);'), true);
 assert.doesNotMatch(
   functionSource(dashboard, 'liveOnEvent'),
   /renderViewIfChanged|rerender/,
@@ -199,8 +199,14 @@ assert.match(dashboard, /data-route-retry/, 'lazy route failures must render a v
 assert.doesNotMatch(dashboard, /\.then\(module => module\.mount[^\n]*\.catch\(debugError\)/, 'lazy route failures must not be swallowed by debug-only handlers');
 
 const refreshSource = functionSource(dashboard, 'performRefresh');
-assert.match(refreshSource, /options\.render === true[\s\S]*renderViewIfChanged\(hydrated\)/, 'explicit structural refreshes must retain rerender support');
-assert.match(refreshSource, /options\.render !== false[\s\S]*syncLiveView\(hydrated\)/, 'ordinary refreshes must use passive synchronization');
+assert.match(refreshSource, /initStore\(hydrated\)[\s\S]*replayLiveEventsDuringRefresh\(\)[\s\S]*const refreshed = getStore\(\)/, 'aggregate refreshes must replay typed live events that arrived while the snapshot was in flight');
+assert.match(refreshSource, /options\.render === true[\s\S]*renderViewIfChanged\(refreshed\)/, 'explicit structural refreshes must retain rerender support');
+assert.match(refreshSource, /options\.render !== false[\s\S]*syncLiveView\(refreshed\)/, 'ordinary refreshes must use passive synchronization');
+assert.match(functionSource(dashboard, 'liveOnEvent'), /bufferLiveEventDuringRefresh\(event\)/, 'live events must be retained while an aggregate refresh is in flight');
+const refreshCoordinatorSource = functionSource(dashboard, 'doRefresh');
+assert.match(refreshCoordinatorSource, /_refreshLiveEvents = \[\]/, 'each aggregate refresh must start a fresh bounded live-event buffer');
+assert.match(refreshCoordinatorSource, /needsCatchUp[\s\S]*live-refresh-overflow/, 'buffer overflow must schedule an authoritative catch-up refresh instead of silently dropping state');
+assert.match(functionSource(dashboard, 'bufferLiveEventDuringRefresh'), /MAX_REFRESH_LIVE_EVENTS[\s\S]*_refreshLiveEventOverflow = true/, 'refresh buffering must stay bounded and record overflow');
 
 assert.match(api, /export function requestDashboardRefresh\(options = \{\}\)/, 'dashboard refresh helper must accept refresh intent');
 assert.match(api, /structural: options\.structural === true/, 'dashboard refresh helper must default structural intent to false');
