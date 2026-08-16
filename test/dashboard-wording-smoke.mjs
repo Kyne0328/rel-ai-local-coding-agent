@@ -4,11 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { availablePort } from './helpers/available-port.mjs';
 import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const port = 39881;
+const port = await availablePort();
 const token = process.env.TEST_TOKEN ?? 'dashboard-wording-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-wording-'));
 
