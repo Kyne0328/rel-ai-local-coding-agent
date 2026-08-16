@@ -187,8 +187,13 @@ export function activityDisplayAction(entry) {
     || displayText(entry?.operation)
     || displayText(entry?.tool?.operation)
     || displayText(entry?.tool?.title)
-    || displayText(entry?.tool?.name || entry?.tool || entry?.type)
-    || 'Activity';
+    || activityToolLabel(entry?.tool?.name || entry?.tool || entry?.type);
+}
+
+export function activityToolLabel(tool) {
+  const raw = displayText(typeof tool === 'object' ? tool?.name : tool);
+  const label = raw.replace(/^relai_/, '').replaceAll('_', ' ').replaceAll('-', ' ').trim();
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : 'Activity';
 }
 
 export function activityActionLabel(entry) {

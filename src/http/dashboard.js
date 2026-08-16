@@ -436,8 +436,8 @@ ${renderDashboardWindowTitlebar()}
       <div class="dashboard-state">
         <div class="dashboard-state-card">
           <div class="loading-mark" aria-hidden="true"></div>
-          <h2>Loading workspace state…</h2>
-          <p>Rel.AI is checking the local service, configuration, and workspace status.</p>
+          <h2>Loading Rel.AI…</h2>
+          <p>Checking your connection and project access.</p>
           <div class="skeleton-grid" aria-hidden="true"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
         </div>
       </div>

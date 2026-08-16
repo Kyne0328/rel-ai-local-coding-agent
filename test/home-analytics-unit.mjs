@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 globalThis.location = { hash: '#home' };
-const { homeAnalyticsHtml, hydrateHomeAnalytics } = await import('../src/ui/features/home/index.js');
+const { homeAnalyticsHtml, hydrateHomeAnalytics, overviewWorkspaceStatus } = await import('../src/ui/features/home/index.js');
 
 const scope = {
   kind: 'all',
@@ -18,6 +18,11 @@ const scope = {
   ],
   points: [{ toolCalls: 1 }, { toolCalls: 5 }, { toolCalls: 2 }, { toolCalls: 10 }]
 };
+
+assert.equal(overviewWorkspaceStatus({ alias: 'app', operational: { exists: true } }), 'ready');
+assert.equal(overviewWorkspaceStatus({ alias: 'app', operational: { exists: false } }), 'unavailable');
+assert.equal(overviewWorkspaceStatus({ alias: 'app', operational: { exists: true } }, [{ workspace: 'app', severity: 'error' }]), 'needs attention');
+assert.equal(overviewWorkspaceStatus({ alias: 'app', operational: { currentActivity: 'Editing' } }), 'active');
 
 const html = homeAnalyticsHtml(scope);
 assert.match(html, /Last 24 hours/);
