@@ -82,7 +82,10 @@ const disconnected = buildDiagnosticReport({
   runtimeLogs: { available: false, entries: [] },
   activeCalls: 0
 });
-assert.ok(disconnected.findings.some(item => item.code === 'public_endpoint_failed'));
+const disconnectedTunnelFinding = disconnected.findings.find(item => item.code === 'public_endpoint_failed');
+assert.ok(disconnectedTunnelFinding);
+assert.equal(disconnectedTunnelFinding.action.kind, 'restart_connection');
+assert.equal(disconnectedTunnelFinding.action.href, '#connection');
 assert.equal(disconnected.findings.some(item => item.code === 'configuration_invalid'), false);
 
 const missingBearer = buildDiagnosticReport({
