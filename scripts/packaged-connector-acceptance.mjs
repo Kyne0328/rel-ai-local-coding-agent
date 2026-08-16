@@ -39,6 +39,7 @@ const base = `http://127.0.0.1:${port}`;
 let child;
 let primarySession = null;
 let reconnectSession = null;
+let dashboardCookie = '';
 let stderr = '';
 let nativeTaskRequestId = 10000;
 
@@ -92,6 +93,11 @@ try {
   assert.equal(challenge.status, 401);
   assert.match(challenge.headers.get('www-authenticate') || '', /^Bearer\s+realm="rel-ai-local"$/i);
   assert.match(await challenge.text(), /private Rel\.AI bearer token/i);
+
+  const dashboardBearerChallenge = await freshFetch(`${base}/api/dashboard/v10`, {
+    headers: { authorization: `Bearer ${localBearerToken}` }
+  });
+  assert.equal(dashboardBearerChallenge.status, 401, 'dashboard APIs must not accept the MCP bearer token directly');
 
   primarySession = await initializeMcp(localBearerToken, '1.0.0');
   const discovered = primarySession.discovery;
@@ -162,7 +168,7 @@ try {
   assert.equal(activeDashboard.application?.version, applicationVersion);
   const activeTask = activeDashboard.tasks?.find(item => item.id === taskId || item.taskId === taskId);
   assert.ok(activeTask, 'dashboard task history must contain the active packaged acceptance task');
-  assert.ok(activeDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === 'relai_edit' && item.ok !== false));
+  assert.ok(activeDashboard.auditTail?.entries?.some(item => item.taskId === taskId && (item.publicTool || item.tool) === 'relai_edit' && item.ok !== false));
 
   const completed = await callTool(primarySession, 20, 'relai_validate', {
     action: 'checks',
@@ -171,7 +177,7 @@ try {
     check: 'npm run check',
     complete: true,
     summary: 'Packaged ESM connector accepted after guarded write, validation, activity inspection, and reconnect verification.'
-  });
+  }, { expectNativeTask: true });
   assert.equal(completed.validationStatus, 'passed');
   assert.equal(completed.completionKnown, true);
   assert.equal(completed.completionSource, 'relai_validate:checks');
@@ -298,13 +304,25 @@ function runGit(...args) {
 }
 
 async function dashboard() {
+  if (!dashboardCookie) {
+    const launch = await freshFetch(`${base}/dashboard?token=${encodeURIComponent(localBearerToken)}`);
+    assert.equal(launch.status, 200);
+    dashboardCookie = dashboardSessionCookie(launch.headers.get('set-cookie'));
+    assert.match(dashboardCookie, /^relai_dashboard_session=/, 'dashboard launch must exchange the local launch token for an HttpOnly session');
+  }
   const response = await freshFetch(`${base}/api/dashboard/v10`, {
-    headers: { authorization: `Bearer ${localBearerToken}` }
+    headers: { cookie: dashboardCookie }
   });
   assert.equal(response.status, 200);
+  const renewedCookie = dashboardSessionCookie(response.headers.get('set-cookie'));
+  if (renewedCookie) dashboardCookie = renewedCookie;
   const payload = await response.json();
   assert.equal(payload.ok, true);
   return payload;
+}
+
+function dashboardSessionCookie(value) {
+  return String(value || '').split(';', 1)[0].trim();
 }
 
 async function readResource(session, id, uri) {

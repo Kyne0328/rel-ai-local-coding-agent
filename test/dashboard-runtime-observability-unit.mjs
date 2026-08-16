@@ -30,7 +30,7 @@ const supported = clientCapabilityViews({
 })[0];
 assert.equal(supported.capabilityState, 'supported');
 assert.equal(supported.capabilityLabel, 'Native MCP Tasks: Supported');
-assert.equal(supported.executionLabel, 'Execution mode: Native asynchronous');
+assert.equal(supported.executionLabel, 'Eligible long work: Native MCP task');
 
 const unsupported = clientCapabilityViews({
   mcpConnection: {
@@ -43,13 +43,13 @@ const unsupported = clientCapabilityViews({
 })[0];
 assert.equal(unsupported.capabilityState, 'not_advertised');
 assert.equal(unsupported.capabilityLabel, 'Native MCP Tasks: Not advertised by client');
-assert.equal(unsupported.executionLabel, 'Execution mode: Bounded synchronous fallback');
-assert.match(unsupported.description, /not a Rel\.AI server failure/i);
+assert.equal(unsupported.executionLabel, 'Eligible long work: Work-session continuation');
+assert.match(unsupported.description, /continue under the same work session/i);
 
 const unknown = clientCapabilityViews({ mcpConnection: { recentEvents: [] } })[0];
 assert.equal(unknown.capabilityState, 'unknown');
 assert.equal(unknown.capabilityLabel, 'Native MCP Tasks: Unknown');
-assert.equal(unknown.executionLabel, 'Execution mode: Unknown');
+assert.equal(unknown.executionLabel, 'Eligible long work: Capability unknown');
 const malformedCapability = clientCapabilityViews({
   mcpConnection: {
     recentEvents: [{ type: 'mcp_request_received', clientCapabilities: { extensions: null } }]
