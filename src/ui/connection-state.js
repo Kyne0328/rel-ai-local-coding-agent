@@ -49,17 +49,20 @@ export function connectionLayerViews(state = {}) {
   return LAYERS.map(([key,title,descriptions]) => { const value=normalized[key]; const [label,tone,description]=descriptions[value.status]||['Unknown','warn','Connection state is unavailable.']; return { key,title,status:value.status,label,tone,description:key==='mcpClient'?requestDescription(value,description):description }; });
 }
 export function connectionSummary(state = {}) {
-  const normalized=normalizeConnectionState(state), local=normalized.localService.status, tunnel=normalized.publicEndpoint.status, activity=normalized.mcpClient.status, error=normalized.error?.message||'';
-  if(local==='failed')return summary('Local MCP service failed','Needs attention','bad',error||'Rel.AI could not start its local MCP service.');
-  if(local==='stopped')return summary('Rel.AI is stopped','Stopped','warn','Start or restart Rel.AI before ChatGPT can use this computer.');
-  if(local==='starting')return summary('Starting Rel.AI','Starting','working','Rel.AI is preparing the local MCP service.');
-  if(tunnel==='unavailable')return summary('Secure MCP Tunnel unavailable','Needs attention','bad',error||'Review the OpenAI Tunnel ID and runtime API key.');
-  if(tunnel==='disabled')return summary('Secure MCP Tunnel setup required','Setup required','warn','Configure the OpenAI Secure MCP Tunnel for this computer.');
-  if(tunnel==='connecting')return summary('Connecting Secure MCP Tunnel','Connecting','working','The local service is ready while Rel.AI establishes the Secure MCP Tunnel.');
-  if(activity==='request_failed')return summary('The last MCP request failed','Last request failed','warn',requestDescription(normalized.mcpClient,'Review Activity or Diagnostics for the request error.'));
-  if(activity==='active')return summary('MCP request in progress','Active now','working',requestDescription(normalized.mcpClient,'An MCP request is running.'));
-  if(activity==='recent'||activity==='connected')return summary('Rel.AI is available to ChatGPT','Recently active','ok',requestDescription(normalized.mcpClient,'A recent MCP request completed successfully.'));
-  return summary('Rel.AI is ready for ChatGPT','Ready','ok','The local MCP service and OpenAI Secure MCP Tunnel are connected.');
+  const normalized = normalizeConnectionState(state);
+  const local = normalized.localService.status;
+  const tunnel = normalized.publicEndpoint.status;
+  const activity = normalized.mcpClient.status;
+  if (local === 'failed') return summary('Rel.AI could not start', 'Needs attention', 'bad', 'Open Troubleshooting for details and recovery options.');
+  if (local === 'stopped') return summary('Rel.AI is stopped', 'Stopped', 'warn', 'Start or restart Rel.AI before ChatGPT can use this computer.');
+  if (local === 'starting') return summary('Starting Rel.AI', 'Starting', 'working', 'Rel.AI is getting this computer ready for ChatGPT.');
+  if (tunnel === 'unavailable') return summary('ChatGPT connection unavailable', 'Needs attention', 'bad', 'Review the Connection settings for this computer or open Troubleshooting.');
+  if (tunnel === 'disabled') return summary('Connect Rel.AI to ChatGPT', 'Setup required', 'warn', 'Set up the secure ChatGPT connection for this computer.');
+  if (tunnel === 'connecting') return summary('Connecting to ChatGPT', 'Connecting', 'working', 'Rel.AI is finishing the secure connection. No setup changes are needed while it connects.');
+  if (activity === 'request_failed') return summary('The last ChatGPT request failed', 'Last request failed', 'warn', 'Open Activity or Troubleshooting to see what happened.');
+  if (activity === 'active') return summary('ChatGPT is using Rel.AI', 'Active now', 'working', 'A request from ChatGPT is in progress.');
+  if (activity === 'recent' || activity === 'connected') return summary('Rel.AI is available to ChatGPT', 'Recently active', 'ok', 'A recent ChatGPT request completed successfully.');
+  return summary('Rel.AI is ready for ChatGPT', 'Ready', 'ok', 'This computer is connected and ready for ChatGPT.');
 }
 function normalizeLayer(key,value,fallback){const source=value&&typeof value==='object'?value:{};const status=String(source.status||fallback);return{...source,status:ALLOWED[key].has(status)?status:fallback};}
 function normalizeActivity(value){const status=String(value||'no_requests');if(ALLOWED.mcpClient.has(status))return status;if(status==='request_succeeded')return'recent';return'no_requests';}
