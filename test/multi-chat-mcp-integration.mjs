@@ -78,7 +78,7 @@ try {
   const listedTools = await client.waitFor(requestId);
   assert.equal(listedTools.result.tools.length, activeToolCount);
   const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_work');
-  assert.equal(listedStartTask.inputSchema.properties.workspace.description, undefined, 'workspace aliases belong in bootstrap/status, not discovery');
+  assert.match(listedStartTask.inputSchema.properties.workspace.description || '', /Action usage: begin \(required\); status; finish; cancel/, 'unified discovery must explain workspace action ownership without enumerating configured aliases');
 
   const startA = await rpc('relai_work', { action: 'begin', workspace: 'appA', objective: 'Validate task A.', bootstrap: 'compact' });
   const startB = await rpc('relai_work', { action: 'begin', workspace: 'appB', objective: 'Validate task B.', bootstrap: 'compact' });

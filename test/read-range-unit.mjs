@@ -95,6 +95,19 @@ try {
   }, { connector: true });
   assert.equal(normalized.items[0].content, 'two\n');
 
+  // Repeated ranges for the same file preserve request order instead of collapsing
+  // to the last path-keyed range.
+  const repeated = relaiRead(workspace, config, {
+    ranges: [
+      { path: 'sample.txt', startLine: 1, endLine: 1 },
+      { path: 'sample.txt', startLine: 3, endLine: 3 }
+    ],
+    guidanceMode: 'none'
+  }, { connector: true });
+  assert.equal(repeated.items.length, 2);
+  assert.equal(repeated.items[0].content, 'alpha\r\n');
+  assert.equal(repeated.items[1].content, 'gamma\r\n');
+
   assert.throws(() => relaiRead(workspace, config, {
     paths: ['sample.txt'],
     ranges: [{ path: 'sample.txt' }]

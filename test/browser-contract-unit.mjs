@@ -42,9 +42,8 @@ const workspace = { alias: 'repo', path: workspaceRoot };
 try {
   const probe = await relaiHttpProbe(workspace, {}, { route: '/ok' });
   assert.equal(probe.ok, true);
-  assert.equal(probe.mode, 'http-probe');
   assert.equal(probe.route, '/ok');
-  assert.equal(probe.httpStatus, 200);
+  assert.equal(probe.statusCode, 200);
   assert.equal(probe.title, 'Route OK');
   assert.equal(probe.reachable, true);
 

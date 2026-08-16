@@ -93,35 +93,36 @@ async function snapshotGitSummary(workspace, config) {
 
 function relaiRead(workspace, config, args = {}, context = {}) {
   const request = prepareReadRequest(workspace, config, args, context);
-  const results = request.paths.map(requested => readSingleItem(
+  const results = request.paths.map((requested, index) => readSingleItem(
     workspace,
     config,
     requested,
     request.sessionActive,
     request.maxBytes,
     args,
-    readOptions(request, requested)
+    readOptions(request, requested, index)
   ));
   return collectReadResults(workspace, results);
 }
 
 async function relaiReadAsync(workspace, config, args = {}, context = {}) {
   const request = prepareReadRequest(workspace, config, args, context);
-  const results = await mapWithConcurrency(request.paths, READ_IO_CONCURRENCY, requested => readSingleItemAsync(
+  const results = await mapWithConcurrency(request.paths, READ_IO_CONCURRENCY, (requested, index) => readSingleItemAsync(
     workspace,
     config,
     requested,
     request.sessionActive,
     request.maxBytes,
     args,
-    readOptions(request, requested)
+    readOptions(request, requested, index)
   ));
   return collectReadResults(workspace, results);
 }
 
 function prepareReadRequest(workspace, config, args, context) {
-  const rangePaths = Array.isArray(args.ranges) ? args.ranges.map(entry => entry?.path).filter(Boolean) : [];
-  const paths = Array.isArray(args.paths) && args.paths.length > 0 ? args.paths : rangePaths;
+  const normalizedRanges = normalizeReadRanges(args.ranges);
+  const explicitPaths = Array.isArray(args.paths) && args.paths.length > 0;
+  const paths = explicitPaths ? args.paths : normalizedRanges.entries.map(entry => entry.path);
   if (paths.length === 0) throw new Error("relai_read requires paths or ranges.");
   const policy = resolvePolicy(workspace, config || {});
   const sessionActive = policy?.sessionActive === true;
@@ -132,14 +133,15 @@ function prepareReadRequest(workspace, config, args, context) {
     sessionActive,
     maxBytes: clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes),
     lineRange: normalizeReadLineRange(args),
-    rangesByPath: normalizeReadRanges(args.ranges),
+    rangesByPath: normalizedRanges.byPath,
+    orderedRanges: explicitPaths ? null : normalizedRanges.entries.map(entry => entry.range),
     guidanceMode: normalizeReadGuidanceMode(args.guidanceMode, context.connector ? "compact" : "full")
   };
 }
 
-function readOptions(request, requested) {
+function readOptions(request, requested, index) {
   return {
-    lineRange: request.rangesByPath.get(readRangeKey(requested)) || request.lineRange,
+    lineRange: request.orderedRanges?.[index] || request.rangesByPath.get(readRangeKey(requested)) || request.lineRange,
     guidanceMode: request.guidanceMode
   };
 }
@@ -173,7 +175,8 @@ async function mapWithConcurrency(items, limit, mapper) {
 // it names, so a multi-file targeted read is a single round trip.
 function normalizeReadRanges(ranges) {
   const byPath = new Map();
-  if (ranges == null) return byPath;
+  const entries = [];
+  if (ranges == null) return { byPath, entries };
   if (!Array.isArray(ranges)) throw new Error("relai_read ranges must be an array of { path, startLine, endLine } objects.");
   for (const entry of ranges) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
@@ -184,8 +187,9 @@ function normalizeReadRanges(ranges) {
     const range = normalizeReadLineRange(entry);
     if (!range) throw new Error(`relai_read ranges entry for ${entry.path} requires startLine or endLine.`);
     byPath.set(key, range);
+    entries.push({ path: entry.path, range });
   }
-  return byPath;
+  return { byPath, entries };
 }
 
 // Match on the caller's own spelling of the path so a range lines up with the entry in
@@ -694,7 +698,7 @@ function workspaceReplace(workspace, config, args = {}) {
     operation: "exactReplace",
     path: safe.relativePath,
     changed,
-    changedFiles: changed ? [safe.relativePath] : [],
+    changedFiles: changed && !dryRun ? [safe.relativePath] : [],
     oldSha256,
     newSha256,
     ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}),
@@ -781,7 +785,7 @@ function performFullFileWrite(workspace, config, relativePath, content, options 
     dryRun,
     workspace: workspace.alias,
     operationId,
-    changedFiles: changed ? [safe.relativePath] : [],
+    changedFiles: changed && !dryRun ? [safe.relativePath] : [],
     result
   };
 

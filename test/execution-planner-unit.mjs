@@ -268,7 +268,30 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 15. structured batches accept 100 edits and compact their response details.
+// 15. dry-run returnDiff must never return unrelated live-workspace changes.
+{
+  const dir = makeTempRepo('foo.js', 'const x = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  try {
+    fs.writeFileSync(path.join(dir, 'ambient.txt'), 'unrelated dirty file\n');
+    const result = await planEdit(workspace, {}, {
+      path: 'foo.js',
+      oldText: 'const x = 1;',
+      newText: 'const x = 2;',
+      dryRun: true,
+      returnDiff: true
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.changed, true, 'dry-run still reports whether the proposed edit would change content');
+    assert.deepEqual(result.changedFiles, [], 'dry-run must not report files as actually changed');
+    assert.equal(result.diff, undefined, 'dry-run must not attach the current workspace diff as if it were the proposed edit');
+    assert.equal(fs.readFileSync(path.join(dir, 'foo.js'), 'utf8'), 'const x = 1;\n');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 16. structured batches accept 100 edits and compact their response details.
 {
   const dir = makeTempRepo();
   const workspace = { alias: 'test', path: dir };

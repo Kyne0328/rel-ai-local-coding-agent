@@ -64,6 +64,15 @@ assert.deepEqual(
   { effectiveSnapshotMaxFiles: 0, budgetMultiplied: false }
 );
 
+assert.deepEqual(
+  buildExtraAudit(OP.EDIT, { changedFiles: ['src/example.js'] }, { path: 'src/example.js', dryRun: true }),
+  { filePath: 'src/example.js' },
+  'dry-run edits must not be recorded as actual changed files'
+);
+assert.deepEqual(buildExtraAudit(OP.PUBLISH_COMMIT, { ok: true, paths: ['src/example.js'] }, { dryRun: true }), {}, 'dry-run commits must not be recorded as created commits');
+assert.deepEqual(buildExtraAudit(OP.PUBLISH_PUSH, { ok: true }, { dryRun: true }), {}, 'dry-run pushes must not be recorded as published pushes');
+assert.deepEqual(buildExtraAudit(OP.PUBLISH_PUSH, { ok: true }, {}), { pushPublished: true }, 'real successful pushes remain publish events');
+
 assert.deepEqual(buildExtraAudit(OP.WORK_STATUS, {}, {}), {});
 assert.deepEqual(buildExtraAudit(OP.EDIT, { plannerPath: '', plannerReason: '' }, {}), {});
 assert.deepEqual(buildExtraAudit('removed_tool', {}, {}), {});
