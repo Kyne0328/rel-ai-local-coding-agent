@@ -3,7 +3,6 @@
 const SAFE_INHERITED_KEYS = Object.freeze([
   'ALLUSERSPROFILE',
   'APPDATA',
-  'CHROME_CRASHPAD_PIPE_NAME',
   'CI',
   'COLORTERM',
   'CommonProgramFiles',
@@ -11,10 +10,7 @@ const SAFE_INHERITED_KEYS = Object.freeze([
   'CommonProgramW6432',
   'ComSpec',
   'DriverData',
-  'GIT_ASKPASS',
   'GIT_EXEC_PATH',
-  'GIT_SSH',
-  'GIT_SSH_COMMAND',
   'HOME',
   'HOMEDRIVE',
   'HOMEPATH',
@@ -37,18 +33,74 @@ const SAFE_INHERITED_KEYS = Object.freeze([
   'PSModulePath',
   'PUBLIC',
   'SHELL',
-  'SSH_AGENT_PID',
-  'SSH_AUTH_SOCK',
   'SystemDrive',
   'SystemRoot',
   'TEMP',
   'TERM',
   'TERM_PROGRAM',
   'TMP',
+  'TMPDIR',
   'USERDOMAIN',
   'USERDOMAIN_ROAMINGPROFILE',
   'USERNAME',
   'USERPROFILE',
+  'windir'
+]);
+
+const CREDENTIAL_INHERITED_KEYS = Object.freeze([
+  'GIT_ASKPASS',
+  'GIT_SSH',
+  'GIT_SSH_COMMAND',
+  'SSH_AGENT_PID',
+  'SSH_AUTH_SOCK'
+]);
+
+const SERVICE_INHERITED_KEYS = Object.freeze([
+  ...SAFE_INHERITED_KEYS,
+  'OTEL_EXPORTER_OTLP_HEADERS',
+  'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+  'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+  'REL_AI_MCP_CONFIG',
+  'REL_AI_MCP_DEBUG',
+  'REL_AI_MCP_GIT',
+  'REL_AI_MCP_MAX_BODY_BYTES',
+  'REL_AI_MCP_MAX_TOOL_RESULT_BYTES',
+  'REL_AI_MCP_MAX_TOOL_RESULT_CHARS',
+  'REL_AI_MCP_MAX_TOOL_TEXT_BYTES',
+  'REL_AI_MCP_PORT',
+  'REL_AI_MCP_STATE_DIR',
+  'REL_AI_MCP_TASK_IDLE_MS',
+  'REL_AI_MCP_WORKSPACE_STATE_TTL_MS',
+  'REL_AI_OTEL_EXPORTER_OTLP_ENDPOINT',
+  'REL_AI_OTEL_SAMPLE_RATIO',
+  'REL_AI_REQUEST_STATE_KEY',
+  'REL_AI_UI_CHROMIUM_PATH',
+  'REL_AI_ZOEKT_INDEX',
+  'REL_AI_ZOEKT_SEARCH',
+  'npm_execpath'
+]);
+
+const TUNNEL_INHERITED_KEYS = Object.freeze([
+  'ALL_PROXY',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'NO_PROXY',
+  'PATH',
+  'PATHEXT',
+  'SSL_CERT_DIR',
+  'SSL_CERT_FILE',
+  'SystemDrive',
+  'SystemRoot',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'all_proxy',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
   'windir'
 ]);
 
@@ -58,24 +110,46 @@ const ALWAYS_BLOCKED_KEYS = Object.freeze(new Set([
 ]));
 
 function makeProcessEnvironment(extra = {}, options = {}) {
-  const source = options.source && typeof options.source === 'object' ? options.source : process.env;
   const inheritedKeys = new Set(SAFE_INHERITED_KEYS);
+  if (options.inheritCredentials === true) {
+    for (const key of CREDENTIAL_INHERITED_KEYS) inheritedKeys.add(key);
+  }
   for (const key of normalizeAllowedKeys(options.allow)) inheritedKeys.add(key);
+  return buildProcessEnvironment(extra, inheritedKeys, options);
+}
 
+function makeServiceProcessEnvironment(extra = {}, options = {}) {
+  const inheritedKeys = new Set(SERVICE_INHERITED_KEYS);
+  for (const key of normalizeAllowedKeys(options.allow)) inheritedKeys.add(key);
+  return buildProcessEnvironment(extra, inheritedKeys, options);
+}
+
+function makeTunnelProcessEnvironment(extra = {}, options = {}) {
+  return buildProcessEnvironment(extra, TUNNEL_INHERITED_KEYS, options);
+}
+
+function buildProcessEnvironment(extra, inheritedKeys, options) {
+  const source = options.source && typeof options.source === 'object' ? options.source : process.env;
   const env = {};
   for (const key of inheritedKeys) {
-    if (ALWAYS_BLOCKED_KEYS.has(key)) continue;
+    if (isAlwaysBlockedKey(key)) continue;
     if (source[key] != null) env[key] = String(source[key]);
   }
   env.REL_AI_MCP = '1';
 
   for (const [key, value] of Object.entries(extra || {})) {
-    if (ALWAYS_BLOCKED_KEYS.has(key) && options.allowDangerous !== true) {
+    if (isAlwaysBlockedKey(key) && options.allowDangerous !== true) {
       throw new Error(`${key} cannot be passed to child processes.`);
     }
     env[key] = String(value);
   }
   return env;
+}
+
+function isAlwaysBlockedKey(key) {
+  const value = String(key || '');
+  const canonical = process.platform === 'win32' ? value.toUpperCase() : value;
+  return ALWAYS_BLOCKED_KEYS.has(canonical);
 }
 
 function normalizeAllowedKeys(value) {
@@ -88,4 +162,9 @@ function isValidEnvironmentKey(key) {
   return Boolean(key) && !key.includes('=') && !key.includes('\0');
 }
 
-export {  makeProcessEnvironment, normalizeAllowedKeys };
+export {
+  makeProcessEnvironment,
+  makeServiceProcessEnvironment,
+  makeTunnelProcessEnvironment,
+  normalizeAllowedKeys
+};

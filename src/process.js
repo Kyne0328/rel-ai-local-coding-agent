@@ -1,12 +1,16 @@
+import * as crypto from 'node:crypto';
+import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import { resolveGitExecutable } from './gitExecutable.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
+import { getStateDir } from './statePaths.js';
 import { traceContextEnvironment } from './telemetry.js';
 
 const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 const DEFAULT_TERMINATION_GRACE_MS = 1000;
 const DEFAULT_FORCE_WAIT_MS = 2000;
 const DEFAULT_MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+const DISABLED_GIT_HOOKS_PATH = `.disabled-git-hooks-${process.pid}-${crypto.randomBytes(12).toString('hex')}`;
 
 function processPid(target) {
   const value = typeof target === 'number' ? target : target?.pid;
@@ -226,9 +230,15 @@ function runProcess(command, args, options = {}, config = {}) {
       30000,
       DEFAULT_FORCE_WAIT_MS
     );
-    const executable = command === 'git' ? (resolveGitExecutable() || command) : command;
-    const childEnvironment = makeProcessEnvironment(options.env, { allow: config.processEnvironment?.allow });
+    const isGit = command === 'git';
+    if (isGit && options.shell) throw new Error('Rel.AI-owned Git commands must run without shell parsing.');
+    const executable = isGit ? (resolveGitExecutable() || command) : command;
+    const childEnvironment = makeProcessEnvironment(options.env, {
+      allow: config.processEnvironment?.allow,
+      inheritCredentials: options.inheritCredentials === true
+    });
     Object.assign(childEnvironment, traceContextEnvironment());
+    const processArgs = isGit ? hardenedGitArgs(config, args || []) : (args || []);
     const spawnOptions = {
       cwd: options.cwd,
       env: childEnvironment,
@@ -237,7 +247,7 @@ function runProcess(command, args, options = {}, config = {}) {
     };
     const child = options.shell
       ? spawn(options.commandString || executable, { ...spawnOptions, shell: true })
-      : spawn(executable, args || [], { ...spawnOptions, shell: false });
+      : spawn(executable, processArgs, { ...spawnOptions, shell: false });
     const abortSignal = options.signal;
     let resolveChildClosed;
     const childClosed = new Promise(resolve => { resolveChildClosed = resolve; });
@@ -361,6 +371,18 @@ function runProcess(command, args, options = {}, config = {}) {
       if (typeof timer.unref === 'function') timer.unref();
     }
   });
+}
+
+function hardenedGitArgs(config, args) {
+  const hooksPath = path.join(getStateDir(config), DISABLED_GIT_HOOKS_PATH);
+  return [
+    '-c', `core.hooksPath=${hooksPath}`,
+    '-c', 'core.fsmonitor=false',
+    '-c', 'commit.gpgSign=false',
+    '-c', 'tag.gpgSign=false',
+    '-c', 'push.gpgSign=false',
+    ...args
+  ];
 }
 
 function processOutputText(buffer, preserveWhitespace = false) {

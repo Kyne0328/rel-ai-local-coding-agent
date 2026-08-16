@@ -44,19 +44,22 @@ const [
   desktopUxContracts,
   processModule,
   localAnalytics,
-  telemetry
+  telemetry,
+  processEnvironment
 ] = await Promise.all([
   importResourceModule('src/connectionProfile.js'),
   importResourceModule('src/config.js'),
   importResourceModule('src/desktopUxContracts.js'),
   importResourceModule('src/process.js'),
   importResourceModule('src/localAnalytics.js'),
-  importResourceModule('src/telemetry.js')
+  importResourceModule('src/telemetry.js'),
+  importResourceModule('src/processEnvironment.js')
 ]);
 const { ERROR_CODES } = desktopUxContracts;
 const { terminateProcessTree } = processModule;
 const { readLocalUsageSnapshotAsync } = localAnalytics;
 const { shutdownTelemetry } = telemetry;
+const { makeServiceProcessEnvironment, makeTunnelProcessEnvironment } = processEnvironment;
 let serviceRuntime = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
 let lastServiceContextKey = '';
@@ -86,6 +89,7 @@ const setupWindowManager = createSetupWindowManager({
 });
 const secureTunnelRuntime = createSecureTunnelRuntime({
   stopProcess: terminateProcessTree,
+  makeEnvironment: makeTunnelProcessEnvironment,
   onLog: chunk => publicConnectionLog('openai-tunnel', chunk),
   onStatus: status => {
     if (status.state === 'running') setStatus({ tunnelStatus: 'running', tunnelId: status.tunnelId, tunnelHealthUrl: status.healthUrl, error: '', errorCode: '' }, { dashboard: false });
@@ -115,6 +119,7 @@ const serviceProcessClient = createServiceProcessClient({
   utilityProcess,
   modulePath: path.join(electronRoot, 'service-process.js'),
   cwd: path.dirname(electronRoot),
+  env: makeServiceProcessEnvironment({}, { allow: configuredProcessEnvironmentAllow() }),
   nativeHandlers: {
     pickFolder: () => dashboardWindowManager.pickFolder(),
     openFolder: payload => dashboardWindowManager.openFolder(payload.path),
@@ -250,6 +255,14 @@ app.on('before-quit', event => {
 });
 
 app.on('window-all-closed', () => {}); // Keep the tray app alive after windows close.
+
+function configuredProcessEnvironmentAllow() {
+  try {
+    return configModule.readConfig({ allowMissing: true }).processEnvironment?.allow || [];
+  } catch {
+    return [];
+  }
+}
 
 function currentDesktopSettings() {
   return readDesktopSettings({

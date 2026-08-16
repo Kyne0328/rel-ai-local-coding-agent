@@ -30,6 +30,8 @@ function createWorkspace(name) {
     '}',
     ''
   ].join('\n'));
+  const initialized = spawnSync('git', ['init'], { cwd: directory, encoding: 'utf8', windowsHide: true });
+  assert.equal(initialized.status, 0, initialized.stderr || 'test workspace git init failed');
   return directory;
 }
 
@@ -88,7 +90,8 @@ try {
   assert.notEqual(taskA, taskB, 'one SDK connection must support independent logical tasks');
   assert.equal(startA.payload.workspace, 'appA');
   assert.equal(startA.payload.bootstrap.mode, 'compact');
-  assert.ok(Array.isArray(startA.payload.bootstrap.files));
+  assert.equal(Number.isInteger(startA.payload.bootstrap.fileCount), true);
+  assert.equal(Object.hasOwn(startA.payload.bootstrap, 'files'), false, 'compact bootstrap must not include the full file list');
 
   const missingTaskRequestId = ++requestId;
   client.call(missingTaskRequestId, 'relai_read', { paths: ['src/index.js'] });

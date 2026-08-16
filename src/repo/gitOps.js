@@ -581,7 +581,11 @@ async function relaiGitPush(workspace, config, args = {}) {
   const dryRun = Boolean(args.dryRun);
   const setUpstream = Boolean(args.setUpstream);
   const pushArgs = ["push", ...(dryRun ? ["--dry-run"] : []), ...(setUpstream ? ["--set-upstream"] : []), remote, branch];
-  const push = await runProcess("git", pushArgs, { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const push = await runProcess("git", pushArgs, {
+    cwd: workspace.path,
+    timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000),
+    inheritCredentials: true
+  }, config);
   return { ok: push.exitCode === 0, workspace: workspace.alias, remote, branch, dryRun, setUpstream, push: summarizeCommand(push) };
 }
 
