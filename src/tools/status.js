@@ -39,7 +39,7 @@ async function relaiStatus(config, args = {}, context = {}) {
         discoveredCommandKeys: sortedKeys(discovered),
         ...(discoveryWarnings.length > 0 ? { discoveryWarnings } : {}),
         policy: resolvePolicy(workspace, config),
-        repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes })
+        repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes, work_id: args.work_id })
       };
     } catch (error) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };

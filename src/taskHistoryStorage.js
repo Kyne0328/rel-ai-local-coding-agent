@@ -5,6 +5,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { normalizeTaskProgress, sanitizeTaskRecord } from './taskObservability.js';
+import { isTerminalTaskStatus } from './taskState.js';
 const MAX_SESSIONS = 500;
 const TASK_HISTORY_VERSION = 3;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
@@ -104,22 +105,19 @@ async function writeSessionAsync(directory, session) {
   rememberWrittenSession(directory, target, sanitized);
 }
 
-function removeSession(directory, id) {
-  const file = sessionPath(directory, id);
-  fs.rmSync(file, { force: true });
-  parsedCache.delete(file);
-  const cached = directoryMetadataCache.get(directory);
-  if (cached) cached.items.delete(path.basename(file));
-}
-
 function pruneSessions(directory, limit = MAX_SESSIONS) {
   const metadata = cachedSessionMetadata(directory);
   if (metadata.length <= limit) return;
   const cached = directoryMetadataCache.get(directory);
-  for (const item of metadata.slice(limit)) {
+  let retained = metadata.length;
+  for (const item of [...metadata].reverse()) {
+    if (retained <= limit) break;
+    const session = readCachedSession(item.file, item.identity);
+    if (!session || !isTerminalTaskStatus(session.status)) continue;
     fs.rmSync(item.file, { force: true });
     parsedCache.delete(item.file);
     cached?.items.delete(item.name);
+    retained -= 1;
   }
 }
 
@@ -252,4 +250,4 @@ function resetTaskHistoryCaches() {
   for (const directory of [...directoryMetadataCache.keys()]) closeDirectoryMetadataCache(directory);
 }
 
-export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, resetTaskHistoryCaches, writeSession, writeSessionAsync };
+export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, resetTaskHistoryCaches, writeSession, writeSessionAsync };

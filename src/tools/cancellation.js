@@ -4,6 +4,7 @@ import { discardTaskSandbox } from '../parallelTaskSandbox.js';
 import { requestCurrentTaskCancellation, taskError } from '../toolActivity.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
+import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
 
 async function cancelTask(config, args = {}) {
   const taskId = String(args.work_id || '').trim();
@@ -24,14 +25,19 @@ async function cancelTask(config, args = {}) {
     };
   }
 
-  if (session?.workspace) {
-    await discardTaskSandbox(session.workspace, config, taskId);
-  }
-
   const cancellation = requestCurrentTaskCancellation({
     reason: sanitizeDisplayText(args.reason || 'Work session cancelled by request.', 500),
     initiator: 'connector_client'
   });
+
+  if (session?.workspace) {
+    await runWorkspaceOperation(
+      session.workspace,
+      () => discardTaskSandbox(session.workspace, config, taskId),
+      { mode: 'write', scope: 'workspace', taskId }
+    );
+  }
+
   return {
     ok: true,
     work_id: cancellation.taskId,

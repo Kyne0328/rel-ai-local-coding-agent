@@ -103,7 +103,9 @@ async function terminateProcessTree(target, options = {}) {
     return { exited: true, forced: false, gracefulSignalSent: false, forceSignalSent: false };
   }
 
-  const gracefulSignalSent = signalProcessTree(target, { signal: options.signal || 'SIGTERM' });
+  const gracefulSignalSent = process.platform === 'win32'
+    ? await signalWindowsProcessTree(rootPid)
+    : signalProcessTree(target, { signal: options.signal || 'SIGTERM' });
   const gracefulExit = process.platform === 'win32'
     ? await waitForPidSetExit(trackedPids, graceMs)
     : await waitForProcessGroupExit(rootPid, graceMs);
@@ -112,7 +114,7 @@ async function terminateProcessTree(target, options = {}) {
   }
 
   const forceSignalSent = process.platform === 'win32'
-    ? forceWindowsProcessTree(trackedPids)
+    ? await forceWindowsProcessTree(trackedPids)
     : signalProcessTree(target, { force: true, signal: 'SIGKILL' });
   const exited = process.platform === 'win32'
     ? await waitForPidSetExit(trackedPids, forceWaitMs)
@@ -120,21 +122,37 @@ async function terminateProcessTree(target, options = {}) {
   return { exited, forced: true, gracefulSignalSent, forceSignalSent };
 }
 
-function forceWindowsProcessTree(pids) {
-  let signalSent = false;
-  for (const pid of [...new Set(pids)].reverse()) {
-    if (!isPidAlive(pid)) continue;
+async function signalWindowsProcessTree(pid, force = false) {
+  if (!isPidAlive(pid)) return false;
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
     try {
-      const killer = spawn(TASKKILL_EXE, ['/f', '/t', '/pid', String(pid)], {
+      const killer = spawn(TASKKILL_EXE, [...(force ? ['/f'] : []), '/t', '/pid', String(pid)], {
         stdio: 'ignore',
         windowsHide: true
       });
-      killer.once('error', error => debugKill('[rel-ai-mcp] force Windows process tree:', error));
-      killer.unref?.();
-      signalSent = true;
+      killer.once('error', error => {
+        debugKill(`[rel-ai-mcp] ${force ? 'force ' : ''}Windows process tree:`, error);
+        finish(!isPidAlive(pid));
+      });
+      killer.once('close', code => finish(code === 0 || !isPidAlive(pid)));
     } catch (error) {
-      debugKill('[rel-ai-mcp] force Windows process tree:', error);
+      debugKill(`[rel-ai-mcp] ${force ? 'force ' : ''}Windows process tree:`, error);
+      finish(!isPidAlive(pid));
     }
+  });
+}
+
+async function forceWindowsProcessTree(pids) {
+  let signalSent = false;
+  for (const pid of [...new Set(pids)].reverse()) {
+    if (!isPidAlive(pid)) continue;
+    signalSent = await signalWindowsProcessTree(pid, true) || signalSent;
   }
   return signalSent;
 }
@@ -221,6 +239,8 @@ function runProcess(command, args, options = {}, config = {}) {
       ? spawn(options.commandString || executable, { ...spawnOptions, shell: true })
       : spawn(executable, args || [], { ...spawnOptions, shell: false });
     const abortSignal = options.signal;
+    let resolveChildClosed;
+    const childClosed = new Promise(resolve => { resolveChildClosed = resolve; });
 
     function finish(payload) {
       if (settled) return;
@@ -259,12 +279,18 @@ function runProcess(command, args, options = {}, config = {}) {
       stderrBuffer.append(request.marker);
       stderrTruncated = stderrBuffer.truncated;
       void terminateProcessTree(child, { graceMs: terminationGraceMs, forceWaitMs })
-        .then(outcome => finishTermination(child.exitCode, child.signalCode, outcome))
-        .catch(error => finishTermination(-1, undefined, {
-          exited: !isProcessTreeAlive(child),
-          forced: true,
-          error: error instanceof Error ? error.message : String(error)
-        }));
+        .then(async outcome => {
+          await childClosed;
+          finishTermination(child.exitCode, child.signalCode, outcome);
+        })
+        .catch(async error => {
+          await childClosed;
+          finishTermination(-1, undefined, {
+            exited: !isProcessTreeAlive(child),
+            forced: true,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
     }
 
     function onAbort() {
@@ -294,6 +320,7 @@ function runProcess(command, args, options = {}, config = {}) {
       stderrTruncated = stderrBuffer.truncated;
     });
     child.on('error', (error) => {
+      resolveChildClosed();
       if (settled) return;
       if (terminationRequest) return;
       finish({
@@ -307,6 +334,7 @@ function runProcess(command, args, options = {}, config = {}) {
       });
     });
     child.on('close', (code, signal) => {
+      resolveChildClosed();
       if (settled) return;
       if (terminationRequest) return;
       finish({

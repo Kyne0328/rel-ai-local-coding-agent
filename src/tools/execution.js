@@ -5,14 +5,15 @@ import { resolveWorkspace } from '../config.js';
 import {
   finalizeTaskSandbox,
   findTaskSandbox,
-  hasInactiveTaskSandboxes,
+  hasRecoverableTaskSandboxes,
   prepareTaskExecutionWorkspace,
   promoteTaskSandbox,
-  reconcileInactiveTaskSandboxes,
+  reconcileRecoverableTaskSandboxes,
   resolveTaskSandboxWorkspace,
   shouldPromoteTaskSandbox
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
+import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActivity } from '../toolActivity.js';
 import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
 import { finalizeValidationResult } from './completion.js';
@@ -20,7 +21,7 @@ import { invalidateSessionCacheForCall, maybeStartSession } from './session.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 const SANDBOX_CREATE_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
-const INACTIVE_RECONCILIATION_OPERATIONS = new Set([OP.WORK_BEGIN, OP.EDIT, OP.EXEC]);
+const RECOVERABLE_SANDBOX_RECONCILIATION_OPERATIONS = new Set([OP.WORK_BEGIN, OP.EDIT, OP.EXEC]);
 const UNSAFE_READ_ONLY_GIT_OPTIONS = new Set([
   '--ext-diff', '--textconv', '--filters', '--open-files-in-pager'
 ]);
@@ -37,10 +38,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const activeTasks = sourceWorkspace ? getToolActivity().tasks : [];
       if (sourceWorkspace
         && taskId
-        && shouldReconcileInactiveSandboxes(executionName, effectiveArgs)
-        && hasInactiveTaskSandboxes(config, sourceWorkspace.alias, activeTasks, taskId)) {
+        && shouldReconcileRecoverableSandboxes(executionName, effectiveArgs)
+        && hasRecoverableTaskSandboxes(config, sourceWorkspace.alias, activeTasks, taskId)) {
         await runWorkspaceOperation(sourceWorkspace.alias, () =>
-          reconcileInactiveTaskSandboxes(sourceWorkspace, config, getToolActivity().tasks, taskId),
+          reconcileRecoverableTaskSandboxes(sourceWorkspace, config, getToolActivity().tasks, taskId),
         queueOptions('write', 'workspace', taskId));
       }
       const hadSandbox = Boolean(sourceWorkspace && taskId && findTaskSandbox(config, sourceWorkspace.alias, taskId));
@@ -120,9 +121,12 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       } catch (error) {
         if (executionWorkspace?.taskSandbox === true
           && !deferSandboxCompletion
-          && SANDBOX_CREATE_OPERATIONS.has(executionName)) {
-          await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId),
-            queueOptions('write', 'workspace', taskId));
+          && SANDBOX_CREATE_OPERATIONS.has(executionName)
+          && !isTaskCancelled(config, taskId)) {
+          await runWorkspaceOperation(sourceWorkspace.alias, () => isTaskCancelled(config, taskId)
+            ? { promoted: false, changedFiles: [] }
+            : promoteTaskSandbox(sourceWorkspace, config, taskId),
+          queueOptions('write', 'workspace', taskId));
         }
         throw error;
       }
@@ -133,10 +137,13 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
 
       if (executionWorkspace?.taskSandbox === true
         && !deferSandboxCompletion
-        && shouldPromoteTaskSandbox(executionName, result)) {
-        await runWorkspaceOperation(sourceWorkspace.alias, () => promoteTaskSandbox(sourceWorkspace, config, taskId, {
-          changedFiles: Array.isArray(result?.changedFiles) ? result.changedFiles : []
-        }), queueOptions('write', 'workspace', taskId));
+        && shouldPromoteTaskSandbox(executionName, result)
+        && !isTaskCancelled(config, taskId)) {
+        await runWorkspaceOperation(sourceWorkspace.alias, () => isTaskCancelled(config, taskId)
+          ? { promoted: false, changedFiles: [] }
+          : promoteTaskSandbox(sourceWorkspace, config, taskId, {
+              changedFiles: Array.isArray(result?.changedFiles) ? result.changedFiles : []
+            }), queueOptions('write', 'workspace', taskId));
       }
 
       const visibleResult = mapVisibleWorkspace(result, executionWorkspace, sourceWorkspace);
@@ -179,6 +186,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
   return { value, sessionStart };
 }
 
+function isTaskCancelled(config, taskId) {
+  return readTaskHistorySessionRecord(config, taskId)?.status === 'cancelled';
+}
+
 function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName, args = {}) {
   if ([OP.WORK_CANCEL, OP.WORK_STATUS, OP.CHANGES_DIFF].includes(executionName)) return false;
   if (findTaskSandbox(config, workspaceAlias, taskId)) return true;
@@ -186,8 +197,8 @@ function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName, arg
   return executionName !== OP.EXEC || !isClearlyReadOnlyExec(args);
 }
 
-function shouldReconcileInactiveSandboxes(executionName, args = {}) {
-  if (!INACTIVE_RECONCILIATION_OPERATIONS.has(executionName)) return false;
+function shouldReconcileRecoverableSandboxes(executionName, args = {}) {
+  if (!RECOVERABLE_SANDBOX_RECONCILIATION_OPERATIONS.has(executionName)) return false;
   return executionName !== OP.EXEC || !isClearlyReadOnlyExec(args);
 }
 
