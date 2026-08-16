@@ -12,6 +12,7 @@ function createSecureTunnelRuntime({
   fetchImpl = globalThis.fetch,
   stopProcess,
   resolveExecutable = bundledTunnelClientPath,
+  makeEnvironment,
   stateDir = process.env.REL_AI_MCP_STATE_DIR || path.join(os.homedir(), '.rel-ai-mcp'),
   onLog = () => {},
   onStatus = () => {}
@@ -20,6 +21,7 @@ function createSecureTunnelRuntime({
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required.');
   if (typeof stopProcess !== 'function') throw new TypeError('stopProcess is required.');
   if (typeof resolveExecutable !== 'function') throw new TypeError('resolveExecutable is required.');
+  if (typeof makeEnvironment !== 'function') throw new TypeError('makeEnvironment is required.');
   if (typeof onLog !== 'function' || typeof onStatus !== 'function') throw new TypeError('Tunnel callbacks must be functions.');
 
   let child = null;
@@ -62,11 +64,10 @@ function createSecureTunnelRuntime({
     try {
       ownedChild = spawnImpl(executable, args, {
         cwd: path.dirname(healthUrlFile),
-        env: {
-          ...process.env,
+        env: makeEnvironment({
           CONTROL_PLANE_API_KEY: apiKey,
           REL_AI_LOCAL_AUTH_HEADER: `Bearer ${localToken}`
-        },
+        }),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true
       });
