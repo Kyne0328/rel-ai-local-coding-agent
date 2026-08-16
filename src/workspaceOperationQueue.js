@@ -191,16 +191,8 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
   }, options.signal);
 }
 
-function hasPendingTaskWriter(workspaceAlias, taskId) {
-  const workspace = String(workspaceAlias || '').trim();
-  const task = String(taskId || '').trim();
-  if (!workspace || !task) return false;
-  const state = locks.get(taskKey(workspace, task));
-  return Boolean(state?.activeWriter || state?.queue.some(entry => entry.mode === WRITE));
-}
-
 function pendingWorkspaceOperations() {
   return locks.size;
 }
 
-export { hasPendingTaskWriter, runWorkspaceOperation, pendingWorkspaceOperations };
+export { runWorkspaceOperation, pendingWorkspaceOperations };

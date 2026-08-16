@@ -492,8 +492,7 @@ function durationDetail(session, live) {
 
 function sessionNeedsAttention(session) {
   if (workSessionStateView(session).status === 'completed') return false;
-  return session.sandboxRecovery?.state === 'conflict'
-    || session.validation === 'failed'
+  return session.validation === 'failed'
     || ['failed', 'validation_failed', 'blocked'].includes(String(session.status || ''));
 }
 
@@ -503,13 +502,7 @@ function attentionSection(session) {
   const failures = Number(session.failures || session.failedToolCallCount || 0);
   if (failures) items.push(`${failures} action${failures === 1 ? '' : 's'} failed`);
   if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Checks failed');
-  const recovery = session.sandboxRecovery?.state === 'conflict' ? session.sandboxRecovery : null;
-  if (recovery) {
-    items.push(recovery.message || 'Private task changes conflict with newer visible workspace changes.');
-    const paths = Array.isArray(recovery.changedFiles) ? recovery.changedFiles.slice(0, 8) : [];
-    if (paths.length) items.push(`Conflicting files: ${paths.join(', ')}`);
-  }
-  if (session.status === 'blocked' && !recovery) items.push(session.endReason || 'Task is blocked');
+  if (session.status === 'blocked') items.push(session.endReason || 'Task is blocked');
   if (session.status === 'failed') items.push(session.endReason || 'The task ended with an unresolved problem');
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
 }

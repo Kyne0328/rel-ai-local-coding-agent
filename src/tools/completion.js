@@ -1,6 +1,5 @@
 import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
-import { finalizeTaskSandbox, findTaskSandbox, resolveTaskSandboxWorkspace } from '../parallelTaskSandbox.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { workspaceDirtyPaths } from '../repo/gitOps.js';
@@ -72,12 +71,10 @@ async function completeTask(config, args = {}) {
   if (authority.validationResult === 'passed') {
     const validatedFingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
     if (validatedFingerprint) {
-      const sandbox = findTaskSandbox(config, workspace.alias, requestedTaskId);
-      const validationWorkspace = sandbox ? resolveTaskSandboxWorkspace(config, sandbox.alias) : workspace;
       const validationScope = Array.isArray(authority.validationScope)
         ? authority.validationScope
         : (authority.taskOwnedChangedFiles || []);
-      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config, { paths: validationScope });
+      const currentFingerprint = await createValidationFingerprint(workspace, config, { paths: validationScope });
       if (currentFingerprint.fingerprint !== validatedFingerprint) {
         throw taskError(
           'TASK_REVALIDATION_REQUIRED',
@@ -92,10 +89,6 @@ async function completeTask(config, args = {}) {
         );
       }
     }
-  }
-
-  if (findTaskSandbox(config, workspace.alias, requestedTaskId)) {
-    await finalizeTaskSandbox(workspace, config, requestedTaskId);
   }
 
   return finalizeValidatedTask(config, workspace, {

@@ -9,10 +9,11 @@
 - **Improve workflow evidence and recovery.** Persist workflow intent and failure evidence, recover more cleanly from exact-edit mismatches, preserve classifier-safe tool guidance, and strengthen completion, cancellation, process-workspace, and transport-task contracts.
 
 ### Parallel work and runtime performance
-- **Isolate concurrent coding work in parallel task sandboxes.** Each task can work against a stable repository snapshot while promotion, dependency cleanup, dirty-file mutation tracking, and unchanged-file synchronization are bounded and safer under concurrent work.
+- **Hard-cut persistent parallel task sandboxes.** All task mutations now target the configured visible workspace directly, so successful changes are immediately visible to users and other ChatGPT sessions without detached worktrees, promotion, reconciliation, or hidden task repositories.
+- **Serialize repository mutations at the workspace boundary.** File edits and mutating or uncertain one-shot commands use the shared workspace write lock, while provably read-only direct commands and ordinary reads can still overlap safely.
 - **Keep normal tool calls off blocking repository paths.** Git integrity probes, validation probes, session baseline capture, process-tree checks, lexical fallback, Zoekt work, and repository-intelligence queries move off or avoid the MCP event loop where practical.
-- **Reduce repeated repository work.** Cache runtime compatibility and active-session policy metadata, invalidate topology from meaningful manifest changes, bound operation-journal reads, append staged edit payloads efficiently, and skip unchanged sandbox synchronization.
-- **Centralize task lifecycle behavior.** Live task state, completion evidence, workflow intent, and promotion decisions share tighter ownership, reducing duplicate state transitions and improving reliability during parallel sessions.
+- **Reduce repeated repository work.** Cache runtime compatibility and active-session policy metadata, invalidate topology from meaningful manifest changes, bound operation-journal reads, and append staged edit payloads efficiently.
+- **Centralize task lifecycle behavior.** Live task state, completion evidence, workflow intent, changed-file ownership, and validation freshness share tighter ownership without a second repository lifecycle.
 
 ### Repository Intelligence
 - **Move expensive queries into isolated workers.** Repository Intelligence query execution is offloaded from the main runtime, while index refreshes, lexical fallback, and Zoekt integration are tuned to avoid unnecessary blocking.
@@ -30,7 +31,7 @@
 - **Use a more compact analytics layout.** Usage metrics and failure/workspace breakdowns are simplified for faster scanning without dropping the underlying operational data.
 
 ### Validation and regression coverage
-- **Expand release and architecture gates around the new runtime contracts.** Add or strengthen checks for parallel sandboxes, executable skill behavior, skill metadata, repository architecture, workflow evidence, analytics migration, web automation, MCP schema parity, and Electron UI behavior.
+- **Expand release and architecture gates around the new runtime contracts.** Add or strengthen checks for direct-workspace concurrency, executable skill behavior, skill metadata, repository architecture, workflow evidence, analytics migration, web automation, MCP schema parity, and Electron UI behavior.
 - **Keep generated branding and color artifacts deterministic.** Color-token generation, WCAG contrast checks, dashboard/Electron token parity, official logo usage, and synthetic-logo regression checks are covered by focused tests.
 
 Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.0.

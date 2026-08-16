@@ -40,7 +40,6 @@ const files = [
   'atomic-validation-race-unit.mjs',
   'workspace-operation-queue-unit.mjs',
   'branch-concurrency-unit.mjs',
-  'parallel-task-sandbox-unit.mjs',
   'process-manager-unit.mjs',
   'baseline-tracking-unit.mjs',
   'unborn-workspace-unit.mjs',

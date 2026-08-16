@@ -12,7 +12,7 @@ import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const MAX_SESSION_EVENTS = 200;
 const DURABLE_FIELDS = Object.freeze([
   'changedFiles', 'changedFileCount', 'validation', 'committed', 'pushed', 'prDrafted',
-  'workflow', 'workflowEvidence', 'principalFingerprint', 'sandboxRecovery', 'repairable'
+  'workflow', 'workflowEvidence', 'principalFingerprint', 'repairable'
 ]);
 
 function canonicalTaskSnapshot(record = {}) {
