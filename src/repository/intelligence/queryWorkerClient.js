@@ -23,7 +23,7 @@ function runRepositoryQuery(kind, workspace, config = {}, payload = {}, options 
 }
 
 function needsPeerRepositoryState(kind, payload = {}) {
-  if (kind === 'cachedContext' || kind === 'cachedSummary') return true;
+  if (kind === 'cachedContext' || kind === 'cachedSummary' || kind === 'searchGraphContext') return true;
   return kind === 'codeInspect' && String(payload?.args?.action || '').toLowerCase() === 'architecture';
 }
 
@@ -59,18 +59,20 @@ function queryWorkerClient(key) {
       });
     },
     terminate(reason = new Error('Repository Intelligence query worker pool terminated.')) {
-      if (client.closed) return;
+      if (client.closed) return Promise.resolve();
       client.closed = true;
       clearIdleTimer();
       if (clients.get(key) === client) clients.delete(key);
       const pending = queue.splice(0);
+      const terminations = [];
       for (const slot of slots) {
         if (slot.active) pending.push(slot.active);
         slot.active = null;
-        disposeWorker(slot.worker);
+        terminations.push(disposeWorker(slot.worker));
         slot.worker = null;
       }
       for (const entry of pending) settle(entry, 'reject', reason);
+      return Promise.allSettled(terminations);
     }
   };
 
@@ -188,9 +190,9 @@ function queryWorkerClient(key) {
 }
 
 function disposeWorker(worker) {
-  if (!worker) return;
+  if (!worker) return Promise.resolve();
   worker.removeAllListeners();
-  void worker.terminate().catch(() => {});
+  return worker.terminate().catch(() => {});
 }
 
 function repositoryStatusSnapshot(workspace, config) {
@@ -267,8 +269,10 @@ function queryAbortError(reason) {
 }
 
 function shutdownRepositoryQueryWorkers() {
-  for (const client of [...clients.values()]) client.terminate(new Error('Repository Intelligence is shutting down.'));
+  const terminations = [...clients.values()].map(client =>
+    client.terminate(new Error('Repository Intelligence is shutting down.')));
   clients.clear();
+  return Promise.allSettled(terminations);
 }
 
 export { QUERY_WORKER_COUNT, QUERY_WORKER_IDLE_EVICT_MS, runRepositoryQuery, shutdownRepositoryQueryWorkers };
