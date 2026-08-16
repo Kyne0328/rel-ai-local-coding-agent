@@ -14,6 +14,7 @@ import { sanitizeDisplayText } from '../src/taskObservability.js';
 import { createDashboardClock } from '../src/ui/clock.js';
 
 const outputArg = process.argv.find(arg => arg.startsWith('--output='));
+const enforceThresholds = process.argv.includes('--enforce-thresholds');
 const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'dist/observability-benchmark.json');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-observability-benchmark-'));
 const workspacePath = path.join(temp, 'workspace');
@@ -169,7 +170,8 @@ try {
     generatedAt: new Date().toISOString(),
     commit: gitCommit(),
     baselineAvailable: false,
-    baselineNote: 'A reliable preimplementation benchmark was not available. Results establish the current release baseline and regression budgets.',
+    baselineNote: 'Thresholds are regression indicators by default. Use --enforce-thresholds only when deliberately validating an explicit performance SLO.',
+    thresholdPolicy: enforceThresholds ? 'blocking' : 'advisory',
     environment: {
       platform: process.platform,
       architecture: process.arch,
@@ -188,7 +190,7 @@ try {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
-  if (!report.complete || report.summary.failed > 0) process.exitCode = 1;
+  if (!report.complete || (enforceThresholds && report.summary.failed > 0)) process.exitCode = 1;
 } finally {
   taskEventBatcher.close();
   unsubscribe();

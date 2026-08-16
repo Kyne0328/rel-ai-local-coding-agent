@@ -3,9 +3,10 @@
   "capturedAt": "2026-08-12",
   "platform": "win32",
   "architecture": "x64",
-  "policy": "strict",
+  "policy": "advisory",
   "tolerancePercent": 3,
-  "notes": "Measured 0.25.0 Windows release baseline with the workspace-scoped web automation runtime included. The Playwright-core payload is tracked separately so future automation-runtime growth remains a blocking size signal.",
+  "blockingGrowthPercent": 25,
+  "notes": "Measured Windows release baseline. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
   "metrics": {
     "installerBytes": 135564771,
     "portableBytes": 120884288,

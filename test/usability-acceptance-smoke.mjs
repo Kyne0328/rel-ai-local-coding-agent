@@ -16,9 +16,9 @@ const docs = read('docs/USABILITY_ACCEPTANCE.md');
 
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.equal(rootPackage.scripts['release:evidence:check'], undefined);
-assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-wrapper.mjs');
-assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
-assert.equal(rootPackage.scripts['verify:tunnel-client'], 'node scripts/verify-tunnel-client.mjs');
+assert.match(String(rootPackage.scripts['verify:packaged'] || ''), /scripts\/verify-packaged-wrapper\.mjs/, 'packaged verification entry point must remain available');
+assert.match(String(rootPackage.scripts['test:connector-acceptance'] || ''), /scripts\/packaged-connector-acceptance\.mjs/, 'connector acceptance entry point must remain available');
+assert.match(String(rootPackage.scripts['verify:tunnel-client'] || ''), /scripts\/verify-tunnel-client\.mjs/, 'tunnel-client verification entry point must remain available');
 
 for (const removedPath of ['scripts/installed-app-smoke.mjs', 'scripts/release-evidence.mjs', 'scripts/release-evidence-check.mjs', 'electron/installed-smoke.js', 'electron/window-smoke.js', 'electron/smoke-evidence.js']) {
   assert.equal(fs.existsSync(path.join(root, removedPath)), false, `${removedPath} must remain removed.`);

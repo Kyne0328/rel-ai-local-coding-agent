@@ -37,15 +37,15 @@ assert.equal(idleStatus.workspace.policy, undefined, 'raw policy object must be 
 assert.equal(idleStatus.workspace.root, undefined, 'connector status must not expose the absolute workspace root');
 assert.equal(idleStatus.state, undefined, 'idle workspace must have no state line');
 assert.equal(idleStatus.workspace.commandKeys, undefined, 'empty arrays pruned');
-assert.deepEqual(idleStatus.workspace.testCommandKeys, ['test']);
+assert.equal(idleStatus.workspace.testCommandKeys, undefined, 'compact connector status must not expose workspace command metadata');
 assert.equal(idleStatus.workspace.repository.branch, 'main');
 assert.equal(idleStatus.workspace.repository.status, ' M src/app.js\n?? generated.txt\n');
 assert.deepEqual(idleStatus.workspace.repository.changedFiles, ['src/app.js', 'generated.txt']);
 assert.deepEqual(idleStatus.workspace.repository.untrackedFiles, ['generated.txt']);
 assert.equal(idleStatus.workspace.repository.statusEntries, undefined, 'nested repository status must drop raw entries');
 assert.equal(idleStatus.version, '0.17.1');
-assert.equal(idleStatus.toolSurface.toolSurfaceVersion, 12);
-assert.equal(idleStatus.toolSurface.toolCount, 20);
+assert.equal(idleStatus.toolSurface.toolSurfaceVersion, 12); // rigidity-ok: synthetic fixture verifies arbitrary metadata survives compaction
+assert.equal(idleStatus.toolSurface.toolCount, 20); // rigidity-ok: synthetic fixture deliberately differs from the live tool count
 assert.deepEqual(idleStatus.toolSurface.deprecations, []);
 assert.equal(Object.hasOwn(idleStatus.toolSurface, 'compatibilityAliases'), false);
 assert.equal(idleStatus.toolSurface.tools, undefined, 'compact status must not duplicate the full per-tool manifest');
