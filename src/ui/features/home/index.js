@@ -457,7 +457,9 @@ function recentTasksCard(tasks) {
     const operation = task.operation || taskAction(task.lastTool);
     const warnings = task.status === 'completed' ? Number(task.failedToolCallCount ?? task.failures ?? 0) : 0;
     const warningText = warnings ? ` · ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
-    return `<div class="activity-row"><span class="activity-time" ${timeClock}>${esc(time)}</span><span class="activity-name truncate"><strong>${esc(task.title || operation)}</strong> · ${esc(task.workspace || 'project')} · ${esc(task.toolCallCount ?? task.calls ?? 0)} actions${warningText}</span>${status}</div>`;
+    const taskId = String(task.id || task.taskId || task.work_id || '').trim();
+    const href = routeHref('tasks', { workspace: task.workspace || '', task: taskId });
+    return `<a class="activity-row" href="${esc(href)}"><span class="activity-time" ${timeClock}>${esc(time)}</span><span class="activity-name truncate"><strong>${esc(task.title || operation)}</strong> · ${esc(task.workspace || 'project')} · ${esc(task.toolCallCount ?? task.calls ?? 0)} actions${warningText}</span>${status}</a>`;
   }).join('') || '<div class="empty">Tasks will appear here after ChatGPT starts using Rel.AI on a project.</div>';
   card.appendChild(body);
   return card;
