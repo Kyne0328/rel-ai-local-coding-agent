@@ -104,8 +104,8 @@
   <details class="app-card status-details" data-disclosure="logs">
     <summary>Recent app logs <span aria-hidden="true">⌄</span></summary>
     <div class="fallback-log-wrap">
-      <p>Recent app and connection messages with sensitive values removed.</p>
-      <pre id="serviceLog" tabindex="0" aria-live="polite" aria-label="Recent app logs">No app logs recorded yet.</pre>
+      <div class="fallback-log-head"><p>Recent app and connection messages with sensitive values removed.</p><label><input id="debugLogsToggle" type="checkbox"> Debug logs</label></div>
+      <div id="serviceLog" class="fallback-log-list" tabindex="0" role="log" aria-live="polite" aria-label="Recent app logs"><div class="fallback-log-empty">No app logs recorded yet.</div></div>
     </div>
   </details>
 

@@ -25,6 +25,7 @@ let desktopContext = {
 let nativeRequestSequence = 0;
 const pendingNativeRequests = new Map();
 const runtimeLogListeners = new Set();
+const desktopStatusListeners = new Set();
 
 const unsubscribeActivity = toolActivity.onToolActivity(event => {
   const projected = projectServiceActivityEvent(event);
@@ -92,6 +93,11 @@ async function startService(payload = {}) {
       openFolder: folderPath => callNative('openFolder', { path: folderPath }),
       getTaskActivity: () => toolActivity.getToolActivity(),
       getDesktopStatus: () => desktopContext.status,
+      onDesktopStatusChange: listener => {
+        if (typeof listener !== 'function') return () => {};
+        desktopStatusListeners.add(listener);
+        return () => desktopStatusListeners.delete(listener);
+      },
       getRuntimeAccess: () => desktopContext.runtimeAccess,
       resetTaskActivity: () => {
         toolActivity.resetToolActivity();
@@ -154,12 +160,18 @@ function createDashboardBootstrap() {
 }
 
 function updateDesktopContext(next = {}) {
+  const hasStatus = Object.hasOwn(next, 'status');
   desktopContext = {
     ...desktopContext,
-    ...(Object.hasOwn(next, 'status') ? { status: next.status } : {}),
+    ...(hasStatus ? { status: next.status } : {}),
     ...(Object.hasOwn(next, 'runtimeAccess') ? { runtimeAccess: next.runtimeAccess } : {}),
     ...(Object.hasOwn(next, 'runtimeLogs') ? { runtimeLogs: next.runtimeLogs } : {})
   };
+  if (hasStatus) {
+    for (const listener of [...desktopStatusListeners]) {
+      try { listener(desktopContext.status); } catch {}
+    }
+  }
   if (next.runtimeLogChange) {
     desktopContext.runtimeLogs = applyRuntimeLogChange(desktopContext.runtimeLogs, next.runtimeLogChange);
     for (const listener of [...runtimeLogListeners]) {

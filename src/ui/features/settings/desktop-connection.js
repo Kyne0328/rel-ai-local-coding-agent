@@ -24,7 +24,9 @@ async function loadAndRender(container, options = {}) {
       port: Number(settings.port || 3333),
       tunnelId: String(settings.tunnelId || ''),
       tunnelApiKey: '',
-      tunnelApiKeyConfigured: settings.tunnelApiKeyConfigured === true
+      tunnelApiKeyConfigured: settings.tunnelApiKeyConfigured === true,
+      tunnelErrorCode: String(settings.tunnelErrorCode || ''),
+      tunnelError: String(settings.tunnelError || '')
     };
     savedState = snapshot(state);
     markUnsaved(container, false);
@@ -40,7 +42,7 @@ function render(container, { expanded = false } = {}) {
   const disclosure = document.createElement('details');
   disclosure.className = 'card connector-details connection-settings-disclosure';
   disclosure.id = 'tunnelSettings';
-  disclosure.open = Boolean(expanded);
+  disclosure.open = Boolean(expanded || tunnelCredentialError(state));
   disclosure.innerHTML = '<summary class="connector-details-summary"><span><strong>Connection settings</strong><small>Secure tunnel credentials and local port</small></span><span aria-hidden="true">›</span></summary>';
 
   const disclosureBody = document.createElement('div');
@@ -52,7 +54,16 @@ function render(container, { expanded = false } = {}) {
   const fields = document.createElement('div');
   fields.className = 'settings-panel-body';
   fields.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI Secure MCP Tunnel ID for this computer.'));
-  fields.appendChild(field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.'));
+  const runtimeKeyField = field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.');
+  const credentialError = tunnelCredentialError(state);
+  if (credentialError) {
+    const error = document.createElement('div');
+    error.className = 'connection-key-error';
+    error.setAttribute('role', 'alert');
+    error.textContent = credentialError;
+    runtimeKeyField.appendChild(error);
+  }
+  fields.appendChild(runtimeKeyField);
 
   const advanced = document.createElement('details');
   advanced.className = 'settings-advanced connection-advanced-settings';
@@ -65,7 +76,7 @@ function render(container, { expanded = false } = {}) {
 
   const footer = document.createElement('div');
   footer.className = 'connection-actions';
-  footer.innerHTML = '<div class="muted">Saving restarts the local Rel.AI connection.</div>';
+  footer.innerHTML = '<div class="muted">Changing the tunnel reconnects it without restarting the local project service. Changing the local port restarts the full connection.</div>';
   const save = button('Save and restart connection', 'primary', () => saveSettings(container, save));
   footer.appendChild(save);
 
@@ -80,13 +91,22 @@ async function saveSettings(container, saveButton) {
   saveButton.disabled = true;
   saveButton.textContent = 'Saving and restarting…';
   try {
-    await window.relaiDesktop.saveSettings({ port: state.port, tunnelId: state.tunnelId, tunnelApiKey: state.tunnelApiKey });
+    const result = await window.relaiDesktop.saveSettings({ port: state.port, tunnelId: state.tunnelId, tunnelApiKey: state.tunnelApiKey });
     savedState = snapshot({ ...state, tunnelApiKey: '' });
     state.tunnelApiKey = '';
     state.tunnelApiKeyConfigured = true;
+    state.tunnelErrorCode = String(result?.errorCode || result?.status?.errorCode || '');
+    state.tunnelError = String(result?.error || result?.status?.error || '');
     markUnsaved(container, false);
-    toast('Connection settings saved. Rel.AI reconnected.', { variant: 'success' });
     requestDashboardRefresh({ structural: true });
+    if (result?.ok === false) {
+      render(container, { expanded: true });
+      toast(result.error || 'Connection settings were saved, but the Secure MCP Tunnel could not connect.', { variant: 'error' });
+      return;
+    }
+    state.tunnelErrorCode = '';
+    state.tunnelError = '';
+    toast('Connection settings saved. Rel.AI reconnected.', { variant: 'success' });
   } catch (error) {
     toast(messageOf(error), { variant: 'error' });
     saveButton.disabled = false;
@@ -120,4 +140,11 @@ function secretControl(value, onChange, placeholder) {
 function button(label, className, onclick) { const element = document.createElement('button'); element.type = 'button'; element.className = className; element.textContent = label; element.onclick = onclick; return element; }
 function snapshot(value) { return JSON.stringify({ port: Number(value?.port || 0), tunnelId: String(value?.tunnelId || '').trim(), replacementKey: String(value?.tunnelApiKey || '').trim() }); }
 function dirty(container) { markUnsaved(container, snapshot(state) !== savedState); }
+function tunnelCredentialError(value = {}) {
+  const code = String(value.tunnelErrorCode || '');
+  if (code === 'tunnel_authentication_failed') return value.tunnelError || 'OpenAI rejected the runtime API key. Replace it with the correct key, then reconnect.';
+  if (code === 'tunnel_access_denied') return value.tunnelError || 'This runtime API key does not have access to the configured tunnel.';
+  if (code === 'tunnel_not_found') return value.tunnelError || 'The configured tunnel could not be found for this OpenAI account.';
+  return '';
+}
 function messageOf(error) { return error instanceof Error ? error.message : String(error || 'Connection settings failed.'); }

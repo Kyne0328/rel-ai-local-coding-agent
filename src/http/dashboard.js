@@ -334,6 +334,9 @@ function openDashboardEvents(res, req, options) {
   });
   const unsubscribe = onToolActivity(activity => taskEvents.push(activity));
   const unsubscribeConnection = mcpConnectionManager.onChange(snapshot => sendConnection(snapshot));
+  const unsubscribeDesktopStatus = typeof options.onDesktopStatusChange === 'function'
+    ? options.onDesktopStatusChange(() => sendDesktopConnectionIfChanged())
+    : () => {};
   const unsubscribeWorkspace = onWorkspaceStateChange(event => {
     sendDomain('workspace.updated', 'workspace', event.version, { alias: event.alias, state: event.state });
   });
@@ -355,6 +358,7 @@ function openDashboardEvents(res, req, options) {
   req.on('close', () => {
     unsubscribe();
     unsubscribeConnection();
+    unsubscribeDesktopStatus();
     unsubscribeWorkspace();
     unsubscribeProcess();
     unsubscribeDiagnostics();

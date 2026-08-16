@@ -41,6 +41,7 @@ const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
 const configPath = path.join(sandbox, 'config.json');
 const auditPath = path.join(sandbox, 'audit.jsonl');
 const token = 'dashboard-live-events-token';
+const desktopStatusListeners = new Set();
 let desktopStatus = {
   serverRunning: true,
   tunnelStatus: 'connecting',
@@ -65,6 +66,10 @@ const { startHttpServer } = await import('../src/httpServer.js');
 const server = startHttpServer({
   host: '127.0.0.1', port: 0, token, exitOnError: false,
   getDesktopStatus: () => desktopStatus,
+  onDesktopStatusChange: listener => {
+    desktopStatusListeners.add(listener);
+    return () => desktopStatusListeners.delete(listener);
+  },
   getTaskActivity: () => getToolActivity()
 });
 const controller = new AbortController();
@@ -129,13 +134,12 @@ try {
   mcpConnectionManager.finishRequest(requestId, { method: 'tools/list', ok: true });
 
   desktopStatus = { ...desktopStatus, tunnelStatus: 'running', tunnelId: 'tunnel_12345678' };
-  const finishStatus = beginConnectorToolCall({ scopeId: 'dashboard-status', taskId, tool: 'relai_work', internalOperation: 'work.status', operation: 'Status', workspace: 'test' });
-  finishStatus({ ok: true });
+  for (const listener of [...desktopStatusListeners]) listener(desktopStatus);
   let desktopConnection = null;
   for (let attempt = 0; attempt < 4 && desktopConnection?.desktopStatus?.tunnelStatus !== 'running'; attempt += 1) {
     desktopConnection = JSON.parse((await stream.nextType('connection.updated')).data);
   }
-  assert.equal(desktopConnection?.desktopStatus?.tunnelStatus, 'running');
+  assert.equal(desktopConnection?.desktopStatus?.tunnelStatus, 'running', 'desktop tunnel status must stream without unrelated task activity');
 
   const secondController = new AbortController();
   let secondReader;

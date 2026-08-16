@@ -40,11 +40,19 @@ function connectionView(status) {
       description: 'Rel.AI is running and the tunnel is connected. Keep Rel.AI running while ChatGPT uses this computer.'
     };
   }
-  if (status.serverRunning && status.tunnelStatus === 'connecting') {
+  if (status.serverRunning && ['starting', 'locally_ready', 'authenticating', 'connecting'].includes(status.tunnelStatus)) {
+    const authenticating = status.tunnelStatus === 'authenticating';
     return {
-      key: 'connecting', badge: 'Connecting', eyebrow: 'Secure MCP Tunnel',
-      title: 'Starting Secure MCP Tunnel…',
-      description: 'Rel.AI is connecting this computer to OpenAI.'
+      key: 'connecting', badge: authenticating ? 'Authenticating' : 'Connecting', eyebrow: 'Secure MCP Tunnel',
+      title: authenticating ? 'Checking the Secure MCP Tunnel…' : 'Starting Secure MCP Tunnel…',
+      description: authenticating ? 'Rel.AI is verifying the tunnel and local MCP channel with OpenAI.' : 'Rel.AI is connecting this computer to OpenAI.'
+    };
+  }
+  if (status.serverRunning && status.tunnelStatus === 'degraded') {
+    return {
+      key: 'degraded', badge: 'Reconnecting', eyebrow: 'Secure MCP Tunnel interrupted',
+      title: 'The tunnel connection was interrupted.',
+      description: 'The local Rel.AI service is still running. Rel.AI is retrying the tunnel automatically.'
     };
   }
   if (status.error || status.tunnelStatus === 'failed') {
@@ -203,13 +211,15 @@ function renderConnectionHealth() {
 function publicHealthState(tunnelStatus) {
   if (tunnelStatus === 'running') return 'ready';
   if (tunnelStatus === 'failed') return 'failed';
-  if (tunnelStatus === 'connecting') return 'connecting';
+  if (tunnelStatus === 'degraded') return 'degraded';
+  if (['starting', 'locally_ready', 'authenticating', 'connecting'].includes(tunnelStatus)) return 'connecting';
   return 'offline';
 }
 
 function tunnelDetail(publicState, tunnelId) {
   if (publicState === 'ready' && tunnelId) return tunnelId;
-  if (publicState === 'connecting') return 'Connecting Secure MCP Tunnel';
+  if (publicState === 'connecting') return 'Checking Secure MCP Tunnel';
+  if (publicState === 'degraded') return 'Retrying automatically';
   return tunnelId || 'Not configured';
 }
 
@@ -387,7 +397,9 @@ function diagnosticSummary() {
 function receiveServerLog(value) {
   const entry = normalizeServiceLog(value);
   if (!entry.message) return;
-  serviceLogs.push(entry);
+  const previous = serviceLogs.at(-1);
+  if (entry.repeatCount > 1 && previous && sameServiceLog(previous, entry)) serviceLogs[serviceLogs.length - 1] = entry;
+  else serviceLogs.push(entry);
   if (serviceLogs.length > 100) serviceLogs.splice(0, serviceLogs.length - 100);
   renderServiceLogs();
 }
@@ -396,25 +408,111 @@ function normalizeServiceLog(value) {
   if (value && typeof value === 'object') {
     return {
       ts: value.ts || new Date().toISOString(),
-      level: value.level || 'info',
+      lastTs: value.lastTs || '',
+      level: ['error', 'warning', 'info', 'debug'].includes(value.level) ? value.level : 'info',
       source: safeDiagnosticText(value.source || 'desktop'),
+      component: safeDiagnosticText(value.component || ''),
       code: safeDiagnosticText(value.code || ''),
-      message: safeDiagnosticText(value.message || '')
+      message: safeDiagnosticText(value.message || ''),
+      repeatCount: Math.max(1, Number(value.repeatCount || 1)),
+      details: safeLogDetails(value.details)
     };
   }
-  return { ts: new Date().toISOString(), level: 'info', source: 'desktop', code: '', message: safeDiagnosticText(value) };
+  return { ts: new Date().toISOString(), lastTs: '', level: 'info', source: 'desktop', component: '', code: '', message: safeDiagnosticText(value), repeatCount: 1, details: {} };
+}
+
+function sameServiceLog(left, right) {
+  return left.level === right.level && left.source === right.source && left.component === right.component && left.code === right.code && left.message === right.message;
 }
 
 function renderServiceLogs() {
   const element = document.getElementById('serviceLog');
   if (!element) return;
-  element.textContent = serviceLogs.length ? serviceLogs.map(formatServiceLog).join('\n') : 'No app logs recorded yet.';
+  const showDebug = document.getElementById('debugLogsToggle')?.checked === true;
+  const visible = serviceLogs.filter(entry => showDebug || entry.level !== 'debug');
+  element.replaceChildren();
+  if (!visible.length) {
+    const empty = document.createElement('div');
+    empty.className = 'fallback-log-empty';
+    empty.textContent = serviceLogs.length ? 'Only debug logs are currently hidden.' : 'No app logs recorded yet.';
+    element.appendChild(empty);
+    requestWindowFit();
+    return;
+  }
+  for (const entry of visible) element.appendChild(serviceLogElement(entry));
   requestWindowFit();
 }
 
+function serviceLogElement(entry) {
+  const details = document.createElement('details');
+  details.className = `fallback-log-entry ${entry.level}`;
+  const summary = document.createElement('summary');
+  summary.className = 'fallback-log-summary';
+
+  const time = document.createElement('time');
+  time.dateTime = entry.lastTs || entry.ts;
+  time.textContent = localLogTimestamp(entry.lastTs || entry.ts);
+  const level = document.createElement('span');
+  level.className = `fallback-log-level ${entry.level}`;
+  level.textContent = String(entry.level || 'info').toUpperCase();
+  const source = document.createElement('code');
+  source.textContent = entry.component ? `${entry.source}/${entry.component}` : entry.source;
+  const message = document.createElement('span');
+  message.className = 'fallback-log-message';
+  message.textContent = entry.message;
+  summary.append(time, level, source, message);
+  if (entry.repeatCount > 1) {
+    const repeat = document.createElement('span');
+    repeat.className = 'fallback-log-repeat';
+    repeat.textContent = `×${entry.repeatCount}`;
+    summary.appendChild(repeat);
+  }
+  details.appendChild(summary);
+
+  const technical = { ...(entry.code ? { code: entry.code } : {}), ...entry.details };
+  if (Object.keys(technical).length) {
+    const body = document.createElement('div');
+    body.className = 'fallback-log-details';
+    const label = document.createElement('strong');
+    label.textContent = 'Technical details';
+    const pre = document.createElement('pre');
+    pre.textContent = JSON.stringify(technical, null, 2);
+    body.append(label, pre);
+    details.appendChild(body);
+  }
+  return details;
+}
+
 function formatServiceLog(entry) {
+  const source = entry.component ? `${entry.source}/${entry.component}` : entry.source || 'desktop';
   const code = entry.code ? ` ${entry.code}` : '';
-  return `${entry.ts || ''} ${String(entry.level || 'info').toUpperCase()} ${entry.source || 'desktop'}${code}: ${entry.message}`.trim();
+  const repeat = entry.repeatCount > 1 ? ` ×${entry.repeatCount}` : '';
+  const details = Object.keys(entry.details || {}).length ? ` ${JSON.stringify(entry.details)}` : '';
+  return `${entry.lastTs || entry.ts || ''} ${String(entry.level || 'info').toUpperCase()} ${source}${code}${repeat}: ${entry.message}${details}`.trim();
+}
+
+function localLogTimestamp(value) {
+  const timestamp = Date.parse(String(value || ''));
+  return Number.isFinite(timestamp) ? new Date(timestamp).toLocaleString(undefined, { hour12: false }) : 'Unknown time';
+}
+
+function safeLogDetails(value, depth = 0) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return {};
+  const output = {};
+  for (const [rawKey, rawValue] of Object.entries(value).slice(0, 24)) {
+    const key = safeDiagnosticText(rawKey).slice(0, 80);
+    if (!key || /token|secret|password|authorization|api.?key|credential/i.test(key)) continue;
+    if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+      const nested = safeLogDetails(rawValue, depth + 1);
+      if (Object.keys(nested).length) output[key] = nested;
+    } else if (typeof rawValue === 'number' && Number.isFinite(rawValue)) output[key] = rawValue;
+    else if (typeof rawValue === 'boolean') output[key] = rawValue;
+    else {
+      const text = safeDiagnosticText(rawValue).slice(0, 1000);
+      if (text) output[key] = text;
+    }
+  }
+  return output;
 }
 
 function safeDiagnosticText(value) {
@@ -450,7 +548,9 @@ function initDisclosures() {
 
 function tunnelLabel(status) {
   if (status === 'running') return 'Connected';
-  if (status === 'connecting') return 'Connecting';
+  if (status === 'degraded') return 'Reconnecting';
+  if (status === 'authenticating') return 'Authenticating';
+  if (['starting', 'locally_ready', 'connecting'].includes(status)) return 'Connecting';
   if (status === 'failed') return 'Failed';
   return 'Offline';
 }
@@ -491,6 +591,7 @@ function bindEvents() {
     runAsync(withBusy(document.getElementById('restartAppBtn'), 'Restarting Rel.AI…', () => window.electronAPI.relaunchApp()));
   });
   document.getElementById('notificationToggleBtn').addEventListener('click', () => runAsync(toggleNotifications()));
+  document.getElementById('debugLogsToggle')?.addEventListener('change', renderServiceLogs);
   document.getElementById('copyDiagnosticsBtn').addEventListener('click', () => {
     runAsync(copyWithFeedback(document.getElementById('copyDiagnosticsBtn'), diagnosticSummary(), 'Details copied'));
   });
