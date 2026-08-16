@@ -77,6 +77,7 @@ assert.match(statusHtml, /id="publicHealthCard"/);
 assert.match(statusHtml, /id="serverToggleBtn"/);
 assert.match(statusHtml, /id="restartAppBtn"/);
 assert.match(statusHtml, /id="notificationToggleBtn"/);
+assert.match(statusHtml, /id="errorTitle"/);
 assert.match(statusHtml, /Recent app logs/);
 assert.match(statusJs, /currentStatus\.tunnelId/);
 assert.match(statusJs, /Tunnel ID copied/);
@@ -87,6 +88,9 @@ assert.match(statusJs, /Secure tunnel:/);
 assert.match(statusJs, /Local MCP:/);
 assert.match(statusJs, /safeDiagnosticText/);
 assert.match(statusJs, /Task activity:/);
+assert.match(statusJs, /setActionError/);
+assert.match(statusJs, /desktop notification setting could not be saved/i);
+assert.doesNotMatch(statusJs, /updateUI\(\{\s*error:[\s\S]{0,160}tunnelStatus:\s*'failed'/, 'recovery action failures must not falsify the tunnel connection state');
 assert.doesNotMatch(statusJs, /currentStatus\.mcpUrl|approval token|ngrok|gateway/i);
 
 for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close','desktop:restart-service','desktop:reload-dashboard','desktop:relaunch','recovery:restart-service','recovery:relaunch']) {
@@ -129,6 +133,8 @@ assert.match(main, /openDashboardWindow\('#diagnostics'\)/);
 assert.match(main, /serviceRuntime\.waitUntilListening\(\)/, 'foreground dashboard opening must await the local service readiness promise');
 assert.match(main, /app\.relaunch\(\)/, 'desktop recovery must provide a full application relaunch escape hatch');
 assert.match(main, /taskActivityBlockReason\(toolActivityRuntime\.getStatus\(\), 'restarting Rel\.AI'\)/, 'full app restart must remain guarded while Rel.AI work is active');
+assert.match(main, /onReady:\s*hydrateRecoveryWindow/, 'recovery reloads must rehydrate from authoritative desktop state');
+assert.match(main, /runtimeLogs\.snapshot\(\{\s*limit:\s*100\s*\}\)\.entries[\s\S]{0,120}recoveryWindowManager\.sendLog\(entry\)/, 'recovery reloads must restore the bounded recent diagnostic log tail');
 assert.doesNotMatch(main, /waitForLocalService|setTimeout\(poll,\s*20\)/, 'local service readiness must not use a 20ms polling loop');
 assert.match(main, /options\.background \? await pendingStart : await serviceRuntime\.waitUntilListening\(\)/, 'foreground configured startup must show the dashboard while the tunnel continues connecting');
 assert.match(main, /setImmediate\(\(\) => \{[\s\S]*appUpdater\.start\(\)[\s\S]*updateSupportPolicy\.start\(\)/, 'updater policy work should begin after the first useful desktop startup path is scheduled');

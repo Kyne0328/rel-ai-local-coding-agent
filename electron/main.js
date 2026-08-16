@@ -73,7 +73,7 @@ const recoveryWindowManager = createRecoveryWindowManager({
   limits: WINDOW_SIZE_LIMITS.status,
   installProtocol: sessionProtocol => installLocalProtocol(sessionProtocol, RENDERER_ROOT),
   isQuitting: () => isQuitting,
-  onReady: pushStatus,
+  onReady: hydrateRecoveryWindow,
   onSecurityError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' })
 });
 const setupWindowManager = createSetupWindowManager({
@@ -303,6 +303,11 @@ function pushStatus(options = {}) {
   const dashboardWindow = dashboardWindowManager.getWindow();
   if (options.dashboard !== false && dashboardWindow) dashboardWindow.webContents.send('server:status', currentStatus);
   desktopTray.update();
+}
+
+function hydrateRecoveryWindow() {
+  pushStatus();
+  for (const entry of runtimeLogs.snapshot({ limit: 100 }).entries) recoveryWindowManager.sendLog(entry);
 }
 
 function setTaskActivityStatus(taskActivity) {

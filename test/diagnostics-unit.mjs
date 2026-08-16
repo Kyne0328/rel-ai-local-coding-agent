@@ -39,7 +39,7 @@ const report = buildDiagnosticReport({
   },
   auditLogs: {
     entries: [
-      { ts: '2026-07-25T00:04:00.000Z', ok: false, tool: 'relai_edit', workspace: 'example', error: 'fourth failure' },
+      { ts: '2026-07-25T00:04:00.000Z', eventId: 'event-edit-1', taskId: 'task-42', ok: false, tool: 'relai_edit', workspace: 'example', error: 'fourth failure' },
       { ts: '2026-07-25T00:02:00.000Z', ok: true, tool: 'relai_read', workspace: 'example' },
       { ts: '2026-07-25T00:03:00.000Z', ok: false, tool: 'relai_validate', workspace: 'example', error: `client_secret=${secret}` }
     ]
@@ -60,6 +60,9 @@ assert.equal(report.maintenance.all.confirmation, 'RESET');
 assert.equal(report.logs.runtime.persistent, true);
 assert.deepEqual(report.logs.runtime.entries.map(item => item.ts), ['2026-07-25T00:01:00.000Z','2026-07-25T00:02:00.000Z','2026-07-25T00:03:00.000Z']);
 assert.equal(report.logs.failedActivity.length, 2);
+assert.equal(report.logs.failedActivity.at(-1).taskId, 'task-42');
+assert.equal(report.logs.failedActivity.at(-1).eventId, 'event-edit-1');
+assert.match(report.reportText, /task=task-42 event=event-edit-1/);
 assert.doesNotMatch(JSON.stringify(report), new RegExp(secret));
 assert.match(report.reportText, /Rel\.AI MCP diagnostic report/);
 assert.doesNotMatch(report.reportText, new RegExp(secret));

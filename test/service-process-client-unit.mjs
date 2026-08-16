@@ -71,6 +71,7 @@ const client = createServiceProcessClient({
 client.updateContext({ status: { serverRunning: false } });
 const activityEvents = [];
 client.activitySource.onToolActivity(event => activityEvents.push(event));
+const unsubscribeBrokenActivityListener = client.activitySource.onToolActivity(() => { throw new Error('listener boom'); });
 
 const started = await client.start({ host: '127.0.0.1', port: 3333, token: 'secret' });
 assert.equal(started.port, 4567);
@@ -94,6 +95,12 @@ child.emit('message', {
 assert.equal(client.activitySource.getToolActivity().state, 'working');
 assert.equal(client.activitySource.getToolActivity().tasks[0].id, 'task-1');
 assert.equal(activityEvents.length, 1);
+child.emit('message', {
+  type: 'activity',
+  event: { phase: 'snapshot', snapshot: { state: 'working', activeCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task-1' }] } }
+});
+assert.equal(logs.filter(entry => entry.options.code === 'activity_listener_failed').length, 1, 'a failing subscriber must be diagnosable without log spam');
+unsubscribeBrokenActivityListener();
 
 client.updateContext({
   runtimeLogs: { available: true, revision: 1, count: 1, entries: [{ message: 'first' }] }
