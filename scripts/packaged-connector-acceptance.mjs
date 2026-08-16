@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -34,8 +33,8 @@ const workspace = path.join(sandbox, 'workspace');
 const stateDir = path.join(sandbox, 'state');
 const configPath = path.join(sandbox, 'config.json');
 const localBearerToken = 'packaged-connector-local-bearer-token';
-const port = await availablePort();
-const base = `http://127.0.0.1:${port}`;
+let port = 0;
+let base = '';
 let child;
 let primarySession = null;
 let reconnectSession = null;
@@ -72,7 +71,7 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 
 try {
-  child = spawn(process.execPath, [packagedServer, '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
+  child = spawn(process.execPath, [packagedServer, '--host', '127.0.0.1', '--port', '0', '--no-profile-write'], {
     cwd: resources,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
@@ -336,16 +335,6 @@ async function readResourceText(session, id, uri) {
   return text;
 }
 
-async function availablePort() {
-  const server = net.createServer();
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  const port = typeof address === 'object' && address ? address.port : 0;
-  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-  return port;
-}
-
 async function freshFetch(input, init = {}) {
   const target = new URL(input);
   const method = String(init.method || 'GET').toUpperCase();
@@ -402,10 +391,20 @@ async function waitForHealth() {
     if (child?.exitCode != null) {
       throw new Error(`Packaged server exited before becoming healthy (code ${child.exitCode}). stderr:\n${stderr}`);
     }
-    try {
-      const response = await freshFetch(`${base}/health`);
-      if (response.ok) return;
-    } catch {}
+    if (!base) {
+      const listening = stderr.match(/HTTP server listening on http:\/\/127\.0\.0\.1:(\d+)/);
+      if (listening) {
+        port = Number(listening[1]);
+        assert.ok(Number.isInteger(port) && port > 0, `Packaged server reported an invalid listening port: ${listening[1]}`);
+        base = `http://127.0.0.1:${port}`;
+      }
+    }
+    if (base) {
+      try {
+        const response = await freshFetch(`${base}/health`);
+        if (response.ok) return;
+      } catch {}
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   throw new Error(`Packaged server did not become healthy within 30 seconds. stderr:\n${stderr}`);
