@@ -58,6 +58,25 @@ async function exerciseSyncLiveView(updateBehavior) {
   return { calls, result, revisionKey: context.testApi.readFingerprint() };
 }
 
+function exerciseRuntimeLogDelta(runtime, change) {
+  const calls = [];
+  const context = {
+    currentReport: { logs: { runtime } },
+    currentContainer: {},
+    updateSourceOptions: () => calls.push('sources'),
+    renderDiagnosticLogs: () => calls.push('render'),
+    announceDiagnosticUpdate: () => calls.push('announce'),
+    scheduleLiveTailRefresh: () => calls.push('refresh')
+  };
+  vm.runInNewContext(`
+    ${functionSource(diagnostics, 'finiteRevision')}
+    ${functionSource(diagnostics, 'applyRuntimeLogDelta')}
+    globalThis.applyRuntimeLogDelta = applyRuntimeLogDelta;
+  `, context);
+  context.applyRuntimeLogDelta(change);
+  return { calls, runtime: context.currentReport.logs.runtime };
+}
+
 assert.match(dashboard, /module\.updateSystemLiveState\(root, currentSection\(\), data\)/);
 assert.match(dashboard, /connection: systemSection\('connection'\)/);
 assert.doesNotMatch(dashboard, /settings\/connection/);
@@ -139,6 +158,21 @@ assert.match(diagnostics, /function syncDiagnosticRegions/, 'Diagnostics live up
 assert.match(diagnostics, /data-diagnostic-region="maintenance"/, 'Diagnostics maintenance controls must live in a stable region');
 assert.match(diagnostics, /function copyDiagnosticDisclosureState/, 'Diagnostics must preserve technical disclosure state when a changed region is replaced');
 assert.doesNotMatch(functionSource(diagnostics, 'renderCurrentReport'), /root\.innerHTML\s*=/, 'Diagnostics live updates must not remount the whole report');
+{
+  const runtime = { revision: 4, count: 1, entries: [{ message: 'existing' }] };
+  const duplicate = exerciseRuntimeLogDelta(runtime, { type: 'append', revision: 4, count: 1, entry: { message: 'duplicate', level: 'info' } });
+  assert.deepEqual(duplicate.runtime.entries.map(entry => entry.message), ['existing'], 'duplicate diagnostic revisions must not duplicate log rows');
+  assert.deepEqual(duplicate.calls, []);
+
+  const gap = exerciseRuntimeLogDelta(runtime, { type: 'append', revision: 6, count: 2, entry: { message: 'gap', level: 'warning' } });
+  assert.deepEqual(gap.runtime.entries.map(entry => entry.message), ['existing'], 'a missed diagnostic revision must not apply a partial live tail');
+  assert.deepEqual(gap.calls, ['refresh'], 'revision gaps must request an authoritative diagnostic refresh');
+
+  const next = exerciseRuntimeLogDelta(runtime, { type: 'append', revision: 5, count: 2, entry: { message: 'next', level: 'warning' } });
+  assert.equal(next.runtime.revision, 5);
+  assert.deepEqual(Array.from(next.runtime.entries, entry => entry.message), ['existing', 'next']);
+  assert.deepEqual(next.calls, ['sources', 'render', 'announce']);
+}
 assert.match(sessions, /renderSessionRows\(body, \[\.\.\._sessionsById\.values\(\)\], scopeKey\)/, 'Show more must render the latest live session snapshot instead of the mount-time data object');
 const reconcileSessionsSource = functionSource(sessions, 'reconcileSessionRows');
 assert.match(reconcileSessionsSource, /body\.children\[index\]/, 'keyed reconciliation must compare against the current DOM child after a row replacement');
