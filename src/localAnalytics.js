@@ -70,7 +70,15 @@ function recordLocalToolOutcome(config = {}, event = {}) {
 
 function readLocalUsageSnapshot(config = {}, requestedMonth = '') {
   const month = normalizeMonth(requestedMonth) || monthKey(new Date());
-  const document = readDocument(config, month);
+  return projectLocalUsageSnapshot(month, readDocument(config, month));
+}
+
+async function readLocalUsageSnapshotAsync(config = {}, requestedMonth = '') {
+  const month = normalizeMonth(requestedMonth) || monthKey(new Date());
+  return projectLocalUsageSnapshot(month, await readDocumentFresh(config, month));
+}
+
+function projectLocalUsageSnapshot(month, document) {
   const activeDays = new Set(document.hours.map(row => row.hour.slice(0, 10))).size;
   const totals = {
     ...aggregateDto(document.totals),
@@ -152,18 +160,31 @@ function readDocument(config, month) {
   try {
     const stat = fs.statSync(file);
     if (!stat.isFile() || stat.size > MAX_FILE_BYTES) document = emptyDocument(month);
-    else {
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      const supportedSchema = parsed?.schemaVersion === SCHEMA_VERSION || parsed?.schemaVersion === LEGACY_SCHEMA_VERSION;
-      document = supportedSchema && parsed?.month === month
-        ? sanitizeDocument(parsed, month, { resetReliability: parsed.schemaVersion !== SCHEMA_VERSION })
-        : emptyDocument(month);
-    }
+    else document = parseDocument(fs.readFileSync(file, 'utf8'), month);
   } catch {
     document = emptyDocument(month);
   }
   documentCache.set(file, document);
   return document;
+}
+
+async function readDocumentFresh(config, month) {
+  const file = analyticsPath(config, month);
+  try {
+    const stat = await fs.promises.stat(file);
+    if (!stat.isFile() || stat.size > MAX_FILE_BYTES) return emptyDocument(month);
+    return parseDocument(await fs.promises.readFile(file, 'utf8'), month);
+  } catch {
+    return emptyDocument(month);
+  }
+}
+
+function parseDocument(text, month) {
+  const parsed = JSON.parse(text);
+  const supportedSchema = parsed?.schemaVersion === SCHEMA_VERSION || parsed?.schemaVersion === LEGACY_SCHEMA_VERSION;
+  return supportedSchema && parsed?.month === month
+    ? sanitizeDocument(parsed, month, { resetReliability: parsed.schemaVersion !== SCHEMA_VERSION })
+    : emptyDocument(month);
 }
 
 function scheduleDocumentWrite(config, document) {
@@ -331,4 +352,4 @@ function monthKey(date) { return `${date.getUTCFullYear()}-${String(date.getUTCM
 function hourKey(date) { return `${monthKey(date)}-${String(date.getUTCDate()).padStart(2, '0')}T${String(date.getUTCHours()).padStart(2, '0')}`; }
 function normalizeMonth(value) { const text = String(value || '').trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(text) ? text : ''; }
 
-export { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot };
+export { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot, readLocalUsageSnapshotAsync };

@@ -166,9 +166,13 @@ function createDesktopServiceRuntime(deps) {
   }
 
   async function stopServer(options = {}) {
+    const pendingLocalReady = localReadyPromise;
     lifecycleToken += 1;
     startPromise = null;
     localReadyPromise = null;
+    if (pendingLocalReady) {
+      try { await pendingLocalReady; } catch {}
+    }
     const [localRuntime, secureTunnel] = await Promise.all([
       serviceProcessClient.stop().catch(error => ({
         ok: false,
