@@ -87,9 +87,13 @@ function createDesktopNotifications(options = {}) {
       preferences = next;
       return { ok: true, preferences: getPreferences() };
     } catch (error) {
-      const message = cleanText(error?.message || error, 400) || 'Desktop notification preferences could not be saved.';
-      onLog(message, { source: 'desktop-notifications', level: 'error' });
-      return { ok: false, error: message, preferences: getPreferences() };
+      const technicalMessage = cleanText(error?.message || error, 400) || 'Desktop notification preferences could not be saved.';
+      onLog(technicalMessage, { source: 'desktop-notifications', level: 'error', code: 'notification_preferences_save_failed' });
+      return {
+        ok: false,
+        error: 'Desktop notification settings could not be saved. Try again. Open Troubleshooting if the problem continues.',
+        preferences: getPreferences()
+      };
     }
   }
 

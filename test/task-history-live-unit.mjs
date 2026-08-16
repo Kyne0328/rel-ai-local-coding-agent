@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { readTaskHistorySession, recordTaskActivityEvent, recordTaskHistoryEvent } from "../src/taskHistoryStore.js";
+import { clearTaskHistory, flushTaskHistoryPersistence, readTaskHistorySession, recordTaskActivityEvent, recordTaskHistoryEvent, taskHistoryPersistenceSnapshot } from "../src/taskHistoryStore.js";
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-history-live-'));
 const config = { stateDir: sandbox, auditLogPath: path.join(sandbox, 'audit.jsonl') };
@@ -154,6 +154,24 @@ try {
   assert.equal(auditOnly.events[0].summary, 'Found 3 matching references.');
   assert.equal(auditOnly.events[0].result.outcome, 'Found 3 matches');
   assert.equal(auditOnly.events[0].metadata.matchCount, 3);
+
+  const failureState = path.join(sandbox, 'persistence-failure');
+  const failureConfig = { stateDir: failureState, auditLogPath: path.join(failureState, 'audit.jsonl') };
+  recordTaskActivityEvent(failureConfig, { taskId: 'task-persistence', task: { ...baseTask, id: 'task-persistence', taskId: 'task-persistence', sessionId: 'task-persistence' } });
+  const failureDirectory = path.join(failureState, 'sessions');
+  fs.rmSync(failureDirectory, { recursive: true, force: true });
+  fs.writeFileSync(failureDirectory, 'blocked');
+  recordTaskActivityEvent(failureConfig, {
+    taskId: 'task-persistence',
+    task: { ...baseTask, id: 'task-persistence', taskId: 'task-persistence', sessionId: 'task-persistence', updatedAt: '2026-07-28T10:02:00.000Z' }
+  }, { defer: true });
+  const flushResult = await flushTaskHistoryPersistence();
+  assert.equal(flushResult.ok, false, 'shutdown flush must stop after a failed persistence attempt instead of retrying forever');
+  assert.equal(flushResult.failed, 1);
+  assert.equal(taskHistoryPersistenceSnapshot().healthy, false, 'task-history persistence failures must remain observable');
+  assert.ok(taskHistoryPersistenceSnapshot().lastError);
+  clearTaskHistory(failureConfig);
+  assert.equal(taskHistoryPersistenceSnapshot().healthy, true, 'clearing the failed history should clear its persistence warning');
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

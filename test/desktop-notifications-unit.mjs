@@ -135,6 +135,8 @@ const failedService = createDesktopNotifications({
 });
 const failedUpdate = failedService.updatePreferences({ enabled: false });
 assert.equal(failedUpdate.ok, false);
+assert.match(failedUpdate.error, /could not be saved|Troubleshooting/i);
+assert.doesNotMatch(failedUpdate.error, /ENOTDIR|not a directory/i, 'ordinary notification settings errors must not expose filesystem internals');
 assert.equal(failedService.getPreferences().enabled, true, 'failed persistence must preserve the active preference snapshot');
 assert.throws(() => failedService.setEnabled(false), /could not be saved|could not persist|not a directory|ENOTDIR/i);
 assert.ok(failedLogs.length >= 1);

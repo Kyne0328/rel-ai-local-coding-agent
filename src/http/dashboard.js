@@ -365,7 +365,7 @@ function openDashboardEvents(res, req, options) {
 
 function sendDashboardStreamError(res, error) {
   if (res.destroyed) return;
-  sendSse(res, 'error', errorPayload(
+  sendSse(res, 'dashboard.error', errorPayload(
     ERROR_CODES.UNKNOWN,
     error instanceof Error ? error.message : String(error)
   ));
