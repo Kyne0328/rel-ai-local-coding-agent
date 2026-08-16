@@ -35,20 +35,21 @@ function buildExtraAudit(name, value, args) {
   const extra = {};
   const auditKind = getOperationDefinition(name)?.behavior?.audit || "";
   AUDIT_ENRICHERS[auditKind]?.(extra, value, args);
-  enrichCommonAudit(extra, name, value);
+  enrichCommonAudit(extra, name, value, args);
   return extra;
 }
 
-function enrichCommonAudit(extra, name, value) {
+function enrichCommonAudit(extra, name, value, args) {
+  const dryRun = args?.dryRun === true;
   const mutationCapable = CODE_MUTATING_TOOLS.has(name) || name === OP.EXEC;
-  const changedFiles = mutationCapable && Array.isArray(value?.changedFiles) ? value.changedFiles : [];
+  const changedFiles = !dryRun && mutationCapable && Array.isArray(value?.changedFiles) ? value.changedFiles : [];
   if (changedFiles.length) extra.changedFiles = changedFiles.slice(0, 200);
   assignTruthy(extra, "validationStatus", value?.validationStatus);
-  if (name === OP.PUBLISH_COMMIT && value?.ok !== false) {
+  if (!dryRun && name === OP.PUBLISH_COMMIT && value?.ok !== false) {
     extra.commitCreated = true;
     if (Array.isArray(value?.paths) && value.paths.length) extra.committedFiles = value.paths.slice(0, 200);
   }
-  if (name === OP.PUBLISH_PUSH && value?.ok !== false) extra.pushPublished = true;
+  if (!dryRun && name === OP.PUBLISH_PUSH && value?.ok !== false) extra.pushPublished = true;
   if (name === OP.PUBLISH_DRAFT_PR && value?.ok !== false) extra.prDrafted = true;
 }
 

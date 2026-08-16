@@ -67,6 +67,21 @@ const cases = [
     metadataRevision: 'rev_1', startedAt: '2026-08-05T00:00:00.000Z', stdoutBytes: 10,
     stdout: { text: 'ready\n', nextOffset: 10 }, stderr: { text: '', nextOffset: 0 }, work_id: 'work_process'
   }),
+  fixture('relai_process:list-empty', 'relai_process', 'list', OP.PROCESS_LIST, 'work_process_list', {
+    ok: true, processes: [], count: 0
+  }, {
+    ok: true, processes: [], count: 0, work_id: 'work_process_list'
+  }),
+  fixture('relai_search:semantic-max-bytes', 'relai_search', 'semantic', OP.SEARCH_SEMANTIC, 'work_semantic', {
+    ok: true, workspace: 'repo', query: 'needle', maxBytes: 4096, resultCount: 0, matchCount: 0, returnedBytes: 0, truncated: false
+  }, {
+    ok: true, workspace: 'repo', query: 'needle', maxBytes: 4096, resultCount: 0, matchCount: 0, returnedBytes: 0, truncated: false, work_id: 'work_semantic'
+  }),
+  fixture('relai_validate:diagnostics-empty', 'relai_validate', 'diagnostics', OP.VALIDATE_DIAGNOSTICS, 'work_diagnostics', {
+    ok: true, workspace: 'repo', commands: ['node --check src/index.js'], results: [], diagnostics: [], diagnosticCount: 0, completedUnits: 1, totalUnits: 1, cancelled: false, truncated: false
+  }, {
+    ok: true, workspace: 'repo', commands: ['node --check src/index.js'], diagnostics: [], diagnosticCount: 0, completedUnits: 1, totalUnits: 1, cancelled: false, truncated: false, work_id: 'work_diagnostics'
+  }),
   fixture('relai_validate:checks', 'relai_validate', 'checks', OP.VALIDATE_CHECKS, 'work_checks', {
     ok: true, workspace: 'repo', level: 'standard', checks: ['npm test'], commands: ['npm test'],
     results: [{ command: 'npm test', ok: true, exitCode: 0, durationMs: 40, stdout: 'noise', stderr: '', stdoutBytes: 5, stderrBytes: 0 }],

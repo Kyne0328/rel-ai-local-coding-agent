@@ -189,7 +189,7 @@ function postActionRecommendation(workspace, changedFiles = []) {
 async function runPostActions(workspace, config, args, changedFiles = []) {
   const post = {};
   const wantsChecks = args.runChecks === true && !args.dryRun;
-  const wantsDiff = args.returnDiff === true;
+  const wantsDiff = args.returnDiff === true && !args.dryRun;
   const validationArgs = {
     level: args.level,
     ...(Array.isArray(changedFiles) && changedFiles.length ? { changedFiles } : {})

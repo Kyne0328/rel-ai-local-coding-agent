@@ -170,6 +170,7 @@ assert.deepEqual(resolvedKeys.sort(), discoveredKeys.sort(), 'every discovered p
 
 assert.ok(approvalRequirement('relai_changes', { action: 'reset', work_id: 'work_contract', confirmation: 'RESET' }), 'workspace reset must remain approval-gated');
 assert.ok(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract' }), 'Git push must remain approval-gated');
+assert.equal(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract', dryRun: true }), null, 'Git push dry-run must not request destructive approval');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit' }), null, 'scoped commit should not require extra approval');
 assert.ok(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', addAll: true }), 'commit --all must remain approval-gated');
 

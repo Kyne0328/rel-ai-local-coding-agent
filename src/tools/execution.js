@@ -50,6 +50,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         });
         if (workspace
           && taskId
+          && effectiveArgs?.dryRun !== true
           && (executionName === OP.EDIT || executionName === OP.EXEC)
           && Array.isArray(handled?.changedFiles)
           && handled.changedFiles.length) {

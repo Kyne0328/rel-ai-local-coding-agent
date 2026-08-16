@@ -91,7 +91,9 @@ const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
   })],
   [OP.PUBLISH_PUSH]: [expose('relai_publish', 'push', {
     capability: PUBLISH,
-    approval: args => ({ message: `Publish branch ${args.branch || '(current branch)'} to ${args.remote || 'origin'}?` })
+    approval: args => args.dryRun === true
+      ? null
+      : ({ message: `Publish branch ${args.branch || '(current branch)'} to ${args.remote || 'origin'}?` })
   })],
   [OP.PUBLISH_DRAFT_PR]: [expose('relai_publish', 'draft_pr', { capability: READ })]
 });
