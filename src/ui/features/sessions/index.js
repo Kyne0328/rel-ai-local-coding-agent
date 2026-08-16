@@ -118,7 +118,7 @@ export function sessionSummary(sessions) {
   const counts = sessions.reduce((summary, session) => {
     const state = workSessionStateView(session);
     if (state.active) summary.active += 1;
-    else if (state.status === 'waiting') summary.open += 1;
+    else if (state.open) summary.open += 1;
     else if (['waiting_for_approval', 'blocked', 'validation_failed'].includes(state.status)) summary.attention += 1;
     else if (state.status === 'inactive') summary.inactive += 1;
     else if (state.status === 'completed') summary.completed += 1;
@@ -511,7 +511,8 @@ function sessionIdentifier(session = {}) {
 }
 
 export function isOngoingSession(session) {
-  return workSessionStateView(session).active === true;
+  const state = workSessionStateView(session);
+  return state.active === true || state.open === true;
 }
 
 export function orderChangedFiles(files = []) {

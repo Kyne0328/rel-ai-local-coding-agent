@@ -12,6 +12,7 @@ async function cancelTask(config, args = {}) {
 
   const session = readTaskHistorySession(config, taskId);
   if (session?.status === 'cancelled') {
+    await discardCancelledTaskSandbox(config, session, taskId);
     return {
       ok: true,
       work_id: taskId,
@@ -30,13 +31,7 @@ async function cancelTask(config, args = {}) {
     initiator: 'connector_client'
   });
 
-  if (session?.workspace) {
-    await runWorkspaceOperation(
-      session.workspace,
-      () => discardTaskSandbox(session.workspace, config, taskId),
-      { mode: 'write', scope: 'workspace', taskId }
-    );
-  }
+  await discardCancelledTaskSandbox(config, session, taskId);
 
   return {
     ok: true,
@@ -49,6 +44,15 @@ async function cancelTask(config, args = {}) {
     cancelledAt: cancellation.cancelledAt,
     progress: cancellation.progress
   };
+}
+
+async function discardCancelledTaskSandbox(config, session, taskId) {
+  if (!session?.workspace) return;
+  await runWorkspaceOperation(
+    session.workspace,
+    () => discardTaskSandbox(session.workspace, config, taskId),
+    { mode: 'write', scope: 'workspace', taskId }
+  );
 }
 
 export { cancelTask };
