@@ -9,6 +9,7 @@ import { confirmAction } from '../../components/confirm-dialog.js';
 import { esc, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter } from '../../router.js';
 import { get as getStore } from '../../store.js';
+import { restartConnection } from './connection-recovery.js';
 import { clientCapabilityViews } from '../../task-identity.js';
 
 const LIVE_TAIL_REFRESH_DELAY_MS = 160;
@@ -78,6 +79,7 @@ function renderCurrentReport(container) {
   syncDiagnosticRegions(root, renderReport(currentReport, view));
   restoreLogScrollState(root, logScrollState);
   bindMaintenance(root, container);
+  bindFindingActions(root, container);
   const summary = container.querySelector('#diagnosticFilterHost .filter-summary');
   if (summary) summary.textContent = filterSummary(view);
   const clear = container.querySelector('#diagnosticFilterHost .filter-clear-button');
@@ -600,9 +602,12 @@ function metric(label, count, severity) {
 }
 
 function findingCard(finding) {
-  const action = finding.action?.href
-    ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
-    : '';
+  const canRestart = finding.action?.kind === 'restart_connection' && typeof window.relaiDesktop?.restartService === 'function';
+  const action = canRestart
+    ? `<button class="secondary compact-button" type="button" data-restart-connection data-diagnostic-action="${esc(finding.code)}">${esc(finding.action.label || 'Restart connection')}</button> <a class="buttonlike secondary compact-button" href="${esc(finding.action.href || '#connection')}">Review connection settings</a>`
+    : finding.action?.href
+      ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
+      : '';
   return `<article class="diagnostic-finding ${esc(finding.severity)}">
     <div class="diagnostic-severity">${esc(finding.severity)}</div>
     <div class="diagnostic-copy">
@@ -615,6 +620,22 @@ function findingCard(finding) {
       <details data-diagnostic-detail="${esc(finding.code)}"><summary>Technical details</summary><pre>${esc(JSON.stringify(finding.details || {}, null, 2))}</pre></details>
     </div>
   </article>`;
+}
+
+function bindFindingActions(root, container) {
+  for (const button of root.querySelectorAll('[data-restart-connection]')) {
+    button.onclick = async () => {
+      const result = await runButtonAction(button, {
+        idleText: 'Restart connection', loadingText: 'Restarting connection…', successText: 'Restarted', errorText: 'Review settings'
+      }, restartConnection);
+      if (!result?.ok) {
+        toast(result?.error || 'The connection could not be restarted.', { variant: 'error' });
+        return;
+      }
+      toast('Connection restarted. Rel.AI is checking the Secure MCP Tunnel.', { variant: 'success' });
+      await loadDiagnostics(container, { silent: true });
+    };
+  }
 }
 
 function findingContext(entries) {
