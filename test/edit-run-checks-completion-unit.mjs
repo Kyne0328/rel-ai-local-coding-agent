@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { clearAuditHistory } from '../src/audit.js';
 import { callTool as rawCallTool } from '../src/tools.js';
+import { clearTaskHistory, flushTaskHistoryPersistence } from '../src/taskHistoryStore.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
@@ -66,9 +68,12 @@ try {
 } finally {
   repositoryIntelligence.shutdown();
   resetToolActivity();
+  await flushTaskHistoryPersistence();
+  clearTaskHistory({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') });
+  await clearAuditHistory({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') });
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
-  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 }
 
 console.log('Passing embedded edit checks can satisfy completion validation without a second validation call.');

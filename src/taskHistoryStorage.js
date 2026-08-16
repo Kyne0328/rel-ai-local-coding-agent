@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { normalizeTaskProgress, sanitizeTaskRecord } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
+import { watchPathFor } from './watchPath.js';
 const MAX_SESSIONS = 500;
 const TASK_HISTORY_VERSION = 3;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
@@ -187,7 +188,8 @@ function orderedMetadata(items) {
 
 function watchSessionDirectory(directory, cached) {
   try {
-    cached.watcher = fs.watch(directory, { persistent: false }, (_event, filename) => {
+    const watchDirectory = watchPathFor(directory);
+    cached.watcher = fs.watch(watchDirectory, { persistent: false }, (_event, filename) => {
       const name = String(filename || '');
       if (!name || name.endsWith('.tmp') || name.endsWith('.old')) return;
       cached.dirty = true;
