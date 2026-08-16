@@ -78,8 +78,7 @@ const fast = selectExecutionMode({
   clientCapabilities: tasksCapability,
   taskEligibility: TASK_ELIGIBILITY.FAST,
   canCompleteSynchronously: true,
-  estimatedDurationMs: 25,
-  estimatedOutputBytes: 128
+  estimatedDurationMs: 25
 });
 assert.equal(fast.ok, true);
 assert.equal(fast.mode, TASK_EXECUTION_MODE.BOUNDED_SYNCHRONOUS);
@@ -103,8 +102,7 @@ const unsupportedButSafe = selectExecutionMode({
   clientCapabilities: {},
   taskEligibility: TASK_ELIGIBILITY.ELIGIBLE,
   canCompleteSynchronously: true,
-  estimatedDurationMs: DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS.maxDurationMs,
-  estimatedOutputBytes: DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS.maxCapturedOutputBytes
+  estimatedDurationMs: DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS.maxDurationMs
 });
 assert.equal(unsupportedButSafe.ok, true);
 assert.equal(unsupportedButSafe.mode, TASK_EXECUTION_MODE.BOUNDED_SYNCHRONOUS);
@@ -113,8 +111,7 @@ const malformedButOtherwiseSafe = selectExecutionMode({
   clientCapabilities: { extensions: [] },
   taskEligibility: TASK_ELIGIBILITY.ELIGIBLE,
   canCompleteSynchronously: true,
-  estimatedDurationMs: 1,
-  estimatedOutputBytes: 1
+  estimatedDurationMs: 1
 });
 assert.equal(malformedButOtherwiseSafe.ok, false);
 assert.equal(malformedButOtherwiseSafe.mode, UNSUPPORTED_EXECUTION_MODE);
@@ -136,16 +133,12 @@ const overLimit = selectExecutionMode({
   clientCapabilities: {},
   taskEligibility: TASK_ELIGIBILITY.INELIGIBLE,
   canCompleteSynchronously: true,
-  estimatedDurationMs: DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS.maxDurationMs + 1,
-  estimatedOutputBytes: DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS.maxCapturedOutputBytes + 1
+  estimatedDurationMs: DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS.maxDurationMs + 1
 });
 assert.equal(overLimit.ok, false);
 assert.equal(overLimit.mode, UNSUPPORTED_EXECUTION_MODE);
 assert.equal(overLimit.error.code, SYNCHRONOUS_EXECUTION_LIMIT_CODE);
-assert.deepEqual(overLimit.synchronous.violations, [
-  'maximum_duration_exceeded',
-  'maximum_captured_output_exceeded'
-]);
+assert.deepEqual(overLimit.synchronous.violations, ['maximum_duration_exceeded']);
 assert.deepEqual(overLimit.error.data.cleanup, BOUNDED_SYNCHRONOUS_CLEANUP);
 
 assert.deepEqual(assessSynchronousExecution({
@@ -187,7 +180,7 @@ assert.throws(
   () => selectExecutionMode({
     taskEligibility: TASK_ELIGIBILITY.FAST,
     canCompleteSynchronously: true,
-    synchronousBounds: { maxDurationMs: 0, maxCapturedOutputBytes: 1 }
+    synchronousBounds: { maxDurationMs: 0 }
   }),
   /maxDurationMs must be a positive finite number/
 );
