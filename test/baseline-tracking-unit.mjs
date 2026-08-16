@@ -10,6 +10,8 @@ function git(args, options = {}) {
 }
 
 import { writeSessionPolicy, resolvePolicy, captureBaselineDirty, POLICY_CACHE_RECHECK_MS } from "../src/policyResolver.js";
+import { recordTaskIntegrityEvent } from "../src/taskIntegrity.js";
+import { buildWorkspaceStates } from "../src/workspaceState.js";
 
 const policyResolverSource = fs.readFileSync(new URL('../src/policyResolver.js', import.meta.url), 'utf8');
 assert.doesNotMatch(policyResolverSource, /spawnSync/, 'session baseline capture must never block the MCP event loop');
@@ -128,6 +130,44 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   // Destination path is what shows in current worktree, so classify on destination
   assert.deepEqual(sessionChanged, ['lib/new/schedule_validator.dart']);
   assert.deepEqual(baselineChanged, []);
+  fs.rmSync(stateDir, { recursive: true, force: true });
+}
+
+// 8. A task touching a file that was already dirty is counted as task-touched
+// without changing baseline ownership. This keeps tidy/restore safety intact while
+// giving the workspace UI an accurate current-task edit count.
+{
+  const repo = makeRepo();
+  fs.writeFileSync(path.join(repo, 'tracked.txt'), 'user dirty before task\n');
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
+  const config = { stateDir, workspaces: { myapp: { path: repo } } };
+  const taskId = 'task-touches-baseline';
+  await writeSessionPolicy(config, 'myapp', { taskId, workspaceRoot: repo });
+  await recordTaskIntegrityEvent(config, {
+    ts: new Date().toISOString(), taskId, workspace: 'myapp', taskIdentityVersion: 2, tool: 'work.begin', ok: true
+  });
+  fs.writeFileSync(path.join(repo, 'tracked.txt'), 'user dirty plus task edit\n');
+  await recordTaskIntegrityEvent(config, {
+    ts: new Date().toISOString(), taskId, workspace: 'myapp', taskIdentityVersion: 2, tool: 'edit', ok: true, changedFiles: ['tracked.txt']
+  });
+  const status = git(['status', '--short', '--branch', '-z', '--untracked-files=all'], { cwd: repo, encoding: 'utf8' }).stdout;
+  await writeSessionPolicy(config, 'myapp', { taskId: 'other-active-task', workspaceRoot: repo });
+  const ambiguousOwnership = classifyStatusOwnership({ alias: 'myapp', path: repo }, config, status);
+  assert.deepEqual(ambiguousOwnership.sessionTouched, [], 'multiple active sessions must not guess which task touched a file');
+  const ownership = classifyStatusOwnership({ alias: 'myapp', path: repo }, config, status, taskId);
+  assert.deepEqual(ownership.baselineChanged, ['tracked.txt'], 'pre-existing dirty content must remain baseline-owned for safety');
+  assert.deepEqual(ownership.sessionChanged, [], 'baseline ownership must not be reclassified as disposable session work');
+  assert.deepEqual(ownership.sessionTouched, ['tracked.txt'], 'an explicit active task must count its mutation even with concurrent sessions');
+
+  const activity = { tasks: [{ id: taskId, workspace: 'myapp', state: 'working', status: 'planning' }] };
+  let workspaceState = buildWorkspaceStates(config, [], activity).myapp;
+  const deadline = Date.now() + 3000;
+  while (workspaceState.sessionChangedFileCount !== 1 && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+    workspaceState = buildWorkspaceStates(config, [], activity).myapp;
+  }
+  assert.equal(workspaceState.sessionChangedFileCount, 1, 'workspace UI state must count the active task mutation even when the file began dirty');
+  fs.rmSync(repo, { recursive: true, force: true });
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 

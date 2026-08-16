@@ -29,7 +29,7 @@ function workspaceState(alias, workspace, config, tasks, activity) {
   const activeTasks = resolveActiveTasks(activity);
   const currentTask = activeTasks.find(task => task.workspace === alias) || null;
   return {
-    ...workspaceGitState(alias, workspace, config),
+    ...workspaceGitState(alias, workspace, config, currentTask?.id || currentTask?.taskId || ''),
     currentActivity: currentTask ? {
       state: currentTask.state,
       tool: currentTask.lastTool || currentTask.tool,
@@ -42,9 +42,9 @@ function workspaceState(alias, workspace, config, tasks, activity) {
   };
 }
 
-function workspaceGitState(alias, workspace, config) {
+function workspaceGitState(alias, workspace, config, taskId = '') {
   const workspacePath = String(workspace?.path || '');
-  const cacheKey = workspaceStateCacheKey(alias, workspacePath);
+  const cacheKey = workspaceStateCacheKey(alias, workspacePath, taskId);
   let cached = gitStateCache.get(cacheKey);
   if (!cached) {
     cached = {
@@ -54,17 +54,17 @@ function workspaceGitState(alias, workspace, config) {
       value: baseWorkspaceGitState(workspacePath)
     };
     gitStateCache.set(cacheKey, cached);
-    if (cached.value.isGit) scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config);
+    if (cached.value.isGit) scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, taskId);
     return cached.value;
   }
   if (cached.value.isGit && Date.now() - cached.createdAt >= WORKSPACE_GIT_STATE_TTL_MS) {
-    scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config);
+    scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, taskId);
   }
   return cached.value;
 }
 
-function workspaceStateCacheKey(alias, workspacePath) {
-  return [alias, workspacePath].join('\u0000');
+function workspaceStateCacheKey(alias, workspacePath, taskId = '') {
+  return [alias, workspacePath, taskId].join('\u0000');
 }
 
 function baseWorkspaceGitState(workspacePath) {
@@ -85,17 +85,17 @@ function baseWorkspaceGitState(workspacePath) {
   };
 }
 
-function scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config) {
+function scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, taskId = '') {
   if (cached.refreshing) return cached.refreshPromise;
   cached.refreshing = true;
-  const run = () => refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config);
+  const run = () => refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config, taskId);
   const refreshPromise = refreshQueue.then(run, run);
   refreshQueue = refreshPromise.catch(() => {});
   cached.refreshPromise = refreshPromise;
   return refreshPromise;
 }
 
-async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config) {
+async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config, taskId = '') {
   const workspacePath = String(workspace?.path || '');
   try {
     const base = baseWorkspaceGitState(workspacePath);
@@ -109,13 +109,13 @@ async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, conf
     ]);
     const next = { ...base };
     if (status.exitCode === 0 && !status.stdoutTruncated) {
-      const ownership = classifyStatusOwnership({ alias, path: workspacePath }, config, status.stdout || '');
+      const ownership = classifyStatusOwnership({ alias, path: workspacePath }, config, status.stdout || '', taskId);
       next.branch = ownership.branch;
       next.unborn = ownership.unborn;
       next.ahead = ownership.aheadBehind?.ahead || 0;
       next.behind = ownership.aheadBehind?.behind || 0;
       next.changedFileCount = ownership.entries.length;
-      next.sessionChangedFileCount = ownership.sessionChanged.length;
+      next.sessionChangedFileCount = ownership.sessionTouched.length;
       next.dirty = ownership.entries.length > 0;
     }
     if (remotes.exitCode === 0 && !remotes.stdoutTruncated) {

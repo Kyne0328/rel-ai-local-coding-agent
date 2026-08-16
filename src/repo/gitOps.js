@@ -1,4 +1,5 @@
 import { readSessionPolicy } from "../policyResolver.js";
+import { taskOwnedChangedFiles } from "../taskIntegrity.js";
 import { runProcess, summarizeCommand } from "../process.js";
 import { resolveSafePath, isSecretPath } from "../safety.js";
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus, formatGitStatus } from "./gitStatus.js";
@@ -29,22 +30,32 @@ function assertPatchUpdateSafe(workspace, _config, _args, patch) {
 
 // ---- Git status classification -----------------------------------------------
 
-function readBaselineOwnership(workspace, config) {
+function readBaselineOwnership(workspace, config, taskId = '') {
   try {
 
-    const session = readSessionPolicy(config, workspace.alias);
+    const session = readSessionPolicy(config, workspace.alias, taskId);
     // Presence of a (non-expired) session file — not presence of a baselineDirty
     // key — is what marks ownership as knowable. A session that started against a
     // clean worktree has no baselineDirty entry, but it is still a real session:
     // everything dirty now is genuinely session-owned.
-    if (!session || session.baselineCaptured !== true) return { baselineDirty: [], baselineSource: null };
+    if (!session || session.baselineCaptured !== true) return { baselineDirty: [], baselineSource: null, taskId: '' };
     return {
       baselineDirty: Array.isArray(session.baselineDirty) ? session.baselineDirty : [],
-      baselineSource: "session"
+      baselineSource: "session",
+      taskId: String(session.taskId || '').trim()
     };
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy read:', error);
-    return { baselineDirty: [], baselineSource: null };
+    return { baselineDirty: [], baselineSource: null, taskId: '' };
+  }
+}
+
+function safeTaskOwnedChangedFiles(config, taskId, workspaceAlias) {
+  try {
+    return taskOwnedChangedFiles(config, taskId, workspaceAlias);
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task ownership read:', error);
+    return [];
   }
 }
 
@@ -73,8 +84,8 @@ function recordStatusEntry(groups, entry) {
   if (entry.untracked) groups[untrackedKey].push(entry.path);
 }
 
-function classifyStatusOwnership(workspace, config, statusOutput) {
-  const { baselineDirty, baselineSource } = readBaselineOwnership(workspace, config);
+function classifyStatusOwnership(workspace, config, statusOutput, requestedTaskId = '') {
+  const { baselineDirty, baselineSource, taskId } = readBaselineOwnership(workspace, config, requestedTaskId);
   const hasSession = baselineSource !== null;
   const baselineSet = new Set(baselineDirty);
   const groups = statusGroups();
@@ -87,6 +98,12 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
     });
   }
 
+  const dirtySet = new Set(groups.entries.map(entry => entry.path));
+  const taskTouched = hasSession && taskId
+    ? safeTaskOwnedChangedFiles(config, taskId, workspace.alias).filter(file => dirtySet.has(file))
+    : [];
+  const sessionTouched = [...new Set([...groups.sessionChanged, ...taskTouched])];
+
   return {
     branchRaw: parsed.branchRaw,
     branch: parsed.branch,
@@ -94,6 +111,7 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
     unborn: parsed.unborn,
     hasSession,
     baselineSource,
+    sessionTouched,
     ...groups
   };
 }
