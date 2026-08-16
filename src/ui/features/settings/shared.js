@@ -1,5 +1,4 @@
 import { Toggle } from '../../components/toggle.js';
-import { Select } from '../../components/select.js';
 import { esc } from '../../utils.js';
 
 let fieldId = 0;
@@ -48,10 +47,6 @@ function labelableControl(control) {
   if (!control) return null;
   if (control.matches?.('input, select, textarea')) return control;
   return control.querySelector?.('input, select, textarea') || null;
-}
-
-export function selectControl(options, value, onChange) {
-  return Select({ options, value, onChange });
 }
 
 export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled = 'Disabled' } = {}) {

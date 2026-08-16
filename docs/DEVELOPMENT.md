@@ -180,8 +180,8 @@ The scanner intentionally excludes this development guide and other internal eng
 
 - `docs/ARCHITECTURE.md`
 - `docs/DESKTOP_UX_ARCHITECTURE.md`
-- `docs/MCP_COMPATIBILITY.md`
+- `docs/MCP_PROTOCOL_POLICY.md`
 - `docs/PACKAGE_MANAGEMENT.md`
-- `docs/RELEASE_PROCESS.md`
-- `docs/SECURITY_MODEL.md`
+- `RELEASE.md`
+- `docs/SECURITY.md`
 - `CONTRIBUTING.md`

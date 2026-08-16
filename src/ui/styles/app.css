@@ -364,8 +364,6 @@
   input:focus, select:focus, textarea:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-selection-background); }
   input::placeholder, textarea::placeholder { color: var(--ui-text-tertiary); }
   textarea { @apply min-h-24 resize-y py-2.5; }
-  .select-control { @apply relative flex w-full min-w-0; }
-  .select-control select { @apply min-w-0; }
   label { @apply text-[12px] font-semibold; }
   .field, .field-stack { @apply flex min-w-0 flex-col gap-1.5; }
   .field-row, .ws-form-row { @apply grid gap-3; grid-template-columns: repeat(2, minmax(0,1fr)); }

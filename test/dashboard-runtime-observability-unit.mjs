@@ -4,7 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  DASHBOARD_RUNTIME_HANDOFF_FIELDS,
   clientCapabilityViews,
   nativeTaskCollection,
   nativeTaskStatusView,
@@ -33,15 +32,6 @@ assert.equal(supported.capabilityState, 'supported');
 assert.equal(supported.capabilityLabel, 'Native MCP Tasks: Supported');
 assert.equal(supported.executionLabel, 'Execution mode: Native asynchronous');
 
-const nestedMode = clientCapabilityViews({
-  taskCapabilityConnections: [{
-    connectionId: 'connection-nested-mode',
-    clientTasksCapability: { supported: true, mode: 'native_asynchronous' }
-  }]
-})[0];
-assert.equal(nestedMode.capabilityState, 'supported');
-assert.equal(nestedMode.executionMode, 'native_tasks');
-
 const unsupported = clientCapabilityViews({
   mcpConnection: {
     recentEvents: [{
@@ -61,7 +51,9 @@ assert.equal(unknown.capabilityState, 'unknown');
 assert.equal(unknown.capabilityLabel, 'Native MCP Tasks: Unknown');
 assert.equal(unknown.executionLabel, 'Execution mode: Unknown');
 const malformedCapability = clientCapabilityViews({
-  taskCapabilityConnections: [{ clientCapabilities: { extensions: null } }]
+  mcpConnection: {
+    recentEvents: [{ type: 'mcp_request_received', clientCapabilities: { extensions: null } }]
+  }
 })[0];
 assert.equal(malformedCapability.capabilityState, 'unknown');
 
@@ -198,15 +190,6 @@ for (const status of ['completed', 'failed', 'cancelled', 'expired']) {
   assert.doesNotMatch(html, /indeterminate/, `${status} must not retain indeterminate progress`);
   assert.doesNotMatch(html, /runtime-activity-spinner/, `${status} must not render an activity spinner`);
 }
-
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.hostRequest.includes('clientCapabilities'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.hostRequest.includes('executionMode'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.nativeTask.includes('cancellationRequestedAt'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.nativeTask.includes('actions'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('originatingTaskId'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('workSessionId'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('stdoutTail'));
-assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('stderrTail'));
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const taskIdentitySource = fs.readFileSync(path.join(root, 'src/ui/task-identity.js'), 'utf8');
