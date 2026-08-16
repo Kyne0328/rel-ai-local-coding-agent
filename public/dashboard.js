@@ -34,12 +34,15 @@ let _dashboardClock = null;
 let _shellStatus = { label: 'Connecting', tone: 'warn' };
 let _liveState = 'connecting';
 let _refreshPromise = null;
+let _refreshLiveEvents = null;
+let _refreshLiveEventOverflow = false;
 let _renderRevisionKey = '';
 let _renderFrame = 0;
 let _renderWaiters = [];
 let _deferredViewRender = false;
 let _recoveryNoticeTimer = null;
 const AUTO_RECOVERY_DELAYS_MS = [0, 600, 1600];
+const MAX_REFRESH_LIVE_EVENTS = 500;
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -216,11 +219,17 @@ function applyDesktopStatus(status) {
 
 async function doRefresh(options = {}) {
   if (_refreshPromise) return _refreshPromise;
+  _refreshLiveEvents = [];
+  _refreshLiveEventOverflow = false;
   _refreshPromise = performRefresh(options);
   try {
     return await _refreshPromise;
   } finally {
+    const needsCatchUp = _refreshLiveEventOverflow;
     _refreshPromise = null;
+    _refreshLiveEvents = null;
+    _refreshLiveEventOverflow = false;
+    if (needsCatchUp) queueMicrotask(() => { void doRefresh({ source: 'live-refresh-overflow', quietFailure: true }); });
   }
 }
 
@@ -231,13 +240,17 @@ async function performRefresh(options = {}) {
     if (data && data.ok !== false) {
       const hydrated = withConnectionState(data, _liveState);
       initStore(hydrated);
-      updateShell(hydrated);
+      replayLiveEventsDuringRefresh();
+      const projected = withConnectionState(getStore(), _liveState);
+      patchLocalConnection({ connectionState: projected.connectionState });
+      const refreshed = getStore();
+      updateShell(refreshed);
       if (!_routerReady) activateRouter(ensureRouteRoot());
-      else if (options.render === true) await renderViewIfChanged(hydrated);
-      else if (options.render !== false) await syncLiveView(hydrated);
+      else if (options.render === true) await renderViewIfChanged(refreshed);
+      else if (options.render !== false) await syncLiveView(refreshed);
       _lastEventAt = Date.now();
       clearRecoveryNotice({ announce: true });
-      return hydrated;
+      return refreshed;
     }
     return options.quietFailure === true ? data : renderRefreshFailure(data);
   } catch (error) {
@@ -408,8 +421,26 @@ function wait(milliseconds) {
   return new Promise(resolve => window.setTimeout(resolve, milliseconds));
 }
 
+function bufferLiveEventDuringRefresh(event) {
+  if (!_refreshLiveEvents) return false;
+  if (_refreshLiveEvents.length >= MAX_REFRESH_LIVE_EVENTS) {
+    _refreshLiveEvents.shift();
+    _refreshLiveEventOverflow = true;
+  }
+  _refreshLiveEvents.push(event);
+  return true;
+}
+
+function replayLiveEventsDuringRefresh() {
+  for (const event of _refreshLiveEvents || []) {
+    if (!event?.type || !event.data || event.data.ok === false) continue;
+    applyLiveEvent(event.type, event.data);
+  }
+}
+
 async function liveOnEvent(event) {
   if (!event?.type || !event.data || event.data.ok === false) return;
+  bufferLiveEventDuringRefresh(event);
   window.dispatchEvent(new CustomEvent('relai:diagnostics-live', { detail: event }));
   const applied = applyLiveEvent(event.type, event.data);
   if (!applied.accepted) return;

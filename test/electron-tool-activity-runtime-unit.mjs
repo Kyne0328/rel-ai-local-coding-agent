@@ -73,6 +73,15 @@ const failedEvent = {
 listener(failedEvent);
 listener(failedEvent);
 assert.equal(notifications.filter(item => item.category === 'errors').length, 1, 'duplicate failed-operation delivery must not repeat the native error notification');
+const projectedFailedEvent = {
+  ...failedEvent,
+  revision: 4,
+  operationId: 'operation-projected-failed',
+  activityEvent: undefined
+};
+listener(projectedFailedEvent);
+listener(projectedFailedEvent);
+assert.equal(notifications.filter(item => item.category === 'errors').length, 2, 'duplicate projected IPC failures must dedupe by operation ID');
 assert.equal(snapshotReads, 1, 'terminal activity must remain event-driven');
 assert.equal(runtime.getStatus().activeTaskCount, 0);
 assert.equal(runtime.getStatus().tasks.length, 0);

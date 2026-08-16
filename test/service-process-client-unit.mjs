@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
 import { createServiceProcessClient } from '../electron/service-process-client.js';
+
+const serviceProcessSource = fs.readFileSync(new URL('../electron/service-process.js', import.meta.url), 'utf8');
+assert.match(
+  serviceProcessSource,
+  /operationId:\s*String\(event\.operationId \|\| event\.activityEvent\?\.operationId \|\| event\.activityEvent\?\.eventId \|\| ''\)/,
+  'service-process activity projection must preserve the operation correlation ID used by desktop notifications and diagnostics'
+);
 
 class FakeUtilityProcess extends EventEmitter {
   constructor() {
@@ -103,6 +111,15 @@ const subscriberFailures = logs.filter(entry => entry.options.code === 'activity
 assert.equal(subscriberFailures.length, 1, 'a failing subscriber must be diagnosable without log spam');
 assert.equal(subscriberFailures[0].options.taskId, 'task-1', 'subscriber failures should retain task correlation when the event identifies one task');
 unsubscribeBrokenActivityListener();
+
+const unsubscribeCorrelatedFailureListener = client.activitySource.onToolActivity(() => { throw new Error('correlated listener boom'); });
+child.emit('message', {
+  type: 'activity',
+  event: { phase: 'finished', taskId: 'task-1', operationId: 'operation-42', operation: 'Read project', workspace: 'repo', ok: false }
+});
+const correlatedFailure = logs.filter(entry => entry.options.code === 'activity_listener_failed').at(-1);
+assert.equal(correlatedFailure.options.eventId, 'operation-42', 'subscriber diagnostics must retain the projected operation ID');
+unsubscribeCorrelatedFailureListener();
 
 client.updateContext({
   runtimeLogs: { available: true, revision: 1, count: 1, entries: [{ message: 'first' }] }
