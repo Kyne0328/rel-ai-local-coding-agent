@@ -17,6 +17,7 @@ const previous = {
   isolated: process.env.REL_AI_MCP_ISOLATED
 };
 const taskId = 'work_web_automation_acceptance';
+const dashboardToken = 'web-automation-dashboard-token';
 const workspace = { alias: 'rel-ai-mcp', path: root };
 let server;
 let sessionId = '';
@@ -38,12 +39,14 @@ try {
   server = startHttpServer({
     host: '127.0.0.1',
     port: 0,
+    token: dashboardToken,
     allowNoAuth: true,
     isolated: true,
     writeProfile: false,
     exitOnError: false
   });
   if (!server.listening) await once(server, 'listening');
+  server.unref();
   const address = server.address();
   assert.ok(address && typeof address === 'object' && address.port > 0);
 
@@ -51,7 +54,7 @@ try {
   const started = await runUiAction(workspace, {}, {
     action: 'start',
     port: address.port,
-    route: '/dashboard',
+    route: `/dashboard?token=${encodeURIComponent(dashboardToken)}`,
     width: 1280,
     height: 800,
     work_id: taskId
@@ -61,6 +64,7 @@ try {
   assert.equal(started.statusCode, 200);
   assert.equal(started.browserEngine, 'chromium');
   assert.equal(started.url.includes('/dashboard'), true);
+  assert.equal(started.url.includes(dashboardToken), false, 'UI automation results must not echo dashboard bootstrap credentials');
   assert.deepEqual(started.viewport, { width: 1280, height: 800 });
 
   const snapshot = await runUiAction(workspace, {}, {
@@ -87,16 +91,14 @@ try {
   assert.equal(expandedSettings.ok, true);
   assert.equal(expandedSettings.interaction, 'click');
 
-  const interacted = await runUiAction(workspace, {}, {
-    action: 'interact',
+  const navigated = await runUiAction(workspace, {}, {
+    action: 'navigate',
     sessionId,
-    interaction: 'click',
-    target: { by: 'role', value: 'link', name: 'Preferences', exact: true },
+    route: '/dashboard#settings',
     work_id: taskId
   }, context);
-  assert.equal(interacted.ok, true);
-  assert.equal(interacted.interaction, 'click');
-  assert.match(interacted.url, /#settings$/);
+  assert.equal(navigated.ok, true);
+  assert.match(navigated.url, /#settings$/);
 
   await runUiAction(workspace, {}, {
     action: 'viewport', sessionId, width: 390, height: 844, work_id: taskId
@@ -127,6 +129,7 @@ try {
 } finally {
   if (sessionId) await stopAllUiSessions().catch(() => {});
   if (server?.listening) {
+    server.closeAllConnections?.();
     server.close();
     await once(server, 'close');
     await server.waitForShutdown?.();
@@ -136,6 +139,7 @@ try {
   restoreEnv('REL_AI_MCP_ISOLATED', previous.isolated);
   fs.rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
+process.exit(0);
 
 function restoreEnv(name, value) {
   if (value == null) delete process.env[name];

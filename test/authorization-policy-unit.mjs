@@ -8,6 +8,7 @@ import {
   requiredCapability
 } from '../src/mcp/authorizationPolicy.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
+import { approvalDigest } from '../src/mcp/approval.js';
 
 const grant = createConsentPolicy({
   capabilities: [CAPABILITIES.REPOSITORY_READ, CAPABILITIES.REPOSITORY_WRITE],
@@ -33,6 +34,21 @@ const stdioPrincipal = { clientId: 'stdio:1234567890abcdef', authMode: 'local_se
 assert.equal(isTrustedLocalPrincipal(stdioPrincipal), true);
 assert.equal(assertAuthorizedToolCall({ principal: stdioPrincipal, operationName: OP.EXEC, workspace: 'repo-b' }).kind, 'local_admin');
 assert.equal(isTrustedLocalPrincipal({ clientId: 'remote-client', authMode: 'local_session' }), false);
+
+const destructiveApproval = {
+  action: 'reset', workspace: 'repo-a', work_id: 'work-a', removeUntracked: true, confirmation: 'RESET_AND_CLEAN'
+};
+assert.notEqual(
+  approvalDigest('relai_changes', destructiveApproval),
+  approvalDigest('relai_changes', { ...destructiveApproval, work_id: 'work-b' }),
+  'approval state must not be reusable across logical tasks'
+);
+assert.equal(
+  approvalDigest('relai_changes', { ...destructiveApproval, _operationTaskId: 'transport-a' }),
+  approvalDigest('relai_changes', { ...destructiveApproval, _operationTaskId: 'transport-b' }),
+  'ephemeral transport task identifiers are not approval boundaries'
+);
+
 assert.throws(
   () => assertAuthorizedToolCall({ principal, operationName: 'relai_unknown_operation', workspace: 'repo-a' }),
   error => error.code === 'AUTHORIZATION_DENIED' && error.details?.reason === 'unclassified_operation'
