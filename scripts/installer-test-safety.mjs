@@ -72,6 +72,7 @@ export function productionAndSystemPaths(env = process.env) {
   const values = [env.ProgramFiles, env['ProgramFiles(x86)']].filter(Boolean);
   if (env.LOCALAPPDATA) {
     values.push(path.join(env.LOCALAPPDATA, 'Programs', 'Rel.AI MCP'));
+    values.push(path.join(env.LOCALAPPDATA, 'Programs', 'rel-ai-mcp'));
     values.push(path.join(env.LOCALAPPDATA, 'rel-ai-mcp-updater'));
   }
   if (env.APPDATA) values.push(path.join(env.APPDATA, 'Rel.AI MCP'));
@@ -79,7 +80,7 @@ export function productionAndSystemPaths(env = process.env) {
 }
 
 export function detectProductionInstallation(env = process.env) {
-  const candidates = productionAndSystemPaths(env).filter(candidate => /rel[.-]?ai mcp|rel-ai-mcp-updater/i.test(candidate));
+  const candidates = productionAndSystemPaths(env).filter(candidate => /rel[.-]?ai[ .-]?mcp|rel-ai-mcp-updater/i.test(candidate));
   return {
     installed: candidates.some(candidate => fs.existsSync(candidate)),
     existingPaths: candidates.filter(candidate => fs.existsSync(candidate)),

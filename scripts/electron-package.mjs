@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -48,6 +49,7 @@ runNode('dashboard CSS build', tailwindCli, [
 ]);
 ensureTunnelClient(platform, targetArch);
 runNode('OpenAI tunnel-client verification', verifyTunnelClient, [], { env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: platform, REL_AI_TARGET_ARCH: targetArch } });
+ensureZoekt(platform, targetArch);
 runNode('Zoekt seed verification', verifyZoekt, [], { env: platformEnvironment });
 
 if (mode === 'unpacked') {
@@ -491,6 +493,33 @@ function ensureTunnelClient(targetPlatform, architecture) {
   });
 }
 
+function ensureZoekt(targetPlatform, architecture) {
+  const manifestPath = path.join(root, 'vendor', 'zoekt', 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const platformManifest = manifest.platforms?.[targetPlatform];
+  const spec = platformManifest?.architectures?.[architecture] || platformManifest;
+  if (!spec?.search?.file || !spec?.index?.file) {
+    throw new Error(`Unsupported Zoekt platform/architecture: ${targetPlatform}/${architecture}`);
+  }
+
+  const valid = ['search', 'index'].every(key => {
+    const artifact = spec[key];
+    const file = path.join(root, 'vendor', 'zoekt', targetPlatform, artifact.file);
+    if (!fs.existsSync(file) || fs.statSync(file).size !== Number(artifact.size)) return false;
+    const sha256 = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    return sha256 === String(artifact.sha256).toLowerCase();
+  });
+  if (valid) return;
+
+  console.log(`[electron-package] Zoekt binaries are missing or stale for ${targetPlatform}/${architecture}; building the pinned ${manifest.upstream.commit} source.`);
+  const env = { ...platformEnvironment, ZOEKT_PLATFORMS: targetPlatform, REL_AI_TARGET_ARCH: architecture };
+  const command = process.platform === 'win32' ? 'pwsh' : 'bash';
+  const args = process.platform === 'win32'
+    ? ['-NoProfile', '-File', path.join(root, 'scripts', 'fetch-zoekt.ps1')]
+    : [path.join(root, 'scripts', 'fetch-zoekt.sh')];
+  runExecutable('Zoekt seed build', command, args, { env });
+}
+
 function packageBin(packageRoot, binName) {
   const manifestPath = path.join(packageRoot, 'package.json');
   let manifest;
@@ -517,7 +546,11 @@ function removeDirectory(directory) {
 }
 
 function runNode(label, script, args = [], options = {}) {
-  const result = spawnSync(process.execPath, [script, ...args], {
+  runExecutable(label, process.execPath, [script, ...args], options);
+}
+
+function runExecutable(label, executable, args = [], options = {}) {
+  const result = spawnSync(executable, args, {
     cwd: options.cwd || root,
     env: options.env || process.env,
     stdio: 'inherit',

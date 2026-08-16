@@ -124,12 +124,12 @@ function verifyPackageContracts() {
   assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
   assert.deepEqual(electronPackage.build.mac.target, ['dmg']);
   assert.equal(electronPackage.build.mac.identity, null);
-  assert.equal(electronPackage.build.dmg.artifactName, 'Rel.AI-MCP-${version}-mac-${arch}.${ext}');
+  assert.match(electronPackage.build.dmg.artifactName, /\$\{version\}[\s\S]*\$\{arch\}[\s\S]*\$\{ext\}/);
   assert.equal(electronPackage.build.nsis.deleteAppDataOnUninstall, false);
   assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
   assert.equal(electronPackage.build.linux.executableName, 'rel-ai-mcp');
-  assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
-  assert.equal(electronPackage.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
+  assert.match(electronPackage.build.appImage.artifactName, /\$\{version\}[\s\S]*\$\{ext\}/);
+  assert.match(electronPackage.build.deb.artifactName, /\$\{version\}[\s\S]*\$\{ext\}/);
   assert.deepEqual(
     electronPackage.build.win.extraResources.find(resource => resource.to === 'bin/tunnel-client')?.filter,
     ['manifest.json', 'win32/**']
@@ -142,6 +142,8 @@ function verifyPackageContracts() {
   const wrapper = fs.readFileSync(path.join(tmp, 'scripts', 'electron-package.mjs'), 'utf8');
   assert.doesNotMatch(wrapper, /npmCommand|npxCommand|npm\.cmd|npx\.cmd|shell:\s*true/i, 'packaging must remain shell-free');
   assert.doesNotMatch(wrapper, /quitAndInstall|Setup.*\.exe|uninstall/i, 'build orchestration must not execute installer lifecycle behavior');
+  assert.match(wrapper, /ensureTunnelClient\(platform, targetArch\)/, 'packaging must provision its pinned tunnel-client dependency');
+  assert.match(wrapper, /ensureZoekt\(platform, targetArch\)/, 'packaging must provision its pinned Zoekt dependency');
 }
 
 function verifyWorkflowContracts() {
@@ -149,14 +151,12 @@ function verifyWorkflowContracts() {
   const productionAuditIndex = workflow.indexOf('npm run audit:production');
   const packagingAuditIndex = workflow.indexOf('npm run audit:packaging');
   const windowsBuildIndex = workflow.indexOf('npm run electron:dist:windows');
-  const fetchWindowsSeedIndex = workflow.indexOf('TUNNEL_CLIENT_PLATFORMS: win32');
-  const testsIndex = workflow.indexOf('npm test');
 
   assert.ok(productionAuditIndex >= 0);
   assert.ok(packagingAuditIndex > productionAuditIndex);
   assert.ok(packagingAuditIndex < windowsBuildIndex);
   assert.doesNotMatch(workflow, /Install gateway test dependencies|gateway\/package\.json/i, 'public release workflow must not depend on the private gateway workspace');
-  assert.ok(fetchWindowsSeedIndex >= 0 && fetchWindowsSeedIndex < testsIndex && fetchWindowsSeedIndex < windowsBuildIndex);
+  assert.doesNotMatch(workflow, /scripts\/fetch-(?:tunnel-client|zoekt)/, 'platform workflows must let the shared packager provision pinned runtime binaries');
 
   for (const pattern of [
     /workflow_dispatch:/,
@@ -177,10 +177,7 @@ function verifyWorkflowContracts() {
     /arch: x64/,
     /arch: arm64/,
     /npm run electron:dist:mac/,
-    /TUNNEL_CLIENT_PLATFORMS: darwin/,
     /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/,
-    /TUNNEL_CLIENT_PLATFORMS: win32/,
-    /TUNNEL_CLIENT_PLATFORMS: linux/,
     /npm run verify:packaged -- --platform win32/,
     /npm run verify:packaged -- --platform linux/,
     /npm run verify:fuses -- --platform win32/,
@@ -189,11 +186,17 @@ function verifyWorkflowContracts() {
     /sudo chmod 4755 "\$sandbox_helper"/,
     /stat -c '%u:%g:%a'/,
     /xvfb-run --auto-servernum/,
-    /Rel\.AI-MCP-Setup-\$\{\{ needs\.preflight\.outputs\.version \}\}\.exe/,
-    /Rel\.AI-MCP-Portable-\$\{\{ needs\.preflight\.outputs\.version \}\}\.exe/,
-    /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-linux-x64\.AppImage/,
-    /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-linux-x64\.deb/,
-    /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-mac-\$\{\{ matrix\.arch \}\}\.dmg/,
+    /release-artifacts\.mjs --platform win32 --github-output paths/,
+    /release-artifacts\.mjs --platform linux --github-output paths/,
+    /release-artifacts\.mjs --platform darwin --arch '[^']+' --github-output paths/,
+    /release-artifacts\.mjs --artifact linuxDeb --github-output deb/,
+    /path: \$\{\{ steps\.release-artifacts\.outputs\.paths \}\}/,
+    /windows-install-upgrade:/,
+    /linux-install-upgrade:/,
+    /validate-installed-release\.mjs/,
+    /REL_AI_RELEASE_INSTALL_TEST:\s*'1'/,
+    /REL_AI_INSTALLER_TEST_ISOLATED:\s*'1'/,
+    /REL_AI_ALLOW_PRODUCTION_INSTALLER_TEST:\s*'1'/,
     /latest-linux\.yml/,
     /electron-size-report-linux\.json/,
     /actions\/download-artifact@/,
@@ -214,6 +217,8 @@ function verifyWorkflowContracts() {
   ]) assert.match(workflow, pattern);
 
   assert.doesNotMatch(workflow, /test:installed|REL_AI_SMOKE_INSTALLER|release-evidence-check|uninstall/i);
+  assert.match(workflow, /publish:[\s\S]*needs:[\s\S]*- windows-install-upgrade[\s\S]*- linux-install-upgrade/,
+    'publishing must wait for installed release lifecycle validation');
   assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node|upload-artifact|download-artifact|attest-build-provenance|attest-sbom)@v\d+/);
 
   const fuseWrapper = fs.readFileSync(path.join(tmp, 'scripts', 'verify-fuses.mjs'), 'utf8');

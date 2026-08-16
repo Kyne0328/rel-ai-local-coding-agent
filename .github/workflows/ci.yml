@@ -52,16 +52,6 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
-      - name: Fetch OpenAI tunnel-client
-        shell: pwsh
-        env:
-          TUNNEL_CLIENT_PLATFORMS: win32
-        run: node scripts/fetch-tunnel-client.mjs
-      - name: Build bundled Zoekt binaries
-        shell: pwsh
-        env:
-          ZOEKT_PLATFORMS: win32
-        run: pwsh scripts/fetch-zoekt.ps1
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Build unpacked Windows application
@@ -80,7 +70,7 @@ jobs:
         run: npm run verify:packaged -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify hardened Electron fuses
         shell: pwsh
-        run: npm run verify:fuses -- --platform win32 '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
+        run: npm run verify:fuses -- --platform win32
       - name: Verify packaged MCP connector flow
         shell: pwsh
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
@@ -105,14 +95,6 @@ jobs:
         working-directory: electron
       - name: Install Electron test binary
         run: node electron/node_modules/electron/install.js
-      - name: Fetch OpenAI tunnel-client
-        env:
-          TUNNEL_CLIENT_PLATFORMS: linux
-        run: node scripts/fetch-tunnel-client.mjs
-      - name: Build bundled Zoekt binaries
-        env:
-          ZOEKT_PLATFORMS: linux
-        run: bash scripts/fetch-zoekt.sh
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Build unpacked Linux application
@@ -128,7 +110,7 @@ jobs:
       - name: Verify packaged application layout
         run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify hardened Electron fuses
-        run: npm run verify:fuses -- --platform linux '${{ steps.unpacked.outputs.path }}/rel-ai-mcp'
+        run: npm run verify:fuses -- --platform linux
       - name: Verify packaged MCP connector flow
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
       - name: Smoke-test Linux desktop startup under Xvfb
