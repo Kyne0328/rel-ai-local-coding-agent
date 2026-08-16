@@ -81,8 +81,8 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     invalidateConfigCache();
     const migrated = ensureConfig();
     const persisted = JSON.parse(fs.readFileSync(tmpConfig, 'utf8'));
-    assert.equal(migrated.version, 6, 'older configuration must normalize to the hard-cutover schema');
-    assert.equal(persisted.version, 6, 'hard-cutover normalization must be persisted before desktop startup continues');
+    assert.equal(migrated.version, 7, 'older configuration must normalize to the hard-cutover schema');
+    assert.equal(persisted.version, 7, 'hard-cutover normalization must be persisted before desktop startup continues');
     assert.equal(Object.hasOwn(persisted, 'sourceVersion'), false, 'obsolete sourceVersion must not survive migration');
     assert.equal(Object.hasOwn(persisted, 'toolMode'), false, 'hard-cutover tool mode must not survive migration');
     assert.equal(Object.hasOwn(persisted, 'trustedLocalAgent'), false, 'hard-cutover trust flag must not survive migration');
@@ -110,8 +110,8 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     fs.writeFileSync(tmpConfig, '{ invalid json');
     invalidateConfigCache();
     const recovered = ensureConfig();
-    assert.equal(recovered.version, 6, 'invalid persisted configuration must recover to a valid current config');
-    assert.equal(JSON.parse(fs.readFileSync(tmpConfig, 'utf8')).version, 6);
+    assert.equal(recovered.version, 7, 'invalid persisted configuration must recover to a valid current config');
+    assert.equal(JSON.parse(fs.readFileSync(tmpConfig, 'utf8')).version, 7);
     assert.equal(
       fs.readdirSync(tmpDir).some(name => name.startsWith('config.json.invalid-')),
       true,
