@@ -9,7 +9,7 @@ import {
 } from '../src/workflow/contracts.js';
 
 assert.deepEqual(WORKFLOW_STAGES, ['understand', 'investigate', 'design', 'implement', 'verify', 'review', 'repair', 'complete', 'blocked']);
-assert.deepEqual(WORKFLOW_INTENTS, ['auto', 'investigation', 'bugfix', 'feature', 'refactor', 'migration', 'documentation', 'review', 'release']);
+assert.deepEqual(WORKFLOW_INTENTS, ['auto', 'investigation', 'bugfix', 'feature', 'refactor', 'migration', 'cleanup', 'documentation', 'performance', 'review', 'release', 'other']);
 assert.deepEqual(RISK_LEVELS, ['low', 'medium', 'high', 'critical']);
 assert.deepEqual(BOUNDARY_LEVELS, ['file', 'package', 'cross_package', 'repository', 'release']);
 

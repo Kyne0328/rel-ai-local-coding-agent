@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 
+import { WORKFLOW_INTENTS } from '../src/workflow/contracts.js';
 import { classifyTaskIntent, normalizeTaskIntent } from '../src/workflow/intent.js';
 
 const scenarios = [
@@ -17,6 +18,7 @@ const scenarios = [
 ];
 
 for (const [objective, expected] of scenarios) {
+  assert.ok(WORKFLOW_INTENTS.includes(expected), `${expected} must be a canonical workflow intent`);
   assert.equal(classifyTaskIntent(objective), expected, objective);
 }
 assert.equal(classifyTaskIntent(''), 'auto');

@@ -13,7 +13,7 @@ import { runProcess } from "./process.js";
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } from "./repo/gitStatus.js";
 import { clampNumber } from "./bridge/limits.js";
 import { relaiVerify } from "./bridge/validation.js";
-import { relaiHttpProbe } from "./bridge/browser.js";
+import { relaiHttpProbe } from "./bridge/httpProbe.js";
 import { relaiDiff } from "./bridge/review.js";
 import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
 import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
