@@ -1,9 +1,8 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { importResourceModule } from './resource-path.js';
 import { compareVersions, isStableVersion } from './update-version.js';
 
-const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durableState.js');
+const { readJsonFile, readJsonFileAsync, writeJsonAtomicAsync } = await importResourceModule('src/durableState.js');
 
 const DEFAULT_SUPPORT_POLICY_URL = 'https://raw.githubusercontent.com/Kyne0328/rel-ai-mcp/main/.github/relai/support-policy.json';
 const SUPPORT_POLICY_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -98,7 +97,14 @@ function createUpdateSupportPolicy(options = {}) {
   let status = withSource(assessmentFromCache(), 'cache');
 
   function assessmentFromCache() {
-    const cached = readJsonFile(cachePath, { backup: true, fallback: {} });
+    return assessCachedPolicy(readJsonFile(cachePath, { backup: true, fallback: {} }));
+  }
+
+  async function assessmentFromCacheAsync() {
+    return assessCachedPolicy(await readJsonFileAsync(cachePath, { backup: true, fallback: {} }));
+  }
+
+  function assessCachedPolicy(cached) {
     const policy = normalizeSupportPolicy(cached?.policy);
     if (!policy) return unavailableStatus(app.getVersion());
     const assessment = assessSupportPolicy(app.getVersion(), policy, now);
@@ -134,10 +140,10 @@ function createUpdateSupportPolicy(options = {}) {
       const assessment = assessSupportPolicy(app.getVersion(), policy, now);
       if (assessment.state === 'unavailable') throw new Error('Support policy is expired or cannot be evaluated.');
       const fetchedAt = isoNow(now);
-      writeCache(cachePath, policy, fetchedAt);
+      await writeCache(cachePath, policy, fetchedAt);
       next = { ...assessment, source: 'remote', checkedAt: fetchedAt, policyFetchedAt: fetchedAt, policyUrl };
     } catch (error) {
-      const cached = assessmentFromCache();
+      const cached = await assessmentFromCacheAsync();
       next = cached.state === 'unavailable'
         ? { ...cached, source: 'none', checkedAt: isoNow(now), policyUrl }
         : { ...cached, source: 'cache', checkedAt: isoNow(now), policyUrl };
@@ -218,8 +224,7 @@ function withSource(assessment, source) {
 }
 
 function writeCache(cachePath, policy, fetchedAt) {
-  fs.mkdirSync(path.dirname(cachePath), { recursive: true, mode: 0o700 });
-  writeJsonAtomic(cachePath, { schemaVersion: CACHE_SCHEMA_VERSION, fetchedAt, policy }, { mode: 0o600, backup: true });
+  return writeJsonAtomicAsync(cachePath, { schemaVersion: CACHE_SCHEMA_VERSION, fetchedAt, policy }, { mode: 0o600, backup: true });
 }
 
 function normalizeBlockedVersions(value) {
