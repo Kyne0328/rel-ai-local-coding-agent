@@ -24,11 +24,11 @@ Compatibility is protected by the HTTP/ChatGPT smoke tests, while stdio tests ve
 - Host/Origin validation for the private local HTTP service.
 - One principal-bound Rel.AI `work_id` per independent repository objective.
 - Native MCP Tasks advertisement/routing through `io.modelcontextprotocol/tasks` on the modern protocol route only.
-- Direct completion for clearly bounded operations, native tasks for long/indeterminate eligible work, and bounded synchronous fallback when Tasks are not advertised.
+- Direct completion for clearly bounded operations, native tasks for long/indeterminate eligible work when Tasks are advertised, and work-session continuation under the same `work_id` when a non-Tasks client outlives the direct response window.
 
 ### Native Tasks capability policy
 
-Rel.AI keeps one current tool surface regardless of whether a connected MCP client advertises the Tasks extension. Clients that do not advertise `io.modelcontextprotocol/tasks` receive ordinary synchronous results for the same current tools; there are no legacy tool aliases, compatibility operation names, or client-name heuristics.
+Rel.AI keeps one current tool surface regardless of whether a connected MCP client advertises the Tasks extension. Clients that do not advertise `io.modelcontextprotocol/tasks` receive direct results when the operation fits the safe response window; longer eligible operations continue under the same repository `work_id` and are retrieved through work-session status. There are no legacy tool aliases, compatibility operation names, or client-name heuristics.
 
 Native Tasks activate only when the request explicitly advertises the supported Tasks capability. The eligibility metadata describes which current operations may use that execution mode. Protocol-version negotiation remains transport interoperability, not a second or legacy tool API.
 

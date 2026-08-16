@@ -85,6 +85,7 @@
       "service-runtime.js",
       "service-process.js",
       "service-process-client.js",
+      "service-activity-projection.js",
       "setup-window.js",
       "renderer/**",
       "build/icon.png",

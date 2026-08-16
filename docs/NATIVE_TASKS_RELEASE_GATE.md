@@ -13,16 +13,16 @@ Principal-bound repository work session
         |
         v
 Execution-mode policy
-   +----------------------+-------------------------+
-   |                                                |
-   v                                                v
-Native MCP Task                               Bounded direct execution
-(one asynchronous MCP request)               (one bounded request)
-   |                                                |
-   +---------------- same domain operation ---------+
-                            |
-                            v
-                 Optional managed OS process
+   +----------------------+-------------------------+---------------------------+
+   |                                                |                           |
+   v                                                v                           v
+Native MCP Task                               Bounded direct execution     Work-session continuation
+(one asynchronous MCP request)               (one bounded request)       (same work_id, status polling)
+   |                                                |                           |
+   +--------------------------- same domain operation ---------------------------+
+                                            |
+                                            v
+                                 Optional managed OS process
 ```
 
 A **repository work session** is the opaque `work_id` created by `relai_work` with `action:"begin"`; it groups one repository objective across multiple tool calls and is bound to the authenticated principal and configured workspace. A **native MCP Task** is a protocol object for one asynchronous MCP operation. A **managed process** is one operating-system process with its own `processId`, logs, ownership, and stop lifecycle.
@@ -35,8 +35,8 @@ Execution mode is selected from the current request's `io.modelcontextprotocol/t
 | --- | --- | --- | --- |
 | HTTP or stdio | Advertised | Clearly bounded and short | Direct result |
 | HTTP or stdio | Advertised | Long, multi-step, or indeterminate | Native MCP task |
-| HTTP or stdio | Not advertised | Within synchronous limits | Bounded synchronous result |
-| HTTP or stdio | Not advertised | Exceeds duration or output limit | Bounded execution error |
+| HTTP or stdio | Not advertised | Within synchronous limits | Bounded direct result |
+| HTTP or stdio | Not advertised | Outside the safe direct-response window | Running work-session result; continue under the same `work_id` |
 
 Rel.AI advertises server support on both HTTP and stdio. It returns a native task handle only when the current request advertises the capability and the operation is not safely bounded for direct execution. Malformed capability objects are rejected as invalid parameters and are never treated as capability absence.
 
@@ -66,9 +66,9 @@ Stdio uses a connection-scoped local principal. A server restart terminalizes ac
 ## Operator diagnostics
 
 - **Native MCP Tasks: Supported** means the observed request advertised the capability.
-- **Native MCP Tasks: Not advertised by client** means bounded synchronous fallback is expected.
+- **Native MCP Tasks: Not advertised by client** means short operations complete directly while longer eligible operations may continue under the repository `work_id`.
 - **Native MCP Tasks: Unknown** means no usable capability evidence has been observed.
-- **Execution mode: Native asynchronous** and **Execution mode: Bounded direct** show the selected mode.
+- Diagnostics describe capability-dependent behavior, not a single selected mode: supported clients may receive Native MCP Tasks for eligible long work, while non-Tasks clients use work-session continuation when the direct response window is exceeded.
 - A native `taskId`, repository `work_id`, and process `processId` identify different entities.
 - Error `-32021` means a Tasks method was called without the required client capability.
 - Error `-32602` with `invalid_client_capabilities` means capability metadata is malformed.
