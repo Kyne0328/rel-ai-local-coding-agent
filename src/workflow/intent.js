@@ -43,4 +43,4 @@ function classifyTaskIntent(objective) {
   return ranked[0]?.intent || 'other';
 }
 
-export { TASK_INTENTS, classifyTaskIntent, normalizeTaskIntent };
+export { classifyTaskIntent, normalizeTaskIntent };

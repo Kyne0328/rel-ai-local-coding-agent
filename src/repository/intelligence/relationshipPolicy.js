@@ -71,6 +71,5 @@ function hasStrongComplementaryRelationshipEvidence(localHints = [], remoteHints
 }
 
 export {
-  COMPLEMENT, GENERIC_PLATFORM_EVENT_NAMES, canonicalHttpKey, hasStrongComplementaryRelationshipEvidence,
-  isSpecificHttpRelationshipKey, relationshipKey
+  COMPLEMENT, GENERIC_PLATFORM_EVENT_NAMES, hasStrongComplementaryRelationshipEvidence, relationshipKey
 };
