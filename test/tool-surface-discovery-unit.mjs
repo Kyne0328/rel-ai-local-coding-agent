@@ -66,6 +66,12 @@ for (const variant of variants) {
     assert.equal(malformed.result?.isError, true, 'runtime validation must surface malformed cross-action input as a tool error');
     assert.equal(malformed.result?.structuredContent?.ok, false);
     assert.match(malformed.result?.structuredContent?.error || '', /Unsupported field 'query'/);
+
+    client.call(7, 'relai_search', { action: 'text', work_id: work.work_id, pattern: 'surface', maxFiles: 201 });
+    const boundedFailure = await client.waitFor(7);
+    assert.equal(boundedFailure.result?.isError, true, 'action-specific canonical validation must surface as a tool error');
+    assert.match(boundedFailure.result?.structuredContent?.error || '', /relai_search action 'text'/, 'public errors must identify the callable public tool/action');
+    assert.doesNotMatch(boundedFailure.result?.structuredContent?.error || '', /search\.text/, 'public errors must not leak internal operation IDs');
   } finally {
     await client.close();
     fs.rmSync(temp, { recursive: true, force: true });

@@ -23,7 +23,7 @@ function buildPublicToolSchema(definition) {
   const schema = buildToolSchema(definition);
   return {
     ...schema,
-    inputSchema: compactPublicInputSchema(schema.name, schema.inputSchema),
+    inputSchema: compactPublicInputSchema(schema.name, schema.inputSchema, catalogToolByName.get(schema.name)),
     outputSchema: compactPublicOutputSchema(schema.name, schema.outputSchema)
   };
 }

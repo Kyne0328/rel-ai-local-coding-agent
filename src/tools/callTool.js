@@ -101,7 +101,9 @@ async function callTool(name, args = {}, context = {}) {
         topology: null
       };
     }
-    await validateExecutableOperationInput(operationName, effectiveArgs);
+    await validateExecutableOperationInput(operationName, effectiveArgs, {
+      publicLabel: resolved.action ? `${name} action '${resolved.action}'` : name
+    });
     const duplicateTerminalCancellation = operationName === OP.WORK_CANCEL && knownTask?.status === 'cancelled';
     const terminalTaskReference = isTerminalTaskReference(knownTask, operationName);
     finishActivity = beginConnectorToolCall({
