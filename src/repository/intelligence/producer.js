@@ -66,4 +66,4 @@ function isRelAiRepository(root) {
   } catch { return false; }
 }
 
-export { INTELLIGENCE_SOURCE_FILES, intelligenceRuntimeFingerprint, intelligenceWorkspaceFingerprint };
+export { intelligenceRuntimeFingerprint, intelligenceWorkspaceFingerprint };

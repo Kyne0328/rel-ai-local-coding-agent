@@ -607,7 +607,6 @@ function indexProducerVersion(db) { return metaValue(db, 'producer_version', '')
 function setIndexProducerVersion(db, value) { setMeta(db, 'producer_version', String(value || '')); }
 
 export {
-  INDEX_SCHEMA_VERSION,
   beginGeneration,
   checkIndexIntegrity,
   currentGeneration,
@@ -622,7 +621,6 @@ export {
   relationshipImpactForPaths,
   relationshipSourceIdsForNames,
   repositoryIndexPath,
-  repositoryIndexRoot,
   resolveRelationships,
   setIndexProducerVersion
 };

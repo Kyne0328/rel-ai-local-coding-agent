@@ -456,9 +456,6 @@ function isoTime(value) {
 }
 
 export {
-  DEFAULT_MAX_INDEX_FILES,
-  MAX_INDEXED_FILE_BYTES,
-  WORKER_IDLE_EVICT_MS,
   cancelRepositoryIndex,
   evictIdleRepositoryWorkers,
   ensureRepositoryIndex,
@@ -466,6 +463,5 @@ export {
   rebuildRepositoryIndex,
   recoverRepositoryIndex,
   repositoryIndexStatus,
-  scanWorkspace,
   shutdownRepositoryIndexes
 };
