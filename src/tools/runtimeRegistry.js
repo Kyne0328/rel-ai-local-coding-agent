@@ -43,7 +43,7 @@ function resolveExecutableToolCall(name, args = {}, config = {}) {
   };
 }
 
-async function validateExecutableOperationInput(operationName, args = {}) {
+async function validateExecutableOperationInput(operationName, args = {}, options = {}) {
   const name = String(operationName || '');
   const validator = OPERATION_INPUT_VALIDATORS.get(name);
   if (!validator) throw new Error(`Unknown internal operation '${name}'.`);
@@ -56,7 +56,8 @@ async function validateExecutableOperationInput(operationName, args = {}) {
       : '';
     return `${location || '<root>'}: ${issue.message}`;
   });
-  throw new Error(`Input validation error for ${name}: ${details.join('; ')}.`);
+  const publicLabel = String(options.publicLabel || '').trim();
+  throw new Error(`Input validation error for ${publicLabel || name}: ${details.join('; ')}.`);
 }
 
 function getExecutableToolDefinition(name, config = {}, args) {
