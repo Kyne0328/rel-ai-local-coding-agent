@@ -54,7 +54,7 @@ assert.equal(inactive?.cancelledAt == null, true);
 assert.equal(events.some(event => event.phase === 'cancelled' || event.phase === 'failed' || event.phase === 'completed'), false, 'inactivity must not emit a false terminal notification');
 assert.equal(events.some(event => event.phase === 'inactive'), true);
 
-const resumed = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', taskId, title: inactive.title, objective: inactive.objective });
+const resumed = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', taskId, resumeTask: inactive });
 assert.equal(resumed.taskId, taskId);
 resumed({ ok: true });
 const resumedTask = tracker.getToolActivity().tasks.find(task => task.taskId === taskId);
@@ -62,5 +62,8 @@ assert.equal(resumedTask?.taskId, taskId);
 assert.equal(resumedTask?.status, 'planning');
 assert.equal(resumedTask?.title, 'Resume me');
 assert.equal(resumedTask?.objective, 'Preserve task identity.');
+assert.equal(resumedTask?.toolCallCount, 3, 'resuming must continue the existing call count instead of presenting a new task');
+assert.equal(resumedTask?.failedToolCallCount, 1, 'resuming must preserve prior failure accounting');
+assert.equal(resumedTask?.startedAt, 1_000, 'resuming must preserve the original task start time');
 
 console.log('Resumable inactivity lifecycle tests passed.');

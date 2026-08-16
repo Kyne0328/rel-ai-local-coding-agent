@@ -15,6 +15,8 @@ const workspacePath = path.join(root, 'workspace');
 const stateDir = path.join(root, 'state');
 const configPath = path.join(root, 'config.json');
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
+const validationStartedPath = path.join(root, 'validation-started');
+const validationReleasePath = path.join(root, 'validation-release');
 
 fs.mkdirSync(path.join(workspacePath, 'src'), { recursive: true });
 fs.writeFileSync(path.join(workspacePath, 'src', 'index.js'), 'export const ready = true;\n');
@@ -22,6 +24,29 @@ fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({
   type: 'module',
   scripts: { check: 'node --check src/index.js' }
 }, null, 2));
+fs.writeFileSync(path.join(workspacePath, 'validation-gate.mjs'), `
+import fs from 'node:fs';
+import path from 'node:path';
+const started = ${JSON.stringify(validationStartedPath)};
+const release = ${JSON.stringify(validationReleasePath)};
+fs.writeFileSync(started, 'ready\\n');
+const finish = () => {
+  if (!fs.existsSync(release)) return false;
+  clearTimeout(timeout);
+  watcher?.close();
+  process.exit(0);
+};
+let watcher = null;
+const timeout = setTimeout(() => {
+  watcher?.close();
+  console.error('validation gate timed out');
+  process.exit(2);
+}, 10_000);
+if (!finish()) {
+  watcher = fs.watch(path.dirname(release), () => { finish(); });
+  finish();
+}
+`);
 execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore' });
 execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
 execFileSync('git', ['config', 'user.name', 'RelAI Test'], { cwd: workspacePath });
@@ -54,6 +79,32 @@ async function startTask(title) {
   return result.work_id;
 }
 
+function waitForFile(file, timeoutMs = 10_000) {
+  if (fs.existsSync(file)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const directory = path.dirname(file);
+    const expected = path.basename(file);
+    const watcher = fs.watch(directory, (_event, filename) => {
+      if (String(filename || '') !== expected && !fs.existsSync(file)) return;
+      if (!fs.existsSync(file)) return;
+      cleanup();
+      resolve();
+    });
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Timed out waiting for ${expected}`));
+    }, timeoutMs);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      watcher.close();
+    };
+    if (fs.existsSync(file)) {
+      cleanup();
+      resolve();
+    }
+  });
+}
+
 try {
   resetToolActivity();
   const primaryTask = await startTask('Atomic validation primary writer');
@@ -66,16 +117,17 @@ try {
     content: 'export const atomicValue = 1;\n'
   }, context);
 
+  const validationStarted = waitForFile(validationStartedPath);
   const completionPromise = callTool('relai_validate', {
     action: 'checks',
     workspace: 'app',
     work_id: validatingTask,
-    checks: ['node -e "setTimeout(() => {}, 300)"'],
+    checks: ['node validation-gate.mjs'],
     complete: true,
     summary: 'Atomic completion synchronized and revalidated relevant concurrent changes internally.'
   }, context);
 
-  await new Promise(resolve => setTimeout(resolve, 75));
+  await validationStarted;
   await callTool('relai_edit', {
     workspace: 'app',
     work_id: primaryTask,
@@ -83,6 +135,7 @@ try {
     oldText: 'export const atomicValue = 1;',
     newText: 'export const atomicValue = 1;\nexport const concurrentValue = 2;'
   }, context);
+  fs.writeFileSync(validationReleasePath, 'release\\n');
 
   const completion = await completionPromise;
   assert.equal(completion.ok, true, 'relevant concurrent Rel.AI changes must trigger one internal locked revalidation instead of a user-visible retry');
