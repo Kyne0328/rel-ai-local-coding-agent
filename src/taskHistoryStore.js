@@ -3,8 +3,9 @@ import { DEFAULT_TASK_IDLE_MS } from './toolActivity.js';
 import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord, sanitizeTaskRecordForProjection } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
 import { canonicalTaskSnapshot, mergeTaskLifecycleSnapshots, reduceTaskLifecycleAuditEvent } from './taskLifecycle.js';
+import { DEFAULT_TASK_STALE_MS } from './taskTiming.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isCurrentTaskEvent, timestampMs } from './taskEvents.js';
-import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
+import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
@@ -128,79 +129,6 @@ function readRecentWorkflowEvidence(config, taskId, limit = 50) {
   }
 }
 
-function recordTaskRecoveryState(config, taskId, recovery = null) {
-  const id = cleanTaskId(taskId);
-  if (!id) return null;
-  ensureCurrentHistory(config);
-  const directory = getTaskHistoryDir(config);
-  const session = readWorkingSession(directory, id);
-  if (!session) return null;
-
-  if (!recovery) {
-    if (!session.sandboxRecovery) return publicSession(session);
-    const previousMessage = String(session.sandboxRecovery?.message || '');
-    const next = { ...session };
-    delete next.sandboxRecovery;
-    if (String(next.errorSummary || '') === previousMessage) next.errorSummary = '';
-    if (!isTerminalTaskStatus(next.status) && next.status === 'blocked' && next.resumeStatus === 'blocked') {
-      next.status = 'planning';
-      next.resumeStatus = 'planning';
-      next.currentStage = 'Planning';
-      next.currentActivity = 'Private task conflict resolved.';
-    }
-    persistSession(directory, canonicalTaskSnapshot(next));
-    return publicSession(next);
-  }
-
-  const at = Number.isFinite(Date.parse(String(recovery.at || '')))
-    ? new Date(Date.parse(String(recovery.at))).toISOString()
-    : new Date().toISOString();
-  const recoveryChangedFiles = [...new Set((Array.isArray(recovery.changedFiles) ? recovery.changedFiles : [])
-    .map(value => String(value || '').trim().replaceAll('\\', '/'))
-    .filter(Boolean))].slice(0, 100);
-  const changedFiles = [...new Set([
-    ...(Array.isArray(session.changedFiles) ? session.changedFiles : []),
-    ...recoveryChangedFiles
-  ].map(value => String(value || '').trim().replaceAll('\\', '/')).filter(Boolean))].slice(0, 200);
-  const message = sanitizeDisplayText(
-    recovery.message || 'Private task changes conflict with newer visible workspace changes.',
-    500
-  );
-  const sandboxRecovery = {
-    state: 'conflict',
-    code: sanitizeDisplayText(recovery.code || 'TASK_SANDBOX_PROMOTION_CONFLICT', 120),
-    message,
-    changedFiles: recoveryChangedFiles,
-    at
-  };
-  const terminal = isTerminalTaskStatus(session.status);
-  const next = canonicalTaskSnapshot({
-    ...session,
-    ...(terminal ? {} : {
-      status: 'blocked',
-      state: 'waiting',
-      resumeStatus: 'blocked',
-      currentStage: 'Conflict resolution required',
-      currentActivity: message,
-      activeCalls: 0,
-      currentOperations: [],
-      inactiveAt: null,
-      endedAt: null,
-      completedAt: null,
-      cancelledAt: null
-    }),
-    repairable: true,
-    errorSummary: message,
-    sandboxRecovery,
-    changedFiles,
-    changedFileCount: changedFiles.length,
-    updatedAt: at,
-    lastActivityAt: at
-  });
-  persistSession(directory, next);
-  return publicSession(next);
-}
-
 function readTaskHistorySession(config, taskId) {
   const session = readTaskHistorySessionRecord(config, taskId);
   return session ? publicSession(session) : null;
@@ -240,10 +168,14 @@ function readTaskHistory(config, activity = {}, options = {}) {
     ensureCurrentHistory(config);
     persisted = listSessions(directory, MAX_SESSIONS).map(session => {
       const current = readPendingSession(directory, session.id) || session;
+      if (isStoredSessionNoise(current, activeIds)) {
+        discardStoredSession(directory, current.id);
+        return null;
+      }
       const reconciled = reconcileInactiveStoredSession(current, activeIds);
       if (reconciled !== current) persistSession(directory, reconciled, { defer: true });
       return reconciled;
-    });
+    }).filter(Boolean);
     const persistedIds = new Set(persisted.map(session => session.id));
     for (const session of pendingSessionsForDirectory(directory)) {
       if (!persistedIds.has(session.id)) persisted.push(session);
@@ -290,6 +222,23 @@ function recoverCompletedSession(session, options = {}) {
     completedAt: session.completedAt || completedAt,
     updatedAt: session.updatedAt || completedAt
   };
+}
+
+function isStoredSessionNoise(session, activeIds, timestamp = Date.now()) {
+  if (!session?.id || activeIds.has(session.id) || isTerminalTaskStatus(session.status)) return false;
+  if (session.completionKnown === true || Number(session.changedFileCount || 0) > 0 || Number(session.activeCalls || 0) > 0) return false;
+  const events = Array.isArray(session.events) ? session.events : [];
+  if (events.length !== 1 || String(events[0]?.tool || '') !== OP.WORK_BEGIN) return false;
+  const lastActivityMs = storedSessionActivityMs(session);
+  return Boolean(lastActivityMs && timestamp - lastActivityMs >= DEFAULT_TASK_STALE_MS);
+}
+
+function discardStoredSession(directory, id) {
+  const key = pendingSessionKey(directory, id);
+  const pending = pendingSessions.get(key);
+  if (pending?.timer) clearTimeout(pending.timer);
+  pendingSessions.delete(key);
+  removeSession(directory, id);
 }
 
 function reconcileInactiveStoredSession(session, activeIds, timestamp = Date.now()) {
@@ -364,7 +313,7 @@ function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
   const { version, principalFingerprint, ...value } = sanitizeTaskRecordForProjection(session);
   const terminal = isTerminalTaskStatus(value.status);
-  const publicStatus = !terminal && value.sandboxRecovery?.state === 'conflict' ? 'blocked' : value.status;
+  const publicStatus = value.status;
   return {
     ...value,
     status: publicStatus,
@@ -587,4 +536,4 @@ function emptySession(id) {
   };
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };

@@ -121,4 +121,22 @@ function createHarness() {
   assert.ok(status.lastTask?.inactiveAt);
 }
 
+{
+  const { tracker } = createHarness();
+  const start = tracker.beginConnectorToolCall({
+    tool: 'relai_work', internalOperation: 'work.begin',
+    workspace: 'repo',
+    createTask: true
+  });
+  const taskId = start.taskId;
+  start({ ok: false, error: "Workspace 'repo' is not configured." });
+
+  const status = tracker.getToolActivity();
+  assert.equal(status.activeTaskCount, 0, 'a rejected work-session start must never remain open');
+  assert.equal(status.lastTask?.taskId, taskId);
+  assert.equal(status.lastTask?.status, 'failed');
+  assert.equal(status.lastTask?.endReason, 'task_start_rejected');
+  assert.match(status.lastTask?.terminalReason || '', /not configured/i);
+}
+
 console.log('Task inactivity recovery tests passed.');
