@@ -10,7 +10,8 @@ const SECRET_PATH_GROUPS = Object.freeze({
 const SECRET_PATH_PATTERNS = Object.freeze([
   ...SECRET_PATH_GROUPS.fileNames,
   ...SECRET_PATH_GROUPS.extensions,
-  ...SECRET_PATH_GROUPS.directories
+  ...SECRET_PATH_GROUPS.directories,
+  ".git"
 ]);
 
 const SECRET_EXTENSIONS = new Set(SECRET_PATH_GROUPS.extensions);
@@ -87,8 +88,9 @@ function sensitivePathError(value, label, operation = "legacy") {
 }
 
 function assertPathOperationAllowed(relativePath, operation = "legacy", options = {}) {
-  if (!isSecretPath(relativePath)) return;
-  if (operation === "commit" && options.allowSensitive === true) return;
+  const classification = classifySensitivePath(relativePath);
+  if (!classification.sensitive) return;
+  if (classification.classification !== "repository_control_metadata" && operation === "commit" && options.allowSensitive === true) return;
   if (["env-list", "env-set", "env-remove", "env-compare", "review-redacted"].includes(operation) && isDotEnvPath(relativePath)) return;
   const contentDecision = evaluateSensitiveContent(relativePath, options.absolutePath, options.proposedContent);
   if (contentDecision.allowed) return;
@@ -228,6 +230,7 @@ function classifySensitivePath(relativePath) {
   const normalized = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").toLowerCase();
   const segments = normalized.split("/").filter(Boolean);
   const leaf = segments.at(-1) || "";
+  if (segments.includes(".git")) return { sensitive: true, classification: "repository_control_metadata", reason: "Git control metadata can contain credentials and execution-affecting configuration" };
   if (isDotEnvName(leaf)) return { sensitive: true, classification: "environment_secret", reason: "runtime environment file" };
   if (["id_rsa", "id_ed25519"].includes(leaf)) return { sensitive: true, classification: "private_key", reason: "private SSH key filename" };
   if ([".npmrc", ".pypirc", ".netrc"].includes(leaf)) return { sensitive: true, classification: "authentication_config", reason: "configuration file commonly stores credentials" };

@@ -62,6 +62,20 @@ function requiredCapability(operationName) {
   return getOperationCapability(operationName);
 }
 
+function authorizedWorkspaceAliases(principal, aliases = []) {
+  const available = unique(aliases).map(cleanWorkspace).filter(Boolean);
+  if (principal === 'local:trusted' || isTrustedLocalPrincipal(principal)) return available;
+  const policyValue = typeof principal === 'object' && principal && !Array.isArray(principal)
+    ? principal.authorizationPolicy
+    : null;
+  let policy;
+  try { policy = normalizeAuthorizationPolicy(policyValue); }
+  catch { return []; }
+  if (policy.workspaces.includes('*')) return available;
+  const allowed = new Set(policy.workspaces);
+  return available.filter(alias => allowed.has(alias));
+}
+
 function assertAuthorizedToolCall(options = {}) {
   const principal = options.principal;
   if (principal === 'local:trusted' || isTrustedLocalPrincipal(principal)) return createLocalAdminPolicy();
@@ -121,6 +135,7 @@ function cleanWorkspace(value) {
 export {
   CAPABILITIES,
   assertAuthorizedToolCall,
+  authorizedWorkspaceAliases,
   createConsentPolicy,
   createLocalAdminPolicy,
   isTrustedLocalPrincipal,
