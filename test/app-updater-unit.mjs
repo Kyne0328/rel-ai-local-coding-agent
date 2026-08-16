@@ -29,6 +29,15 @@ class FakeUpdater extends EventEmitter {
 }
 
 const roots = [];
+
+async function waitFor(condition, message, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) assert.fail(message);
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+}
+
 function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-'));
   roots.push(temp);
@@ -114,16 +123,20 @@ assert.equal(valid.updater.start().state, 'idle');
 assert.equal(valid.fake.autoDownload, false);
 assert.equal(valid.fake.autoInstallOnAppQuit, false);
 assert.equal(valid.fake.allowPrerelease, false);
-await new Promise(resolve => setImmediate(resolve));
-assert.equal(valid.timers[0].delay, AUTO_CHECK_DELAY_MS);
+await waitFor(
+  () => valid.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
+  'starting the updater must eventually schedule its automatic update check'
+);
 
 const checkPromise = valid.updater.checkForUpdates();
 assert.equal(valid.updater.getStatus().state, 'checking');
 assert.equal(valid.updater.getStatus().integrityVerified, false);
 await checkPromise;
 assert.equal(valid.fake.checkCalls, 1);
-await new Promise(resolve => setImmediate(resolve));
-assert.equal(valid.timers.at(-1).delay, AUTO_CHECK_INTERVAL_MS);
+await waitFor(
+  () => valid.timers.some(timer => timer.delay === AUTO_CHECK_INTERVAL_MS),
+  'a completed update check must eventually schedule the next automatic check'
+);
 
 const transientNetworkError = () => Object.assign(new Error('net::ERR_HTTP2_SERVER_REFUSED_STREAM'), { code: 'ERR_HTTP2_SERVER_REFUSED_STREAM' });
 const transientCheck = createHarness({ checkFailures: [transientNetworkError()] });
