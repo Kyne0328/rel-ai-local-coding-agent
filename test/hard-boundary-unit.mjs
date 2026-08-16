@@ -71,10 +71,14 @@ assert.ok(isSecretPath('.pypirc'), '.pypirc');
 assert.ok(isSecretPath('.netrc'), '.netrc');
 console.log('10. rc files flagged: OK');
 
-assert.equal(isSecretPath('.git/config'), false, '.git/config not in secret patterns (current behavior)');
-const gitConfigPath = resolveSafePath(ROOT, '.git/config');
-assert.ok(gitConfigPath.relativePath === '.git/config', 'resolveSafePath allows .git/config (current behavior)');
-console.log('11. .git current behavior pinned: OK');
+assert.ok(isSecretPath('.git/config'), '.git/config is protected repository control metadata');
+assert.ok(isSecretPath('.git/HEAD'), '.git/HEAD is protected repository control metadata');
+assert.ok(isSecretPath('.git'), '.git itself is protected repository control metadata');
+assert.ok(throws(() => resolveSafePath(ROOT, '.git/config')), 'direct .git/config access rejected');
+assert.ok(throws(() => resolveSafePath(ROOT, '.git/HEAD')), 'direct .git/HEAD access rejected');
+assert.ok(throws(() => resolveSafePath(ROOT, '.git', { operation: 'commit', allowSensitive: true })), 'sensitive commit authorization cannot bypass repository control metadata protection');
+assert.equal(isSecretPath('.gitignore'), false, '.gitignore remains ordinary repository content');
+console.log('11. .git control metadata blocked: OK');
 
 assert.ok(isSecretPath(String.raw`config\.env`), 'backslash .env');
 assert.ok(throws(() => resolveSafePath(ROOT, String.raw`..\etc`)), 'backslash traversal rejected');

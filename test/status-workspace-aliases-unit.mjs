@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { relaiStatus } from "../src/tools/status.js";
 import { getToolSurfaceManifest } from '../src/tools/schema.js';
+import { CAPABILITIES, createConsentPolicy } from '../src/mcp/authorizationPolicy.js';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-status-aliases-'));
 const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
@@ -28,6 +29,19 @@ try {
   assert.deepEqual(status.workspaceAliases, ['api', 'app', 'worker', 'zebra']);
   assert.equal(status.workspace, null);
   assert.equal(status.runtimeCompatibility.status, 'repository_unavailable');
+
+  const restricted = await relaiStatus(config, {}, {
+    connector: true,
+    principal: {
+      authorizationPolicy: createConsentPolicy({
+        capabilities: [CAPABILITIES.REPOSITORY_READ],
+        workspaces: ['app', 'api'],
+        availableWorkspaces: ['api', 'app', 'worker', 'zebra']
+      })
+    }
+  });
+  assert.equal(restricted.workspaceCount, 2);
+  assert.deepEqual(restricted.workspaceAliases, ['api', 'app'], 'restricted clients must not enumerate ungranted workspace aliases');
 
   const missing = await relaiStatus(config, { workspace: 'unknown' });
   assert.equal(missing.workspace.alias, 'unknown');
