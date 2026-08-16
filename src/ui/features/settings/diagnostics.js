@@ -524,7 +524,7 @@ function matchesLog(entry, kind) {
   const source = String(kind === 'failed' ? entry.tool || 'activity' : entry.source || 'desktop');
   if (filters.severity !== 'all' && level !== filters.severity) return false;
   if (filters.source !== 'all' && source !== filters.source) return false;
-  return matchesSearch([source, entry.code, entry.errorCode, entry.message, entry.error, entry.workspace]);
+  return matchesSearch([source, entry.code, entry.errorCode, entry.message, entry.error, entry.workspace, entry.taskId, entry.eventId]);
 }
 
 function matchesSearch(values) {

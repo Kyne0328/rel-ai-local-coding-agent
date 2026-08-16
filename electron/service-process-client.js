@@ -21,13 +21,17 @@ function createServiceProcessClient(options = {}) {
   let currentActivity = emptyActivity();
   const pending = new Map();
   const activityListeners = new Set();
+  const failedActivityListeners = new WeakSet();
 
   const activitySource = {
     getToolActivity() { return cloneActivity(currentActivity); },
     onToolActivity(listener) {
       if (typeof listener !== 'function') return () => {};
       activityListeners.add(listener);
-      return () => activityListeners.delete(listener);
+      return () => {
+        activityListeners.delete(listener);
+        failedActivityListeners.delete(listener);
+      };
     },
     resetToolActivity() {}
   };
@@ -199,7 +203,18 @@ function createServiceProcessClient(options = {}) {
   function publishActivity(event = {}) {
     if (event.phase === 'snapshot' && event.snapshot) currentActivity = cloneActivity(event.snapshot);
     for (const listener of [...activityListeners]) {
-      try { listener(event); } catch {}
+      try {
+        listener(event);
+        failedActivityListeners.delete(listener);
+      } catch (error) {
+        if (failedActivityListeners.has(listener)) continue;
+        failedActivityListeners.add(listener);
+        onLog(`Task activity subscriber failed: ${error instanceof Error ? error.message : String(error || 'Unknown listener error')}`, {
+          level: 'warning',
+          source: 'desktop-observability',
+          code: 'activity_listener_failed'
+        });
+      }
     }
   }
 

@@ -9,6 +9,7 @@ let currentStatus = {
   taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', operation: '', completionKnown: false, startedAt: null, lastTask: null }
 };
 let previousAnnouncementKey = '';
+let actionError = '';
 let notificationsEnabled = localStorage.getItem('relai_activity_notifications') !== 'off';
 let clockTimer = null;
 let windowFitFrame = 0;
@@ -247,9 +248,22 @@ function renderLastTask() {
 }
 
 function renderError(view) {
-  const failed = view.key === 'failed';
+  const connectionFailed = view.key === 'failed';
+  const failed = connectionFailed || Boolean(actionError);
   document.getElementById('errorPanel').hidden = !failed;
-  document.getElementById('errorMessage').textContent = currentStatus.error || 'The Secure MCP Tunnel did not become ready.';
+  document.getElementById('errorTitle').textContent = connectionFailed ? 'Connection needs attention' : 'Action needs attention';
+  document.getElementById('errorMessage').textContent = connectionFailed
+    ? currentStatus.error || 'The Secure MCP Tunnel did not become ready.'
+    : actionError;
+  for (const id of ['retryBtn', 'restartAppBtn', 'errorSettingsBtn']) {
+    document.getElementById(id).hidden = !connectionFailed;
+  }
+}
+
+function setActionError(value) {
+  actionError = String(value || '').replace(/\s+/g, ' ').trim();
+  renderError(heroView(currentStatus));
+  requestWindowFit();
 }
 
 function renderControls() {
@@ -329,23 +343,25 @@ async function loadNotificationPreference() {
     localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
     updateNotificationButton();
   } catch {
-    // The fallback remains usable if the preference cannot be loaded.
+    setActionError('The desktop notification setting could not be loaded. Try again from Settings.');
   }
 }
 
-async function syncNotificationPreference() {
+async function toggleNotifications() {
+  const next = !notificationsEnabled;
+  const button = document.getElementById('notificationToggleBtn');
+  button.disabled = true;
   try {
-    await window.electronAPI.setNotificationsEnabled(notificationsEnabled);
+    const result = await window.electronAPI.setNotificationsEnabled(next);
+    notificationsEnabled = result?.enabled === true;
+    localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
+    setActionError('');
   } catch {
-    // Preferences must not affect connection handling.
+    setActionError('The desktop notification setting could not be saved. Try again from Settings.');
+  } finally {
+    button.disabled = false;
+    updateNotificationButton();
   }
-}
-
-function toggleNotifications() {
-  notificationsEnabled = !notificationsEnabled;
-  localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
-  updateNotificationButton();
-  runAsync(syncNotificationPreference());
 }
 
 function diagnosticSummary() {
@@ -363,6 +379,7 @@ function diagnosticSummary() {
   ];
   if (currentStatus.errorCode) lines.push(`Error code: ${currentStatus.errorCode}`);
   if (currentStatus.error) lines.push(`Error: ${safeDiagnosticText(currentStatus.error)}`);
+  if (actionError) lines.push(`Last action error: ${safeDiagnosticText(actionError)}`);
   if (serviceLogs.length) lines.push('', 'Recent service logs:', ...serviceLogs.slice(-20).map(formatServiceLog));
   return safeDiagnosticText(lines.join('\n'));
 }
@@ -445,9 +462,10 @@ async function withBusy(button, label, action) {
   button.textContent = label;
   try {
     const result = await action();
+    setActionError('');
     if (result) updateUI(result);
   } catch (error) {
-    updateUI({ error: error instanceof Error ? error.message : 'The action failed.', tunnelStatus: 'failed' });
+    setActionError(error instanceof Error ? error.message : 'The action could not be completed.');
   } finally {
     button.disabled = false;
     delete button.dataset.state;
@@ -472,7 +490,7 @@ function bindEvents() {
   document.getElementById('restartAppBtn').addEventListener('click', () => {
     runAsync(withBusy(document.getElementById('restartAppBtn'), 'Restarting Rel.AI…', () => window.electronAPI.relaunchApp()));
   });
-  document.getElementById('notificationToggleBtn').addEventListener('click', toggleNotifications);
+  document.getElementById('notificationToggleBtn').addEventListener('click', () => runAsync(toggleNotifications()));
   document.getElementById('copyDiagnosticsBtn').addEventListener('click', () => {
     runAsync(copyWithFeedback(document.getElementById('copyDiagnosticsBtn'), diagnosticSummary(), 'Details copied'));
   });

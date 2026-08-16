@@ -198,6 +198,8 @@ function normalizeFailedActivity(value) {
     .slice(-20)
     .map(entry => sanitizeDiagnosticValue({
       ts: entry.ts || entry.at || entry.createdAt || null,
+      eventId: entry.eventId || entry.operationId || entry.id || '',
+      taskId: entry.taskId || entry.sessionId || '',
       tool: entry.tool || entry.type || 'activity',
       workspace: entry.workspace || '',
       errorCode: normalizeErrorCode(entry.errorCode) || '',
@@ -221,7 +223,10 @@ function formatDiagnosticReport(report) {
   }
   if (report.logs.failedActivity.length) {
     lines.push('', 'Recent failed activity:');
-    for (const entry of report.logs.failedActivity) lines.push(`${entry.ts || ''} ${entry.tool || 'activity'} ${entry.workspace || ''}: ${entry.error}`.trim());
+    for (const entry of report.logs.failedActivity) {
+      const correlation = [entry.taskId ? `task=${entry.taskId}` : '', entry.eventId ? `event=${entry.eventId}` : ''].filter(Boolean).join(' ');
+      lines.push(`${entry.ts || ''} ${entry.tool || 'activity'} ${entry.workspace || ''}${correlation ? ` [${correlation}]` : ''}: ${entry.error}`.trim());
+    }
   }
   return sanitizeText(lines.join('\n'), 30000);
 }
