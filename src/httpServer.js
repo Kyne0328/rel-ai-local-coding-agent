@@ -1,7 +1,7 @@
 import * as http from "node:http";
 import { URL } from "node:url";
 import * as connection from "./connectionProfile.js";
-import { normalizeMaxBodyBytes, setBaseHeaders, sendJson } from "./http/io.js";
+import { DEFAULT_MAX_BODY_BYTES, normalizeMaxBodyBytes, setBaseHeaders, sendJson } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
@@ -23,6 +23,15 @@ import { buildToolManifest } from './mcp/toolManifest.js';
 import { resolveConnectionGenerations } from './mcp/connectionGenerations.js';
 import { mcpConnectionManager } from './mcp/connectionManager.js';
 import { SERVER_INSTANCE_ID } from './mcp/context.js';
+
+const DEFAULT_HTTP_REQUEST_TIMEOUT_MS = 300_000;
+const MAX_NODE_TIMEOUT_MS = 2_147_483_647;
+
+function resolveHttpRequestTimeoutMs(maxBodyBytes) {
+  const bodyBytes = normalizeMaxBodyBytes(maxBodyBytes);
+  const scaledTimeoutMs = Math.ceil(DEFAULT_HTTP_REQUEST_TIMEOUT_MS * (bodyBytes / DEFAULT_MAX_BODY_BYTES));
+  return Math.min(MAX_NODE_TIMEOUT_MS, Math.max(DEFAULT_HTTP_REQUEST_TIMEOUT_MS, scaledTimeoutMs));
+}
 
 function startHttpServer(options = {}) {
   const isolated = options.isolated === true
@@ -105,7 +114,10 @@ function startHttpServer(options = {}) {
   });
   server.waitForShutdown = () => shutdownPromise;
 
-  server.requestTimeout = 30_000;
+  // Keep a finite total receive bound for slow clients, but scale it with the body
+  // size the server explicitly accepts so raising the payload limit does not make
+  // legitimate uploads proportionally more likely to time out.
+  server.requestTimeout = resolveHttpRequestTimeoutMs(maxBodyBytes);
   server.headersTimeout = 15_000;
   server.keepAliveTimeout = 5_000;
   server.maxHeadersCount = 100;
@@ -271,4 +283,4 @@ const POST_ROUTES = {
   "/api/mcp/recovery": { auth: authDashboard, handler: handleMcpRecovery }
 };
 
-export { startHttpServer };
+export { resolveHttpRequestTimeoutMs, startHttpServer };
