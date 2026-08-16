@@ -51,6 +51,7 @@ function createDesktopNotifications(options = {}) {
   const statePath = path.join(safeUserDataPath(app), 'desktop-notifications.json');
   const notifiedKeys = new Set();
   let preferences = readPreferences();
+  let lastDeliveryIssueKey = '';
 
   function readPreferences() {
     try {
@@ -103,13 +104,28 @@ function createDesktopNotifications(options = {}) {
     return result.preferences.enabled;
   }
 
+  function reportDeliveryIssue(code, message, technicalDetail = '') {
+    const detail = cleanText(technicalDetail, 240);
+    const issueKey = `${code}:${detail || message}`;
+    if (issueKey === lastDeliveryIssueKey) return;
+    lastDeliveryIssueKey = issueKey;
+    onLog(detail ? `${message}: ${detail}` : message, {
+      source: 'desktop-notifications',
+      level: 'warning',
+      code
+    });
+  }
+
   function show(category, content = {}, eventOptions = {}) {
     if (!NOTIFICATION_CATEGORIES.has(category)) return false;
     if (!preferences.enabled || !preferences[category]) return false;
     const version = cleanText(eventOptions.version, 80);
     if (category === 'applicationUpdates' && version && preferences.ignoredUpdateVersion === version) return false;
     if (!isReady()) return false;
-    if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) return false;
+    if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) {
+      reportDeliveryIssue('notification_delivery_unavailable', 'Desktop notifications are unavailable in the current system configuration.');
+      return false;
+    }
 
     const title = cleanText(content.title, 100);
     const body = cleanText(content.body, 260);
@@ -120,12 +136,14 @@ function createDesktopNotifications(options = {}) {
       const notification = new Notification(notificationOptions);
       if (typeof notification.on === 'function') notification.on('click', onNotificationClick);
       notification.show();
+      lastDeliveryIssueKey = '';
       return true;
     } catch (error) {
-      onLog(`Desktop notification could not be shown: ${cleanText(error?.message || error, 240)}`, {
-        source: 'desktop-notifications',
-        level: 'warning'
-      });
+      reportDeliveryIssue(
+        'notification_delivery_failed',
+        'Desktop notification could not be shown',
+        error?.message || error
+      );
       return false;
     }
   }
@@ -187,9 +205,10 @@ function createDesktopNotifications(options = {}) {
     }
     if (state === 'error') {
       const error = cleanText(status.error, 200);
+      const guidance = errorGuidance('update_failed');
       return showOnce(`update:error:${status.errorCode || ''}:${error}`, 'errors', {
         title: 'Application update failed',
-        body: error || 'Rel.AI could not complete the application update action.'
+        body: guidance.recovery
       });
     }
     return false;

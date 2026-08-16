@@ -59,6 +59,7 @@ assert.equal(report.maintenance.runtimeLogs.available, true);
 assert.equal(report.maintenance.all.available, true);
 assert.equal(report.maintenance.all.blocked, true);
 assert.equal(report.maintenance.all.confirmation, 'RESET');
+assert.match(report.maintenance.history.reason, /2 Rel\.AI tasks are still active/);
 assert.equal(report.logs.runtime.persistent, true);
 assert.equal(report.logs.runtime.revision, 7, 'diagnostic snapshots must preserve the runtime-log revision for live replay ordering');
 assert.equal(report.logs.runtime.persistence.healthy, true);
@@ -121,6 +122,16 @@ assert.ok(runtimePersistenceFinding, 'persistent app-log write failures must bec
 assert.match(runtimePersistenceFinding.title, /App log/);
 assert.match(runtimePersistenceFinding.recommendation, /disk space|write permissions/i);
 assert.doesNotMatch(JSON.stringify(runtimePersistenceFinding), new RegExp(secret), 'app-log persistence errors must be sanitized');
+
+const waitingTaskReport = buildDiagnosticReport({
+  connection: { tunnelId: 'tunnel_12345678', token: 'set' },
+  connectionState: { publicEndpoint: { status: 'available' }, error: null },
+  runtimeLogs: { available: true, persistent: true, entries: [] },
+  activeCalls: 0,
+  activeTaskCount: 1
+});
+assert.equal(waitingTaskReport.maintenance.history.blocked, true, 'waiting logical tasks must protect task history between tool calls');
+assert.match(waitingTaskReport.maintenance.history.reason, /1 Rel\.AI task is still active/);
 
 const disconnected = buildDiagnosticReport({
   connection: { tunnelId: '', token: 'set' },
