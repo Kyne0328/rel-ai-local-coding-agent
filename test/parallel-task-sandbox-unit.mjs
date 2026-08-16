@@ -70,6 +70,9 @@ try {
     workspace: 'app', work_id: first.work_id, path: 'alpha.txt', oldText: 'alpha\n', newText: 'alpha from first\n'
   }, context);
   assert.equal(fs.readFileSync(path.join(workspacePath, 'alpha.txt'), 'utf8'), 'alpha from first\n');
+  const firstSessionAfterEdit = readTaskHistorySession(config, first.work_id);
+  assert.deepEqual(firstSessionAfterEdit?.changedFiles, ['alpha.txt'], 'successful visible edits must update the owning session immediately');
+  assert.equal(firstSessionAfterEdit?.changedFileCount, 1);
   assert.equal(sandboxEntries(config).length, 0, 'the oldest active task should keep the visible workspace');
 
   const readOnlyExec = await rawCallTool('relai_exec', {
@@ -114,7 +117,27 @@ try {
   assert.deepEqual(sandboxExec.changedFiles, ['exec-generated.txt']);
   assert.equal(sandboxExec.mutationTracking, 'sandbox-baseline');
   assert.equal(readText(path.join(workspacePath, 'exec-generated.txt')), 'generated from sandbox exec\n');
+  const secondSessionAfterMutations = readTaskHistorySession(config, second.work_id);
+  assert.deepEqual(
+    [...(secondSessionAfterMutations?.changedFiles || [])].sort(),
+    ['beta.txt', 'exec-generated.txt', 'read-only-side-effect.txt'],
+    'promoted sandbox edits and exec side effects must stay attributed to the owning session'
+  );
+  assert.equal(secondSessionAfterMutations?.changedFileCount, 3);
   assert.equal(sandboxEntries(config).length, 1, 'successful concurrent exec mutations should reuse the same private worktree while keeping promoted bytes visible');
+
+  const secondTaskReview = await rawCallTool('relai_changes', {
+    action: 'diff', workspace: 'app', work_id: second.work_id, scope: 'task'
+  }, context);
+  assert.equal(secondTaskReview.reviewedScope, 'task');
+  assert.deepEqual(
+    [...(secondTaskReview.reviewedFiles || [])].sort(),
+    ['beta.txt', 'exec-generated.txt', 'read-only-side-effect.txt'],
+    'task review must inspect promoted visible changes rather than the synchronized private worktree'
+  );
+  assert.match(secondTaskReview.diff, /beta\.txt/);
+  assert.match(secondTaskReview.diff, /exec-generated\.txt/);
+  assert.doesNotMatch(secondTaskReview.diff, /alpha\.txt/, 'task review must exclude changes owned by another task');
 
   const staleTaskId = 'stale-inactive-task';
   const staleEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, staleTaskId);
