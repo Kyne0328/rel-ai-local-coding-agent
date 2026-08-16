@@ -4,12 +4,13 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createHttpMcpSession, mcpBody, mcpHeaders, postMcp, readMcpResponse } from './helpers/http-mcp.mjs';
 import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = 39877;
+const port = await reservePort();
 const token = 'auth-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-'));
 const configPath = path.join(stateDir, 'config.json');
@@ -233,3 +234,16 @@ try {
 }
 
 console.log('HTTP authentication, stateless ChatGPT initialization, modern protocol validation, and Origin protection tests passed.');
+
+function reservePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const selectedPort = typeof address === 'object' && address ? address.port : 0;
+      server.close(error => error ? reject(error) : resolve(selectedPort));
+    });
+  });
+}
