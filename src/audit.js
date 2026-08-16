@@ -4,6 +4,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getStateDir } from './statePaths.js';
+import { sanitizeDisplayText } from './taskObservability.js';
 
 function getAuditPath(config = {}) {
   return config.auditLogPath || path.join(getStateDir(config), 'audit.jsonl');
@@ -203,14 +204,18 @@ async function clearAuditHistory(config) {
 }
 
 function redactEvent(value) {
+  if (typeof value === 'string') {
+    const bounded = value.length > 12000
+      ? `${value.slice(0, 12000)}\n[rel-ai-mcp audit truncated ${value.length - 12000} chars]`
+      : value;
+    return sanitizeDisplayText(bounded, 12100);
+  }
   if (Array.isArray(value)) return value.map(redactEvent);
   if (!value || typeof value !== 'object') return value;
   const out = {};
   for (const [key, item] of Object.entries(value)) {
     if (/token|secret|password|authorization|api[_-]?key/i.test(key)) {
       out[key] = '[redacted]';
-    } else if (typeof item === 'string' && item.length > 12000) {
-      out[key] = `${item.slice(0, 12000)}\n[rel-ai-mcp audit truncated ${item.length - 12000} chars]`;
     } else {
       out[key] = redactEvent(item);
     }
