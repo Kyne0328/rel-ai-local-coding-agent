@@ -99,7 +99,6 @@ export function desktopNotificationsPanel(initialState = null) {
       const result = await bridge.setNotificationPreferences(patch);
       if (result?.ok === false) throw new Error(result.error || 'Desktop notification preferences could not be changed.');
       preferences = normalizePreferences(result?.preferences || { ...preferences, ...patch });
-      document.dispatchEvent(new CustomEvent('relai:notification-preferences-change', { detail: preferences }));
       toast(successMessage, { variant: 'success' });
     } catch (error) {
       preferences = previous;

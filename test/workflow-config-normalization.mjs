@@ -61,8 +61,9 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
       version: 3,
       sourceVersion: 3,
       stateDir: tmpDir,
-      trustedLocalAgent: true,
-      productUx: { showAutomaticValidation: false },
+      toolMode: 'legacy-configurable-mode',
+      trustedLocalAgent: false,
+      productUx: { showAutomaticValidation: false, cleanupOlderThanHours: 168 },
       maxOutputBytes: 64 * 1024 * 1024,
       patch: { backup: false, requireCleanGit: true, maxUpdateBytes: 1 },
       workspaces: {
@@ -83,7 +84,10 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     assert.equal(migrated.version, 6, 'older configuration must normalize to the hard-cutover schema');
     assert.equal(persisted.version, 6, 'hard-cutover normalization must be persisted before desktop startup continues');
     assert.equal(Object.hasOwn(persisted, 'sourceVersion'), false, 'obsolete sourceVersion must not survive migration');
+    assert.equal(Object.hasOwn(persisted, 'toolMode'), false, 'hard-cutover tool mode must not survive migration');
+    assert.equal(Object.hasOwn(persisted, 'trustedLocalAgent'), false, 'hard-cutover trust flag must not survive migration');
     assert.equal(Object.hasOwn(persisted.productUx, 'showAutomaticValidation'), false, 'removed validation display preference must not survive migration');
+    assert.equal(Object.hasOwn(persisted.productUx, 'cleanupOlderThanHours'), false, 'removed cleanup setting must not survive migration');
     assert.equal(Object.hasOwn(persisted, 'patch'), false, 'legacy patch tuning must not survive migration');
     assert.equal(Object.hasOwn(persisted, 'maxOutputBytes'), false, 'legacy subprocess output tuning must not survive migration');
     for (const key of ['protectedBranches', 'defaultBaseBranch', 'allowedRemotes', 'testCommands', 'commands']) assert.equal(Object.hasOwn(persisted.workspaces.keep, key), false, `removed workspace field ${key} must not survive migration`);
@@ -140,7 +144,7 @@ assert.equal(Object.hasOwn(normalizedCommands.workspaces.repo, 'commands'), fals
   const previous = process.env.REL_AI_MCP_CONFIG;
   process.env.REL_AI_MCP_CONFIG = tmpConfig;
   try {
-    fs.writeFileSync(tmpConfig, JSON.stringify({ trustedLocalAgent: true, workspaces: { broken: { path: path.join(tmpDir, 'missing') } } }));
+    fs.writeFileSync(tmpConfig, JSON.stringify({ workspaces: { broken: { path: path.join(tmpDir, 'missing') } } }));
 
     const current = JSON.parse(fs.readFileSync(tmpConfig, 'utf8'));
     const result = updateWorkspace(current, { action: 'clear', alias: 'broken', confirmClear: true });

@@ -251,7 +251,6 @@ function createSecureTunnelRuntime({
       consecutiveFailures += 1;
       outageStartedAt ||= Date.now();
       if (consecutiveFailures < degradedAfterFailures) continue;
-      const elapsedSeconds = Math.max(1, Math.round((Date.now() - outageStartedAt) / 1000));
       update({
         state: 'degraded',
         tunnelId,
@@ -649,12 +648,17 @@ function compactTunnelDetails(value) {
 }
 
 function sanitizeTunnelText(value, limit = MAX_DETAIL_CHARS) {
-  return String(value == null ? '' : value)
+  const redacted = String(value == null ? '' : value)
     .replace(/Bearer\s+[^\s,;"']+/gi, 'Bearer [redacted]')
-    .replace(/\bsk-[A-Za-z0-9_\-]{8,}\b/g, '[redacted-api-key]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[redacted-api-key]')
     .replace(/([?&](?:token|bootstrap|code|client_secret|api_key)=)[^&#\s]+/gi, '$1[redacted]')
-    .replace(/(["']?(?:token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)["']?\s*[:=]\s*)["']?[^\s,;"']+["']?/gi, '$1[redacted]')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/(["']?(?:token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)["']?\s*[:=]\s*)["']?[^\s,;"']+["']?/gi, '$1[redacted]');
+  return Array.from(redacted)
+    .filter(character => {
+      const code = character.codePointAt(0);
+      return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127);
+    })
+    .join('')
     .slice(0, Math.max(1, limit))
     .trim();
 }

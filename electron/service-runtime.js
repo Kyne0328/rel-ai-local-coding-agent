@@ -76,7 +76,7 @@ function createDesktopServiceRuntime(deps) {
     }
     const { guiConfig, apiKey } = prepared;
 
-    let actualPort = 0;
+    let actualPort;
     try {
       serviceProcessClient.updateContext({ runtimeLogs: runtimeLogs.snapshot() });
       const localService = await serviceProcessClient.start({
@@ -362,4 +362,4 @@ function formatError(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-export { createDesktopServiceRuntime, waitForLocalApplicationReady };
+export { createDesktopServiceRuntime };
