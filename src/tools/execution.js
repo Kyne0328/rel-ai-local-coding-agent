@@ -180,7 +180,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
 }
 
 function shouldPrepareSandbox(config, workspaceAlias, taskId, executionName, args = {}) {
-  if (executionName === OP.WORK_CANCEL || executionName === OP.WORK_STATUS) return false;
+  if ([OP.WORK_CANCEL, OP.WORK_STATUS, OP.CHANGES_DIFF].includes(executionName)) return false;
   if (findTaskSandbox(config, workspaceAlias, taskId)) return true;
   if (!SANDBOX_CREATE_OPERATIONS.has(executionName)) return false;
   return executionName !== OP.EXEC || !isClearlyReadOnlyExec(args);

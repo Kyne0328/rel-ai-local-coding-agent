@@ -1,4 +1,4 @@
-import { clearTaskHistory } from './taskHistoryStore.js';
+import { clearTaskHistory, recordTaskHistoryEvent } from './taskHistoryStore.js';
 import { recordTaskIntegrityEvent } from './taskIntegrity.js';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -26,6 +26,11 @@ async function logAudit(config, event) {
   const integrity = await recordTaskIntegrityEvent(config, entry);
   if (integrity) Object.assign(entry, integrity);
   enqueueAuditWrite(auditPath, entry);
+  try {
+    recordTaskHistoryEvent(config, entry);
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history audit projection:', error);
+  }
   return entry;
 }
 

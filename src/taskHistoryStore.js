@@ -63,18 +63,6 @@ function recordTaskActivityEvent(config, activity = {}, options = {}) {
   return publicSession(session);
 }
 
-function recordWorkflowSnapshot(config, taskId, workflow, options = {}) {
-  const id = cleanTaskId(taskId);
-  if (!id || !workflow || typeof workflow !== 'object') return null;
-  ensureCurrentHistory(config);
-  const directory = getTaskHistoryDir(config);
-  const session = readWorkingSession(directory, id);
-  if (!session) return null;
-  const safe = JSON.parse(JSON.stringify(workflow));
-  const next = { ...session, workflow: safe };
-  persistSession(directory, next, options);
-  return safe;
-}
 function recordWorkflowEvidence(config, taskId, receipt, options = {}) {
   const recorded = recordWorkflowEvidenceBatch(config, taskId, [receipt], options);
   return recorded.length ? receipt : null;
@@ -164,9 +152,12 @@ function recordTaskRecoveryState(config, taskId, recovery = null) {
   const at = Number.isFinite(Date.parse(String(recovery.at || '')))
     ? new Date(Date.parse(String(recovery.at))).toISOString()
     : new Date().toISOString();
+  const recoveryChangedFiles = [...new Set((Array.isArray(recovery.changedFiles) ? recovery.changedFiles : [])
+    .map(value => String(value || '').trim().replaceAll('\\', '/'))
+    .filter(Boolean))].slice(0, 100);
   const changedFiles = [...new Set([
     ...(Array.isArray(session.changedFiles) ? session.changedFiles : []),
-    ...(Array.isArray(recovery.changedFiles) ? recovery.changedFiles : [])
+    ...recoveryChangedFiles
   ].map(value => String(value || '').trim().replaceAll('\\', '/')).filter(Boolean))].slice(0, 200);
   const message = sanitizeDisplayText(
     recovery.message || 'Private task changes conflict with newer visible workspace changes.',
@@ -176,7 +167,7 @@ function recordTaskRecoveryState(config, taskId, recovery = null) {
     state: 'conflict',
     code: sanitizeDisplayText(recovery.code || 'TASK_SANDBOX_PROMOTION_CONFLICT', 120),
     message,
-    changedFiles: changedFiles.slice(0, 100),
+    changedFiles: recoveryChangedFiles,
     at
   };
   const terminal = isTerminalTaskStatus(session.status);
@@ -430,7 +421,12 @@ function persistSession(directory, session, options = {}) {
   if (options.defer !== true) {
     const pending = pendingSessions.get(key);
     if (pending?.timer) clearTimeout(pending.timer);
-    if (!pending?.writing) pendingSessions.delete(key);
+    if (pending?.writing) {
+      pending.session = session;
+      pending.version += 1;
+      return;
+    }
+    pendingSessions.delete(key);
     writeSession(directory, session);
     scheduleTaskHistoryPrune(directory);
     return;
@@ -569,4 +565,4 @@ function isStoredSessionNoise(session, activeIds) {
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowSnapshot, recordWorkflowState };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState };
