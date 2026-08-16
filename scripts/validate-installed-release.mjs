@@ -108,6 +108,7 @@ async function validateLinuxLifecycle({ currentArtifact, currentVersion, previou
   }
   verifyInstalledPackage(installedRoot, currentVersion);
   verifyLinuxSandbox(installedRoot);
+  verifyInstalledLinuxDesktop(installedRoot, testRoot);
   verifyInstalledConnector(installedRoot);
 }
 
@@ -168,8 +169,46 @@ function verifyLinuxSandbox(applicationRoot) {
   const sandbox = path.join(applicationRoot, 'chrome-sandbox');
   assert.ok(fs.existsSync(sandbox), `Installed Chromium sandbox helper is missing: ${sandbox}`);
   const stat = fs.statSync(sandbox);
-  assert.equal(stat.uid, 0, 'Installed Chromium sandbox helper must be owned by root.');
-  assert.notEqual(stat.mode & 0o4000, 0, 'Installed Chromium sandbox helper must retain the setuid bit.');
+  assert.equal(
+    isSecureLinuxSandboxConfiguration(stat),
+    true,
+    'Installed Chromium sandbox helper must be root-owned, executable, and not writable by group or other users.'
+  );
+}
+
+function isSecureLinuxSandboxConfiguration(stat) {
+  const mode = Number(stat?.mode || 0);
+  return Number(stat?.uid) === 0
+    && (mode & 0o111) !== 0
+    && (mode & 0o022) === 0;
+}
+
+function verifyInstalledLinuxDesktop(applicationRoot, testRoot) {
+  const executable = path.join(applicationRoot, electronPackage.build.linux.executableName);
+  const stateDirectory = path.join(testRoot, 'installed-linux-smoke-state');
+  fs.mkdirSync(stateDirectory, { recursive: true });
+  const result = spawnSync('timeout', [
+    '--signal=TERM',
+    '--kill-after=5s',
+    '15s',
+    'xvfb-run',
+    '--auto-servernum',
+    executable,
+    '--background'
+  ], {
+    cwd: applicationRoot,
+    env: { ...process.env, REL_AI_MCP_STATE_DIR: stateDirectory },
+    encoding: 'utf8',
+    shell: false,
+    timeout: 25_000,
+    maxBuffer: 16 * 1024 * 1024
+  });
+  if (result.error) throw new Error(`Installed Linux desktop smoke test could not start: ${result.error.message}`, { cause: result.error });
+  if (result.signal) throw new Error(`Installed Linux desktop smoke test was terminated by ${result.signal}.`);
+  assert.ok(
+    result.status === 0 || result.status === 124,
+    `Installed Linux desktop failed to start with its packaged sandbox configuration (exit ${result.status}).\n${String(result.stdout || '')}\n${String(result.stderr || '')}`.trim()
+  );
 }
 
 function verifyInstalledConnector(applicationRoot) {
@@ -303,4 +342,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   });
 }
 
-export { assertDisposableReleaseRunner, compareStableVersions, findPreviousReleaseAsset, parseStableVersion, verifyDownloadedAssetBytes };
+export {
+  assertDisposableReleaseRunner,
+  compareStableVersions,
+  findPreviousReleaseAsset,
+  isSecureLinuxSandboxConfiguration,
+  parseStableVersion,
+  verifyDownloadedAssetBytes
+};

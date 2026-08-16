@@ -27,7 +27,14 @@ const RELEASE_GATE_CHECKS = Object.freeze([
   check('current_surface_without_tasks', 'Current tool surface remains synchronous without Tasks capability', 'test/chatgpt-local-hard-cutover-smoke.mjs')
 ]);
 
-const EXCLUSIVE_CHECK_IDS = new Set(['process_lifecycle', 'process_cancellation']);
+const SERIAL_RELEASE_GATE_CHECK_IDS = Object.freeze([
+  'http_matrix',
+  'process_lifecycle',
+  'process_cancellation',
+  'http_discovery',
+  'http_authentication'
+]);
+const SERIAL_CHECK_IDS = new Set(SERIAL_RELEASE_GATE_CHECK_IDS);
 
 const RELEASE_GATE_BLOCKERS = Object.freeze([
   'tasks_returned_without_negotiation',
@@ -59,12 +66,12 @@ async function runReleaseGate(options = {}) {
 
   const parallelIndexes = RELEASE_GATE_CHECKS
     .map((entry, index) => ({ entry, index }))
-    .filter(({ entry }) => !EXCLUSIVE_CHECK_IDS.has(entry.id));
-  const exclusiveIndexes = RELEASE_GATE_CHECKS
+    .filter(({ entry }) => !SERIAL_CHECK_IDS.has(entry.id));
+  const serialIndexes = RELEASE_GATE_CHECKS
     .map((entry, index) => ({ entry, index }))
-    .filter(({ entry }) => EXCLUSIVE_CHECK_IDS.has(entry.id));
+    .filter(({ entry }) => SERIAL_CHECK_IDS.has(entry.id));
 
-  if (!jsonOnly) console.log(`Running ${RELEASE_GATE_CHECKS.length} release checks with ${concurrency} workers; process-tree checks run exclusively.`);
+  if (!jsonOnly) console.log(`Running ${RELEASE_GATE_CHECKS.length} release checks with ${concurrency} workers; socket/process integration checks run serially.`);
   await Promise.all(Array.from({ length: Math.min(concurrency, parallelIndexes.length) }, async () => {
     while (true) {
       const queueIndex = nextIndex++;
@@ -73,7 +80,7 @@ async function runReleaseGate(options = {}) {
       results[index] = await runCheck(entry);
     }
   }));
-  for (const { entry, index } of exclusiveIndexes) {
+  for (const { entry, index } of serialIndexes) {
     results[index] = await runCheck(entry);
   }
 
@@ -162,4 +169,4 @@ if (invokedDirectly) {
   if (summary.status !== 'passed') process.exitCode = 1;
 }
 
-export { RELEASE_GATE_BLOCKERS, RELEASE_GATE_CHECKS, runReleaseGate };
+export { RELEASE_GATE_BLOCKERS, RELEASE_GATE_CHECKS, SERIAL_RELEASE_GATE_CHECK_IDS, runReleaseGate };
