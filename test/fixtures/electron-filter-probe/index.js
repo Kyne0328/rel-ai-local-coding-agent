@@ -198,10 +198,9 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#settings'`);
-    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 3 && document.querySelector('.theme-switch')`);
+    await waitFor(win, `document.querySelector('.settings-content .theme-switch') && !document.querySelector('.settings-rail')`);
     const settings = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-      const order = [...document.querySelectorAll('.settings-nav-button')].map(button => button.textContent.trim());
       const selects = [...document.querySelectorAll('.settings-content select')];
       const theme = document.querySelector('.theme-switch');
       const themes = [];
@@ -210,16 +209,13 @@ app.whenReady().then(async () => {
         themes.push({ preference: document.documentElement.dataset.themePreference, resolved: document.documentElement.dataset.theme });
       }
       return {
-        order,
         themes,
         themeSwitchLabels: [...theme.querySelectorAll('[data-theme-option]')].map(button => button.getAttribute('aria-label')),
         themeSwitchPressedCount: theme.querySelectorAll('[aria-pressed="true"]').length,
         densityControlRemoved: !selects.some(select => [...select.options].some(option => option.value === 'compact')),
         appearancePreviewRemoved: !document.querySelector('.appearance-preview'),
         legacyDensityIgnored: !document.documentElement.dataset.density,
-        navigationLabel: document.querySelector('.settings-rail')?.getAttribute('aria-label') || '',
-        currentPageCount: document.querySelectorAll('.settings-nav-button[aria-current="page"]').length,
-        tabsVisible: getComputedStyle(document.querySelector('.settings-rail')).display !== 'none',
+        secondaryNavigationRemoved: !document.querySelector('.settings-rail') && document.querySelectorAll('.settings-nav-button').length === 0,
         labelsAssociated: [...document.querySelectorAll('.settings-content .settings-field')].every(field => {
           const label = field.querySelector(':scope > label');
           const control = field.querySelector('input, select, textarea');
@@ -270,6 +266,7 @@ app.whenReady().then(async () => {
       primaryTag: document.querySelector('.connection-primary-action > a, .connection-primary-action > button')?.tagName || '',
       detailsDisclosure: Boolean(document.querySelector('.connection-layer-disclosure')),
       technicalDetailsRemoved: !document.querySelector('.connector-technical-details') && !document.body.innerText.includes('Bounded synchronous fallback'),
+      secondaryNavigationRemoved: !document.querySelector('.system-rail') && !document.querySelector('#__system-content .settings-rail'),
       navigationLabels: [...document.querySelectorAll('nav[aria-label]')].map(nav => nav.getAttribute('aria-label'))
     }))()`);
 

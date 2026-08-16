@@ -14,9 +14,6 @@
 }
 
 @layer components {
-.settings-rail { @apply flex w-fit max-w-full items-center gap-0.5 rounded-lg p-0.5; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
-.settings-nav-button { @apply min-w-[112px] justify-center border-transparent bg-transparent; color: var(--ui-text-secondary); }
-.settings-nav-button.active { background: var(--ui-surface-raised); border-color: var(--ui-border-default); color: var(--ui-text-primary); box-shadow: none; }
 .settings-content { @apply flex min-w-0 flex-col gap-3; }
 .settings-panel-intro { @apply rounded-lg px-3 py-2.5; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-subtle); }
 .settings-panel-intro h2 { @apply text-lg; }
@@ -33,9 +30,6 @@
 .toggle[aria-checked="true"] { background: var(--ui-selection-background); border-color: var(--ui-action-primary); }
 .toggle[aria-checked="true"]::after { transform: translateX(20px); background: var(--ui-action-primary); }
 
-.settings-shell, .settings-layout { @apply grid min-w-0 items-start gap-3; grid-template-columns: minmax(0,1fr); }
-.settings-rail { position: static; }
-.settings-nav-button { @apply w-auto text-center; }
 .settings-loading, .connection-loading { @apply py-3 text-[12px]; color: var(--ui-text-secondary); }
 .settings-header { @apply flex flex-col gap-1; }
 .settings-header h2 { @apply text-[16px] font-bold; }
@@ -122,10 +116,6 @@
 
 @media (max-width: 980px) { .settings-grid { grid-template-columns: 1fr; } }
 
-@media (max-width: 980px) {
-  .settings-layout, .settings-shell { grid-template-columns: 1fr; }
-}
-
 @media (max-width: 520px) {
   .appearance-preview, .settings-fact-grid, .desktop-lifecycle-facts { grid-template-columns: 1fr; }
   .settings-fact-grid > div, .desktop-lifecycle-facts > div { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
@@ -133,6 +123,4 @@
   .about-detail-value { @apply w-full text-left; }
   .settings-save-row { @apply flex-col items-stretch; }
   .settings-save-actions { @apply justify-end; }
-  .settings-rail { @apply grid w-full; grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .settings-nav-button { @apply min-w-0 w-full; }
 }
