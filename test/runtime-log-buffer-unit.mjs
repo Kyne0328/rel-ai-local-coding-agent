@@ -8,9 +8,10 @@ import { applyRuntimeLogChange } from '../electron/runtime-log-snapshot.js';
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-runtime-logs-'));
 const logPath = path.join(temp, 'diagnostics', 'service.log');
+const maxEntries = 3;
 let tick = 0;
 const buffer = createRuntimeLogBuffer({
-  maxEntries: 3,
+  maxEntries,
   filePath: logPath,
   now: () => `2026-07-25T00:00:0${tick++}.000Z`
 });
@@ -69,7 +70,8 @@ try {
   assert.match(JSON.stringify(bounded), /\[redacted\]/);
   assert.equal(fs.existsSync(logPath), true);
   assert.doesNotMatch(fs.readFileSync(logPath, 'utf8'), /secret-token|runtime-env-secret/);
-  assert.equal(fs.readFileSync(logPath, 'utf8').trim().split(/\r?\n/).length, 3);
+  const persistedLines = fs.readFileSync(logPath, 'utf8').trim().split(/\r?\n/);
+  assert.ok(persistedLines.length <= maxEntries * 2, 'persistent logs may use bounded compaction slack instead of rewriting on every overflow');
 
   bounded.entries[0].message = 'mutated';
   assert.notEqual(buffer.snapshot().entries[0].message, 'mutated');
@@ -78,6 +80,15 @@ try {
   assert.equal(restored.snapshot().entries.length, 3);
   assert.equal(restored.snapshot().entries.at(-1).message, 'fourth');
   assert.equal(restored.snapshot().entries.at(-1).taskId, 'task-42', 'structured correlation must survive restart hydration');
+
+  const burstLogPath = path.join(temp, 'diagnostics', 'burst.log');
+  const burst = createRuntimeLogBuffer({ maxEntries: 3, filePath: burstLogPath, now: () => '2026-07-25T00:00:00.000Z' });
+  for (let index = 0; index < 30; index += 1) burst.append(`burst-${index}`);
+  await burst.flush();
+  const burstDiskEntries = fs.readFileSync(burstLogPath, 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line));
+  assert.ok(burstDiskEntries.length <= 6, 'sustained diagnostic logging must periodically compact the persistent file');
+  assert.equal(burstDiskEntries.at(-1).message, 'burst-29', 'compaction must retain the newest diagnostic entry');
+  assert.deepEqual(burst.snapshot().entries.map(entry => entry.message), ['burst-27', 'burst-28', 'burst-29']);
 
   const transitions = createRuntimeLogBuffer({ maxEntries: 10, now: () => '2026-07-25T00:00:00.000Z' });
   transitions.recordStatusTransition({}, { serverRunning: true, tunnelStatus: 'connecting' });

@@ -138,7 +138,11 @@ function createServiceProcessClient(options = {}) {
       return;
     }
     if (message.type === 'activity') {
-      publishActivity(message.event || {});
+      const event = message.event || {};
+      // The dashboard receives coalesced live progress from the local service directly.
+      // Electron only needs lifecycle edges for native power, notification, and recovery state.
+      if (event.phase === 'progress') return;
+      publishActivity(event);
       return;
     }
     if (message.type === 'native-request') void handleNativeRequest(utility, message);
