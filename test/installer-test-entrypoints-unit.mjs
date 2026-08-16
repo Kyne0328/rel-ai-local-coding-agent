@@ -56,13 +56,13 @@ assert.equal(electronPackageLock.packages?.['']?.devDependencies?.electron, elec
 assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
 assert.deepEqual(electronPackage.build.mac.target, ['dmg']);
 assert.equal(electronPackage.build.mac.identity, null, 'macOS builds remain unsigned until signing is implemented as a separate release improvement');
-assert.equal(electronPackage.build.dmg.artifactName, 'Rel.AI-MCP-${version}-mac-${arch}.${ext}');
+assert.match(electronPackage.build.dmg.artifactName, /\$\{version\}[\s\S]*\$\{arch\}[\s\S]*\$\{ext\}/);
 assert.equal(electronPackage.build.nsis.deleteAppDataOnUninstall, false,
   'normal uninstall must not enable electron-builder app-data deletion');
 assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
 assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
-assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
-assert.equal(electronPackage.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
+assert.match(electronPackage.build.appImage.artifactName, /\$\{version\}[\s\S]*\$\{ext\}/);
+assert.match(electronPackage.build.deb.artifactName, /\$\{version\}[\s\S]*\$\{ext\}/);
 assert.equal(electronPackage.build.deb.packageName, 'rel-ai-mcp-launcher',
   'DEB releases must keep the historical package identity so newer versions upgrade existing installations');
 
@@ -70,5 +70,12 @@ assert.equal(electronPackage.build.appId, 'com.relai.mcp');
 assert.equal(electronPackage.build.productName, 'Rel.AI MCP');
 assert.ok(!Object.keys(packageJson.scripts).some(name => /installer|installed/.test(name)),
   'installer lifecycle tests must not be exposed through ordinary package scripts');
+const installedReleaseValidation = read('scripts/validate-installed-release.mjs');
+assert.match(installedReleaseValidation, /GITHUB_ACTIONS/,
+  'installed release validation must remain restricted to disposable CI runners');
+assert.match(installedReleaseValidation, /REL_AI_RELEASE_INSTALL_TEST/,
+  'installed release validation must require an explicit release-only opt in');
+assert.match(installedReleaseValidation, /createInstallerTestContext/,
+  'Windows production-identity validation must retain the installer safety guard');
 
 console.log('Cross-platform packaging entry-point isolation regression tests passed.');

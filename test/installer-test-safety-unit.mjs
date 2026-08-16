@@ -22,7 +22,7 @@ assert.throws(() => assertPathInside(path.dirname(process.cwd()), process.cwd())
 
 const fakeProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-production-detection-'));
 const fakeLocalAppData = path.join(fakeProfile, 'LocalAppData');
-const fakeProductionInstall = path.join(fakeLocalAppData, 'Programs', 'Rel.AI MCP');
+const fakeProductionInstall = path.join(fakeLocalAppData, 'Programs', 'rel-ai-mcp');
 fs.mkdirSync(fakeProductionInstall, { recursive: true });
 const productionDetection = detectProductionInstallation({ LOCALAPPDATA: fakeLocalAppData });
 assert.equal(productionDetection.installed, true);

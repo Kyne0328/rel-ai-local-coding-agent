@@ -1,29 +1,101 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { normalizeElectronArch, normalizeElectronPlatform } from './electron-platform.mjs';
 
+const root = process.env.REL_AI_RELEASE_ROOT
+  ? path.resolve(process.env.REL_AI_RELEASE_ROOT)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+let cachedElectronPackage = null;
 
-function releaseArtifactNames(version) {
-  const normalizedVersion = String(version || '').trim();
-  if (!VERSION_PATTERN.test(normalizedVersion)) {
-    throw new Error(`Invalid release version: ${normalizedVersion || '(empty)'}.`);
-  }
-  const installer = `Rel.AI-MCP-Setup-${normalizedVersion}.exe`;
+function releaseArtifactNames(version, options = {}) {
+  const normalizedVersion = normalizeVersion(version);
+  const electronPackage = options.electronPackage || readElectronPackage();
+  const build = electronPackage?.build || {};
+  const installer = renderBuilderArtifactName(requiredArtifactTemplate(build.nsis, 'NSIS'), {
+    version: normalizedVersion,
+    arch: 'x64',
+    ext: 'exe'
+  });
   return {
     installer,
-    portable: `Rel.AI-MCP-Portable-${normalizedVersion}.exe`,
+    portable: renderBuilderArtifactName(requiredArtifactTemplate(build.portable, 'portable'), {
+      version: normalizedVersion,
+      arch: 'x64',
+      ext: 'exe'
+    }),
     blockmap: `${installer}.blockmap`,
     metadata: 'latest.yml',
-    linuxAppImage: `Rel.AI-MCP-${normalizedVersion}-linux-x64.AppImage`,
-    linuxDeb: `Rel.AI-MCP-${normalizedVersion}-linux-x64.deb`,
+    linuxAppImage: renderBuilderArtifactName(requiredArtifactTemplate(build.appImage, 'AppImage'), {
+      version: normalizedVersion,
+      arch: 'x64',
+      ext: 'AppImage'
+    }),
+    linuxDeb: renderBuilderArtifactName(requiredArtifactTemplate(build.deb, 'DEB'), {
+      version: normalizedVersion,
+      arch: 'x64',
+      ext: 'deb'
+    }),
     linuxMetadata: 'latest-linux.yml',
-    macDmgX64: `Rel.AI-MCP-${normalizedVersion}-mac-x64.dmg`,
-    macDmgArm64: `Rel.AI-MCP-${normalizedVersion}-mac-arm64.dmg`,
+    macDmgX64: renderBuilderArtifactName(requiredArtifactTemplate(build.dmg, 'DMG'), {
+      version: normalizedVersion,
+      arch: 'x64',
+      ext: 'dmg'
+    }),
+    macDmgArm64: renderBuilderArtifactName(requiredArtifactTemplate(build.dmg, 'DMG'), {
+      version: normalizedVersion,
+      arch: 'arm64',
+      ext: 'dmg'
+    }),
     checksums: 'SHA256SUMS.txt',
     sbom: 'sbom.cdx.json',
     sizeReport: 'electron-size-report.json',
     linuxSizeReport: 'electron-size-report-linux.json'
   };
+}
+
+function platformReleaseArtifactNames(version, platform, architecture = 'x64', options = {}) {
+  const normalizedPlatform = normalizeElectronPlatform(platform);
+  const normalizedArch = normalizeElectronArch(architecture);
+  const names = releaseArtifactNames(version, options);
+  if (normalizedPlatform === 'win32') {
+    return [names.installer, names.portable, names.blockmap, names.metadata, names.sbom, names.sizeReport];
+  }
+  if (normalizedPlatform === 'linux') {
+    if (normalizedArch !== 'x64') throw new Error(`Linux release artifacts are not configured for ${normalizedArch}.`);
+    return [names.linuxAppImage, names.linuxDeb, names.linuxMetadata, names.linuxSizeReport];
+  }
+  return [normalizedArch === 'arm64' ? names.macDmgArm64 : names.macDmgX64];
+}
+
+function renderBuilderArtifactName(template, values) {
+  const rendered = String(template || '').replace(/\$\{(version|arch|ext)\}/g, (_match, key) => String(values[key] || ''));
+  if (!rendered || /\$\{[^}]+\}/.test(rendered)) {
+    throw new Error(`Unsupported Electron artifact template: ${template || '(empty)'}.`);
+  }
+  return exactBasename(rendered);
+}
+
+function requiredArtifactTemplate(config, label) {
+  const template = String(config?.artifactName || '').trim();
+  if (!template) throw new Error(`electron/package.json is missing build.${String(label).toLowerCase()}.artifactName.`);
+  return template;
+}
+
+function readElectronPackage() {
+  if (!cachedElectronPackage) {
+    cachedElectronPackage = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
+  }
+  return cachedElectronPackage;
+}
+
+function normalizeVersion(version) {
+  const normalizedVersion = String(version || '').trim();
+  if (!VERSION_PATTERN.test(normalizedVersion)) {
+    throw new Error(`Invalid release version: ${normalizedVersion || '(empty)'}.`);
+  }
+  return normalizedVersion;
 }
 
 function invalidateDerivedReleaseEvidence(directory, version) {
@@ -143,11 +215,64 @@ function exactBasename(value) {
   return name;
 }
 
+function main(argv = process.argv.slice(2)) {
+  const platform = valueAfter(argv, '--platform');
+  const artifact = valueAfter(argv, '--artifact');
+  if (!platform && !artifact) return;
+  const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  const version = valueAfter(argv, '--version', packageVersion);
+  const arch = valueAfter(argv, '--arch', process.env.REL_AI_TARGET_ARCH || 'x64');
+  const releaseNames = releaseArtifactNames(version);
+  const selected = artifact
+    ? [releaseArtifactByRole(releaseNames, artifact, arch)]
+    : platformReleaseArtifactNames(version, platform, arch);
+  const names = selected.map(name => `dist/${name}`);
+  const outputKey = valueAfter(argv, '--github-output');
+  if (outputKey) {
+    const outputFile = String(process.env.GITHUB_OUTPUT || '').trim();
+    if (!outputFile) throw new Error('--github-output requires GITHUB_OUTPUT.');
+    const delimiter = `REL_AI_RELEASE_ARTIFACTS_${process.pid}_${Date.now()}`;
+    fs.appendFileSync(outputFile, `${outputKey}<<${delimiter}\n${names.join('\n')}\n${delimiter}\n`);
+    return;
+  }
+  process.stdout.write(`${names.join('\n')}\n`);
+}
+
+function releaseArtifactByRole(names, role, architecture = 'x64') {
+  const normalizedRole = String(role || '').trim();
+  if (normalizedRole === 'macDmg') {
+    return normalizeElectronArch(architecture) === 'arm64' ? names.macDmgArm64 : names.macDmgX64;
+  }
+  const allowed = new Set(['installer', 'portable', 'blockmap', 'metadata', 'linuxAppImage', 'linuxDeb', 'linuxMetadata', 'checksums', 'sbom', 'sizeReport', 'linuxSizeReport']);
+  if (!allowed.has(normalizedRole)) throw new Error(`Unknown release artifact role: ${normalizedRole || '(empty)'}.`);
+  return names[normalizedRole];
+}
+
+function valueAfter(argv, name, fallback = '') {
+  const index = argv.indexOf(name);
+  if (index < 0) return fallback;
+  const value = argv[index + 1];
+  if (!value || value.startsWith('--')) throw new Error(`${name} requires a value.`);
+  return value;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+}
+
 export {
   exactBasename,
   invalidateDerivedReleaseEvidence,
   parseAssetList,
   parseChecksumManifest,
   parseLatestMetadata,
-  releaseArtifactNames
+  platformReleaseArtifactNames,
+  releaseArtifactByRole,
+  releaseArtifactNames,
+  renderBuilderArtifactName
 };
