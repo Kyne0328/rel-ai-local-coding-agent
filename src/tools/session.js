@@ -60,6 +60,7 @@ function enrichEditAudit(extra, value, args) {
     assignTruthy(extra, "validationLevel", checks.validationLevel);
     assignTruthy(extra, "validationLevelReason", checks.validationLevelReason);
     assignTruthy(extra, "validationFingerprint", checks.validationFingerprint);
+    if (Array.isArray(checks.validationScope)) extra.validationScope = checks.validationScope.slice(0, 1000);
   }
   addAuditPath(extra, args?.path);
 }
@@ -84,6 +85,7 @@ function enrichChecksAudit(extra, value) {
   assignTruthy(extra, "validationLevel", value?.validationLevel);
   assignTruthy(extra, "validationLevelReason", value?.validationLevelReason);
   assignTruthy(extra, "validationFingerprint", value?.validationFingerprint);
+  if (Array.isArray(value?.validationScope)) extra.validationScope = value.validationScope.slice(0, 1000);
   assignDefined(extra, "aliasNormalizations", value?.aliasNormalizations);
   if (value?.policy) extra.policySessionActive = value.policy.sessionActive;
   if (value?.completionKnown === true) enrichCompletionAudit(extra, value);

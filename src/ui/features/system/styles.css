@@ -77,8 +77,6 @@
 
 .connection-controls-section { @apply mt-2 grid gap-3 border-t pt-4; border-color: var(--ui-border-default); }
 .copy-box { @apply min-h-24 overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 text-[11px] leading-5; background: var(--ui-canvas); border: 1px solid var(--ui-border-default); color: var(--ui-text-primary); }
-.copy-box.approval-token-value { height: var(--control-height); min-height: var(--control-height); overflow-x: auto; overflow-y: hidden; padding-block: 0; white-space: nowrap; word-break: normal; }
-
 .diagnostic-page { @apply flex min-w-0 flex-col gap-3; container-type: inline-size; container-name: diagnostic-page; }
 .diagnostic-page-head { @apply min-w-0 items-start; }
 .diagnostic-page-actions { @apply min-w-0 flex-wrap justify-end; }
@@ -177,44 +175,3 @@
 }
 
 
-/* Connection controls belong to the Connection/System feature. */
-.cloud-gateway-settings { display: grid; gap: 12px; }
-.cloud-gateway-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.cloud-gateway-heading > div, .cloud-gateway-card { min-width: 0; }
-.cloud-gateway-stack { display: flex; flex-direction: column; gap: 16px; }
-.cloud-gateway-state { display: grid; gap: 6px; min-width: 0; }
-.cloud-gateway-state > strong { font-size: 14px; }
-.cloud-gateway-state > p { margin: 0; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.55; }
-.cloud-gateway-state.good > strong { color: var(--ui-status-success-foreground); }
-.cloud-gateway-state.warn > strong { color: var(--ui-status-warning-foreground); }
-.cloud-gateway-state.bad > strong { color: var(--ui-status-danger-foreground); }
-.cloud-pairing-state { padding: 16px; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-lg); background: var(--ui-status-info-background); }
-.cloud-pairing-copy { width: fit-content; max-width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 7px 10px; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-md); background: var(--ui-surface-primary); color: var(--ui-text-primary); text-align: left; transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease); }
-.cloud-pairing-copy:hover { border-color: var(--ui-action-primary); background: var(--ui-surface-secondary); }
-.cloud-pairing-copy > span { flex: none; color: var(--ui-action-primary); font-size: 11px; font-weight: 700; }
-.cloud-pairing-code { width: fit-content; max-width: 100%; overflow-wrap: anywhere; font-size: clamp(20px, 4vw, 30px); font-weight: 800; letter-spacing: .08em; color: var(--ui-text-primary); }
-.cloud-gateway-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.cloud-gateway-actions > .muted { flex: 1 1 280px; }
-.cloud-gateway-fallback { margin-left: auto; }
-.cloud-gateway-fallback > summary { min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: 11px; font-weight: 600; }
-.cloud-gateway-fallback[open] { display: flex; align-items: center; gap: 8px; }
-.cloud-device-section { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--ui-border-subtle); }
-.cloud-device-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.cloud-device-heading > div { min-width: 0; }
-.cloud-device-heading > span { flex: none; color: var(--ui-text-tertiary); font-size: 11px; }
-.cloud-device-list { display: grid; gap: 8px; }
-.cloud-device-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--ui-border-subtle); border-radius: var(--radius-md); background: var(--ui-surface-secondary); }
-.cloud-device-copy { min-width: 0; display: grid; gap: 3px; }
-.cloud-device-copy strong, .cloud-device-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cloud-device-copy strong { font-size: 12px; }
-.cloud-device-copy span { color: var(--ui-text-secondary); font-size: 11px; }
-.cloud-recovery-panel { display: grid; gap: 8px; }
-.cloud-recovery-panel .connection-endpoint-row { margin-top: 2px; }
-.direct-connection-controls { margin-top: 12px; }
-@media (max-width: 760px) {
-  .cloud-gateway-heading, .cloud-device-heading { align-items: stretch; flex-direction: column; }
-  .cloud-gateway-fallback { margin-left: 0; }
-  .cloud-device-row { align-items: flex-start; }
-  .cloud-pairing-copy { width: 100%; flex-wrap: wrap; justify-content: space-between; }
-  .cloud-pairing-code { font-size: 20px; }
-}

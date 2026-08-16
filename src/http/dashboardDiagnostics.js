@@ -34,7 +34,6 @@ function handleApiDiagnostics(ctx) {
   const report = buildDiagnosticReport({
     workspace,
     health: productUx.healthMonitor(config),
-    aliasCheck: productUx.aliasConsistencyCheck(config),
     cautionData: productUx.cautionSummary(config, { windowHours: 24, limit: 500 }),
     connection: connectionSummary,
     connectionState,

@@ -147,4 +147,4 @@ function isToolSurfaceSourcePath(value) {
   return TOOL_SURFACE_SOURCE_SET.has(normalized);
 }
 
-export { ACTION_REGISTRY, TOOL_SURFACE_SOURCE_PATHS, isToolSurfaceSourcePath };
+export { ACTION_REGISTRY, isToolSurfaceSourcePath };

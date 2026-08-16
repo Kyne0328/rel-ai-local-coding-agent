@@ -2,7 +2,7 @@
 
 import * as path from "node:path";
 import { importResourceModule } from './resource-path.js';
-import { assessUpdateSynchronization, cleanText, cleanVersion, normalizeStatus, progressPayload, updateCompatibilityMetadata } from './app-updater-status.js';
+import { assessUpdateSynchronization, cleanText, normalizeStatus, progressPayload, updateCompatibilityMetadata } from './app-updater-status.js';
 
 const { readJsonFileAsync, writeJsonAtomicAsync } = await importResourceModule('src/durableState.js');
 
@@ -83,4 +83,4 @@ function createLogger(onLog) {
   };
 }
 
-export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, assessUpdateSynchronization, cleanText, cleanVersion, createLogger, createUpdateStateStore, detectUpdateSupport, isoNow, normalizeStatus, progressPayload, updateCompatibilityMetadata };
+export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, assessUpdateSynchronization, cleanText, createLogger, createUpdateStateStore, detectUpdateSupport, isoNow, normalizeStatus, progressPayload, updateCompatibilityMetadata };

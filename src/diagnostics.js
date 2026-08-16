@@ -35,7 +35,6 @@ function buildDiagnosticReport(input = {}) {
   const workspace = String(input.workspace || '');
   const findings = [
     ...healthFindings(input.health, workspace),
-    ...aliasFindings(input.aliasCheck, workspace),
     ...connectionFindings(input.connection, input.connectionState),
     ...cautionFindings(input.cautionData, workspace)
   ];
@@ -99,24 +98,6 @@ function healthFindings(health, workspace) {
         details: finding
       });
     });
-}
-
-function aliasFindings(aliasCheck, workspace) {
-  const findings = [];
-  for (const item of aliasCheck?.workspaces || []) {
-    if (workspace && item.alias !== workspace) continue;
-    if (!item.staleKeys?.length) continue;
-    findings.push(diagnosticFinding({
-      severity: 'warning',
-      code: 'stale_validation_commands',
-      title: `Stale validation commands in ${item.alias}`,
-      impact: 'Saved validation may fail or report a misleading result.',
-      recommendation: `Remove or replace: ${item.staleKeys.join(', ')}`,
-      action: { label: 'Review workspace', href: `#workspaces?workspace=${encodeURIComponent(item.alias)}` },
-      details: item
-    }));
-  }
-  return findings;
 }
 
 function connectionFindings(connection, state) {

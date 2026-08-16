@@ -9,7 +9,7 @@ const DISMISSED_KEY = 'relai_desktop_setup_dismissed';
 let completionPersisted = false;
 let pendingPersisted = false;
 
-export function desktopSetupSteps({
+function desktopSetupSteps({
   hasWorkspace = false,
   endpointReady = false,
   chatgptReady = false,

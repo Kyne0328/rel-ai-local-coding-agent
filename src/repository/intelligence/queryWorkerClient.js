@@ -221,9 +221,7 @@ function serializableWorkspace(workspace = {}) {
     path: String(workspace.path || ''),
     sourceAlias: String(workspace.sourceAlias || ''),
     taskSandbox: workspace.taskSandbox === true,
-    context: plainObject(workspace.context),
-    commands: plainObject(workspace.commands),
-    testCommands: plainObject(workspace.testCommands)
+    context: plainObject(workspace.context)
   };
 }
 

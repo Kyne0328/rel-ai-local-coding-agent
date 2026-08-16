@@ -190,7 +190,7 @@ function durationFor(process, active) {
   return process.endedAt ? timeAgo(process.endedAt) : 'Unavailable';
 }
 
-export function orderProcesses(items = [], nativeTasks = []) {
+function orderProcesses(items = [], nativeTasks = []) {
   return [...(Array.isArray(items) ? items : [])].sort((left, right) => {
     const activeDifference = Number(processStateView(right, nativeTasks).active) - Number(processStateView(left, nativeTasks).active);
     if (activeDifference) return activeDifference;

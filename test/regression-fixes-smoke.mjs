@@ -66,11 +66,11 @@ function read(rel) {
 // Audit-fix smoke guards for docs, UI copy, and tunnel process safety.
 {
   assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
-  assert.match(read('README.md'), /Tunnel[\s\S]*Authentication[\s\S]*No authentication/i);
-  assert.match(read('README.md'), /existing integration instead of creating a duplicate/i);
+  assert.match(read('README.md'), /Tunnel[\s\S]*No authentication/i);
+  assert.match(read('README.md'), /Add or reconnect Rel\.AI MCP/i);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
   assert.match(read('electron/renderer/status.html'), /Secure MCP Tunnel|Secure tunnel/);
-  assert.match(read('electron/renderer/status.js'), /Connecting OpenAI Secure MCP Tunnel/);
+  assert.match(read('electron/renderer/status.js'), /Starting Secure MCP Tunnel/);
   assert.doesNotMatch(read('electron/main.js'), /killOrphanedNgrok\(\)/);
 }
 
@@ -110,11 +110,12 @@ function read(rel) {
   assert.match(workspaceMenu, /aria-haspopup="listbox"/);
   const router = read('src/ui/router.js');
   assert.match(router, /pageScroller\(\)\.scrollTo\(view\.scrollX, view\.scrollY\)/);
-  assert.match(router, /Keep the current route visible while a lazy feature module resolves/);
+  assert.match(router, /_container\.setAttribute\('aria-busy', 'true'\)/);
+  assert.match(router, /Promise\.resolve\(result\)\.finally\(\(\) => finishMount/);
   assert.doesNotMatch(router, /_container\.innerHTML = ''/);
 }
 
-// Stale-command diagnostics cover commands AND testCommands, matching relai_work action status.
+// Workspace command aliases are legacy state: current manifests are the source of truth.
 {
   const workspaceRoot = fs.mkdtempSync(path.join(tmpRoot, 'workspace-'));
   fs.writeFileSync(path.join(workspaceRoot, 'package.json'), JSON.stringify({ scripts: { test: 'node ok.js' } }), 'utf8');
@@ -123,15 +124,15 @@ function read(rel) {
     workspaces: {
       demo: {
         path: workspaceRoot,
-        commands: { 'npm:gone-command': 'npm run gone-command' },
-        testCommands: { 'npm:gone-test': 'npm run gone-test' }
+        commands: { legacy: 'npm run gone-command' },
+        testCommands: { legacy: 'npm run gone-test' }
       }
     }
   });
-  const result = productUx.aliasConsistencyCheck(cfg);
-  const demo = result.workspaces.find((item) => item.alias === 'demo');
-  assert.deepEqual(new Set(demo.staleKeys), new Set(['npm:gone-command', 'npm:gone-test']));
-  assert.equal(demo.ok, false);
+  assert.equal(Object.hasOwn(cfg.workspaces.demo, 'commands'), false);
+  assert.equal(Object.hasOwn(cfg.workspaces.demo, 'testCommands'), false);
+  const summary = publicConfigSummary(cfg).workspaces.find(item => item.alias === 'demo');
+  assert.ok(summary.discoveredTestCommandKeys.includes('npm:test'));
 }
 
 // State export respects the enableStateExport flag.

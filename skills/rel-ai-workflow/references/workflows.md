@@ -39,4 +39,4 @@ Use returned error codes, recovery data, and current status. Re-read after hash 
 
 ## Public tool surface
 
-Rel.AI exposes the complete 13-tool capability surface. Exact action contracts and action-level execution metadata are available through `relai://server/tool-surface`.
+Rel.AI exposes its current public capability surface through the server. Exact action contracts and action-level execution metadata are available through `relai://server/tool-surface`; do not duplicate a numeric tool count here.

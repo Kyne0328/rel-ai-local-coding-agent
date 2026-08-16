@@ -1,8 +1,6 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConfigPath, makeDefaultContextConfig, publicConfigSummary, writeConfig } from './config.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
-import { discoverCommands, staleCommandKeys } from "./commandDiscovery.js";
 
 // Only these nested keys may be written through the settings API; anything else is
 // rejected so junk keys never persist into config.json.
@@ -77,62 +75,6 @@ function _handleDeleteWorkspace(alias, payload, next) {
   return { ok: true, changed: [`workspaces.${alias}`], message: `Removed workspace '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
 }
 
-function _handleRenameWorkspace(alias, payload, next) {
-  const newAlias = String(payload.newAlias || "").trim();
-  validateAlias(newAlias);
-  if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
-  if (alias === newAlias) return { ok: true, changed: [], message: "Workspace alias unchanged.", configPath: getConfigPath(), config: publicConfigSummary(next) };
-  if (next.workspaces[newAlias]) throw new Error(`Workspace '${newAlias}' already exists.`);
-  next.workspaces[newAlias] = { ...next.workspaces[alias] };
-  delete next.workspaces[alias];
-  const normalized = writeConfig(next);
-  return { ok: true, changed: [`workspaces.${alias}`, `workspaces.${newAlias}`], message: `Renamed workspace '${alias}' to '${newAlias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
-}
-
-function _handlePruneCommands(alias, payload, next) {
-  const ws = next.workspaces[alias];
-  if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
-  const configuredTests = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
-  const configuredCommands = ws.commands && typeof ws.commands === "object" ? ws.commands : {};
-  let discovered;
-  try {
-    discovered = discoverCommands(ws.path) || {};
-  } catch (error) {
-    if (process.env.REL_AI_MCP_DEBUG) {
-      console.error('[rel-ai-mcp] prune command discovery:', error);
-    }
-    discovered = {};
-  }
-  if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
-    throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
-  }
-  const staleTests = staleCommandKeys(configuredTests, discovered);
-  const staleCommands = staleCommandKeys(configuredCommands, discovered);
-  const stale = [...new Set([...staleCommands, ...staleTests])];
-  if (!stale.length) {
-    return { ok: true, changed: [], removed: [], message: `No stale commands for '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(next) };
-  }
-  const cleanedTests = {};
-  for (const [key, command] of Object.entries(configuredTests)) {
-    if (!staleTests.includes(key)) cleanedTests[key] = command;
-  }
-  const cleanedCommands = {};
-  for (const [key, command] of Object.entries(configuredCommands)) {
-    if (!staleCommands.includes(key)) cleanedCommands[key] = command;
-  }
-  ws.testCommands = cleanedTests;
-  ws.commands = cleanedCommands;
-  const normalized = writeConfig(next);
-  return {
-    ok: true,
-    changed: [`workspaces.${alias}.commands`, `workspaces.${alias}.testCommands`],
-    removed: stale,
-    message: `Removed ${stale.length} stale command${stale.length === 1 ? "" : "s"} from '${alias}': ${stale.join(", ")}.`,
-    configPath: getConfigPath(),
-    config: publicConfigSummary(normalized)
-  };
-}
-
 function _handleUpsertWorkspace(alias, payload, next) {
   const source = payload.workspaceConfig && typeof payload.workspaceConfig === "object" ? payload.workspaceConfig : payload;
   const mode = String(source.mode || payload.mode || "").trim().toLowerCase();
@@ -158,9 +100,7 @@ function _handleUpsertWorkspace(alias, payload, next) {
     ...currentWorkspace,
     path: workspacePath,
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
-    context: parseContext(source.context, currentWorkspace.context),
-    testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
-    commands: parseCommandMap(source.commands, currentWorkspace.commands || {})
+    context: parseContext(source.context, currentWorkspace.context)
   };
   const normalized = writeConfig(next);
   return {
@@ -188,12 +128,9 @@ function normalizedWorkspacePath(value) {
 }
 
 const WORKSPACE_ACTION_HANDLERS = {
+  upsert: _handleUpsertWorkspace,
   delete: _handleDeleteWorkspace,
-  remove: _handleDeleteWorkspace,
-  clear: _handleDeleteWorkspace,
-  rename: _handleRenameWorkspace,
-  "prune-stale-tests": _handlePruneCommands,
-  "prune-tests": _handlePruneCommands
+  clear: _handleDeleteWorkspace
 };
 
 function updateWorkspace(current, payload = {}) {
@@ -203,7 +140,10 @@ function updateWorkspace(current, payload = {}) {
   const next = clone(current);
   if (!next.workspaces || typeof next.workspaces !== "object") next.workspaces = {};
 
-  const handler = WORKSPACE_ACTION_HANDLERS[action] || _handleUpsertWorkspace;
+  const handler = WORKSPACE_ACTION_HANDLERS[action];
+  if (!handler) {
+    throw new Error(`Unknown workspace action: ${action}. Allowed: ${Object.keys(WORKSPACE_ACTION_HANDLERS).join(", ")}.`);
+  }
   return handler(alias, payload, next);
 }
 
@@ -238,39 +178,8 @@ function parseContext(value, fallback = {}) {
   };
 }
 
-function parseCommandMap(value, fallback = {}) {
-  if (value == null || value === "") return { ...objectOrEmpty(fallback) };
-  if (typeof value === "object" && !Array.isArray(value)) {
-    const result = {};
-    for (const [key, command] of Object.entries(value)) {
-      const cleanKey = String(key || "").trim();
-      if (!cleanKey) continue;
-      validateCommandKey(cleanKey);
-      result[cleanKey] = String(command || "").trim();
-    }
-    return result;
-  }
-  const result = {};
-  for (const rawLine of String(value).split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const index = line.indexOf("=");
-    if (index <= 0) throw new Error(`Command lines must use key=command format. Bad line: ${line}`);
-    const key = line.slice(0, index).trim();
-    const command = line.slice(index + 1).trim();
-    validateCommandKey(key);
-    if (!command) throw new Error(`Command '${key}' cannot be empty.`);
-    result[key] = command;
-  }
-  return result;
-}
-
 function validateAlias(alias) {
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(alias)) throw new Error("Workspace alias must be 1-80 characters using letters, numbers, dot, underscore, or dash.");
-}
-
-function validateCommandKey(key) {
-  if (!/^[A-Za-z0-9._:-]{1,120}$/.test(key)) throw new Error(`Invalid command key: ${key}`);
 }
 
 function setNestedIfChanged(target, section, key, value, changed) {

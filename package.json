@@ -57,8 +57,6 @@
     "typecheck": "tsc -p tsconfig.boundaries.json",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
-    "testcmd:add": "node bin/relai-mcp-config.js test-command add",
-    "cmd:add": "node bin/relai-mcp-config.js command add",
     "test": "npm run test:all",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
@@ -167,18 +165,6 @@
     "web-tree-sitter": "0.25.10",
     "zod": "^4.4.3"
   },
-  "bundledDependencies": [
-    "@modelcontextprotocol/server",
-    "@opentelemetry/api",
-    "@opentelemetry/exporter-trace-otlp-http",
-    "@opentelemetry/resources",
-    "@opentelemetry/sdk-trace-node",
-    "@opentelemetry/semantic-conventions",
-    "playwright-core",
-    "tree-sitter-wasms",
-    "web-tree-sitter",
-    "zod"
-  ],
   "overrides": {
     "@hono/node-server": "2.1.1",
     "oxc-resolver": "11.24.2"

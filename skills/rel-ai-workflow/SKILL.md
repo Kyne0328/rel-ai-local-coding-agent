@@ -36,7 +36,7 @@ Specialists return conclusions to this workflow instead of reopening the objecti
 
 Use `relai_edit` for repository changes. Tests, builds, linters, source checks, and release gates are one-shot commands; run them with `relai_exec` or `relai_validate` as appropriate. Use `relai_process` only for persistent services, watchers, previews, or interactive programs. For browser-rendered UI work, keep the local app running with `relai_process`, then use `relai_ui` to inspect, interact, capture visual evidence, check console/network failures, and stop the UI session when verification is complete. Prefer semantic UI targets over brittle selectors when both are available. Use `relai_changes` for task-owned review and widen to workspace scope only when the objective requires it.
 
-Rel.AI exposes the complete 13-tool capability surface. Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed; do not copy full schemas into skill instructions.
+Rel.AI exposes its current public capability surface through the server. Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed; do not copy full schemas or hard-coded tool counts into skill instructions.
 
 ## Approved plan execution
 

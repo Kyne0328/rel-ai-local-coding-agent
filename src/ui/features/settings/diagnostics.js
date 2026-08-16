@@ -8,6 +8,8 @@ import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirm-dialog.js';
 import { esc, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter } from '../../router.js';
+import { get as getStore } from '../../store.js';
+import { clientCapabilityViews } from '../../task-identity.js';
 
 const LIVE_TAIL_REFRESH_DELAY_MS = 160;
 let currentReport = null;
@@ -538,8 +540,29 @@ function renderReport(report, view) {
       : '<div class="diagnostic-log-empty" data-diagnostic-region="findings"><strong>No findings match the current filters.</strong></div>';
   return summaryCards(countFindings(view.findings))
     + body
+    + clientCapabilityHtml()
     + logsHtml(report.logs || {}, view)
     + maintenanceHtml(report.maintenance || {});
+}
+
+function clientCapabilityHtml() {
+  const capability = clientCapabilityViews({ mcpConnection: getStore().mcpConnection || {} })[0];
+  const supported = capability.capabilityState === 'supported'
+    ? 'true'
+    : capability.capabilityState === 'not_advertised'
+      ? 'false'
+      : 'unknown';
+  return `<details class="card connector-details diagnostic-client-capability" data-diagnostic-region="client-capability" data-diagnostic-detail="client-capability">
+    <summary class="connector-details-summary"><span><strong>Client capability details</strong><small>Technical MCP information for troubleshooting</small></span><span aria-hidden="true">›</span></summary>
+    <div class="card-body connection-status-body">
+      <div class="connection-status-copy">
+        <strong>${esc(capability.capabilityLabel)}</strong>
+        <p>${esc(capability.description)}</p>
+        <p>${esc(capability.executionLabel)}</p>
+      </div>
+      <div class="connection-field"><span class="field-caption">Observed MCP Tasks capability</span><code class="connector-endpoint">nativeTasksSupported: ${supported}</code></div>
+    </div>
+  </details>`;
 }
 
 function summaryCards(summary) {

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { packageMetadata, packageRoot } from '../packageMetadata.js';
 import { resolveWorkspace, allWorkspaceAliases } from '../config.js';
 import { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } from '../safety.js';
-import { commandDiscoveryWarnings, discoverCommands, staleCommandKeys as staleCommandKeyList } from '../commandDiscovery.js';
+import { commandDiscoveryWarnings, discoverCommands } from '../commandDiscovery.js';
 import { summarizeOperations } from '../journal.js';
 import { resolvePolicy } from '../policyResolver.js';
 import { getVersion } from '../version.js';
@@ -33,17 +33,10 @@ async function relaiStatus(config, args = {}, context = {}) {
       const workspace = resolveWorkspace(config, args.workspace);
       const discovered = discoverCommands(workspace.path);
       const discoveryWarnings = commandDiscoveryWarnings(workspace.path);
-      const commandKeys = sortedKeys(workspace.commands);
-      const testCommandKeys = sortedKeys(workspace.testCommands);
-      const staleCommandKeys = staleCommandKeyList(workspace.commands || {}, discovered);
-      const staleTestCommandKeys = staleCommandKeyList(workspace.testCommands || {}, discovered);
       selectedWorkspace = {
         alias: workspace.alias,
         root: workspace.path,
-        commandKeys,
-        testCommandKeys,
-        ...(staleCommandKeys.length > 0 ? { staleCommandKeys } : {}),
-        ...(staleTestCommandKeys.length > 0 ? { staleTestCommandKeys } : {}),
+        discoveredCommandKeys: sortedKeys(discovered),
         ...(discoveryWarnings.length > 0 ? { discoveryWarnings } : {}),
         policy: resolvePolicy(workspace, config),
         repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes })
@@ -115,8 +108,6 @@ function workspaceList(config) {
       alias,
       path: item.path,
       repoSlug: item.repoSlug || '',
-      testCommandKeys: sortedKeys(item.testCommands),
-      commandKeys: sortedKeys(item.commands),
       context: item.context || {}
     };
   }).sort((left, right) => left.alias.localeCompare(right.alias));
@@ -199,8 +190,6 @@ function workspaceProfile(config, args = {}) {
     root: workspace.path,
     manifests: present,
     hints,
-    configuredTestCommands: sortedKeys(workspace.testCommands),
-    configuredCommands: sortedKeys(workspace.commands),
     discoveredCommands: discovered,
     discoveredCommandCount: Object.keys(discovered).length,
     projectInstructions

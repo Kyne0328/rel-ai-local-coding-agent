@@ -19,7 +19,7 @@ When working through Rel.AI itself, use the task-aware validation and diff tools
 
 ## 2. Verify the MCP contract
 
-The release retains one 12-tool surface for stdio and private HTTP clients.
+The release retains one canonical public tool surface for stdio and private HTTP clients. Its exact size and action contracts come from the current tool registry rather than release documentation.
 
 Required invariants:
 

@@ -1,6 +1,6 @@
 # Workflow reliability
 
-Rel.AI exposes one 12-tool public surface and derives bounded workflow guidance from the repository facts it already owns. There is no mandatory numbered workflow. The correct path is the shortest path that proves the current objective without weakening safety, integrity, or completion authority.
+Rel.AI exposes one canonical public tool surface and derives bounded workflow guidance from the repository facts it already owns. There is no mandatory numbered workflow. The correct path is the shortest path that proves the current objective without weakening safety, integrity, or completion authority.
 
 ## Runtime calibration
 

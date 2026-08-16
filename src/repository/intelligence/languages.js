@@ -97,10 +97,6 @@ function languageForPath(relativePath) {
   return BASENAME_LANGUAGE.get(basename) || EXTENSION_LANGUAGE.get(path.posix.extname(basename)) || 'text';
 }
 
-function wasmForLanguage(language) {
-  return WASM_BY_LANGUAGE[String(language || '').toLowerCase()] || null;
-}
-
 function parserForLanguage(language) {
   const key = String(language || '').toLowerCase();
   const vendored = VENDORED_WASM_BY_LANGUAGE[key];
@@ -159,7 +155,7 @@ function stripQuotes(value) {
 }
 
 export {
-  EXTENSION_LANGUAGE, LANGUAGE_PROFILES, MAX_SEARCH_TERMS, PARSER_VERSION, WASM_BY_LANGUAGE,
-  enhancedResolverLanguages, isTestPath, languageCapabilities, languageForPath, languageProfile,
-  lexicalSearchText, parserForLanguage, queryTerms, simpleSymbol, structuralLanguages, stripQuotes, wasmForLanguage
+  PARSER_VERSION,
+  enhancedResolverLanguages, isTestPath, languageCapabilities, languageForPath,
+  lexicalSearchText, parserForLanguage, queryTerms, simpleSymbol, structuralLanguages, stripQuotes
 };

@@ -396,9 +396,6 @@ export {
   relaiExec,
   resolveCommandCwd,
   normalizeCommandEnv,
-  normalizeDirectArgv,
-  normalizeDirectInput,
   normalizeExecutionInvocation,
-  resolveShell,
   redactCommandForAudit
 };

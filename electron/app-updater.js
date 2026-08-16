@@ -1,6 +1,6 @@
 
 
-import { AUTO_CHECK_INTERVAL_MS, AUTO_CHECK_DELAY_MS, assessUpdateSynchronization, cleanText, createLogger, createUpdateStateStore, detectUpdateSupport, normalizeStatus, progressPayload, updateCompatibilityMetadata } from "./app-updater-state.js";
+import { AUTO_CHECK_INTERVAL_MS, AUTO_CHECK_DELAY_MS, cleanText, createLogger, createUpdateStateStore, detectUpdateSupport, normalizeStatus, progressPayload } from "./app-updater-state.js";
 import { importResourceModule } from './resource-path.js';
 
 const { runtimeMetadata } = await importResourceModule('src/runtimeCompatibility.js');
@@ -224,4 +224,4 @@ function isTransientUpdateError(error) {
   return TRANSIENT_UPDATE_ERROR_CODES.some(candidate => code.includes(candidate) || message.includes(candidate));
 }
 
-export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, assessUpdateSynchronization, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload, updateCompatibilityMetadata };
+export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload };
