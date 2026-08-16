@@ -327,7 +327,13 @@ async function workspaceGitStatus(workspace, config, args = {}) {
     timeout: 30000,
     maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
   }, config);
-  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "", args.work_id);
+  const taskScoped = Boolean(String(args.work_id || '').trim());
+  const sessionChangedFiles = taskScoped ? ownership.sessionTouched : ownership.sessionChanged;
+  const scopedSessionSet = new Set(sessionChangedFiles);
+  const untrackedSessionFiles = taskScoped
+    ? ownership.untrackedSession.filter(file => scopedSessionSet.has(file))
+    : ownership.untrackedSession;
   return {
     ok: status.exitCode === 0 && !status.stdoutTruncated,
     workspace: workspace.alias,
@@ -338,9 +344,9 @@ async function workspaceGitStatus(workspace, config, args = {}) {
     statusEntries: ownership.entries,
     changedFiles: ownership.entries.map((entry) => entry.path),
     untrackedFiles: ownership.entries.filter((entry) => entry.untracked).map((entry) => entry.path),
-    sessionChangedFiles: ownership.sessionChanged,
+    sessionChangedFiles,
     baselineChangedFiles: ownership.baselineChanged,
-    untrackedSessionFiles: ownership.untrackedSession,
+    untrackedSessionFiles,
     untrackedBaselineFiles: ownership.untrackedBaseline,
     ...(ownership.baselineSource ? { baselineSource: ownership.baselineSource } : {}),
     ...(status.stderr ? { stderr: truncateUtf8(status.stderr, maxBytes, "git status stderr") } : {})

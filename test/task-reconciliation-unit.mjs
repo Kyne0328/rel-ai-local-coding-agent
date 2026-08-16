@@ -5,8 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { flushAuditWrites } from '../src/audit.js';
+import { readConfig } from '../src/config.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
-import { getToolActivity, resetToolActivity } from '../src/toolActivity.js';
+import { flushTaskHistoryPersistence, readTaskHistory, readTaskHistorySessionRecord, recordWorkflowState } from '../src/taskHistoryStore.js';
+import { ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, writeSession } from '../src/taskHistoryStorage.js';
+import { DEFAULT_TASK_IDLE_MS, getToolActivity, resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-reconciliation-'));
@@ -87,7 +90,59 @@ try {
   assert.equal(getToolActivity().lastTask?.residualState, 'preserved_uncommitted');
   assert.deepEqual(getToolActivity().lastTask?.residualChangedFiles, ['src/residual-owned.js']);
 
-  console.log('Task commit reconciliation and explicit residual-state tests passed.');
+  resetToolActivity();
+  const idleTask = await begin('Idle task must remain resumable');
+  await flushTaskHistoryPersistence();
+  const idleSession = readTaskHistorySessionRecord(readConfig(), idleTask);
+  const inactiveAt = new Date(Date.now() - DEFAULT_TASK_IDLE_MS - 5_000).toISOString();
+  writeSession(getTaskHistoryDir(readConfig()), {
+    ...idleSession,
+    status: 'planning',
+    state: 'waiting',
+    updatedAt: inactiveAt,
+    lastActivityAt: inactiveAt,
+    events: (idleSession.events || []).map(event => ({ ...event, timestamp: inactiveAt, ts: inactiveAt, startedAt: inactiveAt, completedAt: inactiveAt }))
+  });
+  resetToolActivity();
+  const historyAfterIdle = readTaskHistory(readConfig(), getToolActivity(), { limit: 100 });
+  assert.equal(historyAfterIdle.some(session => session.id === idleTask && session.status === 'inactive'), true, 'an idle no-op task must remain stored as resumable inactive work');
+  const resumedIdle = await rawCallTool('relai_read', { workspace: 'app', work_id: idleTask, paths: ['src/index.js'] }, context);
+  assert.equal(resumedIdle.work_id, idleTask, 'a stored inactive task must resume with the same identity');
+  await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: idleTask, reason: 'Idle recovery regression complete.' }, context);
+
+  resetToolActivity();
+  const workflowOnlyTask = await begin('Workflow readiness is not completion');
+  recordWorkflowState(readConfig(), workflowOnlyTask, {
+    workflow: { stage: 'complete', completion: { hardReady: true, blockers: [] } }
+  });
+  await flushTaskHistoryPersistence();
+  resetToolActivity();
+  const workflowOnlySession = readTaskHistorySessionRecord(readConfig(), workflowOnlyTask, { reconcileInactive: true, activeTaskIds: new Set() });
+  assert.notEqual(workflowOnlySession.status, 'completed', 'workflow readiness must never substitute for an explicit lifecycle completion');
+  const resumedWorkflowOnly = await rawCallTool('relai_read', { workspace: 'app', work_id: workflowOnlyTask, paths: ['src/index.js'] }, context);
+  assert.equal(resumedWorkflowOnly.work_id, workflowOnlyTask);
+  await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: workflowOnlyTask, reason: 'Workflow readiness regression complete.' }, context);
+
+  const pruneStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-open-history-prune-'));
+  const pruneConfig = { stateDir: pruneStateDir };
+  ensureCurrentHistory(pruneConfig);
+  const pruneDirectory = getTaskHistoryDir(pruneConfig);
+  const record = (id, status, extra = {}) => writeSession(pruneDirectory, {
+    id,
+    status,
+    workspace: 'app',
+    updatedAt: new Date().toISOString(),
+    progress: { mode: 'indeterminate', label: status },
+    ...extra
+  });
+  record('open-inactive', 'inactive', { resumeStatus: 'planning' });
+  record('terminal-completed', 'completed', { completionKnown: true });
+  record('terminal-cancelled', 'cancelled', { endReason: 'explicit_cancellation' });
+  pruneSessions(pruneDirectory, 1);
+  assert.deepEqual(listSessions(pruneDirectory, 10).map(session => session.id), ['open-inactive'], 'history pruning must preserve nonterminal work even when it exceeds the nominal retention target');
+  fs.rmSync(pruneStateDir, { recursive: true, force: true });
+
+  console.log('Task commit, inactivity recovery, cleanup retention, explicit completion, and residual-state tests passed.');
 } finally {
   await flushAuditWrites();
   repositoryIntelligence.shutdown();

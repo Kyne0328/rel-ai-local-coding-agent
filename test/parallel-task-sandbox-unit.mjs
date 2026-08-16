@@ -8,6 +8,7 @@ import { allWorkspaceAliases, readConfig, resolveWorkspace } from '../src/config
 import { createTaskSandbox, promoteTaskSandbox, readSandboxRegistry } from '../src/parallelTaskSandbox.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { readTaskHistorySession } from '../src/taskHistoryStore.js';
+import { getTaskHistoryDir, resetTaskHistoryCaches, writeSession } from '../src/taskHistoryStorage.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
 
@@ -139,19 +140,47 @@ try {
   assert.match(secondTaskReview.diff, /exec-generated\.txt/);
   assert.doesNotMatch(secondTaskReview.diff, /alpha\.txt/, 'task review must exclude changes owned by another task');
 
-  const staleTaskId = 'stale-inactive-task';
-  const staleEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, staleTaskId);
-  fs.writeFileSync(path.join(staleEntry.path, 'inactive-recovery.txt'), 'recovered from inactive task\n');
+  const inactiveTaskId = 'inactive-open-task';
+  const inactiveEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, inactiveTaskId);
+  fs.writeFileSync(path.join(inactiveEntry.path, 'inactive-private.txt'), 'private resumable work\n');
+  writeSession(getTaskHistoryDir(config), {
+    id: inactiveTaskId,
+    status: 'inactive',
+    resumeStatus: 'planning',
+    workspace: 'app',
+    progress: { mode: 'indeterminate', label: 'Ready to resume' },
+    updatedAt: new Date().toISOString()
+  });
+
+  const orphanTaskId = 'orphaned-task-sandbox';
+  const orphanEntry = await createTaskSandbox(resolveWorkspace(config, 'app'), config, orphanTaskId);
+  fs.writeFileSync(path.join(orphanEntry.path, 'orphan-recovery.txt'), 'recovered from orphaned sandbox\n');
   await rawCallTool('relai_read', {
     workspace: 'app', work_id: first.work_id, paths: ['alpha.txt']
   }, context);
-  assert.equal(fs.existsSync(path.join(workspacePath, 'inactive-recovery.txt')), false, 'ordinary reads must never promote another inactive task');
-  assert.equal(sandboxEntries(config).some(entry => entry.taskId === staleTaskId), true);
+  assert.equal(fs.existsSync(path.join(workspacePath, 'inactive-private.txt')), false, 'ordinary reads must never promote another resumable task');
+  assert.equal(fs.existsSync(path.join(workspacePath, 'orphan-recovery.txt')), false, 'ordinary reads must not perform cleanup reconciliation');
   await rawCallTool('relai_edit', {
     workspace: 'app', work_id: first.work_id, path: 'alpha.txt', oldText: 'alpha from first\n', newText: 'alpha after recovery boundary\n'
   }, context);
-  assert.equal(readText(path.join(workspacePath, 'inactive-recovery.txt')), 'recovered from inactive task\n');
-  assert.equal(sandboxEntries(config).some(entry => entry.taskId === staleTaskId), false, 'writer boundaries should reconcile inactive task bytes');
+  assert.equal(readText(path.join(workspacePath, 'orphan-recovery.txt')), 'recovered from orphaned sandbox\n');
+  assert.equal(sandboxEntries(config).some(entry => entry.taskId === orphanTaskId), false, 'writer boundaries should preserve and reconcile orphaned sandbox bytes');
+  assert.equal(sandboxEntries(config).some(entry => entry.taskId === inactiveTaskId), true, 'open inactive work must remain private and resumable across another task writer boundary');
+  assert.equal(fs.existsSync(path.join(workspacePath, 'inactive-private.txt')), false, 'open inactive private work must not leak into the visible workspace');
+
+  writeSession(getTaskHistoryDir(config), {
+    id: inactiveTaskId,
+    status: 'cancelled',
+    workspace: 'app',
+    endReason: 'explicit_cancellation',
+    progress: { mode: 'indeterminate', label: 'Cancelled' },
+    updatedAt: new Date().toISOString()
+  });
+  await rawCallTool('relai_edit', {
+    workspace: 'app', work_id: first.work_id, path: 'alpha.txt', oldText: 'alpha after recovery boundary\n', newText: 'alpha after cancelled cleanup\n'
+  }, context);
+  assert.equal(sandboxEntries(config).some(entry => entry.taskId === inactiveTaskId), false, 'a terminal cancelled sandbox should be discarded at the next safe writer boundary');
+  assert.equal(fs.existsSync(path.join(workspacePath, 'inactive-private.txt')), false, 'cancelled private bytes must not be promoted during cleanup');
 
   await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
   const entries = sandboxEntries(config);
@@ -300,11 +329,12 @@ try {
     action: 'cancel', workspace: 'app', work_id: first.work_id, reason: 'Test cleanup.'
   }, context);
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
+  resetTaskHistoryCaches();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
-  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 }
 
 console.log('Parallel tasks isolate later writers privately, promote safe changes immediately, refuse conflicts, and clean up without exposing hidden workspaces.');

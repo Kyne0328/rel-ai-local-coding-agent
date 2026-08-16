@@ -8,7 +8,8 @@ import { runProcess } from './process.js';
 import { REUSABLE_DEPENDENCY_ROOTS, isReusableDependencyPath } from './reusableDependencies.js';
 import { isSecretPath } from './safety.js';
 import { getStateDir } from './statePaths.js';
-import { recordTaskRecoveryState } from './taskHistoryStore.js';
+import { readTaskHistorySessionRecord, recordTaskRecoveryState } from './taskHistoryStore.js';
+import { isTerminalTaskStatus } from './taskState.js';
 import { taskError } from './toolActivity.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
@@ -28,7 +29,6 @@ const SANDBOX_ROUTED_OPERATIONS = new Set([
   OP.EDIT
 ]);
 const LIVE_PROMOTION_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
-const TERMINAL_TASK_STATUSES = new Set(['completed', 'cancelled', 'failed', 'inactive']);
 
 function registryPath(config) {
   return path.join(getStateDir(config), 'parallel-sandboxes', 'index.json');
@@ -118,7 +118,7 @@ function activeWorkspaceTasks(activeTasks, workspaceAlias) {
       const id = String(task?.taskId || task?.id || '').trim();
       const workspace = String(task?.workspace || '').trim();
       const status = String(task?.status || '').trim().toLowerCase();
-      return id && workspace === workspaceAlias && !TERMINAL_TASK_STATUSES.has(status);
+      return id && workspace === workspaceAlias && !isTerminalTaskStatus(status);
     })
     .sort((left, right) => Number(left?.startedAt || 0) - Number(right?.startedAt || 0));
 }
@@ -547,34 +547,43 @@ function markSandboxUnresolved(config, entry, error, changedFiles = []) {
   recordTaskRecoveryState(config, current.taskId, current.unresolved);
 }
 
-function inactiveTaskSandboxEntries(config, sourceAlias, activeTasks = [], currentTaskId = '') {
+function recoverableTaskSandboxEntries(config, sourceAlias, activeTasks = [], currentTaskId = '') {
   const activeIds = new Set(activeWorkspaceTasks(activeTasks, sourceAlias)
     .map(task => String(task?.taskId || task?.id || '').trim())
     .filter(Boolean));
   const current = String(currentTaskId || '').trim();
-  return Object.values(readSandboxRegistry(config).sandboxes || {}).filter(entry =>
-    entry.sourceAlias === sourceAlias
-    && entry.taskId !== current
-    && !activeIds.has(entry.taskId)
-    && !entry.unresolved
-  );
+  return Object.values(readSandboxRegistry(config).sandboxes || {}).flatMap(entry => {
+    if (entry.sourceAlias !== sourceAlias
+      || entry.taskId === current
+      || activeIds.has(entry.taskId)
+      || entry.unresolved) return [];
+    const session = readTaskHistorySessionRecord(config, entry.taskId);
+    if (session && !isTerminalTaskStatus(session.status)) return [];
+    return [{ entry, status: String(session?.status || 'orphaned') }];
+  });
 }
 
-function hasInactiveTaskSandboxes(config, sourceAlias, activeTasks = [], currentTaskId = '') {
-  return inactiveTaskSandboxEntries(config, sourceAlias, activeTasks, currentTaskId).length > 0;
+function hasRecoverableTaskSandboxes(config, sourceAlias, activeTasks = [], currentTaskId = '') {
+  return recoverableTaskSandboxEntries(config, sourceAlias, activeTasks, currentTaskId).length > 0;
 }
 
-async function reconcileInactiveTaskSandboxes(sourceWorkspace, config, activeTasks = [], currentTaskId = '') {
-  const entries = inactiveTaskSandboxEntries(config, sourceWorkspace.alias, activeTasks, currentTaskId);
+async function reconcileRecoverableTaskSandboxes(sourceWorkspace, config, activeTasks = [], currentTaskId = '') {
+  const recoverable = recoverableTaskSandboxEntries(config, sourceWorkspace.alias, activeTasks, currentTaskId);
   const reconciled = [];
   const preserved = [];
-  for (const entry of entries) {
+  for (const { entry, status } of recoverable) {
     try {
+      if (status === 'cancelled') {
+        await discardTaskSandbox(sourceWorkspace, config, entry.taskId);
+        reconciled.push({ taskId: entry.taskId, status, changedFiles: [], discarded: true });
+        continue;
+      }
       const result = await finalizeTaskSandbox(sourceWorkspace, config, entry.taskId);
-      reconciled.push({ taskId: entry.taskId, changedFiles: result.changedFiles || [] });
+      reconciled.push({ taskId: entry.taskId, status, changedFiles: result.changedFiles || [] });
     } catch (error) {
       preserved.push({
         taskId: entry.taskId,
+        status,
         code: String(error?.code || 'TASK_SANDBOX_UNRESOLVED'),
         changedFiles: readSandboxRegistry(config).sandboxes?.[entry.alias]?.unresolved?.changedFiles || []
       });
@@ -597,11 +606,21 @@ async function removeSandboxEntry(entry, config) {
   const sandboxExists = Boolean(entry.path && fs.existsSync(entry.path));
   if (sandboxExists) {
     unlinkReusableDependencies(entry.path);
-    const removed = await runProcess('git', ['worktree', 'remove', '--force', entry.path], {
-      cwd: entry.sourcePath, timeout: 120000
-    }, config);
-    if (removed.exitCode !== 0) {
-      throw taskError('TASK_SANDBOX_CLEANUP_FAILED', 'The private task sandbox could not be removed safely. Its registry entry was preserved for recovery.');
+    if (fs.existsSync(path.join(entry.path, '.git'))) {
+      const removed = await runProcess('git', ['worktree', 'remove', '--force', entry.path], {
+        cwd: entry.sourcePath, timeout: 120000
+      }, config);
+      if (removed.exitCode !== 0) {
+        throw taskError('TASK_SANDBOX_CLEANUP_FAILED', 'The private task sandbox could not be removed safely. Its registry entry was preserved for recovery.');
+      }
+    }
+    try {
+      fs.rmSync(entry.path, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    } catch {
+      throw taskError('TASK_SANDBOX_CLEANUP_FAILED', 'The private task sandbox directory is still in use. Its registry entry was preserved for recovery.');
+    }
+    if (fs.existsSync(entry.path)) {
+      throw taskError('TASK_SANDBOX_CLEANUP_FAILED', 'The private task sandbox directory is still present after cleanup. Its registry entry was preserved for recovery.');
     }
   } else {
     await runProcess('git', ['worktree', 'prune'], {
@@ -725,11 +744,11 @@ export {
   discardTaskSandbox,
   finalizeTaskSandbox,
   findTaskSandbox,
-  hasInactiveTaskSandboxes,
+  hasRecoverableTaskSandboxes,
   prepareTaskExecutionWorkspace,
   promoteTaskSandbox,
   readSandboxRegistry,
-  reconcileInactiveTaskSandboxes,
+  reconcileRecoverableTaskSandboxes,
   resolveTaskSandboxWorkspace,
   shouldPromoteTaskSandbox
 };

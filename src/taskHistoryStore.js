@@ -4,7 +4,7 @@ import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, s
 import { isTerminalTaskStatus } from './taskState.js';
 import { canonicalTaskSnapshot, mergeTaskLifecycleSnapshots, reduceTaskLifecycleAuditEvent } from './taskLifecycle.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isCurrentTaskEvent, timestampMs } from './taskEvents.js';
-import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
+import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
@@ -248,11 +248,6 @@ function readTaskHistory(config, activity = {}, options = {}) {
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history read:', error);
   }
-  persisted = persisted.filter(session => {
-    if (!isStoredSessionNoise(session, activeIds)) return true;
-    removeSession(directory, session.id);
-    return false;
-  });
   const byId = new Map(persisted.map(session => [session.id, session]));
   for (const task of active) {
     const existing = byId.get(task.id);
@@ -271,14 +266,6 @@ function hasExplicitCompletionEvidence(session = {}) {
     if (event?.completionKnown === true || String(event?.endReason || '') === 'explicit_completion') return true;
     return event?.tool === OP.WORK_FINISH && event?.ok !== false && !['failed', 'cancelled'].includes(String(event?.status || '').toLowerCase());
   });
-}
-
-function hasWorkflowCompletionEvidence(session = {}) {
-  const workflow = session.workflow;
-  if (!workflow || String(workflow.stage || '') !== 'complete') return false;
-  const completion = workflow.completion;
-  if (!completion || completion.hardReady !== true) return false;
-  return !Array.isArray(completion.blockers) || completion.blockers.length === 0;
 }
 
 function recoverCompletedSession(session, options = {}) {
@@ -306,9 +293,6 @@ function reconcileInactiveStoredSession(session, activeIds, timestamp = Date.now
   if (!session?.id || activeIds.has(session.id)) return session;
   if (!isTerminalTaskStatus(session.status) && hasExplicitCompletionEvidence(session)) {
     return recoverCompletedSession(session, { endReason: 'explicit_completion', completionSource: session.completionSource || 'relai_work:finish' });
-  }
-  if (!isTerminalTaskStatus(session.status) && hasWorkflowCompletionEvidence(session)) {
-    return recoverCompletedSession(session, { endReason: 'workflow_completion', completionSource: 'workflow' });
   }
   if (isTerminalTaskStatus(session.status) || session.status === 'inactive') return session;
   const lastActivityMs = storedSessionActivityMs(session);
@@ -553,16 +537,6 @@ function emptySession(id) {
     currentOperations: [],
     events: []
   };
-}
-
-function isStoredSessionNoise(session, activeIds) {
-  if (!session?.id || activeIds.has(session.id)) return false;
-  const events = Array.isArray(session.events) ? session.events : [];
-  if (events.length !== 1 || session.completionKnown || Number(session.changedFileCount || 0) > 0) return false;
-  const event = events[0] || {};
-  if (event.tool !== OP.WORK_BEGIN) return false;
-  const endedAt = eventTime(session);
-  return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
 export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordTaskRecoveryState, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState };
