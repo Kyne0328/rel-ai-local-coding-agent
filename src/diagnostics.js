@@ -281,6 +281,9 @@ function recommendationForHealth(finding, code) {
 
 function actionFromGuidance(code) {
   const guidance = errorGuidance(code);
+  if (code === ERROR_CODES.SECURE_TUNNEL_FAILED || code === ERROR_CODES.PUBLIC_ENDPOINT_FAILED) {
+    return { kind: 'restart_connection', label: 'Restart connection', href: guidance.href || '#connection' };
+  }
   return { label: guidance.actionLabel, href: guidance.href || '#diagnostics' };
 }
 

@@ -8,6 +8,7 @@ import { canonicalPathFor, normalizeRouteKey } from '../src/ui/route-policy.js';
 import { chatGptFirstPrompt, chatGptGuideSteps } from '../src/ui/features/settings/connection-guidance.js';
 import { connectionLayerViews } from '../src/ui/connection-state.js';
 import { connectionPrimaryAction } from '../src/ui/features/settings/connector.js';
+import { connectionRestartResult } from '../src/ui/features/settings/connection-recovery.js';
 import { desktopSetupItems } from '../src/ui/features/onboarding/index.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,8 +78,12 @@ assert.deepEqual(
 );
 assert.deepEqual(
   connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'unavailable' } }),
-  { kind: 'control', label: 'Review connection settings' }
+  { kind: 'restart', label: 'Restart connection' }
 );
+assert.equal(connectionRestartResult({ serverRunning: true, tunnelStatus: 'running' }).ok, true);
+const failedRestart = connectionRestartResult({ serverRunning: true, tunnelStatus: 'failed' });
+assert.equal(failedRestart.ok, false);
+assert.match(failedRestart.error, /Tunnel ID and runtime API key/);
 assert.deepEqual(
   connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'connecting' } }),
   { kind: 'none' }
@@ -163,6 +168,8 @@ const connectorSource = read('src/ui/features/settings/connector.js');
 assert.match(connectorSource, /card connection-layer-disclosure connector-details|card connector-details connection-layer-disclosure/, 'Connection layers must share the aligned connector disclosure contract');
 assert.doesNotMatch(connectorSource, /connection-status-body[\s\S]{0,600}field-caption[^\n]*Tunnel ID/, 'primary connection status must not duplicate technical setup identifiers');
 assert.match(connectorSource, /action\.href===['"]#diagnostics['"]/, 'connection recovery must not render a duplicate Troubleshooting link beside the primary recovery action');
+assert.match(connectorSource, /data-restart-connection/, 'an unavailable Secure MCP Tunnel must expose the existing desktop restart operation directly');
+assert.match(diagnosticsSource, /data-restart-connection/, 'Troubleshooting must offer a direct tunnel restart instead of only routing back to Connection');
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/advanced.js')), false, 'technical Advanced settings must not remain in the product surface');
 
 const publicRouteOwners = [
