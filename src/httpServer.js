@@ -5,12 +5,11 @@ import { DEFAULT_MAX_BODY_BYTES, normalizeMaxBodyBytes, setBaseHeaders, sendJson
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
-import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
-import { handleApiHistoryReset } from "./http/dashboardHistory.js";
+import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleReleaseNotes, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
 import { getMcpAccess } from "./http/mcp.js";
-import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport } from "./http/mcpTransport.js";
+import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
 import { flushAuditWrites } from './audit.js';
@@ -175,13 +174,10 @@ const NOT_FOUND_PAYLOAD = {
   ok: false, error: "Not found.",
   endpoints: {
     health: "GET /health", dashboard: "GET /dashboard", dashboardV10Api: "GET /api/dashboard/v10",
-    logsApi: "GET /api/logs", diagnosticsApi: "GET /api/diagnostics", settingsApi: "GET /api/settings",
-    updateSettingsApi: "POST /api/settings", diagnosticsResetApi: "POST /api/diagnostics/reset", updateWorkspacesApi: "POST /api/workspaces",
-    healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
+    logsApi: "GET /api/logs", diagnosticsApi: "GET /api/diagnostics",
+    diagnosticsResetApi: "POST /api/diagnostics/reset", updateWorkspacesApi: "POST /api/workspaces",
     workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
-    streamableHttp: "POST /mcp (MCP 2026-07-28; Authentication: private Bearer token)",
-    mcpConnectionApi: "GET /api/mcp/connection",
-    mcpRecoveryApi: "POST /api/mcp/recovery"
+    streamableHttp: "POST /mcp (MCP 2026-07-28; Authentication: private Bearer token)"
   }
 };
 
@@ -240,19 +236,14 @@ const GET_ROUTES = {
   "/dashboard": { auth: authDashboard, handler: handleDashboard },
   "/favicon.ico": { auth: authNone, handler: handleFavicon },
   "/health": { auth: authNone, handler: handleHealth },
-  "/api/settings": { auth: authDashboard, handler: handleApiSettingsGet },
   "/api/tools": { auth: authDashboard, handler: handleApiTools },
   "/api/onboarding/status": { auth: authDashboard, handler: handleOnboardingStatus },
   "/api/connection": { auth: authDashboard, handler: handleConnection },
-  "/api/mcp/connection": { auth: authDashboard, handler: handleMcpConnectionState },
   "/api/dashboard/v10": { auth: authDashboard, handler: handleDashboardV10 },
   "/api/tasks/session": { auth: authDashboard, handler: handleTaskSession },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
-  "/api/health-monitor": { auth: authDashboard, handler: handleHealthMonitor },
   "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
-  "/api/caution-summary": { auth: authDashboard, handler: handleCautionSummary },
-  "/api/readiness": { auth: authDashboard, handler: handleReadiness },
   "/api/workspace/preflight": { auth: authDashboard, handler: handleWorkspacePreflight },
   "/events": { auth: authDashboard, handler: handleEvents }
 };
@@ -273,15 +264,12 @@ async function tryExactPost(ctx) {
 
 const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
-  "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
-  "/api/history/reset": { auth: authDashboard, handler: handleApiHistoryReset },
   "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
   "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks },
-  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop },
-  "/api/mcp/recovery": { auth: authDashboard, handler: handleMcpRecovery }
+  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop }
 };
 
 export { resolveHttpRequestTimeoutMs, startHttpServer };

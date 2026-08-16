@@ -12,7 +12,7 @@ const PRINCIPAL_FIELDS = Object.freeze([
   ['scopes', ['scopes', 'scope']]
 ]);
 
-function createHttpTaskPrincipal(authInfo = {}, authMode = 'oauth') {
+function createHttpTaskPrincipal(authInfo = {}, authMode = '') {
   return Object.freeze(compactPrincipal({
     issuer: authInfo?.issuer,
     clientId: authInfo?.clientId ?? authInfo?.client_id ?? 'unknown-client',
@@ -20,7 +20,7 @@ function createHttpTaskPrincipal(authInfo = {}, authMode = 'oauth') {
     tenant: authInfo?.tenant ?? authInfo?.tenantId,
     organization: authInfo?.organization ?? authInfo?.organizationId ?? authInfo?.orgId,
     authorizationPolicy: authInfo?.authorizationPolicy ?? authInfo?.policyContext,
-    authMode: authMode || authInfo?.authMode || 'oauth',
+    authMode: authMode || authInfo?.authMode || '',
     resource: authInfo?.resource,
     scopes: authInfo?.scopes ?? authInfo?.scope
   }));

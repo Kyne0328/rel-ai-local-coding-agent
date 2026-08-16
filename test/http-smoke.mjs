@@ -103,8 +103,8 @@ try {
   const liveDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(liveDashboard.mcpConnection.status, 'ready');
   assert.equal(liveDashboard.mcpConnection.requestModel, 'stateless');
-  assert.equal(liveDashboard.mcpConnection.connectedClientCount, 0);
-  assert.deepEqual(liveDashboard.mcpConnection.activeSessions, []);
+  assert.equal(Object.hasOwn(liveDashboard.mcpConnection, 'connectedClientCount'), false);
+  assert.equal(Object.hasOwn(liveDashboard.mcpConnection, 'activeSessions'), false);
 
   const listed = await client.request('tools/list');
   assert.equal(listed.body.result?.tools?.length, activeToolCount);
@@ -202,7 +202,7 @@ try {
   const changedDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(changedDashboard.mcpConnection.status, 'ready');
   assert.equal(changedDashboard.mcpConnection.metrics.toolManifestChanges, 0);
-  assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
+  assert.equal(Object.hasOwn(changedDashboard.mcpConnection.metrics, 'capabilityMismatches'), false);
 
   const synchronizedTools = await client.request('tools/list');
   assert.equal(synchronizedTools.body.result?.tools?.length, activeToolCount);

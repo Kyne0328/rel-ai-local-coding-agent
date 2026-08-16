@@ -38,7 +38,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir,
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
-  trustedLocalAgent: true,
   workspaces: { repo: { path: workspacePath } }
 }, null, 2));
 

@@ -49,7 +49,6 @@ function handleHealth(ctx) {
     transports: ["streamable-http"],
     auth: ctx.options.token ? "bearer" : "disabled",
     serverStatus: mcpConnection.status,
-    connectedClientCount: mcpConnection.connectedClientCount,
     toolManifestVersion: mcpConnection.toolManifestVersion,
     activeToolCount: mcpConnection.currentActiveToolCount
   });
@@ -89,10 +88,6 @@ function handleDashboard(ctx) {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff"
   });
-}
-
-function handleApiSettingsGet(ctx) {
-  sendJson(ctx.res, 200, configEditor.settingsPayload(readConfig()));
 }
 
 function handleApiTools(ctx) {
@@ -158,14 +153,6 @@ async function handleOnboardingComplete(ctx) {
     updatedAt: new Date().toISOString()
   });
   sendJson(ctx.res, 200, { ok: true });
-}
-
-async function handleApiSettingsPost(ctx) {
-  const current = readConfig();
-  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const result = configEditor.updateSettings(current, payload);
-  await refreshMcpManifest('settings_changed');
-  sendJson(ctx.res, 200, result);
 }
 
 async function handleApiWorkspaces(ctx) {
@@ -470,11 +457,8 @@ const handleApiLogs = (ctx) => {
   const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
   sendJson(ctx.res, 200, mergeDashboardActivity(productUx.liveLogTail(config, { limit }), tasks, limit));
 };
-const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }));
 const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, getReleaseNotes());
-const handleCautionSummary = (ctx) => sendJson(ctx.res, 200, productUx.cautionSummary(readConfig(), { windowHours: Number(ctx.parsed.searchParams.get("windowHours") || 24) }));
-const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness(readConfig(), { requireHttpToken: resolveRequireHttpToken(ctx.parsed, readConfig()) }));
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 
-export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };
+export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleReleaseNotes, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };

@@ -25,12 +25,6 @@ function releaseReadiness(config, args = {}) {
   if (!process.env.REL_AI_MCP_TOKEN && args.requireHttpToken !== false) {
     findings.push(finding("warning", "missing_http_token_env", "REL_AI_MCP_TOKEN is not set in the current environment. Set it before exposing bearer-auth endpoints."));
   }
-  if (config.trustedLocalAgent) {
-    findings.push(finding("info", "trusted_local_agent", "Trusted ChatGPT local repo mode is enabled. Read, write, verify, diff, and reset are intentionally available inside configured workspaces."));
-  } else {
-    findings.push(finding("warning", "trusted_local_agent_disabled", "Trusted local mode is disabled. ChatGPT may be blocked from writing or running verification."));
-  }
-
   const commandChecks = checkCommandAvailability(["git", "node"], findings);
   const score = scoreFindings(findings);
   const minimumReadinessScore = config.release && Number.isFinite(Number(config.release.minimumReadinessScore))
@@ -200,10 +194,9 @@ function readinessRating(score) {
 function nextActions(findings) {
   const actions = [];
   for (const item of findings.slice(0, 20)) {
-    if (item.code === "missing_http_token_env") actions.push("Set REL_AI_MCP_TOKEN: it is the dashboard credential AND the secret ChatGPT uses to approve the OAuth sign-in. Add the /mcp URL in ChatGPT with Authentication: OAuth.");
+    if (item.code === "missing_http_token_env") actions.push("Set REL_AI_MCP_TOKEN when starting the local HTTP service manually. The desktop app manages this local credential automatically; ChatGPT should connect through the Secure MCP Tunnel with Authentication set to No authentication.");
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
     else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_changes with action 'diff' before further edits.");
-    else if (item.code === "trusted_local_agent_disabled") actions.push("Use the default trusted local bridge mode for ChatGPT repo work.");
     else if (item.code?.includes("gitattributes")) actions.push("Run relai-mcp-config doctor --fix <workspace-path> to add .gitattributes/.editorconfig.");
   }
   return [...new Set(actions)];

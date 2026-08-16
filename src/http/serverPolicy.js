@@ -6,9 +6,8 @@ function isLoopbackHost(host) {
 
 function errorCodeForRequest(req) {
   const path = String(req?.url || '').split('?')[0];
-  if (path === '/api/settings') return ERROR_CODES.SETTINGS_SAVE_FAILED;
   if (path === '/api/workspaces' || path.startsWith('/api/workspace/')) return ERROR_CODES.WORKSPACE_UNAVAILABLE;
-  if (path === '/api/diagnostics/reset' || path === '/api/history/reset') return ERROR_CODES.STATE_RESET_FAILED;
+  if (path === '/api/diagnostics/reset') return ERROR_CODES.STATE_RESET_FAILED;
   if (path === '/api/diagnostics') return ERROR_CODES.DIAGNOSTICS_UNAVAILABLE;
   return ERROR_CODES.UNKNOWN;
 }

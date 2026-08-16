@@ -30,15 +30,12 @@ function makeDefaultContextConfig() {
 
 function makeDefaultConfig() {
   return {
-    version: 6,
+    version: 7,
     stateDir: defaultStateDir(),
     auditLogPath: "",
-    toolMode: "chatgpt_local_repo",
-    trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
     productUx: {
       staleHours: 24,
-      cleanupOlderThanHours: 168,
       enableStateExport: true
     },
     release: {
@@ -160,7 +157,7 @@ function normalizeConfig(config) {
   const input = config || {};
   const next = mergeConfigBase(base, input);
   normalizeCorePaths(next, base);
-  normalizeTrustedMode(next, input);
+  normalizeTrustedBudget(next, input);
   normalizeProductSettings(next, base, input);
   normalizeWorkspaces(next);
   return next;
@@ -181,16 +178,14 @@ function mergeConfigBase(base, input) {
 }
 
 function normalizeCorePaths(next, base) {
-  next.version = 6;
+  next.version = 7;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
   if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
 }
 
-function normalizeTrustedMode(next, input) {
-  next.toolMode = "chatgpt_local_repo";
-  next.trustedLocalAgent = true;
+function normalizeTrustedBudget(next, input) {
   next.trustedBudgetMultiplier = normalizeTrustedBudgetMultiplier(input.trustedBudgetMultiplier);
 }
 
@@ -204,7 +199,6 @@ function normalizeProductSettings(next, base, input) {
   const product = { ...base.productUx, ...objectOrEmpty(input.productUx) };
   next.productUx = {
     staleHours: clampNumber(product.staleHours, 1, 24 * 365, base.productUx.staleHours),
-    cleanupOlderThanHours: clampNumber(product.cleanupOlderThanHours, 1, 24 * 365, base.productUx.cleanupOlderThanHours),
     enableStateExport: normalizeBoolean(product.enableStateExport, base.productUx.enableStateExport)
   };
   next.release = { ...base.release, ...objectOrEmpty(input.release) };
@@ -447,8 +441,6 @@ function publicConfigSummary(config) {
     configPath: getConfigPath(),
     stateDir: config.stateDir,
     auditLogPath: config.auditLogPath,
-    toolMode: "chatgpt_local_repo",
-    trustedLocalAgent: true,
     localRepoBridge: {
       mode: "trusted",
       visibleTools: getToolNames(config),

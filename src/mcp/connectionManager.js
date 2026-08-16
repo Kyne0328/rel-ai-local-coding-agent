@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
-const AUTH_MODES = Object.freeze(['oauth', 'static_bearer', 'local_no_auth']);
+const AUTH_MODES = Object.freeze(['static_bearer', 'local_no_auth']);
 const RECENT_ACTIVITY_MS = 2 * 60 * 1000;
 
 class McpConnectionManager {
@@ -18,7 +18,6 @@ class McpConnectionManager {
     this.configurationGeneration = 0;
     this.manifest = null;
     this.lastDisconnectReason = '';
-    this.lastRecoveryResult = '';
     this.lastRequestAt = null;
     this.lastRequestMethod = '';
     this.lastPrincipal = '';
@@ -41,7 +40,6 @@ class McpConnectionManager {
     this.manifest = manifest || null;
     this.state = 'starting';
     this.lastDisconnectReason = '';
-    this.lastRecoveryResult = '';
     this.lastRequestAt = null;
     this.lastRequestMethod = '';
     this.lastPrincipal = '';
@@ -154,18 +152,6 @@ class McpConnectionManager {
     return this.snapshot();
   }
 
-  async retryConnection(reason = 'manual_retry') {
-    this.lastRecoveryResult = 'not_required_stateless';
-    this.metrics.manualRecoveryRequests += 1;
-    this.record('stateless_recovery_not_required', { reasonCode: reason });
-    return {
-      ok: true,
-      stateless: true,
-      hostActionRequired: false,
-      message: 'The MCP 2026-07-28 endpoint is stateless; there is no transport session to restart.'
-    };
-  }
-
   snapshot() {
     return {
       status: this.state,
@@ -181,14 +167,7 @@ class McpConnectionManager {
       disabledToolCount: this.manifest?.disabledToolCount || 0,
       filteredToolCount: this.manifest?.filteredToolCount || 0,
       externallyVisibleToolCount: this.manifest?.externallyVisibleToolCount || 0,
-      connectedClientCount: 0,
-      connectedPrincipalCount: 0,
-      activeSessions: [],
-      recentSessions: [],
-      reconnectAttemptCount: 0,
       lastDisconnectReason: this.lastDisconnectReason,
-      lastRecoveryResult: this.lastRecoveryResult,
-      manualRecoveryRequired: false,
       activeRequestCount: this.activeRequests.size,
       lastRequestAt: iso(this.lastRequestAt),
       lastRequestMethod: this.lastRequestMethod,
@@ -282,17 +261,7 @@ function emptyMetrics() {
     discoveryRequests: 0,
     toolListRequests: 0,
     taskRequests: 0,
-    manualRecoveryRequests: 0,
-    toolManifestChanges: 0,
-    clientsConnected: 0,
-    clientsDisconnected: 0,
-    staleSessionsDetected: 0,
-    capabilityMismatches: 0,
-    toolListNotificationsSent: 0,
-    reconnectStarted: 0,
-    reconnectSucceeded: 0,
-    reconnectFailed: 0,
-    manualRecoveryRequired: 0
+    toolManifestChanges: 0
   };
 }
 

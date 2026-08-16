@@ -20,7 +20,7 @@ import { handleTransportTaskRequest } from '../mcp/transportTasks.js';
 import { createRelaiMcpServer } from '../mcpServer.js';
 import { runSpan } from '../telemetry.js';
 import { mcpAuthorization, unauthorizedMcp } from './mcpAuth.js';
-import { readJsonBody, readRawBody, sendJson } from './io.js';
+import { readRawBody, sendJson } from './io.js';
 
 let coreHandler = null;
 let coreNodeHandler = null;
@@ -205,21 +205,6 @@ async function handleUnsupportedHttpMethod(ctx) {
   }
   ctx.res.setHeader('allow', 'POST');
   sendMcpProtocolError(ctx.res, 405, -32600, 'Method not allowed. MCP 2026-07-28 uses stateless POST requests only.');
-}
-
-async function handleMcpRecovery(ctx) {
-  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const action = String(payload.action || 'retry');
-  if (!['retry', 'restart_transport'].includes(action)) {
-    sendJson(ctx.res, 400, { ok: false, error: 'action must be retry or restart_transport' });
-    return;
-  }
-  const result = await mcpConnectionManager.retryConnection(action);
-  sendJson(ctx.res, 200, { ...result, connection: mcpConnectionManager.snapshot() });
-}
-
-function handleMcpConnectionState(ctx) {
-  sendJson(ctx.res, 200, { ok: true, connection: mcpConnectionManager.snapshot() });
 }
 
 function validateMcpRequestHeaders(headers = {}, message) {
@@ -415,10 +400,8 @@ export {
   MCP_PROTOCOL_VERSION,
   createHttpRequestAbortScope,
   expectedMcpName,
-  handleMcpConnectionState,
   handleMcpDelete,
   handleMcpGetDiagnostic,
-  handleMcpRecovery,
   handleMcpStreamable,
   shutdownMcpTransport,
   transportSecurityOptions,

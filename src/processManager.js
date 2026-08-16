@@ -605,7 +605,7 @@ function principalKeyForContext(context = {}) {
     || ''
   ).trim();
   if (clientId) {
-    return principalFingerprint(createHttpTaskPrincipal({ ...authInfo, clientId }, authInfo.authMode || context.authMode || 'oauth'));
+    return principalFingerprint(createHttpTaskPrincipal({ ...authInfo, clientId }, authInfo.authMode || context.authMode || ''));
   }
 
   const fallback = context.connector === true ? 'connector:anonymous' : context.taskId ? 'local:stdio' : '';
