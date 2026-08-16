@@ -22,12 +22,14 @@ function createDashboardWindowManager(deps) {
   const userDataPath = typeof app.getPath === 'function' ? app.getPath('userData') : process.cwd();
   const statePath = path.join(userDataPath, 'dashboard-window-state.json');
   let dashboardWindow = null;
+  let windowCreationPromise = null;
   let dashboardOrigin = '';
   let dashboardAuthGeneration = '';
   let persistTimer = null;
   let persistRevision = 0;
 
   async function open(routeHash = '') {
+    if (isQuitting()) throw new Error('Dashboard window is unavailable while Rel.AI is quitting.');
     const connection = await getConnection();
     const target = validateConnection(connection);
     const authGeneration = String(connection?.authGeneration ?? '');
@@ -66,7 +68,20 @@ function createDashboardWindowManager(deps) {
 
   async function getOrCreateWindow() {
     if (dashboardWindow && !dashboardWindow.isDestroyed()) return dashboardWindow;
+    if (windowCreationPromise) return windowCreationPromise;
+    const pending = createWindow();
+    windowCreationPromise = pending;
+    try {
+      return await pending;
+    } finally {
+      if (windowCreationPromise === pending) windowCreationPromise = null;
+    }
+  }
+
+  async function createWindow() {
     const bounds = await readBounds();
+    if (isQuitting()) throw new Error('Dashboard window is unavailable while Rel.AI is quitting.');
+    if (dashboardWindow && !dashboardWindow.isDestroyed()) return dashboardWindow;
     const chrome = dashboardWindowChrome(platform);
     dashboardWindow = new BrowserWindow({
       ...bounds,
@@ -264,6 +279,9 @@ function createDashboardWindowManager(deps) {
   }
 
   async function close() {
+    if (windowCreationPromise) {
+      try { await windowCreationPromise; } catch {}
+    }
     await persistBounds();
     if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.destroy();
     dashboardWindow = null;

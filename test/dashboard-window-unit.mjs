@@ -120,8 +120,9 @@ const dependencies = {
 
 try {
   const manager = createDashboardWindowManager(dependencies);
-  const win = await manager.open();
-  assert.equal(windows.length, 1);
+  const [win, concurrentWin] = await Promise.all([manager.open(), manager.open()]);
+  assert.equal(concurrentWin, win, 'concurrent dashboard opens must share one BrowserWindow');
+  assert.equal(windows.length, 1, 'concurrent dashboard opens must not create duplicate BrowserWindows');
   assert.deepEqual(
     { x: win.options.x, y: win.options.y, width: win.options.width, height: win.options.height },
     defaultDashboardBounds(fakeScreen)

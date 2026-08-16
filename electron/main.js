@@ -55,7 +55,7 @@ const [
 ]);
 const { ERROR_CODES } = desktopUxContracts;
 const { terminateProcessTree } = processModule;
-const { readLocalUsageSnapshot } = localAnalytics;
+const { readLocalUsageSnapshotAsync } = localAnalytics;
 const { shutdownTelemetry } = telemetry;
 let serviceRuntime = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
@@ -499,7 +499,7 @@ registerIpcHandlers({
   openDashboardWindow,
   getDesktopSettings: currentDesktopSettings,
   saveDesktopSettings: updateDesktopSettings,
-  getLocalUsage: month => readLocalUsageSnapshot(configModule.readConfig(), month),
+  getLocalUsage: month => readLocalUsageSnapshotAsync(configModule.readConfig(), month),
   getUpdateStatus: combinedUpdateStatus,
   checkForUpdates: checkApplicationUpdates,
   downloadUpdate: downloadApplicationUpdate,

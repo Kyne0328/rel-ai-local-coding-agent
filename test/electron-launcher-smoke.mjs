@@ -64,6 +64,8 @@ assert.match(main, /createTunnelCredentialStore/);
 assert.match(main, /createServiceProcessClient/);
 assert.match(main, /utilityProcess/);
 assert.doesNotMatch(main, /startHttpServer|stopAllManagedProcesses/, 'Electron main must not own the MCP HTTP/runtime process path');
+assert.match(main, /readLocalUsageSnapshotAsync/, 'desktop analytics reads must use the fresh asynchronous snapshot path');
+assert.doesNotMatch(main, /readLocalUsageSnapshot\(/, 'Electron main must not use the process-local cached analytics snapshot');
 assert.doesNotMatch(main, /createGatewayClient|createPublicConnectionRuntime|createApprovalTokenManager|managedNgrok/);
 assert.match(serviceRuntime, /serviceProcessClient\.start\(\{[\s\S]*host:[\s\S]*port:[\s\S]*token:/s);
 assert.match(serviceRuntime, /secureTunnelRuntime\.start\(\{[\s\S]*tunnelId:[\s\S]*port:[\s\S]*localToken:[\s\S]*apiKey/s);
