@@ -1,16 +1,13 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createHttpMcpSession, mcpBody, mcpHeaders, postMcp, readMcpResponse } from './helpers/http-mcp.mjs';
 import { activeToolCount } from './helpers/tool-surface.mjs';
+import { startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = await reservePort();
 const token = 'auth-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-'));
 const configPath = path.join(stateDir, 'config.json');
@@ -19,33 +16,19 @@ fs.writeFileSync(configPath, JSON.stringify({
   stateDir,
   workspaces: { repo: { path: root } }
 }, null, 2));
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
-  cwd: root,
-  stdio: ['ignore', 'pipe', 'pipe'],
+const { child, base, getStderr } = await startHttpTestServer({
+  root,
+  configPath,
+  token,
+  stateDir,
   env: {
-    ...process.env,
-    REL_AI_MCP_CONFIG: configPath,
-    REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_STATE_DIR: stateDir,
     REL_AI_MCP_MAX_BODY_BYTES: String(10 * 1024 * 1024),
     REL_AI_MCP_DEBUG: '1'
   }
 });
-let stderr = '';
-child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-const base = `http://127.0.0.1:${port}`;
-
-async function waitForHealth() {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try { if ((await fetch(`${base}/health`)).ok) return; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  throw new Error(`HTTP server did not become healthy. ${stderr}`);
-}
 
 let session = null;
 try {
-  await waitForHealth();
   assert.equal((await fetch(`${base}/health`)).status, 200);
   assert.equal((await fetch(`${base}/dashboard`)).status, 401);
   const unauthorizedDashboard = await fetch(`${base}/api/diagnostics`);
@@ -72,7 +55,7 @@ try {
 
   session = await createHttpMcpSession(base, { token, clientName: 'relai-http-auth' });
   const listed = await session.request('tools/list');
-  assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${stderr}`);
+  assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${getStderr()}`);
   assert.equal(listed.body.result?.tools?.length, activeToolCount);
 
   const legacyInitializeResponse = await fetch(`${base}/mcp`, {
@@ -94,7 +77,7 @@ try {
     })
   });
   const legacyInitialize = await readMcpResponse(legacyInitializeResponse);
-  assert.equal(legacyInitializeResponse.status, 200, `${JSON.stringify(legacyInitialize)}\n${stderr}`);
+  assert.equal(legacyInitializeResponse.status, 200, `${JSON.stringify(legacyInitialize)}\n${getStderr()}`);
   assert.equal(legacyInitialize.result?.protocolVersion, '2025-11-25');
   assert.equal(legacyInitialize.result?.serverInfo?.name, 'rel-ai-mcp');
   assert.equal(legacyInitializeResponse.headers.get('mcp-session-id'), null);
@@ -123,7 +106,7 @@ try {
     body: JSON.stringify({ jsonrpc: '2.0', id: 21, method: 'tools/list', params: {} })
   });
   const legacyTools = await readMcpResponse(legacyToolsResponse);
-  assert.equal(legacyToolsResponse.status, 200, `${JSON.stringify(legacyTools)}\n${stderr}`);
+  assert.equal(legacyToolsResponse.status, 200, `${JSON.stringify(legacyTools)}\n${getStderr()}`);
   assert.equal(legacyTools.result?.tools?.length, activeToolCount);
 
   const legacyStatusResponse = await fetch(`${base}/mcp`, {
@@ -142,7 +125,7 @@ try {
     })
   });
   const legacyStatus = await readMcpResponse(legacyStatusResponse);
-  assert.equal(legacyStatusResponse.status, 200, `${JSON.stringify(legacyStatus)}\n${stderr}`);
+  assert.equal(legacyStatusResponse.status, 200, `${JSON.stringify(legacyStatus)}\n${getStderr()}`);
   assert.equal(legacyStatus.result?.isError, false, JSON.stringify(legacyStatus));
   assert.equal(legacyStatus.result?.structuredContent?.ok, true);
 
@@ -228,22 +211,8 @@ try {
   assert.ok([0, 413].includes(overMcpEnvelopeStatus), "an 11 MiB MCP request must be rejected at the body boundary, got " + overMcpEnvelopeStatus);
 } finally {
   if (session) await session.close().catch(() => {});
-  child.kill('SIGKILL');
-  await once(child, 'close').catch(() => {});
+  await stopHttpTestServer(child);
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
 console.log('HTTP authentication, stateless ChatGPT initialization, modern protocol validation, and Origin protection tests passed.');
-
-function reservePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const selectedPort = typeof address === 'object' && address ? address.port : 0;
-      server.close(error => error ? reject(error) : resolve(selectedPort));
-    });
-  });
-}
