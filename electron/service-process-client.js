@@ -209,10 +209,18 @@ function createServiceProcessClient(options = {}) {
       } catch (error) {
         if (failedActivityListeners.has(listener)) continue;
         failedActivityListeners.add(listener);
+        const activityEvent = event.activityEvent || {};
+        const snapshotTasks = Array.isArray(event.snapshot?.tasks) ? event.snapshot.tasks : [];
+        const relatedTask = event.task || (snapshotTasks.length === 1 ? snapshotTasks[0] : null);
         onLog(`Task activity subscriber failed: ${error instanceof Error ? error.message : String(error || 'Unknown listener error')}`, {
           level: 'warning',
           source: 'desktop-observability',
-          code: 'activity_listener_failed'
+          code: 'activity_listener_failed',
+          taskId: event.taskId || relatedTask?.taskId || relatedTask?.id || '',
+          eventId: activityEvent.eventId || activityEvent.operationId || event.operationId || '',
+          workspace: event.workspace || relatedTask?.workspace || '',
+          tool: event.tool || relatedTask?.lastTool || relatedTask?.tool || '',
+          operation: event.operation || relatedTask?.operation || relatedTask?.lastOperation || ''
         });
       }
     }

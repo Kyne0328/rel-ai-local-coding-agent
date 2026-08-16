@@ -117,6 +117,9 @@ service.handleDesktopStatusChange(
 );
 assert.equal(shown.length, 8);
 assert.equal(shown[7].options.title, 'Rel.AI needs attention');
+assert.match(shown[7].options.body, /Secure MCP Tunnel could not start/);
+assert.match(shown[7].options.body, /Check the OpenAI Secure MCP Tunnel settings, then reconnect/);
+assert.doesNotMatch(shown[7].options.body, /Tunnel failed/, 'desktop alerts should keep raw connection errors in diagnostics');
 
 const reloaded = createDesktopNotifications(options);
 assert.deepEqual(reloaded.getPreferences(), service.getPreferences(), 'preferences must persist across application launches');

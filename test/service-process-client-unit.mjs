@@ -99,7 +99,9 @@ child.emit('message', {
   type: 'activity',
   event: { phase: 'snapshot', snapshot: { state: 'working', activeCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task-1' }] } }
 });
-assert.equal(logs.filter(entry => entry.options.code === 'activity_listener_failed').length, 1, 'a failing subscriber must be diagnosable without log spam');
+const subscriberFailures = logs.filter(entry => entry.options.code === 'activity_listener_failed');
+assert.equal(subscriberFailures.length, 1, 'a failing subscriber must be diagnosable without log spam');
+assert.equal(subscriberFailures[0].options.taskId, 'task-1', 'subscriber failures should retain task correlation when the event identifies one task');
 unsubscribeBrokenActivityListener();
 
 client.updateContext({
