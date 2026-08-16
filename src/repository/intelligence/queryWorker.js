@@ -1,7 +1,7 @@
 import { parentPort } from 'node:worker_threads';
 
 import { cachedRepositoryContext, cachedRepositorySummary, cachedSearchGraphContext } from './contextPlanner.js';
-import { openIndexDatabase, repositoryIndexPath } from './database.js';
+import { currentGeneration, openIndexDatabase, repositoryIndexPath } from './database.js';
 import { executeCodeInspectQuery, executeSemanticSearchQuery } from './queryService.js';
 
 let activeJob = null;
@@ -40,9 +40,11 @@ async function runJob(jobId, job) {
     };
     let result;
     if (job.kind === 'codeInspect') {
-      result = await executeCodeInspectQuery(job.workspace, job.config, job.args, job.index, queryOptions(job, options));
+      result = await executeIndexedQuery(job, options, queryOptionsValue =>
+        executeCodeInspectQuery(job.workspace, job.config, job.args, job.index, queryOptionsValue));
     } else if (job.kind === 'semanticSearch') {
-      result = await executeSemanticSearchQuery(job.workspace, job.config, job.args, job.index, queryOptions(job, options));
+      result = await executeIndexedQuery(job, options, queryOptionsValue =>
+        executeSemanticSearchQuery(job.workspace, job.config, job.args, job.index, queryOptionsValue));
     } else if (job.kind === 'cachedContext') {
       result = cachedRepositoryContext(job.workspace, job.config, { ...(job.options || {}), repositoryStatuses: options.repositoryStatuses });
     } else if (job.kind === 'cachedSummary') {
@@ -67,6 +69,32 @@ async function runJob(jobId, job) {
     });
   } finally {
     if (activeJob?.jobId === jobId) activeJob = null;
+  }
+}
+
+async function executeIndexedQuery(job, options, execute) {
+  const queryOptionsValue = queryOptions(job, options);
+  const db = queryOptionsValue.database;
+  let transactionOpen = false;
+  try {
+    db.exec('BEGIN');
+    transactionOpen = true;
+    const expectedGeneration = Number(job.index?.generation || 0);
+    const actualGeneration = Number(currentGeneration(db)?.id || 0);
+    if (!expectedGeneration || actualGeneration !== expectedGeneration) {
+      const error = new Error(`Repository Intelligence index changed before the query started (expected generation ${expectedGeneration || 'none'}, found ${actualGeneration || 'none'}).`);
+      error.code = 'QUERY_INDEX_CHANGED';
+      throw error;
+    }
+    const result = await execute(queryOptionsValue);
+    db.exec('COMMIT');
+    transactionOpen = false;
+    return result;
+  } catch (error) {
+    if (transactionOpen) {
+      try { db.exec('ROLLBACK'); } catch {}
+    }
+    throw error;
   }
 }
 

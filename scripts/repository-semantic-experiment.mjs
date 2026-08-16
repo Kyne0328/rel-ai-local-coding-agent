@@ -146,7 +146,7 @@ try {
     if (report.prototypeP95Ms > 25) throw new Error(`Prototype p95 query overhead ${report.prototypeP95Ms} ms exceeds the 25 ms experiment gate.`);
   }
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   if (process.env.REL_AI_MCP_BENCHMARK_KEEP !== '1') fs.rmSync(root, { recursive: true, force: true });
   else console.error(`Semantic experiment fixture kept at ${root}`);
 }

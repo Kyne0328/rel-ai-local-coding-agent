@@ -72,7 +72,7 @@ try {
   const alphaPath = path.join(workspaceRoot, 'src', 'alpha.js');
   const alphaStat = fs.statSync(alphaPath);
   const generationBeforeTimestampCollision = rebuilt.generation;
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.writeFileSync(alphaPath, 'export function alpha() { return 3; }\n');
   fs.utimesSync(alphaPath, alphaStat.atime, alphaStat.mtime);
   const reconciled = await repositoryIntelligence.ensure(workspace, config, { force: true, watch: false });
@@ -97,7 +97,7 @@ try {
   assert.equal(repairedPartial.pendingRefresh, false,
     'a partial index must remain dirty until a complete reconciliation succeeds');
 
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.writeFileSync(repositoryIndexPath(config, workspace), 'not-a-sqlite-database', 'utf8');
   const recovered = await repositoryIntelligence.ensure(workspace, config);
   assert.equal(recovered.recovered, true);
@@ -116,7 +116,7 @@ try {
   assert.equal(afterCancellation.runtimeStatus, 'ready');
   assert.equal(afterCancellation.workerIsolated, true);
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 

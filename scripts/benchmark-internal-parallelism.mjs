@@ -172,7 +172,7 @@ try {
     console.log(`Edit post-actions: ${payload.scenarios.editPostActions.mode}, final diff matches=${payload.scenarios.editPostActions.finalDiffMatches}`);
   }
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(editRoot, { recursive: true, force: true });
   fs.rmSync(stateRoot, { recursive: true, force: true });

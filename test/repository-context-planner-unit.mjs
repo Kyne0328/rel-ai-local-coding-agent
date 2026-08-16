@@ -56,7 +56,7 @@ try {
   const staleSearch = await relaiSearch(workspace, config, { pattern: 'marker', fixed: true });
   assert.equal(staleSearch.selectionStrategy, 'path-and-match-density', 'stale graph data must not influence search ordering');
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 

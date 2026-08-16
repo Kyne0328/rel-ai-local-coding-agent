@@ -65,7 +65,7 @@ try {
     db.close();
   }
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 

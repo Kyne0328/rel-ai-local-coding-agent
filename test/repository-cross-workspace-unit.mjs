@@ -108,7 +108,7 @@ try {
   assert.equal(sandboxPeers.includes('client'), false, 'query-worker serialization must preserve sandbox source identity and exclude the source workspace');
   assert.ok(sandboxPeers.includes('api'));
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 
