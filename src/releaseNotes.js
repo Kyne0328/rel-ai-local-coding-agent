@@ -8,7 +8,8 @@ const PKG_VERSION = readPackageVersion();
 const FALLBACK = {
   version: PKG_VERSION,
   headline: "See CHANGELOG.md for the latest changes.",
-  bullets: []
+  bullets: [],
+  releases: []
 };
 
 function readPackageVersion() {
@@ -105,27 +106,54 @@ function parseHeading(line) {
   return { version, date: rest };
 }
 
+function parseRelease(lines, startIndex, endIndex) {
+  const heading = parseHeading(lines[startIndex]);
+  if (!heading) return null;
+
+  const sections = [];
+  let section = null;
+  const ungroupedBullets = [];
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const line = lines[index];
+    if (line.startsWith("### ")) {
+      section = { title: stripMarkdown(line.slice(4)), bullets: [] };
+      sections.push(section);
+      continue;
+    }
+    if (!line.startsWith("- ")) continue;
+    const bullet = stripMarkdown(line.slice(2));
+    if (!bullet) continue;
+    if (section) section.bullets.push(bullet);
+    else ungroupedBullets.push(bullet);
+  }
+
+  const normalizedSections = [
+    ...(ungroupedBullets.length ? [{ title: "", bullets: ungroupedBullets }] : []),
+    ...sections.filter((entry) => entry.title || entry.bullets.length)
+  ];
+  const bullets = normalizedSections.flatMap((entry) => entry.bullets);
+  return {
+    version: heading.version,
+    date: heading.date,
+    headline: sections[0]?.title || `Version ${heading.version}`,
+    bullets: bullets.slice(0, 6),
+    sections: normalizedSections
+  };
+}
+
 function parseChangelog(md) {
   const lines = String(md || "").split(/\r?\n/);
-  const headingIndex = lines.findIndex((line) => parseHeading(line));
-  if (headingIndex < 0) return null;
-  const heading = parseHeading(lines[headingIndex]);
-  const body = [];
-  for (let index = headingIndex + 1; index < lines.length; index += 1) {
-    if (lines[index].startsWith("## [")) break;
-    body.push(lines[index]);
+  const headingIndexes = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (parseHeading(lines[index])) headingIndexes.push(index);
   }
+  if (!headingIndexes.length) return null;
 
-  const headlineLine = body.find((line) => line.startsWith("### "));
-  const headline = headlineLine ? stripMarkdown(headlineLine.slice(4)) : `Version ${heading.version}`;
-
-  const bullets = [];
-  for (const line of body) {
-    if (!line.startsWith("- ")) continue;
-    bullets.push(stripMarkdown(line.slice(2)));
-    if (bullets.length >= 6) break;
-  }
-  return { version: heading.version, headline, bullets };
+  const releases = headingIndexes
+    .map((startIndex, index) => parseRelease(lines, startIndex, headingIndexes[index + 1] ?? lines.length))
+    .filter(Boolean);
+  if (!releases.length) return null;
+  return { ...releases[0], releases };
 }
 
 function fallbackReleaseNotes() {

@@ -162,6 +162,10 @@ assert.equal(Object.hasOwn(normalizedCommands.workspaces.repo, 'commands'), fals
   const notes = getReleaseNotes();
   assert.ok(notes.version);
   assert.ok(Array.isArray(notes.bullets));
+  assert.ok(Array.isArray(notes.releases));
+  assert.ok(notes.releases.length >= 1);
+  assert.equal(notes.releases[0].version, notes.version);
+  assert.ok(Array.isArray(notes.releases[0].sections));
 }
 
 
