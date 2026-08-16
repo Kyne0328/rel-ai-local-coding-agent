@@ -86,6 +86,11 @@ const publicSearchInputSchema = publicSchemas.find(item => item.name === 'relai_
 for (const field of ['queries', 'maxResults', 'maxFiles']) {
   assert.equal(publicSearchInputSchema?.properties?.[field]?.anyOf, undefined, `relai_search root ${field} schema must collapse bounded action variants instead of advertising a redundant union`);
 }
+assert.match(publicSearchInputSchema?.properties?.pattern?.description || '', /Action usage: text\./, 'flat discovery must identify text-only fields');
+assert.match(publicSearchInputSchema?.properties?.query?.description || '', /Action usage: semantic\./, 'flat discovery must identify semantic-only fields');
+assert.match(publicSearchInputSchema?.properties?.action?.description || '', /text: pattern or queries.*semantic: queries or query|text: pattern or queries.*semantic: query or queries/, 'flat discovery must preserve canonical alternative input forms');
+assert.match(publicSearchInputSchema?.properties?.maxFiles?.description || '', /text \[1-200\].*semantic \[1-20000\]/, 'flat discovery must preserve action-specific numeric bounds');
+assert.match(publicWorkSchema?.properties?.maxBytes?.description || '', /Action usage: status\./, 'flat discovery must identify action-specific optional fields');
 const publicValidateInputSchema = publicSchemas.find(item => item.name === 'relai_validate')?.inputSchema;
 assert.equal(publicValidateInputSchema?.properties?.timeoutMs?.anyOf, undefined, 'relai_validate root timeoutMs schema must collapse bounded action variants instead of advertising a redundant union');
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
@@ -95,8 +100,15 @@ const publicExecSchema = publicSchemas.find(item => item.name === 'relai_exec');
 for (const field of ['command', 'executable', 'argv', 'input', 'cwd', 'env', 'timeoutMs', 'maxOutputBytes', 'work_id']) {
   assert.ok(publicExecSchema?.inputSchema?.properties?.[field], `relai_exec connector schema must expose ${field}`);
 }
+const publicEditSchema = publicSchemas.find(item => item.name === 'relai_edit');
+assert.match(publicEditSchema?.inputSchema?.properties?.content?.description || '', /Complete replacement content/i, 'public edit discovery must retain complete-file guidance');
+assert.match(publicEditSchema?.inputSchema?.properties?.stage?.description || '', /only when the client transport cannot carry/i, 'public edit discovery must explain staged mode as a transport fallback');
+const publicProcessSchema = publicSchemas.find(item => item.name === 'relai_process');
+assert.match(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /shell syntax.*Action usage: start/i, 'public process discovery must retain shell guidance and action ownership');
+assert.match(publicProcessSchema?.inputSchema?.properties?.processId?.description || '', /Action usage: read \(required\); write \(required\); stop \(required\)/, 'public process discovery must identify process-id actions');
 assert.match(publicExecSchema?.description || '', /Prefer executable \+ argv/i, 'ChatGPT discovery must prefer shell-free direct execution before trying a shell command');
 assert.match(publicExecSchema?.inputSchema?.description || '', /Prefer direct executable \+ argv mode by default/i);
+assert.match(publicExecSchema?.inputSchema?.description || '', /Input form: command or executable\./i, 'flat discovery must preserve canonical executable-mode alternatives');
 assert.match(publicExecSchema?.inputSchema?.properties?.command?.description || '', /Do not embed JavaScript, Python, JSON, patches/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.executable?.description || '', /shell:false/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.argv?.description || '', /without shell parsing/i);
