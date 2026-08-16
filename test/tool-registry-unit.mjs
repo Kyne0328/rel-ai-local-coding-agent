@@ -72,12 +72,24 @@ for (const schema of publicSchemas) {
   assert.equal(schema.inputSchema.oneOf, undefined, `${schema.name} must expose a flat connector input schema`);
   assert.match(schema.description || '', /\bUse\b/i, `${schema.name} must state when to use the tool`);
   assert.match(schema.description || '', /\bDo not\b/i, `${schema.name} must state when not to use the tool`);
+  const sharedRequired = new Set(schema.inputSchema.required || []);
+  for (const guard of schema.inputSchema.allOf || []) {
+    for (const field of guard?.then?.required || []) {
+      assert.equal(sharedRequired.has(field), false, `${schema.name} action guards must not repeat root requirement ${field}`);
+    }
+  }
 }
 const publicWorkSchema = publicSchemas.find(item => item.name === 'relai_work')?.inputSchema;
 for (const field of ['workspace', 'title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason', 'work_id']) {
   assert.ok(publicWorkSchema?.properties?.[field], `relai_work connector schema must expose ${field}`);
 }
 assert.ok(publicWorkSchema?.allOf?.length, 'relai_work public schema must retain action-specific constraints without a top-level oneOf');
+const publicSearchInputSchema = publicSchemas.find(item => item.name === 'relai_search')?.inputSchema;
+for (const field of ['queries', 'maxResults', 'maxFiles']) {
+  assert.equal(publicSearchInputSchema?.properties?.[field]?.anyOf, undefined, `relai_search root ${field} schema must collapse bounded action variants instead of advertising a redundant union`);
+}
+const publicValidateInputSchema = publicSchemas.find(item => item.name === 'relai_validate')?.inputSchema;
+assert.equal(publicValidateInputSchema?.properties?.timeoutMs?.anyOf, undefined, 'relai_validate root timeoutMs schema must collapse bounded action variants instead of advertising a redundant union');
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
 assert.equal(publicSearchSchema?.properties?.neuralEmbeddings?.type, 'boolean', 'semantic search output metadata must remain declared');
 assert.equal(publicSearchSchema?.properties?.originalBytes?.type, 'number', 'compacted tool results must remain valid against the public output schema');
@@ -130,15 +142,17 @@ await invalid('relai_process', { action: 'start', work_id: 'work', command: 'npm
 await valid('relai_process', { action: 'read', work_id: 'work', processId: 'p', includeMetadata: false });
 await invalid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'ignored' });
 await invalid('relai_work', { action: 'status', title: 'ignored' });
-await valid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200 });
+await valid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200, maxResults: 1000 });
 await valid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
 await invalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
 await invalid('relai_search', { action: 'text', work_id: 'work', queries: ['a', 'b', 'c', 'd', 'e'] });
 await invalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 201 });
-await valid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100 });
+await invalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxResults: 1001 });
+await valid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100, maxFiles: 20000 });
 await valid('relai_search', { action: 'semantic', work_id: 'work', queries: ['needle', 'haystack'], maxResults: 100 });
 await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', queries: ['haystack'] });
 await invalid('relai_search', { action: 'semantic', work_id: 'work', maxResults: 101, queries: ['needle'] });
+await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxFiles: 20001 });
 await valid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
@@ -171,16 +185,18 @@ await publicValid('relai_work', { action: 'finish', work_id: 'work', summary: 'D
 await publicInvalid('relai_work', { action: 'finish', work_id: 'work' });
 await publicInvalid('relai_work', { action: 'status', title: 'wrong-action-field' });
 
-await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200 });
+await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200, maxResults: 1000 });
 await publicValid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', query: 'wrong-action-field' });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 201 });
-await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100 });
+await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxResults: 1001 });
+await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100, maxFiles: 20000 });
 await publicValid('relai_search', { action: 'semantic', work_id: 'work', queries: ['needle', 'haystack'], maxResults: 100 });
 await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', pattern: 'wrong-action-field' });
 await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', queries: ['haystack'] });
 await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 101 });
+await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxFiles: 20001 });
 
 await publicValid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.' });
 await publicInvalid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev' });

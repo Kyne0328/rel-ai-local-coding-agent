@@ -76,6 +76,24 @@ await assert.doesNotReject(() => validateToolOutput({}, 'relai_inspect', {
   validationCommands: { quick: [], standard: [], release: [] },
   configuredTestCommands: []
 }));
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_inspect', {
+  action: 'architecture',
+  work_id: 'work_output'
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  action: 'architecture',
+  modules: [],
+  entryPoints: [],
+  hotspots: [],
+  layers: [],
+  cycles: [{ modules: ['src/a.js', 'src/b.js'], size: 2 }],
+  communities: [],
+  summary: { files: 2, analyzedFiles: 2, edges: 2, modules: 2, cycles: 1, communities: 0, entryPoints: 0, hotspots: 0 },
+  truncated: false,
+  next: 'Use cycles to review dependency boundaries.'
+}));
 await assert.doesNotReject(() => validateToolOutput({}, 'relai_work', {
   action: 'begin',
   workspace: 'repo'
