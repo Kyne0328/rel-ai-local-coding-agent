@@ -34,6 +34,7 @@
     "electron": {
       "entry": [
         "preload.cjs",
+        "service-process.js",
         "build/after-pack.js",
         "scripts/*.js",
         "renderer/*.js",
