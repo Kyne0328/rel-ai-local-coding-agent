@@ -1,6 +1,8 @@
 import * as crypto from "node:crypto";
 import { ERROR_CODES } from "../desktopUxContracts.js";
 
+const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
+
 function isAuthorized(req, options) {
   if (!options.token && options.allowNoAuth) return true;
   const header = String(req.headers.authorization || "").trim();
@@ -22,8 +24,16 @@ function requestError(message, status = 400) {
   return error;
 }
 
+function normalizeMaxBodyBytes(value, fallback = DEFAULT_MAX_BODY_BYTES) {
+  const number = Number(value);
+  if (Number.isSafeInteger(number) && number > 0) return number;
+  const fallbackNumber = Number(fallback);
+  if (Number.isSafeInteger(fallbackNumber) && fallbackNumber > 0) return fallbackNumber;
+  return DEFAULT_MAX_BODY_BYTES;
+}
+
 function readRawBody(req, maxBytes) {
-  const limit = Number(maxBytes);
+  const limit = normalizeMaxBodyBytes(maxBytes);
   return new Promise((resolve, reject) => {
     const declaredBytes = Number(req.headers?.["content-length"]);
     if (Number.isSafeInteger(declaredBytes) && declaredBytes >= 0 && declaredBytes > limit) {
@@ -147,4 +157,4 @@ function jsonForHtmlScript(value) {
   return JSON.stringify(value).replaceAll("<", String.raw`\u003c`).replaceAll(">", String.raw`\u003e`).replaceAll("&", String.raw`\u0026`);
 }
 
-export { isAuthorized, readRawBody, readJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };
+export { DEFAULT_MAX_BODY_BYTES, isAuthorized, normalizeMaxBodyBytes, readRawBody, readJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };
