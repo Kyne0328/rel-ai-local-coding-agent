@@ -38,8 +38,6 @@ function approvalRequirement(name, args) {
 
 function approvalDigest(name, args) {
   const safe = { ...args };
-  delete safe.work_id;
-  delete safe.taskId;
   delete safe._deferredExecution;
   delete safe._operationTaskId;
   if (safe.sensitiveAuthorization) safe.sensitiveAuthorization = { ...safe.sensitiveAuthorization, reason: '[provided]' };
@@ -52,4 +50,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-export { requireApprovalIfNeeded, approvalRequirement,  };
+export { requireApprovalIfNeeded, approvalRequirement, approvalDigest };

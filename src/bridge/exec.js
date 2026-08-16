@@ -323,9 +323,10 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
     context.signal
   );
+  const commandSummary = redactCommandForAudit(displayCommand);
   const result = await runSpan(config, 'relai.process.exec', {
     'relai.workspace': workspace.alias,
-    'relai.process.command': redactCommandForAudit(displayCommand),
+    'relai.process.command': commandSummary,
     'relai.process.execution_mode': command ? 'shell' : 'direct',
     'relai.operation_task.id': String(args._operationTaskId || '')
   }, () => runProcess(
@@ -369,8 +370,8 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     executed: true,
     commandSucceeded,
     workspace: workspace.alias,
-    command: displayCommand,
-    commandSummary: redactCommandForAudit(displayCommand),
+    command: commandSummary,
+    commandSummary,
     cwd: cwd.relativePath,
     shell: executionLabel,
     exitCode: result.exitCode,

@@ -5,7 +5,7 @@ import { principalFingerprint, principalForContext } from '../mcp/principal.js';
 import { assertAuthorizedToolCall } from '../mcp/authorizationPolicy.js';
 import { clearSessionPolicy } from '../policyResolver.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
-import { activeProcessesForWorkspace } from '../processManager.js';
+import { activeProcessesForWorkSession } from '../processManager.js';
 import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
 import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
 import { beginConnectorToolCall, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
@@ -314,7 +314,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       : readRecentWorkflowEvidence(config, workId, 100);
     if (receipt) recentEvidence.push(receipt);
     if (requestState) requestState.recentEvidence = recentEvidence.slice(-100);
-    const processes = activeProcessesForWorkspace(config, workspace.alias).map(item => ({
+    const processes = activeProcessesForWorkSession(config, workspace.alias, workId).map(item => ({
       processId: item.processId,
       status: item.status,
       workSessionId: item.workSessionId || '',
