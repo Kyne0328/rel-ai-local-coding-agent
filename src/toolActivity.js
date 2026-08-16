@@ -215,6 +215,7 @@ function createToolActivityTracker(options = {}) {
             phase: 'complete'
           });
       applyActivityPatch(current.activity, completionActivity);
+      task.changedFiles = mergeTaskChangedFiles(task.changedFiles, current.activity?.metadata?.changedFiles);
       current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.internalOperation !== OP.WORK_CANCEL
         ? 'cancelled'
         : result.ok === false
@@ -412,6 +413,7 @@ function createToolActivityTracker(options = {}) {
       failures,
       sequence,
       events,
+      changedFiles: mergeTaskChangedFiles(resumed?.changedFiles),
       errorSummary: String(resumed?.errorSummary || ''),
       workspace: String(details.workspace || resumed?.workspace || ''),
       lastTool: String(resumed?.lastTool || details.tool || ''),
@@ -553,6 +555,8 @@ function createToolActivityTracker(options = {}) {
       successfulToolCallCount: task.successes,
       failedToolCallCount: task.failures,
       failures: task.failures,
+      changedFiles: mergeTaskChangedFiles(task.changedFiles),
+      changedFileCount: mergeTaskChangedFiles(task.changedFiles).length,
       workspace: task.workspace,
       lastTool: task.lastTool,
       operation: task.lastOperation,
@@ -584,6 +588,7 @@ function createToolActivityTracker(options = {}) {
     const completedAt = now();
     const completion = task.completionRequest;
     const status = 'completed';
+    const changedFiles = mergeTaskChangedFiles(task.changedFiles, completion.changedFiles);
     lastTask = sanitizeTaskRecord({
       taskId: task.id,
       sessionId: task.id,
@@ -602,7 +607,8 @@ function createToolActivityTracker(options = {}) {
       validationStatus: completion.validationStatus,
       validationLevel: completion.validationLevel,
       validationAt: completion.validationAt,
-      changedFiles: completion.changedFiles,
+      changedFiles,
+      changedFileCount: changedFiles.length,
       residualChangedFiles: completion.residualChangedFiles,
       residualState: completion.residualState,
       calls: task.calls,
@@ -700,6 +706,8 @@ function createToolActivityTracker(options = {}) {
       successfulToolCallCount: task.successes,
       failedToolCallCount: task.failures,
       failures: task.failures,
+      changedFiles: mergeTaskChangedFiles(task.changedFiles),
+      changedFileCount: mergeTaskChangedFiles(task.changedFiles).length,
       workspace: task.workspace,
       tool: current?.tool || task.lastTool,
       lastTool: task.lastTool,
@@ -796,6 +804,10 @@ function createToolActivityTracker(options = {}) {
     reset,
     idleMs
   };
+}
+
+function mergeTaskChangedFiles(...sources) {
+  return [...new Set(sources.flatMap(files => Array.isArray(files) ? files : []).map(String).filter(Boolean))].slice(0, 200);
 }
 
 function applyActivityPatch(activity, patch = {}) {

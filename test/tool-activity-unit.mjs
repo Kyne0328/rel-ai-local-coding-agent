@@ -80,6 +80,36 @@ const queuedEvent = queueTracker.getToolActivity().tasks[0]?.events[0];
 assert.equal(queuedEvent?.metadata?.waitMs, 1800);
 assert.match(queuedEvent?.summary || '', /Waited 1\.8 seconds for the workspace execution queue/);
 
+const fileTracker = createToolActivityTracker({ idleMs: 60_000 });
+const finishFileStart = fileTracker.beginConnectorToolCall({
+  tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'files-live', createTask: true
+});
+const fileTaskId = finishFileStart.taskId;
+finishFileStart();
+const finishFirstFileEdit = fileTracker.beginConnectorToolCall({ tool: 'relai_edit', workspace: 'repo', scopeId: 'files-live', taskId: fileTaskId });
+finishFirstFileEdit({
+  ok: true,
+  activity: {
+    status: 'succeeded', title: 'Update repository files', summary: 'Updated 2 files.',
+    metadata: { changedFiles: ['src/a.js', 'src/b.js'], changedFileCount: 2 }
+  }
+});
+let fileTask = fileTracker.getToolActivity().tasks[0];
+assert.deepEqual(fileTask?.changedFiles, ['src/a.js', 'src/b.js']);
+assert.equal(fileTask?.changedFileCount, 2, 'live task snapshots must expose changed-file counts immediately');
+const finishSecondFileEdit = fileTracker.beginConnectorToolCall({ tool: 'relai_edit', workspace: 'repo', scopeId: 'files-live', taskId: fileTaskId });
+finishSecondFileEdit({
+  ok: true,
+  activity: {
+    status: 'succeeded', title: 'Update repository files', summary: 'Updated 2 files.',
+    metadata: { changedFiles: ['src/b.js', 'src/c.js'], changedFileCount: 2 }
+  }
+});
+fileTask = fileTracker.getToolActivity().tasks[0];
+assert.deepEqual(fileTask?.changedFiles, ['src/a.js', 'src/b.js', 'src/c.js']);
+assert.equal(fileTask?.changedFileCount, 3, 'live task snapshots must retain cumulative changed files across tool calls');
+fileTracker.reset();
+
 const approvalTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishApproval = approvalTracker.beginConnectorToolCall({
   tool: 'relai_edit',

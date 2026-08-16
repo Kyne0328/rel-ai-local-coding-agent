@@ -1,5 +1,5 @@
 import { fetchJson } from '../../api.js';
-import { closeDrawer, openDrawer } from '../../components/drawer.js';
+import { closeDrawer, openDrawer, updateDrawer } from '../../components/drawer.js';
 import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
 import { toast } from '../../components/toast.js';
@@ -19,6 +19,10 @@ const visibleCounts = new Map();
 let _sessionsById = new Map();
 let _requestedSessionId = '';
 let _openedRequestedSession = false;
+let _openSessionId = '';
+let _openSessionDetail = null;
+let _openSessionFingerprint = '';
+let _openSessionRequest = 0;
 
 export function mountTasks(container, data = {}) {
   const workspace = getWorkspaceFilter();
@@ -82,6 +86,7 @@ export function updateTaskSessions(container, data = {}) {
 
   const body = current.querySelector('.task-list');
   if (body) reconcileSessionRows(body, sessions, scopeKey);
+  refreshOpenSession(data);
   maybeOpenRequestedSession();
   return true;
 }
@@ -265,7 +270,7 @@ function sessionDescription(session, live, operation) {
 function sessionFacts(session, live) {
   const facts = [];
   const toolCalls = Number(session.toolCallCount ?? session.calls ?? 0);
-  const changed = Number(session.changedFileCount || session.changedFiles?.length || 0);
+  const changed = sessionChangedFileCount(session);
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
   const completed = workSessionStateView(session).status === 'completed';
   facts.push(`${toolCalls} action${toolCalls === 1 ? '' : 's'}`);
@@ -297,7 +302,7 @@ function sessionFingerprint(session) {
     session.progress || null,
     Number(session.activeCalls || 0),
     Number(session.toolCallCount ?? session.calls ?? 0),
-    Number(session.changedFileCount || session.changedFiles?.length || 0),
+    sessionChangedFileCount(session),
     Number(session.failedToolCallCount ?? session.failures ?? 0),
     session.validation || '',
     session.status || '',
@@ -317,9 +322,9 @@ function timingHtml(session, live) {
     const start = session.startedAt || session.createdAt || '';
     return `<span data-clock-elapsed-start="${esc(start)}">${esc(formatDuration(sessionDurationMs(session), { live: true }) || '0s')}</span>`;
   }
-  const end = terminalTaskTimestampValue(session);
-  const relative = timeAgo(end);
-  return `<span${relative ? ` title="Ended ${esc(relative)}"` : ''}>${esc(formatDuration(sessionDurationMs(session), { historical: true }))}</span>`;
+  const end = sessionListTimestampValue(session);
+  const relative = timeAgo(end) || '—';
+  return `<span${end ? ` data-clock-relative="${esc(end)}"` : ''}>${esc(relative)}</span>`;
 }
 
 function sessionDurationMs(session) {
@@ -342,7 +347,21 @@ function publishLabel(session) {
 
 async function openSession(session) {
   if (!session) return;
+  const requestedId = sessionIdentifier(session);
+  if (!requestedId) return;
+  closeOpenSession();
+  const request = ++_openSessionRequest;
+  _openSessionId = requestedId;
   session = await loadSessionDetail(session);
+  if (request !== _openSessionRequest || _openSessionId !== requestedId) return;
+  session = mergeSessionDetail(session, _sessionsById.get(requestedId));
+  _openSessionDetail = session;
+  _openSessionFingerprint = sessionDetailFingerprint(session);
+  const { title, content } = buildSessionDetail(session);
+  openDrawer({ title, content, panelClass: 'session-detail-drawer', onClose: clearOpenSessionState });
+}
+
+function buildSessionDetail(session) {
   const content = document.createElement('div');
   content.className = 'detail-stack session-detail';
   const identities = taskEntityView(session);
@@ -365,7 +384,7 @@ async function openSession(session) {
       ${detail('Project', session.workspace || '—')}
       ${durationDetail(session, live)}
       ${detail('Actions', session.toolCallCount ?? session.calls ?? 0)}
-      ${detail('Files changed', session.changedFileCount || session.changedFiles?.length || 0)}
+      ${detail('Files changed', sessionChangedFileCount(session))}
     </div>
     ${attentionSection(session)}
     ${sessionActionSection(session)}
@@ -376,10 +395,81 @@ async function openSession(session) {
     ${technicalDetailsSection(session, identities, state, operationValue)}
     <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">Open in Activity</a></div>`;
 
-  for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) link.addEventListener('click', closeDrawer);
+  for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) link.addEventListener('click', closeOpenSession);
   bindCopyActions(content);
   const id = sessionIdentifier(session);
-  openDrawer({ title: session.title || `Task ${id ? id.slice(0, 8) : 'unknown'}`, content, panelClass: 'session-detail-drawer' });
+  return { title: session.title || `Task ${id ? id.slice(0, 8) : 'unknown'}`, content };
+}
+
+function refreshOpenSession(data = {}) {
+  if (!_openSessionId || !_openSessionDetail) return;
+  const summary = _sessionsById.get(_openSessionId);
+  if (!summary) return;
+  const next = mergeSessionDetail(_openSessionDetail, summary, data);
+  const fingerprint = sessionDetailFingerprint(next);
+  if (fingerprint === _openSessionFingerprint) return;
+  const { title, content } = buildSessionDetail(next);
+  if (!updateDrawer({ title, content })) {
+    clearOpenSessionState();
+    return;
+  }
+  _openSessionDetail = next;
+  _openSessionFingerprint = fingerprint;
+}
+
+function mergeSessionDetail(previous = {}, summary = {}, data = {}) {
+  const changedFiles = orderChangedFiles([...(previous.changedFiles || []), ...(summary?.changedFiles || [])]);
+  const taskId = sessionIdentifier(summary || previous);
+  const liveEvents = (Array.isArray(data?.auditTail?.entries) ? data.auditTail.entries : [])
+    .filter(event => String(event?.taskId || event?.sessionId || '').trim() === taskId);
+  const events = mergeSessionEvents(previous.events || [], liveEvents);
+  return {
+    ...previous,
+    ...(summary || {}),
+    changedFiles,
+    changedFileCount: Math.max(sessionChangedFileCount(previous), sessionChangedFileCount(summary), changedFiles.length),
+    events
+  };
+}
+
+function mergeSessionEvents(existing = [], updates = []) {
+  const byId = new Map();
+  for (const event of [...existing, ...updates]) {
+    const id = activityEventId(event) || `${eventTimestampValue(event)}:${event.operation || event.tool || ''}`;
+    byId.set(id, { ...(byId.get(id) || {}), ...event });
+  }
+  return orderSessionEvents([...byId.values()]);
+}
+
+function sessionDetailFingerprint(session) {
+  return JSON.stringify([
+    sessionFingerprint(session),
+    orderChangedFiles(session.changedFiles || []),
+    (Array.isArray(session.currentOperations) ? session.currentOperations : []).map(operation => [
+      operation.invocationId || operation.operationId || '',
+      operation.label || operation.tool || '',
+      operation.status || '',
+      operation.startedAt || ''
+    ]),
+    orderSessionEvents(session.events || []).map(event => [
+      activityEventId(event),
+      event.status || '',
+      event.summary || '',
+      eventTimestampValue(event)
+    ])
+  ]);
+}
+
+function clearOpenSessionState() {
+  _openSessionId = '';
+  _openSessionDetail = null;
+  _openSessionFingerprint = '';
+  _openSessionRequest += 1;
+}
+
+function closeOpenSession() {
+  clearOpenSessionState();
+  closeDrawer();
 }
 
 async function loadSessionDetail(session) {
@@ -498,12 +588,34 @@ function toolEventsSection(events, session) {
 
 export function orderSessionsForDisplay(sessions = []) {
   return [...(Array.isArray(sessions) ? sessions : [])].sort((left, right) => {
-    const ongoingDifference = Number(isOngoingSession(right)) - Number(isOngoingSession(left));
+    const leftOngoing = isOngoingSession(left);
+    const rightOngoing = isOngoingSession(right);
+    const ongoingDifference = Number(rightOngoing) - Number(leftOngoing);
     if (ongoingDifference) return ongoingDifference;
-    const timestampDifference = terminalTaskTimestamp(right) - terminalTaskTimestamp(left);
+    const timestampDifference = leftOngoing && rightOngoing
+      ? sessionStartTimestamp(left) - sessionStartTimestamp(right)
+      : terminalTaskTimestamp(right) - terminalTaskTimestamp(left);
     if (timestampDifference) return timestampDifference;
     return sessionIdentifier(left).localeCompare(sessionIdentifier(right), 'en-US', { numeric: true, sensitivity: 'base' });
   });
+}
+
+function sessionStartTimestamp(session = {}) {
+  for (const value of [session.startedAtIso, session.startedAt, session.createdAt]) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const parsed = Date.parse(String(value || ''));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function sessionListTimestampValue(session = {}) {
+  if (String(session.status || '').toLowerCase() === 'inactive' && session.inactiveAt) return session.inactiveAt;
+  return terminalTaskTimestampValue(session);
+}
+
+function sessionChangedFileCount(session = {}) {
+  return Math.max(0, Number(session.changedFileCount || 0), orderChangedFiles(session.changedFiles || []).length);
 }
 
 function sessionIdentifier(session = {}) {

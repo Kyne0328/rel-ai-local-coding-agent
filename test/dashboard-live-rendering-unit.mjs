@@ -13,6 +13,7 @@ const connector = read('src/ui/features/settings/connector.js');
 const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const home = read('src/ui/features/home/index.js');
 const diagnostics = read('src/ui/features/settings/diagnostics.js');
+const drawer = read('src/ui/components/drawer.js');
 
 function functionSource(source, name) {
   const asyncStart = source.indexOf(`async function ${name}`);
@@ -141,6 +142,10 @@ assert.match(activity, /<th scope="col" class="activity-message-column">Message<
 assert.doesNotMatch(activity, /<th scope="col" class="activity-session-column">Session<\/th>/, 'Activity must not replace the original columns with Session');
 assert.match(activity, /routeHref\('tasks'/, 'Activity details must deep-link back to Sessions');
 assert.match(sessions, /data-session-fingerprint/, 'session rows must carry semantic fingerprints for keyed reconciliation');
+assert.match(functionSource(sessions, 'timingHtml'), /data-clock-relative/, 'ended and inactive task rows must show relative age instead of total duration');
+assert.match(functionSource(sessions, 'updateTaskSessions'), /refreshOpenSession\(data\)/, 'live task updates must refresh an already-open task detail drawer');
+assert.match(functionSource(sessions, 'refreshOpenSession'), /updateDrawer/, 'open task details must update in place without reopening the drawer');
+assert.match(drawer, /export function updateDrawer/, 'shared drawers must support in-place content refreshes');
 const sessionFactsSource = functionSource(sessions, 'sessionFacts');
 assert.match(sessionFactsSource, /toolCallCount/, 'session rows must show their tool-call count');
 assert.match(sessionFactsSource, /(?:tool call|action)/, 'session rows must label action counts');
