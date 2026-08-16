@@ -23,10 +23,13 @@ const workspaceRoot = path.join(root, 'workspace');
 const config = { stateDir };
 const workspace = { alias: 'app', path: workspaceRoot };
 const otherWorkspace = { alias: 'other', path: path.join(root, 'other-workspace') };
-const ownerStart = { taskId: 'work-session-a', principal: 'client-a', workspace: 'app' };
-const ownerLater = { taskId: 'work-session-b', principal: 'client-a', workspace: 'app' };
-const otherPrincipal = { taskId: 'work-session-c', principal: 'client-b', workspace: 'app' };
-const otherWorkspaceContext = { taskId: 'work-session-d', principal: 'client-a', workspace: 'other' };
+const principalA = { clientId: 'client-a', authMode: 'oauth' };
+const principalB = { clientId: 'client-b', authMode: 'oauth' };
+const ownerStart = { taskId: 'work-session-a', principal: principalA, workspace: 'app' };
+const ownerLater = { taskId: 'work-session-a', principal: principalA, workspace: 'app' };
+const otherSession = { taskId: 'work-session-b', principal: principalA, workspace: 'app' };
+const otherPrincipal = { taskId: 'work-session-c', principal: principalB, workspace: 'app' };
+const otherWorkspaceContext = { taskId: 'work-session-d', principal: principalA, workspace: 'other' };
 const createdProcessIds = [];
 let externalChild = null;
 
@@ -101,11 +104,27 @@ try {
 
   assert.throws(
     () => readManagedProcess(config, { processId: started.processId }, otherPrincipal),
-    error => error?.code === 'PROCESS_ACCESS_DENIED'
+    error => error?.code === 'PROCESS_ACCESS_DENIED',
+    'distinct object principals must not collapse to one process identity'
   );
   assert.throws(
     () => readManagedProcess(config, { processId: started.processId }, otherWorkspaceContext),
     error => error?.code === 'PROCESS_WORKSPACE_MISMATCH'
+  );
+  assert.throws(
+    () => readManagedProcess(config, { processId: started.processId }, otherSession),
+    error => error?.code === 'PROCESS_SESSION_MISMATCH',
+    'another logical task from the same principal must not read this process'
+  );
+  assert.throws(
+    () => writeManagedProcess(config, { processId: started.processId, input: 'cross-task\n' }, otherSession),
+    error => error?.code === 'PROCESS_SESSION_MISMATCH',
+    'another logical task from the same principal must not write to this process'
+  );
+  await assert.rejects(
+    () => stopManagedProcess(config, { processId: started.processId, graceMs: 0 }, otherSession),
+    error => error?.code === 'PROCESS_SESSION_MISMATCH',
+    'another logical task from the same principal must not stop this process'
   );
 
   const written = writeManagedProcess(config, {
@@ -140,8 +159,10 @@ try {
   assert.equal(incremental.stdout.requestedOffset, cursor);
   assert.match(incremental.stdout.text, /ECHO:after-noise/);
 
-  const listedByNewSession = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
-  assert.ok(listedByNewSession.processes.some(item => item.processId === started.processId));
+  const listedByOwner = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
+  assert.ok(listedByOwner.processes.some(item => item.processId === started.processId));
+  const hiddenFromOtherSession = listManagedProcesses(config, { workspace: 'app' }, otherSession);
+  assert.equal(hiddenFromOtherSession.processes.some(item => item.processId === started.processId), false);
   const hiddenFromOtherPrincipal = listManagedProcesses(config, { workspace: 'app' }, otherPrincipal);
   assert.equal(hiddenFromOtherPrincipal.processes.some(item => item.processId === started.processId), false);
   assert.throws(
