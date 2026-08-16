@@ -10,8 +10,9 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
-import { DEFAULT_MAX_BODY_BYTES, normalizeMaxBodyBytes, readRawBody } from '../src/http/io.js';
+import { DEFAULT_MAX_BODY_BYTES, normalizeMaxBodyBytes, readRawBody, sendJson } from '../src/http/io.js';
 import { createHttpRequestAbortScope, expectedMcpName } from '../src/http/mcpTransport.js';
+import { resolveHttpRequestTimeoutMs } from '../src/httpServer.js';
 import {
   createNativeTask,
   getNativeTask,
@@ -127,6 +128,63 @@ try {
   assert.equal(normalizeMaxBodyBytes('not-a-number'), DEFAULT_MAX_BODY_BYTES, 'invalid body limits must fail closed to the bounded default instead of becoming unbounded');
   assert.equal(normalizeMaxBodyBytes(-1), DEFAULT_MAX_BODY_BYTES);
   assert.equal(normalizeMaxBodyBytes(12 * 1024 * 1024), 12 * 1024 * 1024, 'valid configured limits must not be arbitrarily clamped');
+  assert.equal(resolveHttpRequestTimeoutMs(DEFAULT_MAX_BODY_BYTES), 300_000, 'default payloads should retain Node\'s normal finite request-receive window');
+  assert.equal(resolveHttpRequestTimeoutMs(DEFAULT_MAX_BODY_BYTES * 2), 600_000, 'larger configured request bodies must receive a proportionally larger transport window');
+  assert.equal(resolveHttpRequestTimeoutMs(Math.floor(DEFAULT_MAX_BODY_BYTES / 2)), 300_000, 'smaller body limits must not reduce the baseline request-receive protection window');
+
+  let streamedOversizeResumed = false;
+  const streamedOversize = new EventEmitter();
+  streamedOversize.headers = {};
+  streamedOversize.complete = false;
+  streamedOversize.resume = () => { streamedOversizeResumed = true; };
+  const streamedOversizeRead = readRawBody(streamedOversize, 64);
+  streamedOversize.emit('data', Buffer.alloc(40));
+  streamedOversize.emit('data', Buffer.alloc(40));
+  await assert.rejects(streamedOversizeRead, error => error?.status === 413);
+  assert.equal(streamedOversizeResumed, true, 'streaming bodies that cross the limit must continue draining for a structured 413 response');
+  assert.equal(streamedOversize.listenerCount('data'), 0, 'rejected bodies must release buffered data listeners immediately');
+  streamedOversize.emit('end');
+  assert.equal(streamedOversize.listenerCount('end'), 0);
+  assert.equal(streamedOversize.listenerCount('error'), 0);
+  assert.equal(streamedOversize.listenerCount('close'), 0);
+
+  const abortedBody = new EventEmitter();
+  abortedBody.headers = {};
+  abortedBody.complete = false;
+  abortedBody.aborted = false;
+  const abortedBodyRead = readRawBody(abortedBody, 64);
+  abortedBody.emit('data', Buffer.alloc(32));
+  abortedBody.aborted = true;
+  abortedBody.emit('aborted');
+  await assert.rejects(abortedBodyRead, /aborted before completion/i);
+  abortedBody.emit('close');
+  assert.equal(abortedBody.listenerCount('data'), 0);
+  assert.equal(abortedBody.listenerCount('end'), 0);
+  assert.equal(abortedBody.listenerCount('error'), 0);
+  assert.equal(abortedBody.listenerCount('aborted'), 0);
+  assert.equal(abortedBody.listenerCount('close'), 0, 'aborted request bodies must not leave transport listeners behind');
+
+  let jsonStatus = 0;
+  let jsonHeaders = null;
+  let jsonBody = null;
+  const jsonResponse = {
+    headersSent: false,
+    writableEnded: false,
+    destroyed: false,
+    writeHead(status, headers) { jsonStatus = status; jsonHeaders = headers; },
+    end(body) { jsonBody = body; this.writableEnded = true; }
+  };
+  sendJson(jsonResponse, 200, { ok: true, value: '😀' });
+  assert.equal(jsonStatus, 200);
+  assert.equal(typeof jsonBody, 'string', 'JSON responses should avoid a second full payload Buffer allocation');
+  assert.equal(jsonHeaders['Content-Length'], Buffer.byteLength(jsonBody, 'utf8'));
+  assert.doesNotThrow(() => sendJson({
+    headersSent: false,
+    writableEnded: true,
+    destroyed: false,
+    writeHead() { throw new Error('closed response must not be written'); },
+    end() { throw new Error('closed response must not be ended'); }
+  }, 200, { ok: true }), 'late transport errors must not try to write a second response');
 
   const externalAbort = new AbortController();
   const aborted = runBoundedExecution(
