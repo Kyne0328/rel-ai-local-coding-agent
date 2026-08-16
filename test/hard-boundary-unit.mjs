@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 import { resolveSafePath, validateRelativePath, isSecretPath, SECRET_PATH_PATTERNS } from "../src/safety.js";
+import { runAuditRedactionRegression } from './audit-redaction-unit.mjs';
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-hard-boundary-'));
 
@@ -101,6 +102,9 @@ for (const streamPath of ['.env::$DATA', '.env::$data', 'id_rsa::$DATA', 'cert.p
 assert.ok(throws(() => validateRelativePath('C:foo/bar.js')), 'drive-relative path rejected');
 assert.equal(resolveSafePath(ROOT, 'src/ok.js').relativePath, 'src/ok.js', 'ordinary paths unaffected');
 console.log('16. NTFS stream and drive separators rejected: OK');
+
+await runAuditRedactionRegression(ROOT);
+console.log('17. audit strings redact embedded credentials: OK');
 
 fs.rmSync(ROOT, { recursive: true, force: true });
 console.log('hard-boundary unit tests passed.');

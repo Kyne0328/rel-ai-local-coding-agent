@@ -7,6 +7,7 @@ import { readJsonFile, writeJsonAtomic, writeJsonAtomicAsync } from './durableSt
 import { normalizeExecutionInvocation, resolveCommandCwd, normalizeCommandEnv, redactCommandForAudit } from './bridge/exec.js';
 import { isProcessTreeAlive, terminateProcessTree } from './process.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
+import { createHttpTaskPrincipal, principalFingerprint } from './mcp/principal.js';
 import { getStateDir } from './statePaths.js';
 import { readTaskHistorySession } from './taskHistoryStore.js';
 import { runSpan, addSpanEvent, traceContextEnvironment } from './telemetry.js';
@@ -525,8 +526,8 @@ function assertProcessAccess(config, record, args = {}, context = {}) {
   }
 
   const workSessionId = String(context.taskId || args.work_id || '').trim();
-  if (record.status === 'starting' && record.workSessionId && workSessionId && record.workSessionId !== workSessionId) {
-    throw taskError('PROCESS_SESSION_MISMATCH', 'Managed process startup belongs to a different work session.');
+  if (String(record.workSessionId || '').trim() !== workSessionId) {
+    throw taskError('PROCESS_SESSION_MISMATCH', 'Managed process belongs to a different work session.');
   }
 }
 
@@ -592,20 +593,23 @@ function findReusableManagedProcess(reuseFingerprint) {
   ) || null;
 }
 function principalKeyForContext(context = {}) {
+  if (context.principal) return principalFingerprint(context.principal);
+
   const authInfo = context.mcp?.authInfo || context.authInfo || {};
   const authExtra = authInfo?.extra && typeof authInfo.extra === 'object' ? authInfo.extra : {};
-  const principal = String(
-    context.principal
-    || authInfo.clientId
+  const clientId = String(
+    authInfo.clientId
     || authInfo.client_id
     || authExtra.clientId
     || authExtra.client_id
-    || context.requestHeaders?.authorization
-    || (context.connector === true ? 'connector:anonymous' : context.taskId ? 'local:stdio' : '')
     || ''
   ).trim();
-  if (!principal) return '';
-  return crypto.createHash('sha256').update(`relai-process-principal\0${principal}`).digest('base64url');
+  if (clientId) {
+    return principalFingerprint(createHttpTaskPrincipal({ ...authInfo, clientId }, authInfo.authMode || context.authMode || 'oauth'));
+  }
+
+  const fallback = context.connector === true ? 'connector:anonymous' : context.taskId ? 'local:stdio' : '';
+  return fallback ? principalFingerprint(fallback) : '';
 }
 
 function trustedLocalContext(args = {}, context = {}) {
