@@ -33,14 +33,14 @@ const report = buildDiagnosticReport({
     persistent: true,
     revision: 7,
     entries: [
-      { ts: '2026-07-25T00:03:00.000Z', level: 'info', source: 'desktop', message: 'third' },
+      { ts: '2026-07-25T00:03:00.000Z', level: 'info', source: 'desktop-observability', code: 'activity_listener_failed', taskId: 'task-runtime-7', eventId: 'event-runtime-7', workspace: 'example', tool: 'relai_read', operation: 'Read src/app.js', message: 'third' },
       { ts: '2026-07-25T00:01:00.000Z', level: 'error', source: 'openai-tunnel', code: 'public_endpoint_failed', message: `{"token":"${secret}"}` },
       { ts: '2026-07-25T00:02:00.000Z', level: 'warning', source: 'local-service', message: 'second' }
     ]
   },
   auditLogs: {
     entries: [
-      { ts: '2026-07-25T00:04:00.000Z', eventId: 'event-edit-1', taskId: 'task-42', ok: false, tool: 'relai_edit', workspace: 'example', error: 'fourth failure' },
+      { ts: '2026-07-25T00:04:00.000Z', eventId: 'event-edit-1', taskId: 'task-42', ok: false, tool: 'relai_edit', workspace: 'example', errorCode: 'PATCH_CONTEXT_MISMATCH', error: 'fourth failure' },
       { ts: '2026-07-25T00:02:00.000Z', ok: true, tool: 'relai_read', workspace: 'example' },
       { ts: '2026-07-25T00:03:00.000Z', ok: false, tool: 'relai_validate', workspace: 'example', error: `client_secret=${secret}` }
     ]
@@ -61,10 +61,17 @@ assert.equal(report.maintenance.all.confirmation, 'RESET');
 assert.equal(report.logs.runtime.persistent, true);
 assert.equal(report.logs.runtime.revision, 7, 'diagnostic snapshots must preserve the runtime-log revision for live replay ordering');
 assert.deepEqual(report.logs.runtime.entries.map(item => item.ts), ['2026-07-25T00:01:00.000Z','2026-07-25T00:02:00.000Z','2026-07-25T00:03:00.000Z']);
+assert.equal(report.logs.runtime.entries.at(-1).code, 'activity_listener_failed', 'technical log codes must not collapse to a generic UI error code');
+assert.equal(report.logs.runtime.entries.at(-1).taskId, 'task-runtime-7');
+assert.equal(report.logs.runtime.entries.at(-1).eventId, 'event-runtime-7');
+assert.equal(report.logs.runtime.entries.at(-1).tool, 'relai_read');
 assert.equal(report.logs.failedActivity.length, 2);
 assert.equal(report.logs.failedActivity.at(-1).taskId, 'task-42');
 assert.equal(report.logs.failedActivity.at(-1).eventId, 'event-edit-1');
-assert.match(report.reportText, /task=task-42 event=event-edit-1/);
+assert.equal(report.logs.failedActivity.at(-1).errorCode, 'PATCH_CONTEXT_MISMATCH');
+assert.match(report.reportText, /code=activity_listener_failed/);
+assert.match(report.reportText, /task=task-runtime-7 event=event-runtime-7 tool=relai_read operation=Read src\/app\.js/);
+assert.match(report.reportText, /code=PATCH_CONTEXT_MISMATCH workspace=example task=task-42 event=event-edit-1/);
 assert.doesNotMatch(JSON.stringify(report), new RegExp(secret));
 assert.match(report.reportText, /Rel\.AI MCP diagnostic report/);
 assert.doesNotMatch(report.reportText, new RegExp(secret));

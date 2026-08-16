@@ -13,7 +13,8 @@ const failure = buildFailureNotification({
 assert.ok(String(failure.title || '').trim(), 'failure notification must have a title');
 assert.match(failure.body, /Running release checks/);
 assert.match(failure.body, /rel-ai-mcp/);
-assert.match(failure.body, /Lint failed/);
+assert.doesNotMatch(failure.body, /Lint failed|Open the dashboard for details/, 'native alerts should not expose raw technical failure text');
+assert.match(failure.body, /Open Rel\.AI for details and recovery options/);
 assert.doesNotMatch(failure.title, /Rel\.AI MCP|Electron/i, 'the OS already supplies the application identity');
 
 const completion = buildCompletionNotification({

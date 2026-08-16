@@ -548,7 +548,7 @@ function renderReport(report, view) {
   const body = view.findings.length
     ? `<div class="diagnostic-list" data-diagnostic-region="findings">${view.findings.map(findingCard).join('')}</div>`
     : view.totalFindings === 0
-      ? '<div class="diagnostic-clear" data-diagnostic-region="findings"><strong>All clear</strong><span>No blocking errors or warnings were found.</span></div>'
+      ? '<div class="diagnostic-clear" data-diagnostic-region="findings"><strong>Current health looks good</strong><span>No current connection, project, or configuration problems were found. Recent failures can still appear in the logs below.</span></div>'
       : '<div class="diagnostic-log-empty" data-diagnostic-region="findings"><strong>No findings match the current filters.</strong></div>';
   return summaryCards(countFindings(view.findings))
     + body
@@ -650,11 +650,19 @@ function logRow(entry) {
   const message = entry.message || entry.error || 'Recorded diagnostic event';
   const source = entry.source || entry.tool || 'activity';
   const level = entry.level || (entry.error ? 'error' : 'info');
+  const context = [
+    entry.code || entry.errorCode ? `Code: ${entry.code || entry.errorCode}` : '',
+    entry.workspace ? `Project: ${entry.workspace}` : '',
+    entry.taskId ? `Task: ${entry.taskId}` : '',
+    entry.eventId ? `Event: ${entry.eventId}` : '',
+    entry.tool && entry.source ? `Tool: ${entry.tool}` : '',
+    entry.operation ? `Operation: ${entry.operation}` : ''
+  ].filter(Boolean).join(' · ');
   return `<div class="diagnostic-log-row ${esc(level)}">
     <time>${esc(timeAgo(entry.ts))}</time>
     <code>${esc(source)}</code>
     <span>${esc(message)}</span>
-    ${entry.code || entry.errorCode ? `<small>${esc(entry.code || entry.errorCode)}</small>` : ''}
+    ${context ? `<small>${esc(context)}</small>` : ''}
   </div>`;
 }
 

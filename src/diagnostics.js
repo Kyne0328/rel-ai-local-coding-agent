@@ -184,8 +184,13 @@ function normalizeRuntimeLogs(value) {
       ts: entry.ts || null,
       level: ['error', 'warning', 'info'].includes(entry.level) ? entry.level : 'info',
       source: sanitizeText(entry.source || 'desktop', 80),
-      code: normalizeErrorCode(entry.code) || '',
-      message: sanitizeText(entry.message || '', 2000)
+      code: sanitizeText(entry.code || '', 120),
+      message: sanitizeText(entry.message || '', 2000),
+      taskId: sanitizeText(entry.taskId || '', 160),
+      eventId: sanitizeText(entry.eventId || '', 160),
+      workspace: sanitizeText(entry.workspace || '', 120),
+      tool: sanitizeText(entry.tool || '', 120),
+      operation: sanitizeText(entry.operation || '', 240)
     }))
   };
 }
@@ -202,9 +207,17 @@ function normalizeFailedActivity(value) {
       taskId: entry.taskId || entry.sessionId || '',
       tool: entry.tool || entry.type || 'activity',
       workspace: entry.workspace || '',
-      errorCode: normalizeErrorCode(entry.errorCode) || '',
+      errorCode: sanitizeText(entry.errorCode || '', 120),
       error: entry.error || entry.message || 'Failed activity'
     }));
+}
+
+function logContext(entry = {}, fields = []) {
+  const labels = { code: 'code', errorCode: 'code', workspace: 'workspace', taskId: 'task', eventId: 'event', tool: 'tool', operation: 'operation' };
+  const context = fields
+    .map(field => entry[field] ? `${labels[field] || field}=${entry[field]}` : '')
+    .filter(Boolean);
+  return context.length ? ` [${context.join(' ')}]` : '';
 }
 
 function formatDiagnosticReport(report) {
@@ -219,13 +232,16 @@ function formatDiagnosticReport(report) {
   }
   if (report.logs.runtime.entries.length) {
     lines.push('', 'Recent service logs:');
-    for (const entry of report.logs.runtime.entries.slice(-20)) lines.push(`${entry.ts || ''} ${entry.level.toUpperCase()} ${entry.source}: ${entry.message}`.trim());
+    for (const entry of report.logs.runtime.entries.slice(-20)) {
+      const context = logContext(entry, ['code', 'workspace', 'taskId', 'eventId', 'tool', 'operation']);
+      lines.push(`${entry.ts || ''} ${entry.level.toUpperCase()} ${entry.source}${context}: ${entry.message}`.trim());
+    }
   }
   if (report.logs.failedActivity.length) {
     lines.push('', 'Recent failed activity:');
     for (const entry of report.logs.failedActivity) {
-      const correlation = [entry.taskId ? `task=${entry.taskId}` : '', entry.eventId ? `event=${entry.eventId}` : ''].filter(Boolean).join(' ');
-      lines.push(`${entry.ts || ''} ${entry.tool || 'activity'} ${entry.workspace || ''}${correlation ? ` [${correlation}]` : ''}: ${entry.error}`.trim());
+      const context = logContext(entry, ['errorCode', 'workspace', 'taskId', 'eventId']);
+      lines.push(`${entry.ts || ''} ${entry.tool || 'activity'}${context}: ${entry.error}`.trim());
     }
   }
   return sanitizeText(lines.join('\n'), 30000);

@@ -14,10 +14,8 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
   function append(message, options = {}) {
     hydrate();
     const entry = normalizeEntry({
+      ...options,
       ts: options.ts || now(),
-      level: options.level,
-      source: options.source,
-      code: options.code,
       message
     });
     if (!entry) return null;
@@ -136,13 +134,22 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
 function normalizeEntry(value = {}) {
   const message = sanitizeText(value.message, 4000).trim();
   if (!message) return null;
-  return {
+  const entry = {
     ts: value.ts || new Date().toISOString(),
     level: normalizeLevel(value.level),
-    source: sanitizeText(value.source || 'desktop', 80),
-    code: sanitizeText(value.code || '', 120),
+    source: sanitizeLogField(value.source || 'desktop', 80),
+    code: sanitizeLogField(value.code, 120),
     message
   };
+  for (const [key, limit] of Object.entries({ taskId: 160, eventId: 160, workspace: 120, tool: 120, operation: 240 })) {
+    const field = sanitizeLogField(value[key], limit);
+    if (field) entry[key] = field;
+  }
+  return entry;
+}
+
+function sanitizeLogField(value, limit) {
+  return sanitizeText(value || '', limit).replace(/\s+/g, ' ').trim();
 }
 
 function normalizeLevel(value) {
