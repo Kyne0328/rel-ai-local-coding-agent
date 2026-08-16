@@ -373,38 +373,49 @@ function createToolActivityTracker(options = {}) {
 
   function createTask(scopeId, details, timestamp, requestedTaskId = '') {
     const id = requestedTaskId || crypto.randomUUID();
+    const resumed = requestedTaskId && details.resumeTask && typeof details.resumeTask === 'object'
+      ? canonicalTaskSnapshot(details.resumeTask)
+      : null;
     const explicitTitle = String(details.title || '').trim();
+    const resumedTitle = String(resumed?.title || '').trim();
+    const objective = sanitizeDisplayText(details.objective || resumed?.objective, 500);
+    const calls = Math.max(0, Number(resumed?.toolCallCount ?? resumed?.calls ?? 0));
+    const failures = Math.max(0, Number(resumed?.failedToolCallCount ?? resumed?.failures ?? 0));
+    const successes = Math.max(0, Number(resumed?.successfulToolCallCount ?? Math.max(0, calls - failures)));
+    const events = Array.isArray(resumed?.events) ? resumed.events.slice(-200) : [];
+    const sequence = Math.max(calls, ...events.map(event => Math.max(0, Number(event?.sequence || 0))));
+    const resumedStartedAt = Date.parse(String(resumed?.startedAtIso || resumed?.startedAt || ''));
     return {
       id,
       scopeId,
       title: deriveTaskTitle({
-        title: explicitTitle,
-        objective: details.objective,
+        title: explicitTitle || resumedTitle,
+        objective,
         tool: details.internalOperation || details.tool,
         operation: details.operation,
-        workspace: details.workspace,
+        workspace: details.workspace || resumed?.workspace,
         ...(details.input || {})
       }),
-      titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : String(details.internalOperation || '') === OP.WORK_BEGIN ? 'fallback' : 'operation',
-      objective: sanitizeDisplayText(details.objective, 500),
-      intent: classifyTaskIntent(details.objective),
-      correlation: compactCorrelation(details.correlation, details.workspace),
-      principalFingerprint: String(details.principalFingerprint || ''),
-      status: 'planning',
-      progress: { mode: 'indeterminate', label: 'Planning task' },
-      currentStage: 'Planning',
-      currentActivity: String(details.operation || ''),
+      titleSource: explicitTitle ? 'explicit' : resumedTitle ? 'resume' : objective ? 'objective' : String(details.internalOperation || '') === OP.WORK_BEGIN ? 'fallback' : 'operation',
+      objective,
+      intent: resumed?.intent || classifyTaskIntent(objective),
+      correlation: mergeCorrelation(resumed?.correlation || {}, details.correlation, details.workspace || resumed?.workspace),
+      principalFingerprint: String(details.principalFingerprint || resumed?.principalFingerprint || ''),
+      status: resumed?.status === 'inactive' ? String(resumed.resumeStatus || 'planning') : String(resumed?.status || 'planning'),
+      progress: normalizeTaskProgress(resumed?.progress || { mode: 'indeterminate', label: 'Planning task' }, resumed?.status || 'planning'),
+      currentStage: String(resumed?.currentStage || 'Planning'),
+      currentActivity: String(details.operation || resumed?.currentActivity || ''),
       activeCalls: 0,
-      calls: 0,
-      successes: 0,
-      failures: 0,
-      sequence: 0,
-      events: [],
-      errorSummary: '',
-      workspace: String(details.workspace || ''),
-      lastTool: String(details.tool || ''),
-      lastOperation: String(details.operation || defaultOperation(details.tool)),
-      lastOutcome: '',
+      calls,
+      successes,
+      failures,
+      sequence,
+      events,
+      errorSummary: String(resumed?.errorSummary || ''),
+      workspace: String(details.workspace || resumed?.workspace || ''),
+      lastTool: String(resumed?.lastTool || details.tool || ''),
+      lastOperation: String(resumed?.lastOperation || resumed?.operation || details.operation || defaultOperation(details.tool)),
+      lastOutcome: String(resumed?.lastOutcome || ''),
       completionRequest: null,
       abortController: new AbortController(),
       endReason: '',
@@ -412,8 +423,8 @@ function createToolActivityTracker(options = {}) {
       endedAt: null,
       cancelledAt: null,
       cancellationInitiator: '',
-      createdAt: timestamp,
-      startedAt: timestamp,
+      createdAt: Number.isFinite(Date.parse(String(resumed?.createdAt || ''))) ? Date.parse(String(resumed.createdAt)) : timestamp,
+      startedAt: Number.isFinite(resumedStartedAt) ? resumedStartedAt : timestamp,
       updatedAt: timestamp,
       lastActivityAt: timestamp,
       completionTimer: null,

@@ -70,7 +70,7 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
   startB();
 
   const busyB = tracker.beginConnectorToolCall({ tool: 'relai_exec', workspace: 'repo-b', scopeId: 'shared', taskId: taskB });
-  const completeA = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo-a', scopeId: 'shared', taskId: taskA });
+  const completeA = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.finish', workspace: 'repo-a', scopeId: 'shared', taskId: taskA });
   const completion = runWithToolActivity(completeA, () => completeA.requestCompletion({ summary: 'A complete.' }));
   assert.equal(completion.taskId, taskA);
   completeA();
@@ -85,8 +85,8 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
   const start = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'shared', createTask: true });
   const taskId = start.taskId;
   start();
-  const first = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'shared', taskId });
-  const second = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'shared', taskId });
+  const first = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.finish', workspace: 'repo', scopeId: 'shared', taskId });
+  const second = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.finish', workspace: 'repo', scopeId: 'shared', taskId });
   const accepted = runWithToolActivity(first, () => first.requestCompletion({ summary: 'Completed once.' }));
   const duplicate = runWithToolActivity(second, () => second.requestCompletion({ summary: 'Duplicate request.' }));
   assert.equal(accepted.duplicate, false);

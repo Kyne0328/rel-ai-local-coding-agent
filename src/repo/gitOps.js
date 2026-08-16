@@ -102,7 +102,9 @@ function classifyStatusOwnership(workspace, config, statusOutput, requestedTaskI
   const taskTouched = hasSession && taskId
     ? safeTaskOwnedChangedFiles(config, taskId, workspace.alias).filter(file => dirtySet.has(file))
     : [];
-  const sessionTouched = [...new Set([...groups.sessionChanged, ...taskTouched])];
+  const sessionTouched = hasSession && taskId
+    ? taskTouched
+    : groups.sessionChanged;
 
   return {
     branchRaw: parsed.branchRaw,

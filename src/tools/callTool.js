@@ -116,6 +116,7 @@ async function callTool(name, args = {}, context = {}) {
       operation: describeToolOperation(operationName, effectiveArgs || {}),
       title: effectiveArgs?.title,
       objective: effectiveArgs?.objective,
+      resumeTask: knownTask,
       correlation: {
         requestId: context?.requestId,
         traceId: context?.traceId,
