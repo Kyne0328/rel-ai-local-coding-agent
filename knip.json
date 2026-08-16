@@ -25,6 +25,7 @@
         ]
       },
       "ignoreBinaries": [
+        "dpkg-query",
         "pwsh"
       ],
       "ignoreDependencies": [
