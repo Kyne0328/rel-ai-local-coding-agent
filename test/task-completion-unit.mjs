@@ -501,7 +501,7 @@ try {
   await flushTaskHistoryPersistence();
   await flushLocalAnalytics();
   resetToolActivity();
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   resetTaskHistoryCaches();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;

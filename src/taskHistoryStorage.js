@@ -135,9 +135,9 @@ function pruneSessions(directory, limit = MAX_SESSIONS) {
 
 function clearTaskHistory(config) {
   const directory = getTaskHistoryDir(config);
+  closeDirectoryMetadataCache(directory);
   fs.rmSync(directory, { recursive: true, force: true });
   clearCachedDirectory(directory);
-  closeDirectoryMetadataCache(directory);
 }
 
 function clearCachedDirectory(directory) {
