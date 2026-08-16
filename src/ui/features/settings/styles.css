@@ -113,17 +113,6 @@
 .desktop-lifecycle-facts strong { @apply break-words text-[12px]; }
 .desktop-lifecycle-notice p { @apply mt-1; }
 
-.approval-token-settings { @apply gap-4; }
-.approval-token-intro { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
-.approval-token-box { @apply grid gap-3; }
-.approval-token-value { @apply flex items-center break-words; letter-spacing: .04em; }
-.approval-token-replacement-copy { @apply grid gap-2; }
-.approval-token-replacement-copy p, .approval-token-success p, .connection-auth-recovery p { @apply m-0; }
-.approval-token-replacement-copy ul, .approval-token-success ol, .connection-auth-recovery ol { @apply ml-5 grid gap-1.5 pl-0 text-[12px] leading-5; }
-.approval-token-confirmation { @apply max-w-md; }
-.approval-token-confirmation input { text-transform: uppercase; letter-spacing: .08em; }
-.approval-token-success { @apply grid gap-3; }
-.approval-required-notice { @apply max-w-4xl; }
 }
 
 @media (max-width: 980px) { .settings-grid { grid-template-columns: 1fr; } }

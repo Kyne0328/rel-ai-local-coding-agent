@@ -8,8 +8,6 @@ function printUsage() {
   relai-mcp-config init
   relai-mcp-config show
   relai-mcp-config workspace add <alias> <absolute-path>
-  relai-mcp-config test-command add <alias> <key> <command...>
-  relai-mcp-config command add <alias> <key> <command...>
   relai-mcp-config doctor [--fix] [workspace-path]
   relai-mcp-config setup [alias] [workspace-path]
   relai-mcp-config import-relai [source-path]
@@ -49,9 +47,7 @@ function main() {
     "import-relai": handleImportRelai,
     state: handleState,
     set: handleSet,
-    workspace: handleWorkspace,
-    "test-command": handleTestCommand,
-    command: handleCommand
+    workspace: handleWorkspace
   };
   const handler = handlers[command];
   if (handler) {
@@ -137,33 +133,9 @@ function handleWorkspace(subcommand, action, rest) {
   if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
   const config = readConfig({ allowMissing: true });
   config.workspaces = config.workspaces || {};
-  config.workspaces[alias] = config.workspaces[alias] || {};
-  config.workspaces[alias].path = workspacePath;
-  config.workspaces[alias].testCommands = config.workspaces[alias].testCommands || {};
-  config.workspaces[alias].commands = config.workspaces[alias].commands || {};
+  config.workspaces[alias] = { ...(config.workspaces[alias] || {}), path: workspacePath };
   writeConfig(config);
   console.log(`Added workspace '${alias}' -> ${workspacePath}`);
-}
-
-function handleTestCommand(subcommand, action, rest) {
-  addWorkspaceCommand("testCommands", "test command", action, rest);
-}
-
-function handleCommand(subcommand, action, rest) {
-  addWorkspaceCommand("commands", "dev command", action, rest);
-}
-
-function addWorkspaceCommand(field, label, aliasValue, rest) {
-  const alias = requireArg(aliasValue, "workspace alias");
-  const key = requireArg(rest[0], `${label} key`);
-  const shellCommand = rest.slice(1).join(" ").trim();
-  if (!shellCommand) throw new Error(`Missing ${label}.`);
-  const config = readConfig();
-  if (!config.workspaces?.[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
-  config.workspaces[alias][field] = config.workspaces[alias][field] || {};
-  config.workspaces[alias][field][key] = shellCommand;
-  writeConfig(config);
-  console.log(`Added ${label} '${key}' for workspace '${alias}'.`);
 }
 
 try {

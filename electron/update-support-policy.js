@@ -272,7 +272,6 @@ function cleanText(value, limit) {
 
 export {
   DEFAULT_SUPPORT_POLICY_URL,
-  SUPPORT_POLICY_CHECK_INTERVAL_MS,
   assessSupportPolicy,
   createUpdateSupportPolicy,
   normalizeSupportPolicy,

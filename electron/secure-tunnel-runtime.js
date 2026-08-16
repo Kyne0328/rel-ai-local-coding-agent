@@ -225,4 +225,4 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown tunnel error');
 }
 
-export { bundledTunnelClientPath, createSecureTunnelRuntime, normalizeTunnelId };
+export { createSecureTunnelRuntime };

@@ -38,6 +38,9 @@ const SOURCE_INVARIANTS = Object.freeze([
   ['src/repo/gitStatus.js', /parseLegacyStatus/, 'removed-line-oriented-git-status-parser'],
   ['src/bridge/checkDetection.js', /legacy:root|source:\s*['"]legacy['"]/, 'removed-validation-legacy-label'],
   ['src/policyResolver.js', /legacySessionFilePath|legacy_session_file/, 'removed-unscoped-session-policy'],
+  ['src/ui/features/system/styles.css', /cloud-(?:gateway|pairing|device|recovery)|direct-connection-controls|approval-token-value/, 'removed-connection-ui-style'],
+  ['src/ui/features/settings/styles.css', /approval-token|connection-auth-recovery/, 'removed-approval-ui-style'],
+  ['src/ui/styles/app.css', /approval-token-replacement|connection-auth-recovery/, 'removed-approval-ui-style'],
   ['types/boundaries.d.ts', /ToolLifecycleMetadata|lifecycle\?:\s*ToolLifecycleMetadata/, 'removed-tool-lifecycle-type'],
   ['scripts/electron-size-baseline.json', /"electronVersion"\s*:/, 'decorative-package-baseline-version'],
   ['scripts/electron-size-baseline-linux.json', /"electronVersion"\s*:/, 'decorative-package-baseline-version'],
@@ -70,7 +73,7 @@ function auditRepositoryStaleness({ root = process.cwd() } = {}) {
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
       if (publicGuidance && /0\.23\.[0-9]+/.test(line)) findings.push(finding(relative, index, 'stale-version', line));
-      if (publicGuidance && /(?:30|33)[- ]tool|exposes 30 callable tools|executes every test file|Windows x64 only/i.test(line)) findings.push(finding(relative, index, 'stale-claim', line));
+      if (publicGuidance && /\b\d+[- ]tool(?:\/\d+-action)?(?:\s+(?:public|capability|semantic))?\s+surface\b|exposes \d+ callable tools|executes every test file|Windows x64 only/i.test(line)) findings.push(finding(relative, index, 'stale-claim', line));
       if (publicGuidance) {
         for (const name of FORBIDDEN_PUBLIC_NAMES) {
           if (line.includes(name)) findings.push(finding(relative, index, 'removed-public-tool', line, name));

@@ -9,7 +9,7 @@ function git(args, options = {}) {
   return spawnSync(GIT_EXECUTABLE, args, options);
 }
 
-import { writeSessionPolicy, resolvePolicy, captureBaselineDirty } from "../src/policyResolver.js";
+import { writeSessionPolicy, resolvePolicy, captureBaselineDirty, POLICY_CACHE_RECHECK_MS } from "../src/policyResolver.js";
 
 const policyResolverSource = fs.readFileSync(new URL('../src/policyResolver.js', import.meta.url), 'utf8');
 assert.doesNotMatch(policyResolverSource, /spawnSync/, 'session baseline capture must never block the MCP event loop');
@@ -80,6 +80,7 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   data.baselineDirty = ['old/generated.cmake', 'old/registrant.swift'];
   data.baselineCaptured = true;
   fs.writeFileSync(sessionFile, JSON.stringify(data));
+  await new Promise(resolve => setTimeout(resolve, POLICY_CACHE_RECHECK_MS + 20));
 
   const statusOutput = ' M old/generated.cmake\0 M old/registrant.swift\0 M lib/new_edit.dart\0?? new/untracked.dart\0';
   const workspace = { alias: 'myapp' };
@@ -121,6 +122,7 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   data.baselineDirty = ['lib/old/zone_validator.dart'];
   data.baselineCaptured = true;
   fs.writeFileSync(sessionFile, JSON.stringify(data));
+  await new Promise(resolve => setTimeout(resolve, POLICY_CACHE_RECHECK_MS + 20));
   const status = 'R  lib/new/schedule_validator.dart\0lib/old/zone_validator.dart\0';
   const { sessionChanged, baselineChanged } = classifyStatusOwnership({ alias: 'myapp' }, config, status);
   // Destination path is what shows in current worktree, so classify on destination

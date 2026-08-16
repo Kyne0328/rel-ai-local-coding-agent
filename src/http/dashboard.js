@@ -467,11 +467,10 @@ const handleApiLogs = (ctx) => {
   sendJson(ctx.res, 200, mergeDashboardActivity(productUx.liveLogTail(config, { limit }), tasks, limit), ctx.ae);
 };
 const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
-const handleAliasDiagnostics = (ctx) => sendJson(ctx.res, 200, productUx.aliasConsistencyCheck(readConfig()), ctx.ae);
 const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, getReleaseNotes(), ctx.ae);
 const handleCautionSummary = (ctx) => sendJson(ctx.res, 200, productUx.cautionSummary(readConfig(), { windowHours: Number(ctx.parsed.searchParams.get("windowHours") || 24) }), ctx.ae);
 const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness(readConfig(), { requireHttpToken: resolveRequireHttpToken(ctx.parsed, readConfig()) }), ctx.ae);
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 
-export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };
+export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };

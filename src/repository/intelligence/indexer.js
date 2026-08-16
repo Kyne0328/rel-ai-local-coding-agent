@@ -258,6 +258,7 @@ function repositoryWorkerClient(databaseFile) {
         entry.reject(reason);
       }
       pending.clear();
+      worker.unref();
       worker.removeAllListeners();
       void worker.terminate().catch(() => {});
     }

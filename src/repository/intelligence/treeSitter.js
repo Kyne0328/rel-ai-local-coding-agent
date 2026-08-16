@@ -336,4 +336,4 @@ function dedupe(items, keyFn) {
   });
 }
 
-export { loadLanguage, parseSourceFile };
+export { parseSourceFile };

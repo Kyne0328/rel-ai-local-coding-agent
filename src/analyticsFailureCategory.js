@@ -34,4 +34,4 @@ function normalizeFailureCategory(value) {
   return ANALYTICS_FAILURE_CATEGORY_SET.has(category) ? category : 'runtime';
 }
 
-export { ANALYTICS_FAILURE_CATEGORIES, failureCategoryFromCode, normalizeFailureCategory };
+export { failureCategoryFromCode, normalizeFailureCategory };

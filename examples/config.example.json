@@ -25,8 +25,6 @@
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",
-      "testCommands": {},
-      "commands": {},
       "repoSlug": "",
       "context": {
         "snapshotMaxFiles": 3000,

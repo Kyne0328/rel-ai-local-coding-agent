@@ -3,99 +3,51 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// Isolate config writes to a temp config file before requiring config-backed modules.
-// Setting only REL_AI_MCP_STATE_DIR is not enough: getConfigPath() otherwise still
-// points at the user's real ~/.rel-ai-mcp/config.json, and this test can overwrite
-// their saved workspaces with the temporary "myapp" fixture.
 const previousConfigPath = process.env.REL_AI_MCP_CONFIG;
-const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
-const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-prune-state-'));
+const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-command-hard-cut-'));
 const configPath = path.join(stateDir, 'config.json');
-process.env.REL_AI_MCP_STATE_DIR = stateDir;
+const workspacePath = path.join(stateDir, 'workspace');
 process.env.REL_AI_MCP_CONFIG = configPath;
 
-import { updateWorkspace } from "../src/configEditor.js";
-import { readConfig } from "../src/config.js";
-
-// Workspace with a package.json exposing only `test` and `build` scripts.
-const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-prune-ws-'));
+import { updateWorkspace } from '../src/configEditor.js';
+import { invalidateConfigCache, readConfig } from '../src/config.js';
 
 try {
-  fs.writeFileSync(path.join(wsDir, 'package.json'), JSON.stringify({ scripts: { test: 'node t.js', build: 'node b.js' } }));
-
-  const config = {
+  fs.mkdirSync(workspacePath, { recursive: true });
+  fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ scripts: { test: 'node test.js' } }, null, 2));
+  fs.writeFileSync(configPath, JSON.stringify({
+    version: 5,
     stateDir,
     workspaces: {
-      myapp: {
-        path: wsDir,
-        commands: {
-          'npm:build': 'npm run build',
-          'npm:gone-command': 'npm run gone-command'
-        },
-        testCommands: {
-          'npm:test': 'npm run test',       // valid — matches a discovered script
-          'npm:test:v4': 'npm run test:v4', // stale — no such script
-          'npm:legacy': 'old custom cmd'    // stale — not a discovered command
-        }
+      app: {
+        path: workspacePath,
+        commands: { obsolete: 'npm run removed' },
+        testCommands: { test: 'npm test', obsolete: 'npm run removed-test' }
       }
     }
-  };
+  }, null, 2));
 
-  // 1. prune removes only the stale keys, keeps the valid one
-  {
-    const result = updateWorkspace(config, { action: 'prune-stale-tests', alias: 'myapp' });
-    assert.equal(result.ok, true, 'prune: ok');
-    assert.deepEqual([...result.removed].sort((a, b) => a.localeCompare(b)), ['npm:gone-command', 'npm:legacy', 'npm:test:v4'], 'prune: removes stale regular and test commands');
-    const ws = result.config.workspaces.find((w) => w.alias === 'myapp');
-    assert.deepEqual(ws.commandKeys, ['npm:build'], 'prune: keeps the valid regular command');
-    assert.deepEqual(ws.testCommandKeys, ['npm:test'], 'prune: keeps the valid key');
-    assert.deepEqual(ws.staleTestCommandKeys || [], [], 'prune: no stale keys remain');
-  }
+  invalidateConfigCache();
+  const config = readConfig();
+  assert.equal(config.version, 6);
+  assert.equal(Object.hasOwn(config.workspaces.app, 'commands'), false);
+  assert.equal(Object.hasOwn(config.workspaces.app, 'testCommands'), false);
 
-  // 2. prune is a no-op when nothing is stale
-  {
-    const current = readConfig();
-    const result = updateWorkspace(current, { action: 'prune-stale-tests', alias: 'myapp' });
-    assert.equal(result.ok, true, 'prune no-op: ok');
-    assert.deepEqual(result.removed, [], 'prune no-op: nothing removed');
-  }
+  const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  assert.equal(persisted.version, 6);
+  assert.equal(Object.hasOwn(persisted.workspaces.app, 'commands'), false);
+  assert.equal(Object.hasOwn(persisted.workspaces.app, 'testCommands'), false);
 
-  // 3. refuses when the workspace path is unavailable (cannot tell stale from valid)
-  {
-    const missing = path.join(os.tmpdir(), 'relai-prune-missing-' + Date.now());
-    const cfg = { stateDir, workspaces: { gone: { path: missing, testCommands: { 'npm:test': 'npm run test' } } } };
-    assert.throws(
-      () => updateWorkspace(cfg, { action: 'prune-stale-tests', alias: 'gone' }),
-      /unavailable/,
-      'prune: refuses when the workspace path is unavailable'
-    );
-  }
-
-  // 4. removed pre-Electron test aliases are discarded during config normalization
-  {
-    fs.writeFileSync(configPath, JSON.stringify({
-      stateDir,
-      workspaces: {
-        myapp: {
-          path: wsDir,
-          testCommands: {
-            'npm:test': 'npm run test',
-            'npm:test:oneclick': 'npm run test:oneclick',
-            'npm:test:tunnel': 'npm run test:tunnel'
-          }
-        }
-      }
-    }, null, 2));
-    const normalized = readConfig();
-    assert.deepEqual(Object.keys(normalized.workspaces.myapp.testCommands), ['npm:test']);
-  }
+  assert.throws(
+    () => updateWorkspace(config, { action: 'prune-stale-tests', alias: 'app' }),
+    /Unknown workspace action/,
+    'manual stale-command pruning must stay removed after the hard cutover'
+  );
 } finally {
   if (previousConfigPath == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfigPath;
-  if (previousStateDir == null) delete process.env.REL_AI_MCP_STATE_DIR;
-  else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;
+  invalidateConfigCache();
   fs.rmSync(stateDir, { recursive: true, force: true });
-  fs.rmSync(wsDir, { recursive: true, force: true });
 }
 
-console.log('prune-stale-tests unit tests passed.');
+console.log('Legacy command maps migrate away automatically; manual pruning is removed.');

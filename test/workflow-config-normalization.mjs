@@ -1,6 +1,5 @@
 import { updateWorkspace } from "../src/configEditor.js";
 import { getReleaseNotes } from "../src/releaseNotes.js";
-import { staleCommandKeys } from "../src/commandDiscovery.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -72,6 +71,8 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
           protectedBranches: ['main'],
           defaultBaseBranch: 'main',
           allowedRemotes: ['origin'],
+          testCommands: { legacy: 'npm run legacy' },
+          commands: { serve: 'npm run serve' },
           context: { snapshotMaxFiles: 44, includeRoots: ['src'] }
         }
       }
@@ -79,13 +80,13 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     invalidateConfigCache();
     const migrated = ensureConfig();
     const persisted = JSON.parse(fs.readFileSync(tmpConfig, 'utf8'));
-    assert.equal(migrated.version, 5, 'older configuration must normalize to the hard-cutover schema');
-    assert.equal(persisted.version, 5, 'hard-cutover normalization must be persisted before desktop startup continues');
+    assert.equal(migrated.version, 6, 'older configuration must normalize to the hard-cutover schema');
+    assert.equal(persisted.version, 6, 'hard-cutover normalization must be persisted before desktop startup continues');
     assert.equal(Object.hasOwn(persisted, 'sourceVersion'), false, 'obsolete sourceVersion must not survive migration');
     assert.equal(Object.hasOwn(persisted.productUx, 'showAutomaticValidation'), false, 'removed validation display preference must not survive migration');
     assert.equal(Object.hasOwn(persisted, 'patch'), false, 'legacy patch tuning must not survive migration');
     assert.equal(Object.hasOwn(persisted, 'maxOutputBytes'), false, 'legacy subprocess output tuning must not survive migration');
-    for (const key of ['protectedBranches', 'defaultBaseBranch', 'allowedRemotes']) assert.equal(Object.hasOwn(persisted.workspaces.keep, key), false, `removed workspace field ${key} must not survive migration`);
+    for (const key of ['protectedBranches', 'defaultBaseBranch', 'allowedRemotes', 'testCommands', 'commands']) assert.equal(Object.hasOwn(persisted.workspaces.keep, key), false, `removed workspace field ${key} must not survive migration`);
     assert.equal(persisted.workspaces.keep.path, tmpDir, 'valid workspaces must survive configuration migration');
     assert.equal(fs.existsSync(`${tmpConfig}.bak`), true, 'configuration migration must preserve the original file as a backup');
   } finally {
@@ -105,8 +106,8 @@ assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampl
     fs.writeFileSync(tmpConfig, '{ invalid json');
     invalidateConfigCache();
     const recovered = ensureConfig();
-    assert.equal(recovered.version, 5, 'invalid persisted configuration must recover to a valid current config');
-    assert.equal(JSON.parse(fs.readFileSync(tmpConfig, 'utf8')).version, 5);
+    assert.equal(recovered.version, 6, 'invalid persisted configuration must recover to a valid current config');
+    assert.equal(JSON.parse(fs.readFileSync(tmpConfig, 'utf8')).version, 6);
     assert.equal(
       fs.readdirSync(tmpDir).some(name => name.startsWith('config.json.invalid-')),
       true,
@@ -130,7 +131,8 @@ const normalizedCommands = normalizeConfig({
     }
   }
 });
-assert.deepEqual(normalizedCommands.workspaces.repo.testCommands, { 'npm:test': 'npm test' });
+assert.equal(Object.hasOwn(normalizedCommands.workspaces.repo, 'testCommands'), false);
+assert.equal(Object.hasOwn(normalizedCommands.workspaces.repo, 'commands'), false);
 
 {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-cfg-'));
@@ -158,9 +160,5 @@ assert.deepEqual(normalizedCommands.workspaces.repo.testCommands, { 'npm:test': 
   assert.ok(Array.isArray(notes.bullets));
 }
 
-{
-
-  assert.deepEqual(staleCommandKeys({ test: 'npm run gone', build: 'npm run build' }, { build: 'npm run build' }), ['test']);
-}
 
 console.log('Current-only configuration normalization tests passed.');

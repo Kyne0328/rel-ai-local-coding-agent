@@ -117,9 +117,9 @@ Useful development commands include:
 ```powershell
 npm run init-config
 npm run workspace:add
-npm run testcmd:add
-npm run cmd:add
 ```
+
+Rel.AI discovers validation commands from the project's current manifests. Use `relai_validate` for explicit one-off checks and `relai_exec` for other bounded one-shot commands; command aliases are not stored in Rel.AI configuration.
 
 ## Packaging
 

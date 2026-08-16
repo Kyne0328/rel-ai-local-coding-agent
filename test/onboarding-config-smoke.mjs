@@ -10,22 +10,34 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 process.env.REL_AI_MCP_TOKEN = token;
 
+import { invalidateConfigCache } from "../src/config.js";
+import { createDashboardBootstrap } from "../src/http/dashboardSessions.js";
 import { startHttpServer } from "../src/httpServer.js";
+import { resetTaskHistoryCaches } from "../src/taskHistoryStorage.js";
 const server = startHttpServer({ host: '127.0.0.1', port: 0, token, exitOnError: false });
 await once(server, 'listening');
 const address = server.address();
 const base = `http://127.0.0.1:${address.port}`;
+const bootstrap = createDashboardBootstrap(token);
+const dashboardLaunch = await fetch(`${base}/dashboard?bootstrap=${encodeURIComponent(bootstrap)}`, {
+  headers: { connection: 'close' }
+});
+assert.equal(dashboardLaunch.status, 200, `dashboard bootstrap should succeed, got ${dashboardLaunch.status}`);
+const dashboardCookie = String(dashboardLaunch.headers.get('set-cookie') || '').split(';')[0];
+assert.match(dashboardCookie, /^relai_dashboard_session=/);
+await dashboardLaunch.arrayBuffer();
 
 try {
   assert.equal(fs.existsSync(configPath), true, 'Hard-cutover server startup should materialize the canonical config immediately');
   const startupConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  assert.equal(startupConfig.version, 5);
+  assert.equal(startupConfig.version, 6);
   assert.deepEqual(startupConfig.workspaces, {});
 
   const skip = await fetch(`${base}/api/onboarding/complete`, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${token}`,
+      cookie: dashboardCookie,
+      connection: 'close',
       'content-type': 'application/json'
     },
     body: JSON.stringify({ completed: false, skipped: true })
@@ -37,7 +49,7 @@ try {
   assert.deepEqual(config.workspaces, {}, 'skipped onboarding must create an empty valid workspace map');
 
   const dashboard = await fetch(`${base}/api/dashboard/v10?requireHttpToken=0`, {
-    headers: { authorization: `Bearer ${token}` }
+    headers: { cookie: dashboardCookie, connection: 'close' }
   });
   assert.equal(dashboard.status, 200, `dashboard should load after onboarding skip, got ${dashboard.status}`);
   const dashboardBody = await dashboard.json();
@@ -49,7 +61,7 @@ try {
   assert.equal(onboarding.completed, false);
 
   const skippedStatus = await fetch(`${base}/api/onboarding/status`, {
-    headers: { authorization: `Bearer ${token}` }
+    headers: { cookie: dashboardCookie, connection: 'close' }
   }).then(response => response.json());
   assert.equal(skippedStatus.skipped, true);
   assert.equal(skippedStatus.needsOnboarding, false, 'skipped onboarding must stay dismissed after restart');
@@ -57,8 +69,9 @@ try {
   fs.rmSync(path.join(stateDir, 'onboarding.json'));
   config.workspaces.existing = { path: stateDir };
   fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  invalidateConfigCache();
   const migratedStatus = await fetch(`${base}/api/onboarding/status`, {
-    headers: { authorization: `Bearer ${token}` }
+    headers: { cookie: dashboardCookie, connection: 'close' }
   }).then(response => response.json());
   assert.equal(migratedStatus.completed, true);
   assert.equal(migratedStatus.migrated, true);
@@ -67,6 +80,7 @@ try {
   assert.equal(migratedOnboarding.workspaceCount, 1);
 } finally {
   if (server.listening) await new Promise(resolve => server.close(resolve));
+  resetTaskHistoryCaches();
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 

@@ -67,7 +67,7 @@ assert.deepEqual(uiActions.map(entry => entry.action), [
   'start', 'navigate', 'snapshot', 'interact', 'screenshot',
   'console', 'network', 'viewport', 'reload', 'stop'
 ]);
-assert.ok(uiActions.every(entry => entry.operationName === 'relai_ui'));
+assert.ok(uiActions.every(entry => entry.operationName === 'ui'));
 assert.ok(uiActions.every(entry => entry.behavior.taskScope === 'required'));
 
 console.log('Web automation contracts are bounded, local-only, and image-capable.');

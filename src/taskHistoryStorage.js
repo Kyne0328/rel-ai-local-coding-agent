@@ -181,9 +181,6 @@ function watchSessionDirectory(directory, cached) {
     cached.watcher = fs.watch(directory, { persistent: false }, (_event, filename) => {
       const name = String(filename || '');
       if (!name || name.endsWith('.tmp') || name.endsWith('.old')) return;
-      const current = fileMetadata(path.join(directory, name), name);
-      const known = cached.items.get(name);
-      if (current?.identity === known?.identity) return;
       cached.dirty = true;
     });
     cached.watcher.on('error', () => { cached.dirty = true; });

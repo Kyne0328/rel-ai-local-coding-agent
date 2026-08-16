@@ -6,18 +6,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { safeReadJson, realRootOf, clearRealRootCache } from './safety.js';
-import { discoverCommands, staleCommandKeys } from './commandDiscovery.js';
+import { discoverCommands } from './commandDiscovery.js';
 import { readProjectInstructions, summarizeProjectInstructions } from './projectInstructions.js';
 import { normalizeAllowedKeys } from './processEnvironment.js';
 import { writeJsonAtomic } from './durableState.js';
 import { defaultStateDir } from './stateLayout.js';
 import { resolveTaskSandboxWorkspace } from './parallelTaskSandbox.js';
-const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
-  'npm:test:fast-task',
-  'npm:test:oneclick',
-  'npm:test:tunnel'
-]);
-
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(defaultStateDir(), "config.json");
 }
@@ -36,7 +30,7 @@ function makeDefaultContextConfig() {
 
 function makeDefaultConfig() {
   return {
-    version: 5,
+    version: 6,
     stateDir: defaultStateDir(),
     auditLogPath: "",
     toolMode: "chatgpt_local_repo",
@@ -187,7 +181,7 @@ function mergeConfigBase(base, input) {
 }
 
 function normalizeCorePaths(next, base) {
-  next.version = 5;
+  next.version = 6;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
@@ -244,17 +238,10 @@ function normalizeWorkspaces(config) {
 function normalizeWorkspace(workspace) {
   return {
     path: workspace.path,
-    testCommands: normalizeWorkspaceCommandMap(workspace.testCommands),
-    commands: normalizeWorkspaceCommandMap(workspace.commands),
     repoSlug: workspace.repoSlug || "",
     context: normalizeContextConfig(workspace.context),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
-}
-
-function normalizeWorkspaceCommandMap(value) {
-  const source = objectOrEmpty(value);
-  return Object.fromEntries(Object.entries(source).filter(([key]) => !REMOVED_WORKSPACE_COMMAND_KEYS.has(key)));
 }
 
 function normalizeContextConfig(value) {
@@ -419,8 +406,6 @@ function resolveWorkspace(config, alias) {
   return {
     alias: resolvedAlias,
     path: realRoot,
-    testCommands: entry.testCommands || {},
-    commands: entry.commands || {},
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
@@ -481,16 +466,12 @@ function publicConfigSummary(config) {
       return {
         alias,
         path: entry.path,
-        testCommandKeys: Object.keys(entry.testCommands || {}).sort((a, b) => a.localeCompare(b)),
-        commandKeys: Object.keys(entry.commands || {}).sort((a, b) => a.localeCompare(b)),
         repoSlug: entry.repoSlug || "",
         context: normalizeContextConfig(entry.context),
         discoveredCommands: discovered,
         validationCommands,
         projectInstructions,
-        discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b)),
-        staleCommandKeys: staleCommandKeys(entry.commands || {}, discovered).sort((a, b) => a.localeCompare(b)),
-        staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort((a, b) => a.localeCompare(b))
+        discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b))
       };
     }).sort((a, b) => a.alias.localeCompare(b.alias))
   };

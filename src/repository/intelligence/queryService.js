@@ -458,7 +458,6 @@ function diagnosticReadiness(workspace, db) {
       standard: detectVerifyChecks(workspace.path, 'standard'),
       release: detectVerifyChecks(workspace.path, 'release')
     },
-    configuredTestCommands: Object.entries(workspace.testCommands || {}).map(([key, command]) => ({ key, command })),
     diagnosticsExecuted: false,
     next: diagnosticCommands.length ? 'Run relai_validate checks at the appropriate level to execute diagnostics.' : 'No dedicated language diagnostic command was detected.'
   };

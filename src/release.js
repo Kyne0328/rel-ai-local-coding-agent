@@ -79,8 +79,6 @@ async function workspacePreflight(config, args = {}) {
     }
   }
 
-  const commandKeys = Object.keys(workspace.commands || {});
-  const testKeys = Object.keys(workspace.testCommands || {});
   const discoveredCommands = discoverCommands(workspace.path);
   const discoveredTestKeys = Object.keys(discoveredCommands).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discoveredCommands[key]));
 
@@ -90,8 +88,6 @@ async function workspacePreflight(config, args = {}) {
     workspace: workspace.alias,
     path: workspace.path,
     generatedAt: new Date().toISOString(),
-    commandKeys,
-    testCommandKeys: testKeys,
     discoveredCommandKeys: Object.keys(discoveredCommands).sort((a, b) => a.localeCompare(b)),
     discoveredTestCommandKeys: [...discoveredTestKeys].sort((a, b) => a.localeCompare(b)),
     checks,
@@ -177,9 +173,7 @@ function workspaceBrief(config, alias) {
     return {
       alias,
       ok: true,
-      path: workspace.path,
-      testCommandKeys: Object.keys(workspace.testCommands || {}),
-      commandKeys: Object.keys(workspace.commands || {})
+      path: workspace.path
     };
   } catch (error) {
     return { alias, ok: false, error: error.message };

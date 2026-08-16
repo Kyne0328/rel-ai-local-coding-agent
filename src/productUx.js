@@ -4,7 +4,6 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } from "./config.js";
-import { discoverCommands, staleCommandKeys } from "./commandDiscovery.js";
 import { resolvePolicy } from "./policyResolver.js";
 import { readAudit } from './audit.js';
 import { getStateDir } from './statePaths.js';
@@ -143,13 +142,7 @@ function setupWizard(args = {}) {
   const alias = String(args.alias || "myapp").trim();
   const token = args.generateToken === false ? "" : crypto.randomBytes(24).toString("hex");
   const config = makeDefaultConfig();
-  if (workspacePath) {
-    config.workspaces[alias] = {
-      path: workspacePath,
-      testCommands: guessTestCommands(workspacePath),
-      commands: {}
-    };
-  }
+  if (workspacePath) config.workspaces[alias] = { path: workspacePath };
   const startCmd = setupStartCommand(token);
   return {
     ok: true,
@@ -233,10 +226,7 @@ function importOriginalRelAiConfig(args = {}) {
   const imported = [];
   for (const [alias, entry] of Object.entries(source.workspaces || {})) {
     if (!entry?.path) continue;
-    config.workspaces[alias] = config.workspaces[alias] || {};
-    config.workspaces[alias].path = entry.path;
-    config.workspaces[alias].testCommands = entry.testCommands || config.workspaces[alias].testCommands || {};
-    config.workspaces[alias].commands = config.workspaces[alias].commands || {};
+    config.workspaces[alias] = { ...(config.workspaces[alias] || {}), path: entry.path };
     imported.push(alias);
   }
   if (args.dryRun !== true) writeConfig(config);
@@ -288,28 +278,6 @@ function stateImport(config, args = {}) {
   return { ok: true, stateDir, writtenCount: written.length, written: written.slice(0, 200) };
 }
 
-function guessTestCommands(workspacePath) {
-  const out = {};
-  if (!workspacePath || !fs.existsSync(workspacePath)) return out;
-  const pkgPath = path.join(workspacePath, "package.json");
-  if (fs.existsSync(pkgPath)) {
-    // Only suggest scripts that actually exist, so we don't seed stale aliases the
-    // dashboard's alias-consistency check then flags.
-    let scripts = {};
-    try {
-      scripts = safeReadJson(pkgPath)?.scripts || {};
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package script discovery:', error);
-    }
-    if (scripts.test) out.test = "npm test";
-    if (scripts.lint) out.lint = "npm run lint";
-  }
-  if (fs.existsSync(path.join(workspacePath, "pyproject.toml")) || fs.existsSync(path.join(workspacePath, "requirements.txt"))) out.pytest = "pytest";
-  if (fs.existsSync(path.join(workspacePath, "Cargo.toml"))) out.cargo = "cargo test";
-  if (fs.existsSync(path.join(workspacePath, "go.mod"))) out.go = "go test ./...";
-  return out;
-}
-
 function checkDir(findings, name, dir, createSuggested) {
   if (!dir) return findings.push({ severity: "error", code: `${name}_missing`, message: `${name} is not configured.` });
   if (!fs.existsSync(dir)) return findings.push({ severity: createSuggested ? "warning" : "error", code: `${name}_not_found`, message: `${name} does not exist: ${dir}` });
@@ -342,10 +310,6 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
       files.push({ path: relative, modifiedAt: stat.mtime.toISOString(), content: fs.readFileSync(full, "utf8") });
     }
   }
-}
-
-function commandMapOrEmpty(value) {
-  return Object(value) === value ? value : {};
 }
 
 function clampNumber(value, min, max) {
@@ -409,22 +373,4 @@ function cautionSummary(config, options = {}) {
   };
 }
 
-function aliasConsistencyCheck(config) {
-  const results = [];
-  const entries = Object.entries(config.workspaces || {}).sort(([left], [right]) => compareText(left, right));
-  for (const [alias, ws] of entries) {
-    // Cover BOTH command maps, matching relai_work action "status". Checking only testCommands made
-    // the dashboard report "All consistent" while relai_work action "status" flagged a stale entry in
-    // the plain commands map — two surfaces disagreeing about the same workspace.
-    const allConfigured = { ...commandMapOrEmpty(ws.commands), ...commandMapOrEmpty(ws.testCommands) };
-    const configuredKeys = Object.keys(allConfigured).sort(compareText);
-    let discovered = {};
-    try { discovered = discoverCommands(ws.path || ''); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] alias command discovery:', error); }
-    const discoveredKeys = Object.keys(discovered).sort(compareText);
-    const staleKeys = staleCommandKeys(allConfigured, discovered).sort(compareText);
-    results.push({ alias, configuredKeys, discoveredKeys, staleKeys, ok: staleKeys.length === 0 });
-  }
-  return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };
-}
-
-export { dashboardData, liveLogTail, healthMonitor, aliasConsistencyCheck, cautionSummary,   doctorFix, setupWizard, importOriginalRelAiConfig, stateExport, stateImport };
+export { dashboardData, liveLogTail, healthMonitor, cautionSummary, doctorFix, setupWizard, importOriginalRelAiConfig, stateExport, stateImport };

@@ -1,6 +1,6 @@
 import { callTool as rawCallTool } from "../src/tools.js";
 import { getToolActivity, resetToolActivity } from "../src/toolActivity.js";
-import { readAudit } from "../src/audit.js";
+import { flushAuditWrites, readAudit } from "../src/audit.js";
 import { readConfig } from "../src/config.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -40,7 +40,8 @@ try {
   assert.equal(result.commandSucceeded, false);
   assert.equal(result.exitCode, 1);
   assert.equal(getToolActivity().failures, 0, 'a nonzero child-process exit must not count as an MCP tool failure');
-  const event = readAudit(readConfig(), { limit: 20 }).entries.find(entry => entry.tool === 'relai_exec');
+  await flushAuditWrites();
+  const event = readAudit(readConfig(), { limit: 20 }).entries.find(entry => entry.publicTool === 'relai_exec');
   assert.equal(event.ok, true, 'the audit event must record successful tool execution separately from command outcome');
 } finally {
   if (previous == null) delete process.env.REL_AI_MCP_CONFIG;

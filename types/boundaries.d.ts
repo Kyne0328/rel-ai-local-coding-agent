@@ -117,16 +117,6 @@ export interface ToolDefinitionMetadata {
 }
 
 
-export interface ToolSchema {
-  name: ToolName;
-  title: string;
-  description: string;
-  inputSchema: ObjectJsonSchema;
-  outputSchema?: JsonSchema;
-  annotations: ToolAnnotations;
-  execution?: ToolExecution;
-}
-
 export interface ToolArgs extends Record<string, unknown> {
   workspace?: string;
   work_id?: string;
@@ -244,71 +234,4 @@ export interface LauncherConfig {
   tunnelId: string;
   token: string;
 }
-
-export type LocalServiceStatus = 'running' | 'starting' | 'stopped' | 'failed';
-export type PublicEndpointStatus = 'available' | 'connecting' | 'unavailable' | 'disabled';
-export type ChatgptReadinessStatus = 'ready' | 'unavailable';
-export type DashboardUpdateStatus = 'live' | 'connecting' | 'reconnecting' | 'paused' | 'offline';
-export type DesktopErrorCode =
-  | 'unknown'
-  | 'request_invalid'
-  | 'configuration_invalid'
-  | 'local_service_start_failed'
-  | 'local_service_stop_failed'
-  | 'local_port_in_use'
-  | 'secure_tunnel_failed'
-  | 'public_endpoint_failed'
-  | 'dashboard_unavailable'
-  | 'workspace_unavailable'
-  | 'settings_save_failed'
-  | 'diagnostics_unavailable'
-  | 'diagnostics_export_failed'
-  | 'state_reset_failed'
-  | 'update_failed';
-
-export interface StructuredRecoveryAction {
-  message: string;
-  actionLabel: string;
-  href: string;
-  retryable: boolean;
-}
-
-export interface StructuredErrorPayload {
-  ok: false;
-  errorCode: DesktopErrorCode;
-  error: string;
-  title: string;
-  recovery: StructuredRecoveryAction;
-  status?: number;
-}
-
-export interface DiagnosticFinding {
-  id: string;
-  severity: 'error' | 'warning' | 'info';
-  code: string;
-  title: string;
-  impact: string;
-  recommendation: string;
-  action: { label: string; href: string };
-  context: unknown[];
-  details: Record<string, unknown>;
-}
-
-export interface DiagnosticReport {
-  ok: true;
-  generatedAt: string;
-  scope: { workspace: string };
-  summary: { blocking: number; warnings: number; recommendations: number; total: number };
-  findings: DiagnosticFinding[];
-  reportText: string;
-}
-
-export interface DesktopConnectionState {
-  localService: { status: LocalServiceStatus };
-  publicEndpoint: { status: PublicEndpointStatus };
-  chatgptReadiness: { status: ChatgptReadinessStatus };
-  dashboardUpdates: { status: DashboardUpdateStatus };
-  error: null | { code: DesktopErrorCode; message: string };
-}
-
 

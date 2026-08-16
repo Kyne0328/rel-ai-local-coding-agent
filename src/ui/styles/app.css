@@ -455,8 +455,6 @@
   .ws-form, .settings-form { @apply flex flex-col gap-4; }
   .ws-form-section { @apply flex flex-col gap-3 rounded-xl p-4; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
   .ws-form-advanced > summary { @apply cursor-pointer text-[12px] font-semibold; }
-  .approval-token-replacement, .connection-auth-recovery { @apply rounded-xl p-4; background: var(--ui-status-warning-background); border: 1px solid color-mix(in srgb, var(--ui-status-warning-foreground) 32%, transparent); }
-
   /* Feature contracts preserved after the Tailwind v4 stylesheet consolidation. */
   .section-head { @apply flex items-end justify-between gap-4; }
   .section-head h2 { @apply text-[15px] font-bold; }
