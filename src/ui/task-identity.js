@@ -259,8 +259,16 @@ export function workSessionStateView(value = {}) {
   const contextualInactive = ['validation_failed', 'blocked', 'waiting_for_approval'].includes(inactiveContext)
     ? states[inactiveContext]
     : null;
-  const [label, terminal, active, pillClass] = contextualInactive || states[status] || ['Unknown', isTerminalDashboardTaskStatus(status, value), false, ''];
-  return { status: status || 'unknown', label, terminal: status === 'inactive' ? false : terminal, active: status === 'inactive' ? false : active, pillClass }; 
+  const [label, terminal, statusActive, pillClass] = contextualInactive || states[status] || ['Unknown', isTerminalDashboardTaskStatus(status, value), false, ''];
+  const activityKnown = typeof value === 'object' && value !== null
+    && (Object.hasOwn(value, 'activeCalls') || Object.hasOwn(value, 'state'));
+  const runtimeActive = activityKnown
+    ? Number(value.activeCalls || 0) > 0 || normalize(value.state) === 'working'
+    : statusActive;
+  const active = status === 'inactive' ? false : statusActive && runtimeActive;
+  const open = !terminal && status !== 'inactive' && !active
+    && ['queued', 'planning', 'running', 'working', 'validating', 'waiting', 'settling'].includes(status);
+  return { status: status || 'unknown', label, terminal: status === 'inactive' ? false : terminal, active, open, pillClass }; 
 }
 
 export function processStateView(process = {}, nativeTasks = []) {

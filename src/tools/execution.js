@@ -139,9 +139,11 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
           },
           queueOptions(
             definition?.annotations?.readOnlyHint === true ? 'read' : 'write',
-            hadSandbox && executionName === OP.WORK_FINISH
+            branchChange
               ? 'workspace'
-              : definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
+              : hadSandbox && executionName === OP.WORK_FINISH
+                ? 'workspace'
+                : definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
             taskId,
             context?.signal
           )
@@ -289,7 +291,7 @@ function assertSandboxExecDoesNotMutateSharedRefs(args = {}) {
   if ((directGit && mutatesSharedGitRefs(argv)) || (shellCommand && shellMutatesSharedGitRefs(shellCommand))) {
     throw taskError(
       'TASK_SANDBOX_SHARED_REF_MUTATION_BLOCKED',
-      'A private task sandbox cannot mutate shared Git branch, tag, or worktree refs. Use relai_publish for commits/publishing or perform an explicit branch change so Rel.AI can reconcile the visible workspace safely.',
+      'A private task sandbox cannot mutate shared Git refs or create hidden Git history. Use relai_publish for commits/publishing, or use an explicit branch switch so Rel.AI can reconcile the visible workspace safely.',
       { retryable: false }
     );
   }
@@ -298,35 +300,49 @@ function assertSandboxExecDoesNotMutateSharedRefs(args = {}) {
 function mutatesSharedGitRefs(argv = []) {
   const tokens = argv.map(value => String(value || ''));
   const lower = tokens.map(value => value.toLowerCase());
-  const updateRef = lower.indexOf('update-ref');
-  if (updateRef >= 0) return true;
-  const symbolicRef = lower.indexOf('symbolic-ref');
-  if (symbolicRef >= 0) {
-    const operands = tokens.slice(symbolicRef + 1).filter(value => !value.startsWith('-'));
+  const commandIndex = gitSubcommandIndex(tokens);
+  const command = commandIndex >= 0 ? lower[commandIndex] : '';
+  const tail = commandIndex >= 0 ? lower.slice(commandIndex + 1) : [];
+  if (['commit', 'merge', 'rebase', 'cherry-pick', 'revert', 'am', 'stash'].includes(command)) return true;
+  if (command === 'update-ref') return true;
+  if (command === 'symbolic-ref') {
+    const operands = tokens.slice(commandIndex + 1).filter(value => !value.startsWith('-'));
     if (operands.length >= 2) return true;
   }
-  const branch = lower.indexOf('branch');
-  if (branch >= 0) {
-    const tail = lower.slice(branch + 1);
+  if (command === 'branch') {
     if (tail.some(value => ['-f', '--force', '-m', '-M', '-c', '-C', '-d', '-D', '--delete', '--move', '--copy'].includes(value))) return true;
     const listMode = tail.some(value => ['--list', '-l', '--show-current', '-a', '--all', '-r', '--remotes'].includes(value));
     if (!listMode && tail.some(value => value && !value.startsWith('-'))) return true;
   }
-  const worktree = lower.indexOf('worktree');
-  if (worktree >= 0 && String(lower[worktree + 1] || '') !== 'list') return true;
-  const tag = lower.indexOf('tag');
-  if (tag >= 0) {
-    const tail = lower.slice(tag + 1);
+  if (command === 'worktree' && String(tail[0] || '') !== 'list') return true;
+  if (command === 'tag') {
     const listMode = tail.length === 0 || tail.some(value => ['--list', '-l'].includes(value));
     if (!listMode || tail.some(value => ['-d', '--delete', '-f', '--force'].includes(value))) return true;
   }
   return false;
 }
 
+function gitSubcommandIndex(argv = []) {
+  const tokens = argv.map(value => String(value || ''));
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const lower = token.toLowerCase();
+    if (['-c', '--git-dir', '--work-tree', '--namespace', '--super-prefix', '--config-env'].includes(lower)) {
+      index += 1;
+      continue;
+    }
+    if (/^--(?:git-dir|work-tree|namespace|super-prefix|config-env)=/i.test(token)) continue;
+    if (token.startsWith('-')) continue;
+    return index;
+  }
+  return -1;
+}
+
 function shellMutatesSharedGitRefs(command) {
   const text = String(command || '');
   if (!/\bgit(?:\.exe)?\b/i.test(text)) return false;
-  return /\bgit(?:\.exe)?\b[^\r\n;&|]*\bupdate-ref\b/i.test(text)
+  return /(?:^|[\r\n;&|])\s*git(?:\.exe)?(?:\s+(?:-C|-c)\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+))*\s+(?:commit|merge|rebase|cherry-pick|revert|am|stash)\b/i.test(text)
+    || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bupdate-ref\b/i.test(text)
     || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bsymbolic-ref\b[^\r\n;&|]+\s+refs\//i.test(text)
     || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bbranch\b[^\r\n;&|]*(?:\s-f\b|\s--force\b|\s-[mMcCdD]\b|\s--(?:delete|move|copy)\b)/i.test(text)
     || /\bgit(?:\.exe)?\b[^\r\n;&|]*\bworktree\s+(?:add|remove|move|lock|unlock|prune|repair)\b/i.test(text)
@@ -345,9 +361,19 @@ function isExplicitBranchChange(executionName, args = {}) {
   if (executionName !== OP.EXEC) return false;
   const executable = path.basename(String(args.executable || '')).toLowerCase();
   if (executable === 'git' || executable === 'git.exe') {
-    return (Array.isArray(args.argv) ? args.argv : []).some(token => ['switch', 'checkout'].includes(String(token).toLowerCase()));
+    const argv = Array.isArray(args.argv) ? args.argv.map(value => String(value || '')) : [];
+    const commandIndex = gitSubcommandIndex(argv);
+    const command = commandIndex >= 0 ? argv[commandIndex].toLowerCase() : '';
+    if (command === 'switch') return true;
+    if (command !== 'checkout') return false;
+    const tail = argv.slice(commandIndex + 1);
+    if (tail.includes('--')) return false;
+    if (tail.some(value => ['-b', '-B', '--detach', '--orphan'].includes(value))) return true;
+    return tail.filter(value => value && !value.startsWith('-')).length === 1;
   }
-  return /\bgit(?:\.exe)?\b[^\n;&|]*\b(?:switch|checkout)\b/i.test(String(args.command || ''));
+  const command = String(args.command || '');
+  if (/\bgit(?:\.exe)?\b[^\r\n;&|]*\bswitch\b/i.test(command)) return true;
+  return /\bgit(?:\.exe)?\b[^\r\n;&|]*\bcheckout\b(?![^\r\n;&|]*\s--(?:\s|$))/i.test(command);
 }
 
 function queueOptions(mode, scope, taskId, signal) {

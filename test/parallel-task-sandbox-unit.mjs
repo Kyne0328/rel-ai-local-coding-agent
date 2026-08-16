@@ -321,6 +321,27 @@ try {
   assert.equal(readText(path.join(entries[0].path, 'beta.txt')), 'beta private in progress\n', 'an aborted queued edit must not run after the writer releases');
   fs.writeFileSync(path.join(entries[0].path, 'beta.txt'), 'beta from second\n');
 
+  const pathCheckout = await rawCallTool('relai_exec', {
+    workspace: 'app',
+    work_id: second.work_id,
+    executable: 'git',
+    argv: ['checkout', '--', 'alpha.txt']
+  }, context);
+  assert.equal(pathCheckout.ok, true);
+  assert.equal(sandboxEntries(config).length, 1, 'git checkout -- <path> is a task-local file operation, not a shared branch switch');
+  assert.equal(git('branch', '--show-current'), 'main', 'path checkout must not alter the visible workspace branch');
+
+  await assert.rejects(
+    () => rawCallTool('relai_exec', {
+      workspace: 'app',
+      work_id: second.work_id,
+      executable: 'git',
+      argv: ['commit', '--allow-empty', '-m', 'must not become hidden history']
+    }, context),
+    error => error?.code === 'TASK_SANDBOX_SHARED_REF_MUTATION_BLOCKED'
+  );
+  assert.equal(sandboxEntries(config).length, 1, 'blocked Git history mutation must preserve the task sandbox for recovery');
+
   await assert.rejects(
     () => rawCallTool('relai_exec', {
       workspace: 'app',
@@ -429,6 +450,15 @@ try {
   assert.equal(sandboxEntries(config).length, 0, 'cancelling a parallel task must remove its private sandbox');
   assert.equal(fs.existsSync(entries[0].path), false);
   assert.equal(readTaskHistorySession(config, second.work_id)?.sandboxRecovery, undefined, 'cancellation must clear discarded conflict recovery metadata');
+
+  const strandedCancelledSandbox = await createTaskSandbox(resolveWorkspace(config, 'app'), config, second.work_id);
+  fs.writeFileSync(path.join(strandedCancelledSandbox.path, 'stranded-after-cancel.txt'), 'must be discarded on cancellation retry\n');
+  const duplicateCancellation = await rawCallTool('relai_work', {
+    action: 'cancel', workspace: 'app', work_id: second.work_id, reason: 'Retry cleanup after an interrupted cancellation.'
+  }, context);
+  assert.equal(duplicateCancellation.duplicate, true);
+  assert.equal(sandboxEntries(config).some(entry => entry.taskId === second.work_id), false, 'a duplicate cancellation must retry cleanup of a stranded private sandbox');
+  assert.equal(fs.existsSync(strandedCancelledSandbox.path), false, 'retry cleanup must remove the stranded cancelled worktree from disk');
 
   await rawCallTool('relai_work', {
     action: 'cancel', workspace: 'app', work_id: first.work_id, reason: 'Test cleanup.'
