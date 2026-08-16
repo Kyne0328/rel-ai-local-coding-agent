@@ -55,6 +55,7 @@ const DEFAULT_EXCLUDED_PATHS = [
   "windows/flutter/ephemeral",
   "linux/flutter/ephemeral",
   ".claude/skills",
+  ".agents/skills",
   ".superpowers",
   ".rel-ai-mcp",
   ".rel-ai-mcp-state",

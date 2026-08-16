@@ -116,7 +116,7 @@ try {
     if (report.addedPersistentBytes !== 0) throw new Error(`Benchmark queries changed the persistent graph by ${report.addedPersistentBytes} bytes.`);
   }
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   if (process.env.REL_AI_MCP_BENCHMARK_KEEP !== '1') fs.rmSync(tempRoot, { recursive: true, force: true });
   else console.error(`Real-repo semantic experiment state kept at ${tempRoot}`);
 }

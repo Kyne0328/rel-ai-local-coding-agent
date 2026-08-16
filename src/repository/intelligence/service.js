@@ -9,10 +9,33 @@ import {
 } from './indexer.js';
 import { runRepositoryQuery, shutdownRepositoryQueryWorkers } from './queryWorkerClient.js';
 
+const MAX_INDEXED_QUERY_ATTEMPTS = 2;
+
 function createRepositoryIntelligenceService() {
-  const indexedQuery = async (kind, workspace, config, args, options) => {
-    const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
-    return runRepositoryQuery(kind, workspace, config, { args, index }, options);
+  const indexedQuery = async (kind, workspace, config, args, options = {}) => {
+    for (let attempt = 0; attempt < MAX_INDEXED_QUERY_ATTEMPTS; attempt += 1) {
+      const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
+      let result;
+      try {
+        result = await runRepositoryQuery(kind, workspace, config, { args, index }, options);
+      } catch (error) {
+        if (error?.code === 'QUERY_INDEX_CHANGED' && attempt + 1 < MAX_INDEXED_QUERY_ATTEMPTS) continue;
+        throw error;
+      }
+
+      const status = repositoryIndexStatus(workspace, config);
+      const currentGeneration = Number(status.metadata?.generation || 0);
+      const expectedGeneration = Number(index.generation || 0);
+      const changedDuringQuery = status.dirty === true
+        || (currentGeneration > 0 && expectedGeneration > 0 && currentGeneration !== expectedGeneration);
+      if (!changedDuringQuery) return result;
+      if (attempt + 1 < MAX_INDEXED_QUERY_ATTEMPTS) continue;
+
+      const error = new Error('Repository changed while Repository Intelligence was answering the query. Retry against the refreshed index.');
+      error.code = 'QUERY_SOURCE_CHANGED';
+      throw error;
+    }
+    throw new Error('Repository Intelligence query retry budget exhausted.');
   };
   return Object.freeze({
     ensure: (workspace, config = {}, options = {}) => ensureRepositoryIndex(workspace, config, options),
