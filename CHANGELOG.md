@@ -1,38 +1,93 @@
 # Changelog
 
-## [0.26.0] — 2026-08-15
+## [0.26.0] — 2026-08-16
 
-### ChatGPT coding-agent workflow and MCP contracts
-- **Reposition Rel.AI around ChatGPT coding-agent workflows.** Product copy, bundled guidance, and connector wording now describe the actual local-repository workflow more clearly, with less internal jargon and tighter action guidance.
-- **Tighten the public MCP surface without expanding it.** Rel.AI remains a 12-tool surface while advancing the release manifest to schema version 7 and tool-surface version 42, with canonical action definitions, simpler Zod-backed schemas, stricter schema/runtime parity, and clearer executable argument contracts.
-- **Make execution outcomes easier to interpret.** Command execution is distinguished from operation success, direct-process failures keep useful diagnostics, task-scoped diff review is exposed explicitly, and safe observation remains available after task completion.
-- **Improve workflow evidence and recovery.** Persist workflow intent and failure evidence, recover more cleanly from exact-edit mismatches, preserve classifier-safe tool guidance, and strengthen completion, cancellation, process-workspace, and transport-task contracts.
+### ChatGPT coding-agent product and supported connection
+- **Reposition Rel.AI as a local coding-agent bridge for ChatGPT Web.** Package metadata, desktop copy, bundled guidance, README content, and connector instructions now describe the actual search → edit → run → check → review → publish workflow instead of older generic MCP or internal terminology.
+- **Keep one supported ChatGPT connection path.** OpenAI Secure MCP Tunnel is the product connection; setup and Connection guidance distinguish the tunnel runtime key, the private loopback bearer credential, and ChatGPT's Tunnel + No authentication configuration without reviving old provider or OAuth setup paths.
+- **Make Secure Tunnel recovery actionable.** Connection readiness, tunnel startup, parser output, troubleshooting, restart/reconnect actions, and structured diagnostics now lead to recovery instead of bouncing users between Connection and Troubleshooting without a fix.
+- **Keep transport recovery separate from repository recovery.** Reconnecting the tunnel restores connectivity only; ambiguous edits, commands, validation, or Git mutations still reconcile through the work-session integrity model before more mutations or completion are allowed.
+- **Refresh public documentation and discoverability.** Replace legacy screenshots with current Overview, Projects, and Activity captures, simplify the README around ChatGPT Web, add GitHub Pages publication support, and align setup, security, packaging, and protocol documentation with the shipped architecture.
 
-### Parallel work and runtime performance
-- **Hard-cut persistent parallel task sandboxes.** All task mutations now target the configured visible workspace directly, so successful changes are immediately visible to users and other ChatGPT sessions without detached worktrees, promotion, reconciliation, or hidden task repositories.
-- **Serialize repository mutations at the workspace boundary.** File edits and mutating or uncertain one-shot commands use the shared workspace write lock, while provably read-only direct commands and ordinary reads can still overlap safely.
-- **Keep normal tool calls off blocking repository paths.** Git integrity probes, validation probes, session baseline capture, process-tree checks, lexical fallback, Zoekt work, and repository-intelligence queries move off or avoid the MCP event loop where practical.
-- **Reduce repeated repository work.** Cache runtime compatibility and active-session policy metadata, invalidate topology from meaningful manifest changes, bound operation-journal reads, and append staged edit payloads efficiently.
-- **Centralize task lifecycle behavior.** Live task state, completion evidence, workflow intent, changed-file ownership, and validation freshness share tighter ownership without a second repository lifecycle.
+### MCP tool surface, schemas, and task execution
+- **Keep the public surface at 12 tools while advancing the contract to tool-surface version 49 and schema version 7.** Public schemas, operation IDs, action definitions, runtime dispatch, capability metadata, output schemas, dashboard metadata, and release-manifest hashing now derive from tighter canonical registries.
+- **Use Zod-backed executable schemas and stricter schema/runtime parity.** Duplicate schema-building code is removed, shared action contracts are normalized, executable argument boundaries are explicit, and successful results are validated against the public output contract.
+- **Hard-cut obsolete tool and configuration compatibility.** Removed public aliases, stale internal operation names, superseded configuration normalization paths, obsolete audit surfaces, and old dashboard/MCP compatibility code are guarded against returning; the only retained protocol adapter is the verified stateless ChatGPT HTTP initialization path documented by the current MCP policy.
+- **Gate native MCP Tasks strictly by advertised capability.** Eligible long or indeterminate work uses native Tasks only when the client advertises `io.modelcontextprotocol/tasks`; bounded work still completes directly.
+- **Continue long work safely for clients without native Tasks.** If eligible work outlives the direct response window, Rel.AI returns a running work-session result under the same `work_id` instead of exposing legacy tools or failing merely because the client lacks Tasks support.
+- **Improve tool-call ergonomics and failure contracts.** Direct process failures retain useful diagnostics, command execution is distinguished from command outcome, task-scoped review is explicit, exact-edit mismatches provide recovery guidance, and observation remains available after task completion.
+- **Tighten transport resource safety.** Request, response, timeout, abort, task, and cleanup boundaries are more consistent across HTTP and stdio; long-call fallback is less fragile, transport deadlines are clearer, and unnecessary dynamic gzip handling is removed.
 
-### Repository Intelligence
-- **Move expensive queries into isolated workers.** Repository Intelligence query execution is offloaded from the main runtime, while index refreshes, lexical fallback, and Zoekt integration are tuned to avoid unnecessary blocking.
-- **Improve search and semantic-query contracts.** Semantic search respects the published `maxBytes` boundary, repository index refreshes do less redundant work, and architecture/health gates cover the worker-backed implementation.
+### Direct shared-workspace concurrency and task lifecycle
+- **Hard-cut task sandbox/worktree execution from the final 0.26.0 architecture.** Task mutations now target the configured visible repository directly, so users and parallel ChatGPT conversations see successful edits immediately without hidden task repositories, promotion, or sandbox reconciliation.
+- **Serialize mutations at the real workspace boundary while preserving safe read concurrency.** File writes, Git mutations, and uncertain one-shot commands share the workspace writer lock; provably read-only commands, reads, searches, and other safe observation can overlap.
+- **Make changed-file ownership task-exact.** Session baselines, task-owned file attribution, task-scoped diffs, scoped commits, concurrent-work attribution, and residual workspace reconciliation no longer let one ChatGPT task claim unrelated changes from another task or pre-existing dirty state.
+- **Make validation race-safe under concurrent work.** Atomic validation absorbs unrelated workspace churn where possible, invalidates stale evidence when relevant state changes, and can recover already-validated task changes without silently blessing later mutations.
+- **Centralize lifecycle state and summary counting.** Running, open, waiting, blocked, cancelled, failed, completed, expired, and inactive outcomes use one lifecycle model so dashboard totals do not double-count cancelled or terminal work as open.
+- **Improve abandonment, inactivity, cancellation, and removal behavior.** Inactive work can remain open when appropriate, truly abandoned sessions close without being mistaken for successful completion, explicit cancellation remains isolated, and historical sessions can now be removed intentionally.
+- **Keep task UI state stable while work changes.** Active rows no longer jump merely because another task emits an update, task-list changed-file counts follow the live task record, open detail views receive task updates, and terminal list entries show how long ago work ended while the detail view retains total runtime.
 
-### Desktop app, setup, and visual identity
-- **Match the Electron app to the new Rel.AI website identity.** Replace the old/synthetic branding with the canonical Rel.AI mark, ship the new app/tray/notification icon and favicons, use the website's dark navy surfaces and lime primary action color, and reserve blue for informational state.
-- **Align desktop typography and geometry with the website.** Reduce excessive visual weight and rounding, tighten common radii and font weights, improve focus/selection treatments, and keep the existing application information architecture rather than redesigning the product.
-- **Simplify desktop information density and Secure Tunnel onboarding.** Setup, recovery, connection guidance, dashboard summaries, and settings expose the important state with less competing copy while preserving the OpenAI Secure MCP Tunnel workflow.
-- **Improve updater and completion feedback.** Application update UX, taskbar completion badges, Electron task activity handling, and notification behavior are more consistent and less costly during normal operation.
+### Tool orchestration and runtime performance
+- **Move normal repository work off blocking event-loop paths.** Git integrity and validation probes, session baseline capture, process-tree checks, lexical fallback, Zoekt work, and Repository Intelligence queries avoid synchronous blocking where practical.
+- **Add bounded internal execution plans without adding public tools.** Independent internal steps can execute concurrently under explicit limits, with progress surfaced through the existing operation/task observability path.
+- **Batch repository searches inside one tool call.** Related searches share one bounded execution path instead of requiring avoidable round trips while preserving per-query result limits and context metadata.
+- **Parallelize independent validation checks and edit post-actions.** Safe checks can run concurrently and independent post-edit work can overlap, while mutation ordering and final evidence rules remain enforced.
+- **Reduce repeated runtime work.** Runtime compatibility metadata, active policy decisions, topology, command/check discovery, and other reusable state are cached with invalidation tied to meaningful repository or manifest changes; operation-journal reads and staged-edit payload work are bounded.
+- **Reduce MCP orchestration overhead.** Tool dispatch, execution planning, task bookkeeping, and connector result handling perform less repeated normalization and less unnecessary work on hot paths.
 
-### Dashboard and analytics reliability
-- **Stream smaller dashboard domain updates.** Live dashboard state changes avoid unnecessary broad remounts and keep task, connection, and activity views more stable while work is running.
-- **Separate reliability from raw operation success.** Analytics migration no longer guesses historical reliability counters; newly classified reliability is reported separately from legacy operation success, with clearer infrastructure-failure and recoverable-failure presentation.
-- **Use a more compact analytics layout.** Usage metrics and failure/workspace breakdowns are simplified for faster scanning without dropping the underlying operational data.
+### Repository Intelligence and search
+- **Offload expensive Repository Intelligence queries into isolated workers.** Query execution, local index work, and selected semantic operations no longer monopolize the main MCP runtime.
+- **Harden index freshness and generation consistency.** Index builds, generation changes, database state, query workers, and cleanup now coordinate more carefully so a query does not combine stale and fresh generations accidentally.
+- **Improve ranking and relationship evidence.** Symbol, reference, call, import, related-file, affected-test, graph, and cross-workspace evidence use tighter relationship policy and ranking rules with stronger correctness coverage.
+- **Make degradation visible instead of silently pretending full intelligence is available.** Parser or indexing degradation is surfaced through runtime/diagnostic state and tested as a first-class condition.
+- **Keep search contracts bounded and nonblocking.** Semantic search honors `maxBytes`, lexical fallback avoids blocking the event loop, Zoekt integration does less redundant work, and repository index refreshes avoid unnecessary rebuilds.
 
-### Validation and regression coverage
-- **Expand release and architecture gates around the new runtime contracts.** Add or strengthen checks for direct-workspace concurrency, executable skill behavior, skill metadata, repository architecture, workflow evidence, analytics migration, web automation, MCP schema parity, and Electron UI behavior.
-- **Keep generated branding and color artifacts deterministic.** Color-token generation, WCAG contrast checks, dashboard/Electron token parity, official logo usage, and synthetic-logo regression checks are covered by focused tests.
+### Electron runtime, connection recovery, and updates
+- **Isolate the desktop service runtime from the Electron UI process.** The desktop now has an explicit service process/client boundary plus activity projection, reducing main-process IPC churn and keeping tool/service work from competing directly with window rendering.
+- **Reduce background desktop overhead.** Hidden-window activity is paused or coalesced where safe, tool activity and dashboard snapshots cross narrower IPC paths, and background service/runtime updates perform less repeated work.
+- **Make desktop recovery resilient.** Service startup, tunnel failures, dashboard-load failures, interrupted shutdown, and restart paths expose concrete recovery actions and preserve the single-window/fallback-window security model.
+- **Improve updater behavior and update-state clarity.** Update checks, download/install state, support-policy handling, retry/recovery messages, and release preflight behavior are more explicit without presenting updater failures as connection failures.
+- **Improve completion and connection notifications.** Taskbar badges, desktop notification categories, unread completion handling, connection/service alerts, update notifications, and notification recovery are more consistent across focus changes and restarts.
+- **Use a dedicated bordered Windows Setup icon.** The installer executable gets its own bordered icon while the app, tray, and taskbar identities remain separate.
+- **Harden desktop lifecycle and persistence across platforms.** Window/session state, custom-protocol loading, startup/background behavior, shutdown coordination, runtime markers, and persisted desktop state have tighter recovery and regression coverage.
+
+### Dashboard, navigation, and analytics
+- **Adopt the final neutral dark desktop palette.** The shipped theme uses black/gray surfaces with the lime Rel.AI action color, blue for informational state, accessible status colors, updated canonical logo/favicons, and synchronized generated dashboard/Electron color tokens.
+- **Simplify product terminology and information density.** Routine pages expose less implementation jargon and fewer low-value settings while retaining meaningful Overview analytics, repository status, diagnostics, and recovery information.
+- **Remove duplicate in-page navigation.** Advanced/System and Settings content now rely on the primary application navigation instead of rendering a second Connection/Running commands/Troubleshooting/Tools/Analytics or General/App/About menu inside the page.
+- **Stream narrower live dashboard updates.** Task, activity, process, connection, and analytics changes can update their owned state without broad route remounts, reducing scroll jumps, control resets, and rendering churn during concurrent work.
+- **Improve task and activity presentation.** Live status summaries, task counts, changed-file feedback, process relationships, completion state, activity messages, and task navigation are clearer and more internally consistent.
+- **Refactor local Usage analytics.** Range handling, workspace/tool breakdowns, metric rendering, timeline data, and locally observed request/outcome/duration summaries are more consistent and easier to scan.
+- **Separate reliability from raw command success.** Reliable actions, system errors, retryable problems, and successful actions are derived from clearer outcome classification so infrastructure failures are not conflated with ordinary command exit status.
+- **Improve responsive and accessible desktop behavior.** Narrow-width sidebar identity, focus/keyboard behavior, status clarity, control sizing, overlays, connection content, and desktop/browser acceptance are tightened without creating a separate compact feature set.
+
+### Observability, diagnostics, and recovery signals
+- **Strengthen the runtime signal path from tool execution to UI.** Task/activity events, service activity projection, dashboard deltas, persistence, and Electron notifications share more consistent status and recovery semantics.
+- **Persist and replay runtime logs more reliably.** Bounded runtime logs, snapshot support, packaged log resources, replay ordering, and restart hydration make recent failures diagnosable after renderer or service restarts.
+- **Improve structured diagnostics.** Connection, tunnel, process, task, updater, parser, and runtime failures retain actionable codes/context while copy/export paths keep sensitive values sanitized.
+- **Repair notification recovery.** Notification delivery, badge state, connection-change signals, and diagnostic visibility recover after lifecycle transitions instead of silently stopping after renderer/service churn.
+
+### Security and permission boundaries
+- **Tighten task, principal, and process ownership.** Repository work sessions, native task handles, managed processes, and transport principals are checked independently so reconnects or concurrent chats cannot inherit each other's authority.
+- **Harden process execution boundaries.** Environment inheritance, process-tree cleanup, persistent-process ownership, working-directory rules, and cancellation behavior receive stricter security checks and dedicated regression coverage.
+- **Strengthen authorization and secret handling.** Audit payloads, diagnostics, task state, runtime logs, dashboard projections, and exported data apply broader redaction; authorization and approval boundaries fail closed without leaking credentials or local secret material.
+- **Keep dashboard authentication separate from MCP bearer authentication.** Dashboard APIs use their HttpOnly local session bootstrap rather than accepting the private MCP bearer token as a browser credential.
+- **Preserve repository and Git safety during concurrency.** Path containment, sensitive-file authorization, remote/ref constraints, protected state, task-scoped commit ownership, and recovery operations remain separate from ordinary editing and transport recovery.
+
+### Release, packaging, and dependency maintenance
+- **Advance the runtime baseline.** Rel.AI now requires Node.js `24.15+` and npm `12`, pins npm `12.0.2` through `packageManager`, and updates Electron from `43.2.0` to `43.4.0` alongside current lint/dependency tooling.
+- **Ship the actual desktop runtime dependency graph.** Packaging now includes the isolated service process/client/activity projection, runtime log snapshot support, tunnel log parser, Zod runtime, and other files required by the current execution architecture.
+- **Harden packaged connector acceptance.** Acceptance follows the real dashboard session-cookie boundary, handles capability-gated native Tasks, validates current observability projections, and rejects removed compatibility routes rather than depending on stale test authentication or tool names.
+- **Strengthen release preflight and artifact verification.** Distribution checks cover release-manifest parity, updater metadata, packaged resources, Electron fuses, installer/portable artifacts, SBOM generation, and an isolated installed-release validation path without making normal development tests install or replace the active app.
+- **Make release metadata harder to drift.** Version surfaces, tool-manifest hashes, artifact naming, packaged dependency checks, and release workflow inputs are synchronized by shared release helpers and focused consistency tests.
+
+### Validation, CI, skills, and maintainability
+- **Reduce brittle tests that block legitimate maintenance.** Tests no longer pin incidental dependency versions, arbitrary package-size limits, stale UI structures, or exact implementation details when the real contract can be asserted instead; a dedicated test-rigidity audit guards against those patterns returning.
+- **Keep release gates focused on real regressions.** Native Tasks, security boundaries, direct-workspace concurrency, Repository Intelligence, packaged connector behavior, Electron lifecycle, browser acceptance, and hard-cutover/stale-reference contracts have explicit suites instead of relying on duplicated broad assertions.
+- **Speed up validation without weakening ownership.** Independent checks run concurrently where safe, test entrypoints avoid redundant work, and release/CI gates reuse the smallest authoritative evidence that proves the current contract.
+- **Strengthen bundled skill quality.** Skill metadata, routing, package validation, and executable behavior prompts are checked structurally and behaviorally without adding a second desktop skill-management subsystem.
+- **Continue architecture cleanup.** Obsolete schema builders, task-history layers, settings modules, stale compatibility fixtures, dead configuration paths, and disconnected helpers are removed or consolidated behind the current canonical owners.
+- **Keep generated and packaged artifacts deterministic.** Color assets, release metadata, packaged runtime files, plugin metadata, and stale-reference audits are checked so source, desktop package, and documented release contracts stay aligned.
 
 Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.0.
 
