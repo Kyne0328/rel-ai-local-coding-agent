@@ -46,23 +46,74 @@ function readRawBody(req, maxBytes) {
     // measurably faster than incremental string decoding or manual preallocation here.
     const chunks = [];
     let bytes = 0;
-    let rejected = false;
-    req.on("data", (chunk) => {
-      if (rejected) return;
+    let settled = false;
+
+    const removeAllListeners = () => {
+      req.off?.("data", onData);
+      req.off?.("end", onEnd);
+      req.off?.("error", onError);
+      req.off?.("aborted", onAborted);
+      req.off?.("close", onClose);
+    };
+    const fail = (error, { drain = false, waitForTerminal = false } = {}) => {
+      if (settled) return;
+      settled = true;
+      chunks.length = 0;
+      req.off?.("data", onData);
+      req.off?.("aborted", onAborted);
+      if (!waitForTerminal) removeAllListeners();
+      if (drain) req.resume?.();
+      reject(error);
+    };
+    const onData = (chunk) => {
+      if (settled) return;
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       bytes += buffer.length;
       if (bytes > limit) {
-        rejected = true;
-        req.resume?.();
-        reject(requestError(`Request body exceeds ${limit} bytes.`, 413));
+        fail(requestError(`Request body exceeds ${limit} bytes.`, 413), {
+          drain: true,
+          waitForTerminal: true
+        });
         return;
       }
       chunks.push(buffer);
-    });
-    req.on("error", reject);
-    req.on("end", () => {
-      if (!rejected) resolve(Buffer.concat(chunks, bytes).toString("utf8"));
-    });
+    };
+    const onEnd = () => {
+      if (settled) {
+        removeAllListeners();
+        return;
+      }
+      settled = true;
+      removeAllListeners();
+      const body = Buffer.concat(chunks, bytes).toString("utf8");
+      chunks.length = 0;
+      resolve(body);
+    };
+    const onError = (error) => {
+      if (settled) {
+        removeAllListeners();
+        return;
+      }
+      fail(error);
+    };
+    const onAborted = () => {
+      fail(requestError("Request body was aborted before completion."), { waitForTerminal: true });
+    };
+    const onClose = () => {
+      if (settled) {
+        removeAllListeners();
+        return;
+      }
+      if (req.complete === true) return;
+      fail(requestError("Request body connection closed before completion."));
+    };
+
+    req.on("data", onData);
+    req.once("end", onEnd);
+    req.once("error", onError);
+    req.once("aborted", onAborted);
+    req.once("close", onClose);
+    if (req.aborted || (req.destroyed && req.complete !== true)) onAborted();
   });
 }
 
@@ -109,11 +160,11 @@ function setBaseHeaders(req, res, options = {}) {
 }
 
 function sendJson(res, status, payload) {
-  if (res.headersSent) return;
-  const body = Buffer.from(`${JSON.stringify(payload)}\n`, "utf8");
+  if (res.headersSent || res.writableEnded || res.destroyed) return;
+  const body = `${JSON.stringify(payload)}\n`;
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": body.length
+    "Content-Length": Buffer.byteLength(body, "utf8")
   });
   res.end(body);
 }
