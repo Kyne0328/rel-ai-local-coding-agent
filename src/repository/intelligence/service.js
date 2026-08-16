@@ -27,10 +27,10 @@ function createRepositoryIntelligenceService() {
     rebuild: (workspace, config = {}, options = {}) => rebuildRepositoryIndex(workspace, config, options),
     recover: (workspace, config = {}, options = {}) => recoverRepositoryIndex(workspace, config, options),
     cancel: (workspace, config = {}, reason) => cancelRepositoryIndex(workspace, config, reason),
-    shutdown: () => {
-      shutdownRepositoryQueryWorkers();
-      shutdownRepositoryIndexes();
-    }
+    shutdown: () => Promise.all([
+      shutdownRepositoryQueryWorkers(),
+      shutdownRepositoryIndexes()
+    ])
   });
 }
 

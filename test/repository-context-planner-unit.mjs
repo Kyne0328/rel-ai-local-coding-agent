@@ -12,10 +12,11 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-context-planner-'));
 const stateDir = path.join(root, '.state');
 const workspaceRoot = path.join(root, 'workspace');
 fs.mkdirSync(path.join(workspaceRoot, 'src'), { recursive: true });
-fs.writeFileSync(path.join(workspaceRoot, 'src', 'core.js'), "export function markerCore() { return 'marker'; }\n");
-fs.writeFileSync(path.join(workspaceRoot, 'src', 'service.js'), "import { markerCore } from './core.js';\nexport function markerService() { return markerCore(); }\n");
-fs.writeFileSync(path.join(workspaceRoot, 'src', 'app.js'), "import { markerService } from './service.js';\nexport function markerApp() { return markerService(); }\n");
-fs.writeFileSync(path.join(workspaceRoot, 'src', 'isolated.js'), "export const markerIsolated = 'marker';\n");
+const markerNoise = Array.from({ length: 4 }, (_, index) => `// marker fixture ${index}`).join('\n');
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'core.js'), `export function markerCore() { return 'marker'; }\n${markerNoise}\n`);
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'service.js'), `import { markerCore } from './core.js';\nexport function markerService() { return markerCore(); }\n${markerNoise}\n`);
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'app.js'), `import { markerService } from './service.js';\nexport function markerApp() { return markerService(); }\n${markerNoise}\n`);
+fs.writeFileSync(path.join(workspaceRoot, 'src', 'isolated.js'), `export const markerIsolated = 'marker';\n${markerNoise}\n`);
 const init = spawnSync('git', ['init'], { cwd: workspaceRoot, encoding: 'utf8' });
 assert.equal(init.status, 0, init.stderr);
 
@@ -44,6 +45,7 @@ try {
   assert.ok(Object.keys(graph.pathScores).length >= 3);
 
   const searched = await relaiSearch(workspace, config, { pattern: 'marker', fixed: true });
+  assert.equal(searched.autoTier, 'moderate');
   assert.equal(searched.selectionStrategy, 'path-match-density-and-graph');
   assert.match(searched.next, /graph-prioritized/);
   assert.notEqual(searched.files[0].path, 'src/isolated.js', 'unconnected lexical matches should not outrank structurally connected matches');

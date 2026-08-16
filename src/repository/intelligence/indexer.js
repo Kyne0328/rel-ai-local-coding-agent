@@ -4,7 +4,7 @@ import { Worker } from 'node:worker_threads';
 
 import { collectOptionsFromWorkspace, createCollectionPathFilter, isPathInside, realRootOf } from '../../safety.js';
 import { repositoryIndexPath } from './database.js';
-import { DEFAULT_MAX_INDEX_FILES, MAX_INDEXED_FILE_BYTES, scanWorkspace } from './indexBuild.js';
+import { DEFAULT_MAX_INDEX_FILES } from './indexBuild.js';
 import { recentIntelligenceDiagnostics, recordIntelligenceDiagnostic } from './state.js';
 
 const FALLBACK_RECONCILE_INTERVAL_MS = 5 * 60_000;
@@ -117,7 +117,7 @@ function evictIdleRepositoryWorkers(reason = 'Repository Intelligence idle worke
 function shutdownRepositoryIndexes() {
   const shutdownError = abortError('Repository Intelligence is shutting down.');
   for (const record of activeBuilds.values()) record.cancel(shutdownError.message);
-  for (const client of workerClients.values()) client.terminate(shutdownError);
+  const terminations = [...workerClients.values()].map(client => client.terminate(shutdownError));
   for (const state of runtimeStates.values()) {
     try { state.watcher?.close(); } catch {}
     state.watcher = null;
@@ -125,6 +125,7 @@ function shutdownRepositoryIndexes() {
   runtimeStates.clear();
   activeBuilds.clear();
   workerClients.clear();
+  return Promise.allSettled(terminations);
 }
 
 async function runCoalescedIndexing(workspace, config, databaseFile, state, options) {
@@ -249,7 +250,7 @@ function repositoryWorkerClient(databaseFile) {
       };
     },
     terminate(reason = new Error('Repository Intelligence worker terminated.')) {
-      if (client.closed) return;
+      if (client.closed) return Promise.resolve();
       client.closed = true;
       clearIdleTermination();
       if (workerClients.get(databaseFile) === client) workerClients.delete(databaseFile);
@@ -260,7 +261,7 @@ function repositoryWorkerClient(databaseFile) {
       pending.clear();
       worker.unref();
       worker.removeAllListeners();
-      void worker.terminate().catch(() => {});
+      return worker.terminate().catch(() => {});
     }
   };
 
