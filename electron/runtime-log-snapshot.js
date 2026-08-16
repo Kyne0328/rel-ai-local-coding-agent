@@ -2,8 +2,11 @@ function applyRuntimeLogChange(snapshot = {}, change = {}) {
   const current = cloneRuntimeLogSnapshot(snapshot);
   if (!change || typeof change !== 'object') return current;
 
-  const requestedRevision = Number(change.revision ?? current.revision ?? 0);
-  const revision = Number.isFinite(requestedRevision) ? Math.max(0, requestedRevision) : Math.max(0, Number(current.revision || 0));
+  const currentRevision = Math.max(0, Number(current.revision || 0));
+  const requestedRevision = Number(change.revision ?? currentRevision);
+  const hasRevision = change.revision != null && Number.isFinite(requestedRevision);
+  const revision = Number.isFinite(requestedRevision) ? Math.max(0, requestedRevision) : currentRevision;
+  if (hasRevision && revision <= currentRevision) return current;
   if (change.type === 'reset') {
     return { ...current, revision, count: 0, entries: [] };
   }
@@ -24,4 +27,4 @@ function cloneRuntimeLogSnapshot(snapshot = {}) {
   };
 }
 
-export { applyRuntimeLogChange, cloneRuntimeLogSnapshot };
+export { applyRuntimeLogChange };
