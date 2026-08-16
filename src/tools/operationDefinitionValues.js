@@ -234,7 +234,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Explicitly close the task identified by work_id after its final read-only review. Use this when the final relai_validate action 'checks' call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace","summary"],"additionalProperties":false},
     handlerName: 'completeTask',
-    behavior: {"audit":"completion","summary":"completion"},
+    behavior: {"audit":"completion","summary":"completion","concurrencyScope":"workspace"},
     dashboard: {"category":"Workflow"}
   },
 ];

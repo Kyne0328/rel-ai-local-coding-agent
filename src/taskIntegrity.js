@@ -11,6 +11,7 @@ import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const STORE_VERSION = 1;
 const LOCK_STALE_MS = 30_000;
 const INTEGRITY_CACHE_RECHECK_MS = 250;
+const AMBIENT_OWNER = '@ambient';
 const integrityCache = new Map();
 const CODE_MUTATING_TOOLS = new Set([
   OP.EDIT,
@@ -87,9 +88,57 @@ function taskOwnedChangedFiles(config, taskId, workspaceAlias = '') {
   const authority = readTaskIntegrity(config, taskId, workspaceAlias);
   return Array.isArray(authority?.taskOwnedChangedFiles) ? [...authority.taskOwnedChangedFiles] : [];
 }
+
+function taskCommitOwnership(config, taskId, workspaceAlias = '') {
+  const authority = readTaskIntegrity(config, taskId, workspaceAlias);
+  if (!authority) return { ownedFiles: [], conflictingFiles: [] };
+  const workspace = readWorkspaceIntegrity(config, authority.workspace);
+  const ownedFiles = [];
+  const conflictingFiles = [];
+  for (const [file, owners] of Object.entries(workspace.uncommittedOwners || {})) {
+    if (!owners.includes(taskId)) continue;
+    ownedFiles.push(file);
+    if (owners.some(owner => owner !== taskId)) conflictingFiles.push(file);
+  }
+  return {
+    ownedFiles: unique(ownedFiles).sort(),
+    conflictingFiles: unique(conflictingFiles).sort()
+  };
+}
+
+function claimTaskChangedFiles(config, taskId, workspaceAlias, changedFiles = []) {
+  const owner = clean(taskId);
+  const workspace = clean(workspaceAlias);
+  const files = exactPaths(changedFiles);
+  if (!owner || !workspace || !files.length) return { ownedFiles: [], conflictingFiles: [] };
+  return withIntegrityLock(config, () => {
+    const authority = readJson(taskFile(config, owner));
+    if (!authority || authority.workspace !== workspace) {
+      return { ownedFiles: [], conflictingFiles: [] };
+    }
+    const workspaceState = normalizeWorkspaceState(readJson(workspaceFile(config, workspace)) || createWorkspaceState(workspace));
+    for (const file of files) addWorkspaceOwner(workspaceState, file, owner);
+    writeJson(workspaceFile(config, workspace), workspaceState);
+    return taskCommitOwnershipFromState(workspaceState, owner);
+  });
+}
+
+function releaseTaskChangedFiles(config, taskId, workspaceAlias, changedFiles = []) {
+  const owner = clean(taskId);
+  const workspace = clean(workspaceAlias);
+  const files = exactPaths(changedFiles);
+  if (!owner || !workspace || !files.length) return { ownedFiles: [], conflictingFiles: [] };
+  return withIntegrityLock(config, () => {
+    const workspaceState = normalizeWorkspaceState(readJson(workspaceFile(config, workspace)) || createWorkspaceState(workspace));
+    for (const file of files) removeWorkspaceOwner(workspaceState, file, owner);
+    writeJson(workspaceFile(config, workspace), workspaceState);
+    return taskCommitOwnershipFromState(workspaceState, owner);
+  });
+}
+
 function readWorkspaceIntegrity(config, workspaceAlias) {
   try {
-    return readJson(workspaceFile(config, workspaceAlias)) || createWorkspaceState(workspaceAlias);
+    return normalizeWorkspaceState(readJson(workspaceFile(config, workspaceAlias)) || createWorkspaceState(workspaceAlias));
   } catch (error) {
     if (error instanceof TaskIntegrityError) throw error;
     throw new TaskIntegrityError('TASK_INTEGRITY_STATE_INVALID', `Workspace integrity state is unreadable for '${workspaceAlias}'.`, { cause: error });
@@ -101,6 +150,13 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event, reposi
   const timestamp = clean(event.ts) || new Date().toISOString();
   const changedFiles = exactChangedFiles(event);
   const mutation = eventMutatedCode(event) && (event.ok !== false || changedFiles.length > 0);
+  normalizeWorkspaceState(workspaceState);
+  if (Array.isArray(repositoryChanged)) reconcileWorkspaceOwners(workspaceState, repositoryChanged);
+  if (tool === OP.WORK_BEGIN && Array.isArray(repositoryChanged)) {
+    for (const file of exactPaths(repositoryChanged)) {
+      if (!workspaceState.uncommittedOwners[file]?.length) addWorkspaceOwner(workspaceState, file, AMBIENT_OWNER);
+    }
+  }
 
   authority.updatedAt = timestamp;
   authority.workspace = workspace.alias;
@@ -109,6 +165,7 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event, reposi
   if (mutation) {
     authority.mutationGeneration += 1;
     authority.taskOwnedChangedFiles = unique([...authority.taskOwnedChangedFiles, ...changedFiles]);
+    for (const file of changedFiles) addWorkspaceOwner(workspaceState, file, authority.taskId);
     authority.lastMutationAt = timestamp;
     authority.lastMutationTool = tool;
     authority.validationResult = authority.validationResult === 'passed' ? 'stale' : authority.validationResult;
@@ -133,6 +190,9 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event, reposi
     authority.completedAt = timestamp;
   }
   if (tool === OP.WORK_CANCEL && event.ok !== false) authority.cancelledAt = timestamp;
+  if (tool === OP.PUBLISH_COMMIT && event.ok !== false) {
+    for (const file of exactCommittedFiles(event)) removeWorkspaceOwner(workspaceState, file, authority.taskId);
+  }
 
   if (mutation || REPOSITORY_RECONCILE_TOOLS.has(tool)) {
     authority.ambientChangedFiles = Array.isArray(repositoryChanged) ? repositoryChanged : authority.ambientChangedFiles;
@@ -169,11 +229,14 @@ function readIntegrityProjection(config, taskId, workspaceAlias) {
 }
 
 function integrityProjection(authority, workspaceState) {
+  const ownership = taskCommitOwnershipFromState(normalizeWorkspaceState(workspaceState), authority.taskId);
   return {
     taskMutationGeneration: authority.mutationGeneration,
     taskValidatedMutationGeneration: authority.latestValidatedMutationGeneration,
     taskWorkspaceGeneration: workspaceState.generation,
     taskOwnedChangedFiles: authority.taskOwnedChangedFiles,
+    taskUncommittedChangedFiles: ownership.ownedFiles,
+    taskConflictingChangedFiles: ownership.conflictingFiles,
     externalChangedFiles: authority.externalChangedFiles
   };
 }
@@ -235,7 +298,8 @@ function createWorkspaceState(workspace) {
     workspace: clean(workspace),
     generation: 0,
     updatedAt: '',
-    lastMutation: null
+    lastMutation: null,
+    uncommittedOwners: {}
   };
 }
 
@@ -281,9 +345,73 @@ function eventMutatedCode(event) {
 }
 
 function exactChangedFiles(event) {
-  return unique((Array.isArray(event.changedFiles) ? event.changedFiles : [])
+  return exactPaths(event.changedFiles);
+}
+
+function exactCommittedFiles(event) {
+  return exactPaths(event.committedFiles);
+}
+
+function exactPaths(values) {
+  return unique((Array.isArray(values) ? values : [])
     .map(normalizePath)
     .filter(Boolean));
+}
+
+function normalizeWorkspaceState(workspaceState) {
+  if (!workspaceState || typeof workspaceState !== 'object') return workspaceState;
+  if (!workspaceState.uncommittedOwners || typeof workspaceState.uncommittedOwners !== 'object' || Array.isArray(workspaceState.uncommittedOwners)) {
+    workspaceState.uncommittedOwners = {};
+  }
+  for (const [file, owners] of Object.entries(workspaceState.uncommittedOwners)) {
+    const normalizedFile = normalizePath(file);
+    const normalizedOwners = unique((Array.isArray(owners) ? owners : []).map(clean).filter(Boolean));
+    if (!normalizedFile || !normalizedOwners.length) {
+      delete workspaceState.uncommittedOwners[file];
+      continue;
+    }
+    if (normalizedFile !== file) delete workspaceState.uncommittedOwners[file];
+    workspaceState.uncommittedOwners[normalizedFile] = normalizedOwners;
+  }
+  return workspaceState;
+}
+
+function addWorkspaceOwner(workspaceState, file, owner) {
+  const normalizedFile = normalizePath(file);
+  const normalizedOwner = clean(owner);
+  if (!normalizedFile || !normalizedOwner) return;
+  workspaceState.uncommittedOwners[normalizedFile] = unique([
+    ...(workspaceState.uncommittedOwners[normalizedFile] || []),
+    normalizedOwner
+  ]);
+}
+
+function removeWorkspaceOwner(workspaceState, file, owner) {
+  const normalizedFile = normalizePath(file);
+  const normalizedOwner = clean(owner);
+  if (!normalizedFile || !normalizedOwner) return;
+  const owners = (workspaceState.uncommittedOwners[normalizedFile] || []).filter(value => value !== normalizedOwner);
+  if (owners.length) workspaceState.uncommittedOwners[normalizedFile] = owners;
+  else delete workspaceState.uncommittedOwners[normalizedFile];
+}
+
+function reconcileWorkspaceOwners(workspaceState, repositoryChanged) {
+  const dirty = new Set(exactPaths(repositoryChanged));
+  for (const file of Object.keys(workspaceState.uncommittedOwners)) {
+    if (!dirty.has(file)) delete workspaceState.uncommittedOwners[file];
+  }
+}
+
+function taskCommitOwnershipFromState(workspaceState, taskId) {
+  const owner = clean(taskId);
+  const ownedFiles = [];
+  const conflictingFiles = [];
+  for (const [file, owners] of Object.entries(workspaceState?.uncommittedOwners || {})) {
+    if (!owners.includes(owner)) continue;
+    ownedFiles.push(file);
+    if (owners.some(value => value !== owner)) conflictingFiles.push(file);
+  }
+  return { ownedFiles: unique(ownedFiles).sort(), conflictingFiles: unique(conflictingFiles).sort() };
 }
 
 function integrityDir(config) {
@@ -391,6 +519,9 @@ export {
 
   readTaskIntegrity,
   taskOwnedChangedFiles,
+  taskCommitOwnership,
+  claimTaskChangedFiles,
+  releaseTaskChangedFiles,
   readWorkspaceIntegrity,
   recordTaskIntegrityEvent
 };

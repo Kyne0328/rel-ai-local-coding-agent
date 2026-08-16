@@ -15,6 +15,7 @@ import {
 } from '../parallelTaskSandbox.js';
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
 import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { claimTaskChangedFiles } from '../taskIntegrity.js';
 import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActivity } from '../toolActivity.js';
 import { hasPendingTaskWriter, runWorkspaceOperation } from '../workspaceOperationQueue.js';
 import { finalizeValidationResult } from './completion.js';
@@ -117,6 +118,14 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
           mutationBaselineCommit: baselineEntry?.syncCommit || '',
           mutationTrackingRequired: executionName !== OP.EXEC || !isClearlyReadOnlyExec(args || {})
         });
+        if (sourceWorkspace
+          && executionWorkspace?.taskSandbox !== true
+          && taskId
+          && (executionName === OP.EDIT || executionName === OP.EXEC)
+          && Array.isArray(handled?.changedFiles)
+          && handled.changedFiles.length) {
+          claimTaskChangedFiles(config, taskId, sourceWorkspace.alias, handled.changedFiles);
+        }
         if (handled && typeof handled === 'object' && !Array.isArray(handled) && handled.ok === false && handled.error?.code === 'CANCELLED') {
           context?.cancel?.throwIfCancelled?.();
         }
