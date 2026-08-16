@@ -1,4 +1,6 @@
 
+const downloadBlockedSessions = new WeakSet();
+
 function localWindowWebPreferences(preload, partition, surface = 'application') {  return {
     preload,
     additionalArguments: [`--relai-preload-surface=${surface}`],
@@ -22,7 +24,7 @@ function secureLocalWindow(window, { allowedUrl, onError = () => {} } = {}) {
 
   session?.setPermissionRequestHandler?.((_contents, _permission, callback) => callback(false));
   session?.setPermissionCheckHandler?.(() => false);
-  session?.on?.('will-download', event => event.preventDefault());
+  blockSessionDownloads(session);
   webContents.on?.('will-attach-webview', event => event.preventDefault());
   const blockUnexpectedNavigation = (event, target) => {
     if (isAllowedLocalTarget(target, expectedTarget)) return;
@@ -33,6 +35,13 @@ function secureLocalWindow(window, { allowedUrl, onError = () => {} } = {}) {
   webContents.on?.('will-redirect', blockUnexpectedNavigation);
   webContents.setWindowOpenHandler?.(() => ({ action: 'deny' }));
   return window;
+}
+
+function blockSessionDownloads(session) {
+  if (!session || typeof session.on !== 'function' || downloadBlockedSessions.has(session)) return false;
+  session.on('will-download', event => event.preventDefault());
+  downloadBlockedSessions.add(session);
+  return true;
 }
 
 function isAllowedLocalTarget(target, allowedUrl) {

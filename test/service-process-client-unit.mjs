@@ -1,16 +1,28 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 
 import { createServiceProcessClient } from '../electron/service-process-client.js';
+import { projectServiceActivityEvent, projectServiceActivitySnapshot } from '../electron/service-activity-projection.js';
 
-const serviceProcessSource = fs.readFileSync(new URL('../electron/service-process.js', import.meta.url), 'utf8');
-assert.match(
-  serviceProcessSource,
-  /operationId:\s*String\(event\.operationId \|\| event\.activityEvent\?\.operationId \|\| event\.activityEvent\?\.eventId \|\| ''\)/,
-  'service-process activity projection must preserve the operation correlation ID used by desktop notifications and diagnostics'
-);
+const projectedTask = {
+  taskId: 'task-projection',
+  workspace: 'repo',
+  events: [{ eventId: 'private-timeline' }],
+  currentOperations: [{ id: 'private-operation' }],
+  principalFingerprint: 'private-principal'
+};
+const projectedEvent = projectServiceActivityEvent({
+  phase: 'finished',
+  operationId: 'operation-42',
+  task: projectedTask
+});
+assert.equal(projectedEvent.operationId, 'operation-42', 'service activity must preserve operation correlation across the desktop boundary');
+assert.equal(Object.hasOwn(projectedEvent.task, 'events'), false, 'service activity must not serialize task timelines into Electron IPC');
+assert.equal(Object.hasOwn(projectedEvent.task, 'currentOperations'), false, 'service activity must not serialize active-operation payloads into Electron IPC');
+assert.equal(Object.hasOwn(projectedEvent.task, 'principalFingerprint'), false, 'service activity must not serialize principal fingerprints into Electron IPC');
+assert.equal(projectServiceActivityEvent({ phase: 'progress', task: projectedTask }), null, 'high-frequency progress must be dropped before Electron IPC serialization');
+assert.equal(projectServiceActivitySnapshot({ tasks: [projectedTask] }).tasks[0].taskId, 'task-projection');
 
 class FakeUtilityProcess extends EventEmitter {
   constructor() {
