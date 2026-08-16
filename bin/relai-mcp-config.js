@@ -10,11 +10,8 @@ function printUsage() {
   relai-mcp-config workspace add <alias> <absolute-path>
   relai-mcp-config doctor [--fix] [workspace-path]
   relai-mcp-config setup [alias] [workspace-path]
-  relai-mcp-config import-relai [source-path]
   relai-mcp-config state export <output-path>
   relai-mcp-config state import <input-path> --confirm
-  relai-mcp-config set dashboardEnabled <true|false>
-  relai-mcp-config set maxOutputBytes <number>
 
 Config path: ${getConfigPath()}`);
 }
@@ -22,13 +19,6 @@ Config path: ${getConfigPath()}`);
 function requireArg(value, label) {
   if (!value) throw new Error(`Missing ${label}.`);
   return value;
-}
-
-function parseBool(value, label) {
-  const text = String(value || "").toLowerCase();
-  if (["true", "1", "yes", "on"].includes(text)) return true;
-  if (["false", "0", "no", "off"].includes(text)) return false;
-  throw new Error(`${label} must be true or false.`);
 }
 
 function main() {
@@ -44,9 +34,7 @@ function main() {
     show: handleShow,
     doctor: handleDoctor,
     setup: handleSetup,
-    "import-relai": handleImportRelai,
     state: handleState,
-    set: handleSet,
     workspace: handleWorkspace
   };
   const handler = handlers[command];
@@ -83,11 +71,6 @@ function handleSetup(subcommand, action) {
   console.log(JSON.stringify(result, null, 2));
 }
 
-function handleImportRelai(subcommand) {
-  const result = productUx.importOriginalRelAiConfig({ sourcePath: subcommand || undefined, dryRun: false });
-  console.log(JSON.stringify(result, null, 2));
-}
-
 function handleState(subcommand, action, rest) {
   if (subcommand === "export") {
     const config = readConfig();
@@ -103,23 +86,6 @@ function handleState(subcommand, action, rest) {
   }
   printUsage();
   process.exitCode = 1;
-}
-
-function handleSet(subcommand, action) {
-  const key = requireArg(subcommand, "setting key");
-  const value = requireArg(action, "setting value");
-  const config = readConfig({ allowMissing: true });
-  if (["dashboardEnabled"].includes(key)) {
-    config[key] = parseBool(value, key);
-  } else if (["maxOutputBytes"].includes(key)) {
-    const number = Number(value);
-    if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
-    config[key] = number;
-  } else {
-    throw new Error(`Unsupported setting '${key}'. Supported settings: dashboardEnabled, maxOutputBytes.`);
-  }
-  writeConfig(config);
-  console.log(`Set ${key}=${config[key]}`);
 }
 
 function handleWorkspace(subcommand, action, rest) {

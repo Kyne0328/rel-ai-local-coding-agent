@@ -81,6 +81,15 @@ assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profileRegistry.js')
 assert.equal(fs.existsSync(path.join(root, 'docs', 'TOOL_PROFILES.md')), false);
 assert.equal(fs.existsSync(path.join(root, 'skills-lock.json')), false, 'removed built-in skill management must not leave an empty skills-lock.json authority behind');
 
+const configCli = fs.readFileSync(path.join(root, 'bin', 'relai-mcp-config.js'), 'utf8');
+for (const removedSetting of ['dashboardEnabled', 'maxOutputBytes', 'function handleSet(', 'set: handleSet', 'import-relai']) {
+  assert.equal(configCli.includes(removedSetting), false, `config CLI still exposes removed setting surface ${removedSetting}`);
+}
+const productUx = fs.readFileSync(path.join(root, 'src', 'productUx.js'), 'utf8');
+for (const removedImporter of ['importOriginalRelAiConfig', 'trustedDefaultConfigPath', 'opencode.json']) {
+  assert.equal(productUx.includes(removedImporter), false, `legacy Rel.AI config importer still contains ${removedImporter}`);
+}
+
 const removedCompatibilityNames = [
   'relai_write', 'relai_replace', 'relai_browser',
   'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr'
