@@ -139,6 +139,14 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
     return `<details class="application-update-release-notes" open><summary>What's new in ${version}</summary><div class="application-update-release-notes-body">${notes}</div></details>`;
   }
 
+  const releases = Array.isArray(installedReleaseNotes?.releases)
+    ? installedReleaseNotes.releases.filter(entry => String(entry?.version || '').trim())
+    : [];
+  if (releases.length) {
+    const body = releases.map(changelogReleaseHtml).join('');
+    return `<details class="application-update-release-notes"><summary>What changed · Changelog</summary><div class="application-update-release-notes-body">${body}</div></details>`;
+  }
+
   const version = String(installedReleaseNotes?.version || '').trim();
   const headline = String(installedReleaseNotes?.headline || '').trim();
   const bullets = Array.isArray(installedReleaseNotes?.bullets)
@@ -150,6 +158,26 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
     bullets.length ? `<ul>${bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''
   ].join('');
   return `<details class="application-update-release-notes"><summary>What changed · v${escapeHtml(version)}</summary><div class="application-update-release-notes-body">${body}</div></details>`;
+}
+
+function changelogReleaseHtml(release = {}) {
+  const version = String(release.version || '').trim();
+  if (!version) return '';
+  const date = String(release.date || '').trim();
+  const sections = Array.isArray(release.sections) ? release.sections : [];
+  let content = sections.map(section => {
+    const title = String(section?.title || '').trim();
+    const bullets = Array.isArray(section?.bullets) ? section.bullets.filter(Boolean) : [];
+    if (!title && !bullets.length) return '';
+    return `<div class="application-update-release-note">${title ? `<strong>${escapeHtml(title)}</strong>` : ''}${bullets.length ? `<ul>${bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</div>`;
+  }).join('');
+  if (!content) {
+    const headline = String(release.headline || '').trim();
+    const bullets = Array.isArray(release.bullets) ? release.bullets.filter(Boolean) : [];
+    content = `${headline ? `<p class="application-update-release-headline">${escapeHtml(headline)}</p>` : ''}${bullets.length ? `<ul>${bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}`;
+  }
+  if (!content) return '';
+  return `<section class="application-update-release-note"><strong>v${escapeHtml(version)}${date ? ` · ${escapeHtml(date)}` : ''}</strong>${content}</section>`;
 }
 
 function supportPolicyHtml(policy) {
