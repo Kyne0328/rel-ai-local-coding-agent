@@ -1,18 +1,15 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
 import { activeToolCount, activeToolNames, activeToolSurface } from './helpers/tool-surface.mjs';
+import { startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = await reservePort();
 const token = 'http-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-smoke-'));
 const profile = path.join(stateDir, 'connection.json');
@@ -24,32 +21,16 @@ config.stateDir = stateDir;
 config.auditLogPath = path.join(stateDir, 'audit.jsonl');
 config.workspaces = { repo: { ...(config.workspaces?.repo || {}), path: root } };
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
-  cwd: root,
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    REL_AI_MCP_CONFIG: configPath,
-    REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_STATE_DIR: stateDir,
-    REL_AI_MCP_MAX_BODY_BYTES: String(12 * 1024 * 1024)
-  }
+const { child, base } = await startHttpTestServer({
+  root,
+  configPath,
+  token,
+  stateDir,
+  env: { REL_AI_MCP_MAX_BODY_BYTES: String(12 * 1024 * 1024) }
 });
-let stderr = '';
-child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-const base = `http://127.0.0.1:${port}`;
-
-async function waitForHealth() {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try { if ((await fetch(`${base}/health`)).ok) return; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  throw new Error(`HTTP server did not become healthy. ${stderr}`);
-}
 
 let client = null;
 try {
-  await waitForHealth();
   const health = await fetch(`${base}/health`).then(response => response.json());
   assert.equal(health.ok, true);
   assert.ok(health.transports.includes('streamable-http'));
@@ -253,23 +234,9 @@ try {
   assert.equal(getMcp.headers.get('allow'), 'POST');
 } finally {
   if (client) await client.close().catch(() => {});
-  child.kill('SIGKILL');
-  await once(child, 'close').catch(() => {});
+  await stopHttpTestServer(child);
   assert.equal(fs.readFileSync(profile, 'utf8'), originalProfile);
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
 console.log('HTTP MCP 2026-07-28 discovery, stateless tools, resources, dashboard, and POST-only lifecycle smoke test passed.');
-
-function reservePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const selectedPort = typeof address === 'object' && address ? address.port : 0;
-      server.close(error => error ? reject(error) : resolve(selectedPort));
-    });
-  });
-}

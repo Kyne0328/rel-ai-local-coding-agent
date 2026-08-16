@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION, postMcp } from './helpers/http-mcp.mjs';
 import { activeToolCount } from './helpers/tool-surface.mjs';
+import { startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const port = await reservePort();
 const token = 'native-tasks-http-token';
 const extensionId = 'io.modelcontextprotocol/tasks';
 const eligibleTool = 'relai_exec';
@@ -32,27 +29,7 @@ config.stateDir = stateDir;
 config.auditLogPath = path.join(stateDir, 'audit.jsonl');
 config.workspaces = { repo: { ...(config.workspaces?.myapp || {}), path: workspaceDir } };
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
-  cwd: root,
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    REL_AI_MCP_CONFIG: configPath,
-    REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_STATE_DIR: stateDir
-  }
-});
-let stderr = '';
-child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-const base = `http://127.0.0.1:${port}`;
-
-async function waitForHealth() {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try { if ((await fetch(`${base}/health`)).ok) return; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  throw new Error(`HTTP server did not become healthy. ${stderr}`);
-}
+const { child, base } = await startHttpTestServer({ root, configPath, token, stateDir });
 
 async function callTool(client, id, name, args, capabilities = tasksCapability) {
   return client.request('tools/call', { name, arguments: args }, { id, name, capabilities });
@@ -78,8 +55,6 @@ function sleepCommand(durationMs) {
 
 let client = null;
 try {
-  await waitForHealth();
-
   client = await createHttpMcpSession(base, {
     token,
     clientName: 'native-tasks-client',
@@ -189,22 +164,8 @@ try {
   assert.equal(initializeInsideModernEnvelope.body.error?.code, -32601);
 } finally {
   if (client) await client.close().catch(() => {});
-  child.kill('SIGKILL');
-  await once(child, 'close').catch(() => {});
+  await stopHttpTestServer(child);
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
 console.log('MCP 2026-07-28 synchronous tool execution and Tasks protocol routing passed.');
-
-function reservePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const selectedPort = typeof address === 'object' && address ? address.port : 0;
-      server.close(error => error ? reject(error) : resolve(selectedPort));
-    });
-  });
-}
