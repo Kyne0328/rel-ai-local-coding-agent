@@ -23,8 +23,8 @@
   </header>
 
   <section class="app-card fallback-intro" aria-label="Recovery information">
-    <strong>Backup connection window</strong>
-    <p>This window appears only when the main dashboard cannot load. Fix the connection here, then choose Open dashboard to return to the app.</p>
+    <strong>Rel.AI recovery</strong>
+    <p>This window appears when the main dashboard cannot load. Restart the connection first; if that does not recover Rel.AI, restart the app or edit the connection settings.</p>
   </section>
 
   <section class="app-card status-hero" id="statusHero" aria-labelledby="statusTitle" aria-describedby="statusDescription">
@@ -76,7 +76,8 @@
       <p id="errorMessage"></p>
     </div>
     <div class="alert-actions">
-      <button class="primary" id="retryBtn" type="button">Retry</button>
+      <button class="primary" id="retryBtn" type="button">Restart connection</button>
+      <button class="secondary" id="restartAppBtn" type="button">Restart Rel.AI</button>
       <button class="secondary" id="errorSettingsBtn" type="button">Edit connection</button>
       <button class="secondary" id="copyDiagnosticsBtn" type="button">Copy details</button>
     </div>

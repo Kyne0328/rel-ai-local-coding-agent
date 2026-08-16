@@ -50,7 +50,7 @@ function connectionView(status) {
     return {
       key: 'failed', badge: 'Needs attention', eyebrow: 'Connection failed',
       title: 'Rel.AI could not finish connecting.',
-      description: 'Review the error below, choose Edit connection if needed, then retry.'
+      description: 'Restart the connection first. If the problem continues, restart Rel.AI or edit the connection settings.'
     };
   }
   return {
@@ -467,7 +467,10 @@ function bindEvents() {
       : window.electronAPI.startServer()));
   });
   document.getElementById('retryBtn').addEventListener('click', () => {
-    runAsync(withBusy(document.getElementById('retryBtn'), 'Retrying…', () => window.electronAPI.startServer()));
+    runAsync(withBusy(document.getElementById('retryBtn'), 'Restarting connection…', () => window.electronAPI.restartService()));
+  });
+  document.getElementById('restartAppBtn').addEventListener('click', () => {
+    runAsync(withBusy(document.getElementById('restartAppBtn'), 'Restarting Rel.AI…', () => window.electronAPI.relaunchApp()));
   });
   document.getElementById('notificationToggleBtn').addEventListener('click', toggleNotifications);
   document.getElementById('copyDiagnosticsBtn').addEventListener('click', () => {
