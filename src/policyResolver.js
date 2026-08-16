@@ -4,8 +4,10 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { runProcess } from './process.js';
 import { gitStatusArgs, parseGitStatus } from "./repo/gitStatus.js";
+import { writeJsonAtomic } from './durableState.js';
+import { DEFAULT_TASK_STALE_MS } from './taskTiming.js';
 
-const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
+const SESSION_IDLE_TTL_MS = DEFAULT_TASK_STALE_MS;
 const SESSION_TOUCH_PERSIST_INTERVAL_MS = 60 * 1000;
 const POLICY_CACHE_RECHECK_MS = 250;
 const policyCache = new Map();
@@ -196,8 +198,7 @@ function touchSessionPolicy(config, alias, taskId = '') {
 }
 
 function persistPolicy(filePath, policy) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(policy, null, 2)}\n`, { mode: 0o600 });
+  writeJsonAtomic(filePath, policy, { mode: 0o600, spacing: 2 });
 }
 
 async function ensureSessionStarted(config, alias, workspaceRoot, options = {}) {

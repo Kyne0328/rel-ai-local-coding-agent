@@ -18,7 +18,7 @@ import { runUiAction } from '../webAutomationManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
-import { taskOwnedChangedFiles } from '../taskIntegrity.js';
+import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
@@ -89,7 +89,14 @@ const HANDLERS = Object.freeze({
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
   status: relaiStatus,
-  gitCommit: inWorkspace((workspace, config, args, context) => relaiGitCommit(workspace, config, withTaskOwnedCommitContext(config, workspace, args, context))),
+  gitCommit: inWorkspace(async (workspace, config, args, context) => {
+    const commitArgs = withTaskOwnedCommitContext(config, workspace, args, context);
+    const result = await relaiGitCommit(workspace, config, commitArgs);
+    if (result?.ok === true && commitArgs._taskId && Array.isArray(result.paths) && result.paths.length) {
+      releaseTaskChangedFiles(config, commitArgs._taskId, workspace.alias, result.paths);
+    }
+    return result;
+  }),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
@@ -143,11 +150,13 @@ function withTaskOwnedReviewContext(config, workspace, args, context = {}) {
 function withTaskOwnedCommitContext(config, workspace, args, context = {}) {
   const taskId = String(context.taskId || args.work_id || '').trim();
   if (!taskId) return args;
-  const requestState = requestTaskState(context, taskId);
-  const owned = Array.isArray(requestState?.integrity?.taskOwnedChangedFiles)
-    ? [...requestState.integrity.taskOwnedChangedFiles]
-    : taskOwnedChangedFiles(config, taskId, workspace.alias);
-  return { ...args, _taskOwnedPaths: owned };
+  const ownership = taskCommitOwnership(config, taskId, workspace.alias);
+  return {
+    ...args,
+    _taskId: taskId,
+    _taskOwnedPaths: ownership.ownedFiles,
+    _taskConflictingPaths: ownership.conflictingFiles
+  };
 }
 
 function requestTaskState(context, taskId) {

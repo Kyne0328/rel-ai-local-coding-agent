@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { getOperationDefinition } from '../src/tools/actionDefinitions.js';
+import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
 import { hasPendingTaskWriter, runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
 
 const order = [];
@@ -137,6 +139,38 @@ assert.deepEqual(globalOrder, [
   'task-b:end'
 ]);
 assert.equal(pendingWorkspaceOperations(), 0);
+
+// Standalone task completion is a short repository-wide critical section. It must
+// not race a source-workspace operation from another logical task after validation
+// has been checked but before completion is accepted.
+{
+  const finishBehavior = getOperationDefinition(OP.WORK_FINISH)?.behavior;
+  assert.equal(finishBehavior?.concurrencyScope, 'workspace', 'work.finish must use the workspace barrier');
+
+  const sourceOperationStarted = deferred();
+  const releaseSourceOperation = deferred();
+  const sourceOperation = runWorkspaceOperation('finish-barrier', async () => {
+    sourceOperationStarted.resolve();
+    await releaseSourceOperation.promise;
+  }, { mode: 'write', scope: 'task', taskId: 'task-b' });
+  await sourceOperationStarted.promise;
+
+  let completionEntered = false;
+  const completion = runWorkspaceOperation('finish-barrier', async () => {
+    completionEntered = true;
+  }, {
+    mode: 'write',
+    scope: finishBehavior.concurrencyScope,
+    taskId: 'task-a'
+  });
+  await nextTurn();
+  assert.equal(completionEntered, false, 'work.finish must wait until concurrent source-workspace activity leaves the validation/completion boundary');
+
+  releaseSourceOperation.resolve();
+  await Promise.all([sourceOperation, completion]);
+  assert.equal(completionEntered, true);
+  assert.equal(pendingWorkspaceOperations(), 0);
+}
 
 // A rejected operation must still release the lock.
 await assert.rejects(

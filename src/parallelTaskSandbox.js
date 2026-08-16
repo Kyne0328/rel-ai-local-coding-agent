@@ -9,6 +9,7 @@ import { REUSABLE_DEPENDENCY_ROOTS, isReusableDependencyPath } from './reusableD
 import { isSecretPath } from './safety.js';
 import { getStateDir } from './statePaths.js';
 import { readTaskHistorySessionRecord, recordTaskRecoveryState } from './taskHistoryStore.js';
+import { claimTaskChangedFiles } from './taskIntegrity.js';
 import { isTerminalTaskStatus } from './taskState.js';
 import { taskError } from './toolActivity.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
@@ -377,6 +378,7 @@ async function promoteTaskSandbox(sourceWorkspace, config, taskId, options = {})
           throw promotionError('TASK_SANDBOX_PROMOTION_FAILED', 'A private task patch passed preflight but could not be applied to the visible workspace. The sandbox was preserved.');
         }
       }
+      claimTaskChangedFiles(config, taskId, sourceWorkspace.alias, changedFiles);
       nextSourceRevision = await workspaceRevision(sourceWorkspace, config);
     } finally {
       fs.rmSync(path.dirname(patchPath), { recursive: true, force: true });

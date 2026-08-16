@@ -8,6 +8,7 @@ import { flushAuditWrites } from '../src/audit.js';
 import { readConfig } from '../src/config.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { flushTaskHistoryPersistence, readTaskHistory, readTaskHistorySessionRecord, recordWorkflowState } from '../src/taskHistoryStore.js';
+import { taskCommitOwnership } from '../src/taskIntegrity.js';
 import { ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, writeSession } from '../src/taskHistoryStorage.js';
 import { DEFAULT_TASK_IDLE_MS, getToolActivity, resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
@@ -59,6 +60,7 @@ try {
   assert.equal(committed.ok, true);
   assert.equal(committed.addAll, false);
   assert.deepEqual(committed.paths, ['src/committed-owned.js']);
+  assert.deepEqual(taskCommitOwnership(readConfig(), committedTask, 'app').ownedFiles, [], 'successful task commit must release live path ownership before another task can publish');
   assert.equal(git('status', '--porcelain=v1', '--', 'src/committed-owned.js'), '', 'committed task-owned path must be clean immediately');
   assert.equal(git('diff', '--cached', '--name-only', '--', 'src/committed-owned.js'), '', 'committed path must not remain reverse-staged');
   assert.ok(git('status', '--porcelain=v1', '--', 'ambient-unrelated.txt').startsWith('??'), 'ambient untracked work must remain untouched');

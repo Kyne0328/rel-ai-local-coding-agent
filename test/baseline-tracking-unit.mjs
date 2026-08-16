@@ -182,4 +182,32 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
+// 9. Exact work_id ownership survives loss/expiry of the short-lived session policy.
+// The task-integrity ledger is the durable authority for which dirty paths belong to
+// a resumable task; the policy file is only needed to classify ambient baseline work.
+{
+  const repo = makeRepo();
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
+  const config = { stateDir, workspaces: { myapp: { path: repo } } };
+  const taskId = 'task-durable-ownership';
+  await recordTaskIntegrityEvent(config, {
+    ts: new Date().toISOString(), taskId, workspace: 'myapp', taskIdentityVersion: 2, tool: 'work.begin', ok: true
+  });
+  fs.writeFileSync(path.join(repo, 'tracked.txt'), 'durable task mutation\n');
+  await recordTaskIntegrityEvent(config, {
+    ts: new Date().toISOString(), taskId, workspace: 'myapp', taskIdentityVersion: 2, tool: 'edit', ok: true, changedFiles: ['tracked.txt']
+  });
+
+  const status = git(['status', '--short', '--branch', '-z', '--untracked-files=all'], { cwd: repo, encoding: 'utf8' }).stdout;
+  const ownership = classifyStatusOwnership({ alias: 'myapp', path: repo }, config, status, taskId);
+  assert.equal(ownership.hasSession, false, 'the fixture intentionally has no live policy file');
+  assert.equal(ownership.baselineSource, null, 'missing policy must keep ambient baseline ownership conservative');
+  assert.deepEqual(ownership.sessionTouched, ['tracked.txt'], 'explicit task ownership must come from durable task integrity even without a policy file');
+
+  const scopedStatus = await workspaceGitStatus({ alias: 'myapp', path: repo }, config, { work_id: taskId });
+  assert.deepEqual(scopedStatus.sessionChangedFiles, ['tracked.txt'], 'resumed task status must keep showing its durable changed files after policy expiry/loss');
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.rmSync(stateDir, { recursive: true, force: true });
+}
+
 console.log('baseline-tracking unit tests passed.');

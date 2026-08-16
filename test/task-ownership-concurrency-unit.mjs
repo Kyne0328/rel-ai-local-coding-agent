@@ -31,6 +31,7 @@ function git(...args) {
 try {
   fs.mkdirSync(path.join(workspacePath, 'src'), { recursive: true });
   fs.writeFileSync(path.join(workspacePath, 'src', 'base.js'), 'export const base = true;\n');
+  fs.writeFileSync(path.join(workspacePath, 'src', 'shared.js'), 'export const left = 0;\nexport const right = 0;\n');
   fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ type: 'module' }, null, 2));
   git('init', '--initial-branch=main');
   git('config', 'user.email', 'relai@example.test');
@@ -69,6 +70,35 @@ try {
   const ownedB = classifyStatusOwnership({ alias: 'app', ...workspace }, config, status, taskB.work_id);
   assert.deepEqual(ownedA.sessionTouched, ['src/task-a.js'], 'task A must not claim task B changes from the shared session baseline');
   assert.deepEqual(ownedB.sessionTouched, ['src/task-b.js'], 'task B must not claim task A changes from the shared session baseline');
+
+  await callTool('relai_edit', {
+    workspace: 'app', work_id: taskA.work_id, path: 'src/shared.js', content: 'export const left = 1;\nexport const right = 0;\n'
+  });
+  await callTool('relai_edit', {
+    workspace: 'app', work_id: taskB.work_id, path: 'src/shared.js', content: 'export const left = 1;\nexport const right = 2;\n'
+  });
+  assert.equal(fs.readFileSync(path.join(workspacePath, 'src', 'shared.js'), 'utf8').replaceAll('\r\n', '\n'), 'export const left = 1;\nexport const right = 2;\n');
+
+  const headBeforeRejectedPublish = git('rev-parse', 'HEAD').trim();
+  const sharedPublish = await callTool('relai_publish', {
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'must not absorb shared task work'
+  });
+  assert.equal(sharedPublish.ok, false, 'a task commit must refuse paths currently owned by another logical task');
+  assert.match(String(sharedPublish.error || ''), /other-task work|ownership/i);
+  assert.equal(git('rev-parse', 'HEAD').trim(), headBeforeRejectedPublish, 'rejected shared ownership must not create Git history');
+  assert.equal(git('diff', '--cached', '--name-only').trim(), '', 'rejected shared ownership must not disturb the visible Git index');
+
+  const foreignPublish = await callTool('relai_publish', {
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'must stay task scoped', paths: ['src/task-b.js']
+  });
+  assert.equal(foreignPublish.ok, false, 'explicit paths must not widen a logical task commit beyond current ownership');
+  assert.match(String(foreignPublish.error || ''), /outside current task ownership/i);
+
+  const addAllPublish = await callTool('relai_publish', {
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'must not add all workspace changes', addAll: true
+  });
+  assert.equal(addAllPublish.ok, false, 'addAll must not bypass logical-task ownership');
+  assert.match(String(addAllPublish.error || ''), /cannot widen to addAll/i);
 
   await Promise.all([
     callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: taskA.work_id, reason: 'Ownership concurrency coverage complete.' }),

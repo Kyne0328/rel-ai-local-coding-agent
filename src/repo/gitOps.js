@@ -99,12 +99,16 @@ function classifyStatusOwnership(workspace, config, statusOutput, requestedTaskI
   }
 
   const dirtySet = new Set(groups.entries.map(entry => entry.path));
-  const taskTouched = hasSession && taskId
-    ? safeTaskOwnedChangedFiles(config, taskId, workspace.alias).filter(file => dirtySet.has(file))
+  const requestedId = String(requestedTaskId || '').trim();
+  const ownershipTaskId = requestedId || taskId;
+  const taskTouched = ownershipTaskId
+    ? safeTaskOwnedChangedFiles(config, ownershipTaskId, workspace.alias).filter(file => dirtySet.has(file))
     : [];
-  const sessionTouched = hasSession && taskId
+  const sessionTouched = requestedId
     ? taskTouched
-    : groups.sessionChanged;
+    : hasSession && taskId
+      ? taskTouched
+      : groups.sessionChanged;
 
   return {
     branchRaw: parsed.branchRaw,
@@ -365,18 +369,68 @@ async function relaiGitCommit(workspace, config, args = {}) {
   const dryRun = Boolean(args.dryRun);
   const authorization = normalizeSensitiveAuthorization(workspace, args);
   const hasTaskOwnedScope = Array.isArray(args._taskOwnedPaths);
-  const requestedPaths = Array.isArray(args.paths) && args.paths.length > 0
-    ? args.paths
-    : hasTaskOwnedScope && args.addAll !== true ? args._taskOwnedPaths : [];
-  const paths = [...new Set(requestedPaths.map((item) => resolveSafePath(workspace.path, item, {
+  const explicitPaths = Array.isArray(args.paths) && args.paths.length > 0;
+  const taskOwnedPaths = hasTaskOwnedScope
+    ? [...new Set(args._taskOwnedPaths.map(item => normalizeGitPath(item)).filter(Boolean))]
+    : [];
+  const requestedPaths = explicitPaths ? args.paths : hasTaskOwnedScope ? taskOwnedPaths : [];
+  let paths = [...new Set(requestedPaths.map((item) => resolveSafePath(workspace.path, item, {
     operation: "commit",
     allowSensitive: authorization.authorizedPaths.has(normalizeGitPath(item))
   }).relativePath))];
-  const addAll = args.addAll === true || (!hasTaskOwnedScope && paths.length === 0 && args.addAll !== false);
+  const addAll = !hasTaskOwnedScope && (args.addAll === true || (paths.length === 0 && args.addAll !== false));
   const statusRead = workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
   statusRead.catch(() => {});
   await repoProbe;
   const statusBefore = await statusRead;
+
+  if (hasTaskOwnedScope && args.addAll === true) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      message,
+      addAll: false,
+      paths: [],
+      statusBefore,
+      error: 'Logical task commits cannot widen to addAll. Omit addAll to commit all currently task-owned paths.'
+    };
+  }
+  if (hasTaskOwnedScope && explicitPaths) {
+    const taskOwnedSet = new Set(taskOwnedPaths);
+    const outsideTaskScope = paths.filter(file => !taskOwnedSet.has(file));
+    if (outsideTaskScope.length) {
+      return {
+        ok: false,
+        workspace: workspace.alias,
+        message,
+        addAll: false,
+        paths: [],
+        outsideTaskScope,
+        statusBefore,
+        error: `Logical task commits cannot include paths outside current task ownership: ${outsideTaskScope.join(', ')}.`
+      };
+    }
+  }
+  if (hasTaskOwnedScope) {
+    const dirtySet = new Set(statusBefore.changedFiles || []);
+    paths = paths.filter(file => dirtySet.has(file));
+    const conflictSet = new Set((Array.isArray(args._taskConflictingPaths) ? args._taskConflictingPaths : [])
+      .map(item => normalizeGitPath(item))
+      .filter(Boolean));
+    const conflictPaths = paths.filter(file => conflictSet.has(file));
+    if (conflictPaths.length) {
+      return {
+        ok: false,
+        workspace: workspace.alias,
+        message,
+        addAll: false,
+        paths,
+        conflictPaths,
+        statusBefore,
+        error: `Task-owned commit is ambiguous because these paths also contain ambient or other-task work: ${conflictPaths.join(', ')}. Rel.AI preserved the working tree and refused to combine ownership implicitly.`
+      };
+    }
+  }
   if (dryRun) {
     return {
       ok: true,
