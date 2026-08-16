@@ -99,13 +99,19 @@ assert.equal(prevented, true);
 assert.equal(first.visible, false, 'routine close must hide the fallback while the tray app stays alive');
 const sentBeforeHiddenStatus = first.sent.length;
 manager.sendStatus({ serverRunning: true, taskActivity: { state: 'working', activeCalls: 2 } });
-assert.equal(first.sent.length, sentBeforeHiddenStatus, 'hidden recovery windows must not receive high-frequency status IPC');
+manager.sendLog('hidden log one');
+manager.sendLog('hidden log two');
+assert.equal(first.sent.length, sentBeforeHiddenStatus, 'hidden recovery windows must not receive high-frequency status or log IPC');
 assert.equal(manager.show(), first, 'show must reuse the same fallback window');
-assert.equal(first.sent.length, sentBeforeHiddenStatus + 1, 'reopening recovery must receive the latest status immediately');
-assert.deepEqual(first.sent.at(-1), {
-  channel: 'server:status',
-  payload: { serverRunning: true, taskActivity: { state: 'working', activeCalls: 2 } }
-});
+assert.equal(first.sent.length, sentBeforeHiddenStatus + 3, 'reopening recovery must receive the latest status and logs accumulated while hidden');
+assert.deepEqual(first.sent.slice(-3), [
+  {
+    channel: 'server:status',
+    payload: { serverRunning: true, taskActivity: { state: 'working', activeCalls: 2 } }
+  },
+  { channel: 'server:log', payload: 'hidden log one' },
+  { channel: 'server:log', payload: 'hidden log two' }
+]);
 assert.equal(windows.length, 1);
 
 quitting = true;
