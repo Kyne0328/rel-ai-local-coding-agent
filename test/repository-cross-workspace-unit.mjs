@@ -102,11 +102,10 @@ try {
   const cached = await repositoryIntelligence.cachedContext(client, config, { maxResults: 10 });
   assert.ok(cached.crossWorkspace.relationships.some(item => item.type === 'CROSS_HTTP_CALLS'));
 
-  const sandboxClient = { ...client, alias: '__relai_sandbox_client', taskSandbox: true, sourceAlias: 'client' };
-  const sandboxResult = await repositoryIntelligence.architecture(sandboxClient, config, { maxResults: 50 });
-  const sandboxPeers = sandboxResult.architecture.crossWorkspace.peers.map(item => item.workspace);
-  assert.equal(sandboxPeers.includes('client'), false, 'query-worker serialization must preserve sandbox source identity and exclude the source workspace');
-  assert.ok(sandboxPeers.includes('api'));
+  const architectureResult = await repositoryIntelligence.architecture(client, config, { maxResults: 50 });
+  const architecturePeers = architectureResult.architecture.crossWorkspace.peers.map(item => item.workspace);
+  assert.equal(architecturePeers.includes('client'), false, 'query-worker serialization must exclude the current workspace');
+  assert.ok(architecturePeers.includes('api'));
 } finally {
   await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });

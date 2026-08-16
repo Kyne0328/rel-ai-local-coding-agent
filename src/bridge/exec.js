@@ -244,56 +244,6 @@ function changedStatusFiles(before, after) {
   return boundedChangedFiles(files);
 }
 
-async function changedFilesSinceCommit(workspace, config, commit) {
-  const baseline = String(commit || '').trim();
-  if (!/^[0-9a-f]{40,64}$/i.test(baseline)) return null;
-  const [tracked, untracked] = await Promise.all([
-    runProcess('git', ['diff', '--name-status', '-z', '--no-renames', baseline, '--'], {
-      cwd: workspace.path,
-      timeout: 30000,
-      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
-    }, config),
-    runProcess('git', ['ls-files', '-t', '-z', '--others', '--exclude-standard'], {
-      cwd: workspace.path,
-      timeout: 30000,
-      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
-    }, config)
-  ]);
-  if (tracked.exitCode !== 0 || tracked.stdoutTruncated) return null;
-  if (untracked.exitCode !== 0 || untracked.stdoutTruncated) return null;
-  return boundedChangedFiles([
-    ...parseNameStatusPaths(tracked.stdout),
-    ...parseTaggedUntrackedPaths(untracked.stdout)
-  ]);
-}
-
-function parseNameStatusPaths(output) {
-  const records = String(output || '').split('\0').filter(Boolean);
-  const paths = [];
-  for (let index = 0; index < records.length; index += 1) {
-    const record = records[index];
-    if (!record) continue;
-    const tab = record.indexOf('\t');
-    if (tab >= 0) {
-      const candidate = record.slice(tab + 1);
-      if (candidate) paths.push(candidate);
-      continue;
-    }
-    const next = records[index + 1];
-    if (/^[A-Z][0-9]*$/i.test(record) && next) {
-      paths.push(next);
-      index += 1;
-    }
-  }
-  return paths;
-}
-
-function parseTaggedUntrackedPaths(output) {
-  return String(output || '').split('\0').filter(Boolean).map(record =>
-    record.startsWith('? ') ? record.slice(2) : record
-  ).filter(Boolean);
-}
-
 function boundedChangedFiles(files) {
   const uniqueFiles = [...new Set(files.map(file => String(file || '').replaceAll('\\', '/')).filter(Boolean))]
     .filter(file => !isReusableDependencyPath(file))
@@ -315,9 +265,8 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   const env = normalizeCommandEnv(args.env);
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, 2 * 1024 * 1024);
-  const sandboxBaseline = workspace.taskSandbox === true ? String(context.mutationBaselineCommit || '').trim() : '';
   const trackMutation = context.mutationTrackingRequired !== false;
-  const statusBefore = !trackMutation || sandboxBaseline ? null : await readGitStatusMap(workspace, config);
+  const statusBefore = trackMutation ? await readGitStatusMap(workspace, config) : null;
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
@@ -351,14 +300,6 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   if (!trackMutation) {
     changed = { files: [], truncated: false };
     mutationTracking = 'declared-read-only';
-  } else if (sandboxBaseline) {
-    changed = await changedFilesSinceCommit(workspace, config, sandboxBaseline);
-    if (changed) mutationTracking = 'sandbox-baseline';
-    else {
-      const statusAfter = await readGitStatusMap(workspace, config);
-      changed = statusAfter ? boundedChangedFiles([...statusAfter.keys()]) : { files: [], truncated: false };
-      if (statusAfter) mutationTracking = 'sandbox-status-fallback';
-    }
   } else {
     const statusAfter = await readGitStatusMap(workspace, config);
     changed = changedStatusFiles(statusBefore, statusAfter);

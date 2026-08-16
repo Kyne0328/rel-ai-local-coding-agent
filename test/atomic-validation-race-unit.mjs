@@ -128,20 +128,28 @@ try {
   }, context);
 
   await validationStarted;
-  await callTool('relai_edit', {
+  let concurrentEditCompleted = false;
+  const concurrentEdit = callTool('relai_edit', {
     workspace: 'app',
     work_id: primaryTask,
     path: 'src/atomic-race.js',
     oldText: 'export const atomicValue = 1;',
     newText: 'export const atomicValue = 1;\nexport const concurrentValue = 2;'
-  }, context);
+  }, context).then(result => {
+    concurrentEditCompleted = true;
+    return result;
+  });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  assert.equal(concurrentEditCompleted, false, 'a mutating edit must wait while atomic validation and completion hold the workspace barrier');
   fs.writeFileSync(validationReleasePath, 'release\\n');
 
   const completion = await completionPromise;
-  assert.equal(completion.ok, true, 'relevant concurrent Rel.AI changes must trigger one internal locked revalidation instead of a user-visible retry');
+  assert.equal(completion.ok, true, 'atomic validation must complete against one stable visible workspace state');
   assert.equal(completion.completionKnown, true);
   assert.equal(completion.work_id, validatingTask);
   assert.equal(completion.completionSource, 'relai_validate:checks');
+  await concurrentEdit;
+  assert.equal(concurrentEditCompleted, true, 'the queued edit must run after validation releases the workspace barrier');
 
   fs.rmSync(validationStartedPath, { force: true });
   fs.rmSync(validationReleasePath, { force: true });
@@ -164,18 +172,26 @@ try {
   }, context);
 
   await scopedValidationStarted;
-  await callTool('relai_edit', {
+  let unrelatedEditCompleted = false;
+  const unrelatedEdit = callTool('relai_edit', {
     workspace: 'app',
     work_id: primaryTask,
     path: 'src/unrelated-validation.js',
     content: 'export const unrelated = true;\n'
-  }, context);
+  }, context).then(result => {
+    unrelatedEditCompleted = true;
+    return result;
+  });
+  await new Promise(resolve => setTimeout(resolve, 25));
+  assert.equal(unrelatedEditCompleted, false, 'all visible workspace mutations must wait for atomic validation completion');
   fs.writeFileSync(validationReleasePath, 'release\\n');
 
   const scopedCompletion = await scopedCompletionPromise;
-  assert.equal(scopedCompletion.ok, true, 'unrelated concurrent changes must not invalidate task-scoped validation');
+  assert.equal(scopedCompletion.ok, true, 'task-scoped validation must complete before later unrelated mutations enter');
   assert.equal(scopedCompletion.completionKnown, true);
   assert.equal(scopedCompletion.work_id, scopedTask);
+  await unrelatedEdit;
+  assert.equal(unrelatedEditCompleted, true);
 
   await callTool('relai_work', {
     action: 'cancel',

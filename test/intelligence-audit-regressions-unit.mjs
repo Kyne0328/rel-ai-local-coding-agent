@@ -58,14 +58,14 @@ assert.equal(peerHasStrongRelationshipEvidence(
   { packageInfo: { name: 'api-service', dependencies: new Set() }, hints: [{ type: 'HANDLES', targetName: 'POST /api/tasks' }, { type: 'HANDLES', targetName: 'GET /api/users' }] }
 ), true, 'two matching generic HTTP contracts provide enough corroboration');
 
-const sandboxPeers = configuredPeers(
-  { alias: '__relai_sandbox_task', path: 'C:/tmp/sandbox', taskSandbox: true, sourceAlias: 'rel-ai-mcp' },
+const configuredPeerList = configuredPeers(
+  { alias: 'rel-ai-mcp', path: 'C:/repos/rel-ai-mcp' },
   { workspaces: {
     'rel-ai-mcp': { path: 'C:/repos/rel-ai-mcp' },
     'other-app': { path: 'C:/repos/other-app' }
   } }
 );
-assert.deepEqual(sandboxPeers.map(peer => peer.alias), ['other-app'], 'a task sandbox must never cross-link to its own source workspace');
+assert.deepEqual(configuredPeerList.map(peer => peer.alias), ['other-app'], 'cross-workspace discovery must exclude the current workspace');
 
 assert.equal(repositoryFreshness({ dirty: true, metadata: { generation: 5 } }, { id: 5 }), 'stale');
 assert.equal(repositoryFreshness({ dirty: false, metadata: { generation: 5 } }, { id: 5 }), 'current');

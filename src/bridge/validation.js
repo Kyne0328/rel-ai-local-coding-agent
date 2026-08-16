@@ -30,7 +30,7 @@ const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}, context = {}) {
   const currentTaskId = String(getCurrentToolActivityContext()?.taskId || context.taskId || args.work_id || '').trim();
-  const logicalWorkspaceAlias = String(workspace.sourceAlias || workspace.alias || '').trim();
+  const logicalWorkspaceAlias = String(workspace.alias || '').trim();
   const suppliedChangedFiles = Array.isArray(args.changedFiles)
     ? [...new Set(args.changedFiles.map(file => String(file || '').trim()).filter(Boolean))]
     : [];

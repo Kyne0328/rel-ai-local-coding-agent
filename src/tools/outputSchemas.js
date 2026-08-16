@@ -227,7 +227,6 @@ const FIELD_SCHEMAS = Object.freeze({
   acceptedBytes: NUMBER,
   readiness: OBJECT,
   alias: STRING,
-  sourceAlias: STRING,
   path: STRING,
   paths: STRING_ARRAY,
   branch: STRING,

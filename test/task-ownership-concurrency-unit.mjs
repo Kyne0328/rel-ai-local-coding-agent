@@ -7,7 +7,6 @@ import path from 'node:path';
 import { flushAuditWrites } from '../src/audit.js';
 import { readConfig } from '../src/config.js';
 import { flushLocalAnalytics } from '../src/localAnalytics.js';
-import { readSandboxRegistry } from '../src/parallelTaskSandbox.js';
 import { classifyStatusOwnership } from '../src/repo/gitOps.js';
 import { gitStatusArgs } from '../src/repo/gitStatus.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
@@ -105,11 +104,10 @@ try {
     callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: taskB.work_id, reason: 'Ownership concurrency coverage complete.' })
   ]);
 
-  const remainingSandboxes = Object.values(readSandboxRegistry(config).sandboxes)
-    .filter(entry => [taskA.work_id, taskB.work_id].includes(entry.taskId));
-  assert.deepEqual(remainingSandboxes, [], 'cancelled fixture tasks must not leave private worktree registry entries behind');
+  assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-a.js')), true, 'cancellation must preserve already-visible task A changes');
+  assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-b.js')), true, 'cancellation must preserve already-visible task B changes');
 
-  console.log('Independent concurrent task ownership remains narrow, visible, and cleanup-safe.');
+  console.log('Independent concurrent task ownership remains narrow and directly visible.');
 } finally {
   await flushAuditWrites();
   await flushTaskHistoryPersistence();
