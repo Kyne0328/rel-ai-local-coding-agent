@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { startMcpClient } from './helpers/mcp-client.mjs';
+import { startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
 import { activeToolCount, activeToolNames } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,8 +30,42 @@ for (const variant of variants) {
     assert.equal(discovery.result?.capabilities?.experimental?.relai?.toolCount, activeToolCount);
     client.send(2, 'tools/list', {});
     const response = await client.waitFor(2);
-    const names = response.result?.tools?.map(tool => tool.name) || [];
+    const tools = response.result?.tools || [];
+    const names = tools.map(tool => tool.name);
     assert.deepEqual(names, activeToolNames);
+
+    const byName = new Map(tools.map(tool => [tool.name, tool]));
+    const readSchema = byName.get('relai_read')?.inputSchema;
+    assert.ok(readSchema?.properties?.paths, 'raw MCP discovery must expose relai_read paths');
+    assert.ok(readSchema?.properties?.ranges, 'raw MCP discovery must expose relai_read ranges');
+    const searchSchema = byName.get('relai_search')?.inputSchema;
+    assert.ok(searchSchema?.properties?.queries, 'raw MCP discovery must expose batched relai_search queries');
+    for (const [toolName, schema] of [['relai_read', readSchema], ['relai_search', searchSchema]]) {
+      for (const keyword of ['oneOf', 'anyOf', 'allOf', 'if', 'then', 'else', 'not', 'propertyNames']) {
+        assert.equal(schema?.[keyword], undefined, `${toolName} raw discovery must stay import-safe at the root (${keyword})`);
+      }
+    }
+
+    client.call(3, 'relai_work', { action: 'begin', workspace: 'repo', bootstrap: 'none' });
+    const work = structuredContentOf(await client.waitFor(3));
+    assert.ok(work.work_id, 'raw MCP dispatch must create a repository work session');
+
+    client.call(4, 'relai_read', { work_id: work.work_id, paths: ['release-manifest.json'] });
+    const read = structuredContentOf(await client.waitFor(4));
+    assert.equal(read.items?.[0]?.path, 'release-manifest.json', 'advertised relai_read paths must dispatch successfully');
+
+    client.call(5, 'relai_search', {
+      action: 'text', work_id: work.work_id,
+      queries: ['TOOL_SURFACE_VERSION', 'manifestHash'], glob: 'src/**/*.js', maxFiles: 20
+    });
+    const search = structuredContentOf(await client.waitFor(5));
+    assert.equal(search.ok, true, 'advertised batched relai_search queries must dispatch successfully');
+
+    client.call(6, 'relai_search', { action: 'text', work_id: work.work_id, pattern: 'surface', query: 'sibling-field' });
+    const malformed = await client.waitFor(6);
+    assert.equal(malformed.result?.isError, true, 'runtime validation must surface malformed cross-action input as a tool error');
+    assert.equal(malformed.result?.structuredContent?.ok, false);
+    assert.match(malformed.result?.structuredContent?.error || '', /Unsupported field 'query'/);
   } finally {
     await client.close();
     fs.rmSync(temp, { recursive: true, force: true });

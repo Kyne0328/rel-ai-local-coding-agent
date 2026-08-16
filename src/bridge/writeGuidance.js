@@ -13,32 +13,20 @@ const SOURCE_LIKE_EXTENSIONS = new Set([
 
 function workspaceWriteGuidance() {
   return {
-    defaultMode: 'size-based',
-    recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
+    defaultMode: 'shape-based',
     modes: {
       'exact-replace': {
         tool: 'relai_edit',
         when: [
           'localized edits inside existing files',
-          'large source files',
+          'large source files when only a small region changes',
           'template-heavy or interpolation-heavy files',
           'duplicate import cleanup, lint-only text edits, and focused behavior changes'
         ]
       },
       'direct-write': {
         tool: 'relai_edit',
-        when: [
-          'complete replacement of a small or normal-sized file',
-          `whole-file content under about ${STAGED_WRITE_BYTE_THRESHOLD} bytes and ${STAGED_WRITE_LINE_THRESHOLD} lines`
-        ]
-      },
-      'staged-write': {
-        tool: 'relai_edit',
-        when: [
-          'complete replacement of a large file',
-          `whole-file content above about ${STAGED_WRITE_BYTE_THRESHOLD} bytes or ${STAGED_WRITE_LINE_THRESHOLD} lines`
-        ],
-        chunkBytes: DEFAULT_STAGED_CHUNK_BYTES
+        when: ['complete replacement of one file; Rel.AI stages large content internally when needed']
       },
       'apply-update': {
         tool: 'relai_edit',
@@ -47,29 +35,34 @@ function workspaceWriteGuidance() {
           'several related files need coordinated text edits (pass edits: [...])'
         ]
       },
+      'staged-write': {
+        tool: 'relai_edit',
+        when: ['the MCP client or transport cannot carry the intended content/updateText payload in one request'],
+        chunkBytes: DEFAULT_STAGED_CHUNK_BYTES
+      },
       'workspace-tidy': {
-        tools: ['relai_changes', 'relai_changes'],
+        tools: ['relai_changes'],
         when: ['generated session artifacts should be tidied through a bounded plan']
       }
     },
     selectionOrder: [
-      'Use exact-replace for small edits inside existing files.',
-      'Use direct-write for complete replacement of small or normal-sized files.',
-      'Use staged-write for complete replacement of large files.',
+      'Use exact-replace for localized edits inside existing files.',
+      'Use direct-write for complete replacement of one file regardless of size.',
       'Use apply-update when the change is naturally patch-shaped across files.',
+      'Use staged-write only after a client or transport payload limit prevents one-call content/updateText.',
       'Use workspace-tidy plan/run for generated session artifacts.'
     ],
     examples: {
       exactReplace: 'relai_edit { work_id, path, expectedSha256?, oldText, newText, occurrence? }',
       directWrite: 'relai_edit { work_id, path, expectedSha256?, content }',
+      applyUpdate: 'relai_edit { work_id, updateText, returnDiff: true }',
       stagedWriteStart: "relai_edit { work_id, stage: 'start', path, expectedSha256?, content }",
       stagedWriteAppend: "relai_edit { work_id, stage: 'append', writeId, content }",
       stagedWriteCommit: "relai_edit { work_id, stage: 'commit', writeId }",
-      applyUpdate: 'relai_edit { work_id, updateText, returnDiff: true }',
       workspaceTidyPlan: "relai_changes { action: 'tidy_plan', work_id, mode: 'session_untracked' }",
       workspaceTidyRun: "relai_changes { action: 'tidy_run', work_id, planId }"
     },
-    next: 'Choose the edit shape by task and file size. Use workflow guidance to decide when validation is useful; runChecks remains explicit.'
+    next: 'Choose the edit shape by the intended change. Rel.AI handles large complete-file writes internally; runChecks remains explicit.'
   };
 }
 
@@ -99,24 +92,23 @@ function fileWriteGuidance(relativePath, text) {
     return {
       recommendedMode: 'exact-replace',
       tool: 'relai_edit',
-      fallbackMode: 'staged-write',
+      fallbackMode: 'direct-write',
       fallbackTool: 'relai_edit',
-      alternatives: ['staged-write', 'apply-update'],
-      recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
+      alternatives: ['direct-write', 'apply-update'],
       fileShape,
       reasons: shape.reasons,
       useWhen: 'Use for localized edits inside this existing file.',
       wholeFileReplacement: {
-        recommendedMode: 'staged-write',
+        recommendedMode: 'direct-write',
         tool: 'relai_edit',
-        reason: 'Use staged content only when the complete file genuinely needs replacement.'
+        reason: 'Pass complete content in one request when the whole file genuinely needs replacement; Rel.AI stages large content internally.'
       },
       multiFileChange: {
         recommendedMode: 'apply-update',
         tool: 'relai_edit',
         reason: 'Use relai_edit with updateText (or edits: [...]) when the change spans multiple files.'
       },
-      next: 'Use relai_edit with exact current text for localized changes or staged content for unavoidable whole-file replacement. Use relai_changes and relai_changes for session-owned untracked artifacts.'
+      next: 'Use exact current text for localized changes, direct content for unavoidable whole-file replacement, or updateText/edits for coordinated changes. Use explicit staged mode only after a client payload limit blocks a one-call edit.'
     };
   }
   return {

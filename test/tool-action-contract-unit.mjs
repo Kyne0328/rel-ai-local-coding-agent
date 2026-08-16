@@ -6,7 +6,7 @@ import { approvalRequirement } from '../src/mcp/approval.js';
 import { requiredCapability } from '../src/mcp/authorizationPolicy.js';
 import { buildToolManifest, stableJson } from '../src/mcp/toolManifest.js';
 import { catalogApprovalRequirement, getToolActionCatalog } from '../src/tools/actionCatalog.js';
-import { isToolSurfaceSourcePath } from '../src/tools/actionRegistry.js';
+import { OPERATION_REGISTRY, isToolSurfaceSourcePath } from '../src/tools/actionRegistry.js';
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
@@ -41,6 +41,12 @@ assert.ok(definitions.length > 0, 'the public tool contract must not be empty');
 assert.ok(catalog.length >= definitions.length, 'every public tool must resolve to at least one operation');
 assert.equal(new Set(definitions.map(item => item.name)).size, definitions.length, 'public tool names must remain unique');
 assert.equal(new Set(catalog.map(item => `${item.publicTool}:${item.action}`)).size, catalog.length, 'public tool/action keys must remain unique');
+assert.deepEqual(
+  OPERATION_REGISTRY.map(record => record.definition.name).sort(),
+  [...new Set(catalog.map(entry => entry.operationName))].sort(),
+  'the canonical operation registry must own every executable operation exposed by the public catalog'
+);
+assert.ok(OPERATION_REGISTRY.every(record => record.publicActions.length > 0), 'stale unexposed operations must fail canonical registry construction');
 
 const editDefinition = definitions.find(definition => definition.name === 'relai_edit');
 assert.ok(editDefinition, 'relai_edit definition must exist');
@@ -88,8 +94,12 @@ for (const entry of catalog) {
   const args = sampleArgs(entry);
   const resolved = resolveExecutableToolCall(entry.publicTool, args, {});
   assert.ok(resolved, `${entry.publicTool}:${entry.action} must resolve`);
+  const advertisedSchema = publicSchemaByName.get(entry.publicTool);
+  for (const field of entry.fields) {
+    assert.ok(advertisedSchema?.properties?.[field], `${entry.publicTool}:${entry.action} executable field ${field} must remain discoverable`);
+  }
   if (entry.action !== 'default') {
-    const publicValidation = await fromJsonSchema(publicSchemaByName.get(entry.publicTool))['~standard'].validate(args);
+    const publicValidation = await fromJsonSchema(advertisedSchema)['~standard'].validate(args);
     assert.equal(publicValidation.issues, undefined, `${entry.publicTool}:${entry.action} sample must satisfy advertised discovery schema`);
   }
   resolvedKeys.push(`${entry.publicTool}:${entry.action}`);
@@ -144,7 +154,7 @@ for (const entry of catalog.filter(item => item.action !== 'default')) {
   const [field, value] = foreignFields[0];
   const invalidArgs = { ...baseArgs, [field]: value };
   const publicValidation = await fromJsonSchema(publicSchemaByName.get(entry.publicTool))['~standard'].validate(invalidArgs);
-  assert.ok(publicValidation.issues?.length, `${entry.publicTool}:${entry.action} discovery schema must reject sibling-only field ${field}`);
+  assert.equal(publicValidation.issues, undefined, `${entry.publicTool}:${entry.action} discovery keeps sibling field ${field} visible; runtime owns action-specific rejection`);
   assert.throws(
     () => resolveExecutableToolCall(entry.publicTool, invalidArgs, {}),
     new RegExp(`Unsupported field '${field}'`),

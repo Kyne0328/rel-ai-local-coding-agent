@@ -68,22 +68,20 @@ for (const schema of schemas) {
   assert.equal(publicSchema.outputSchema.additionalProperties, false);
   assert.deepEqual(publicSchema.outputSchema.required, ['ok']);
 }
+const importUnsafeRootKeywords = ['oneOf', 'anyOf', 'allOf', 'if', 'then', 'else', 'not', 'propertyNames'];
 for (const schema of publicSchemas) {
-  assert.equal(schema.inputSchema.oneOf, undefined, `${schema.name} must expose a flat connector input schema`);
+  for (const keyword of importUnsafeRootKeywords) {
+    assert.equal(schema.inputSchema[keyword], undefined, `${schema.name} discovery must not use root ${keyword}`);
+  }
+  assert.equal(schema.inputSchema.additionalProperties, false, `${schema.name} discovery must reject unknown fields`);
   assert.match(schema.description || '', /\bUse\b/i, `${schema.name} must state when to use the tool`);
   assert.match(schema.description || '', /\bDo not\b/i, `${schema.name} must state when not to use the tool`);
-  const sharedRequired = new Set(schema.inputSchema.required || []);
-  for (const guard of schema.inputSchema.allOf || []) {
-    for (const field of guard?.then?.required || []) {
-      assert.equal(sharedRequired.has(field), false, `${schema.name} action guards must not repeat root requirement ${field}`);
-    }
-  }
 }
 const publicWorkSchema = publicSchemas.find(item => item.name === 'relai_work')?.inputSchema;
 for (const field of ['workspace', 'title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason', 'work_id']) {
   assert.ok(publicWorkSchema?.properties?.[field], `relai_work connector schema must expose ${field}`);
 }
-assert.ok(publicWorkSchema?.allOf?.length, 'relai_work public schema must retain action-specific constraints without a top-level oneOf');
+assert.equal(publicWorkSchema?.allOf, undefined, 'relai_work discovery stays import-safe; action-specific validation belongs to the canonical runtime contract');
 const publicSearchInputSchema = publicSchemas.find(item => item.name === 'relai_search')?.inputSchema;
 for (const field of ['queries', 'maxResults', 'maxFiles']) {
   assert.equal(publicSearchInputSchema?.properties?.[field]?.anyOf, undefined, `relai_search root ${field} schema must collapse bounded action variants instead of advertising a redundant union`);
@@ -103,7 +101,7 @@ assert.match(publicExecSchema?.inputSchema?.properties?.command?.description || 
 assert.match(publicExecSchema?.inputSchema?.properties?.executable?.description || '', /shell:false/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.argv?.description || '', /without shell parsing/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.input?.description || '', /multiline scripts or structured text/i);
-assert.ok(publicExecSchema?.inputSchema?.allOf?.length, 'relai_exec public schema must retain its execution-mode constraint without a top-level oneOf');
+assert.equal(publicExecSchema?.inputSchema?.allOf, undefined, 'relai_exec discovery stays import-safe; execution-mode exclusivity is enforced at runtime');
 for (const removed of removedDirectNames) {
   assert.equal(resolveToolOperation(removed, {}), null, `${removed} must not resolve as a public tool`);
   assert.equal(publicSchemas.some(tool => tool.name === removed), false, `${removed} must not be discovered`);
@@ -122,13 +120,12 @@ assert.match(processSchema.inputSchema.properties.input.description, /without cl
 const editSchema = schemaByName.get('relai_edit');
 assert.equal(editSchema.inputSchema.oneOf?.length, 7, 'relai_edit executable schema must retain all canonical edit-form variants');
 assert.match(editSchema.description, /oldText\/newText/i);
-assert.match(editSchema.description, /content for full-file replacement/i);
-assert.match(editSchema.description, /before sending the whole payload/i);
-assert.match(editSchema.description, /12 KiB/i);
-assert.match(editSchema.inputSchema.properties.content.description, /complete replacement content/i);
-assert.match(editSchema.inputSchema.properties.content.description, /8 KiB or 180 lines/i);
-assert.match(editSchema.inputSchema.properties.updateText.description, /from the first request/i);
-assert.match(editSchema.inputSchema.properties.stage.description, /12 KiB/i);
+assert.match(editSchema.description, /content for complete-file replacement/i);
+assert.match(editSchema.description, /automatically handles large complete-file writes/i);
+assert.match(editSchema.description, /explicit staged mode only when a client transport cannot carry/i);
+assert.match(editSchema.inputSchema.properties.content.description, /staged internally when needed/i);
+assert.match(editSchema.inputSchema.properties.updateText.description, /one logical patch together/i);
+assert.match(editSchema.inputSchema.properties.stage.description, /only when the client transport cannot carry/i);
 
 await valid('relai_work', { action: 'begin', workspace: 'repo' });
 await invalid('relai_work', { action: 'begin' });
@@ -175,70 +172,33 @@ await invalid('relai_edit', { path: 'README.md', content: '# Missing task\n' });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: 42 });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', overwrite: true });
 
-// The connector-facing schema keeps shared properties flat while preserving
-// the same action-specific requirements, bounds, modes, and field ownership
-// enforced by the executable runtime schema.
+// Connector discovery intentionally exposes a flat, import-safe superset of
+// callable fields. Conditional requirements and cross-action ownership are
+// enforced once by the canonical executable/runtime contract below.
 await publicValid('relai_work', { action: 'begin', workspace: 'repo' });
-await publicInvalid('relai_work', { action: 'begin' });
-await publicInvalid('relai_work', { action: 'begin', workspace: 'repo', work_id: 'wrong-action-field' });
-await publicValid('relai_work', { action: 'finish', work_id: 'work', summary: 'Done.' });
-await publicInvalid('relai_work', { action: 'finish', work_id: 'work' });
-await publicInvalid('relai_work', { action: 'status', title: 'wrong-action-field' });
-
-await publicValid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200, maxResults: 1000 });
+await publicValid('relai_work', { action: 'begin' });
+await publicValid('relai_work', { action: 'status', title: 'runtime-rejects-sibling-field' });
+await publicValid('relai_read', { work_id: 'work', paths: ['README.md'] });
+await publicValid('relai_read', { work_id: 'work', ranges: [{ path: 'README.md', startLine: 1, endLine: 2 }] });
 await publicValid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
-await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', query: 'wrong-action-field' });
-await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
-await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 201 });
-await publicInvalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxResults: 1001 });
-await publicValid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 100, maxFiles: 20000 });
+await publicValid('relai_search', { action: 'text', work_id: 'work', query: 'runtime-rejects-sibling-field' });
 await publicValid('relai_search', { action: 'semantic', work_id: 'work', queries: ['needle', 'haystack'], maxResults: 100 });
-await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', pattern: 'wrong-action-field' });
-await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', queries: ['haystack'] });
-await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxResults: 101 });
-await publicInvalid('relai_search', { action: 'semantic', work_id: 'work', query: 'needle', maxFiles: 20001 });
+await publicValid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev' });
+await publicValid('relai_inspect', { action: 'symbol', work_id: 'work' });
+await publicValid('relai_ui', { action: 'navigate', work_id: 'work', sessionId: 'ui_12345678901234567890' });
+await publicValid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
+await publicValid('relai_changes', { action: 'restore', work_id: 'work' });
+await publicValid('relai_publish', { action: 'commit', work_id: 'work' });
+await publicValid('relai_exec', { work_id: 'work' });
+await publicValid('relai_exec', { work_id: 'work', command: 'node -v', executable: 'node' });
+await publicValid('relai_edit', { work_id: 'work', path: 'README.md' });
+await publicValid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', oldText: 'before', newText: 'after' });
 
-await publicValid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.' });
-await publicInvalid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev' });
-await publicValid('relai_process', { action: 'read', work_id: 'work', processId: 'p' });
-await publicInvalid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'wrong-action-field' });
-
-await publicInvalid('relai_inspect', { action: 'symbol', work_id: 'work' });
-await publicValid('relai_inspect', { action: 'symbol', work_id: 'work', symbol: 'callTool' });
-await publicInvalid('relai_inspect', { action: 'related', work_id: 'work' });
-await publicValid('relai_inspect', { action: 'related', work_id: 'work', query: 'schema' });
-
-await publicInvalid('relai_ui', { action: 'start', work_id: 'work' });
-await publicValid('relai_ui', { action: 'start', work_id: 'work', port: 3000 });
-await publicInvalid('relai_ui', { action: 'navigate', work_id: 'work', sessionId: 'ui_12345678901234567890' });
-await publicValid('relai_ui', { action: 'navigate', work_id: 'work', sessionId: 'ui_12345678901234567890', route: '/' });
-await publicInvalid('relai_ui', { action: 'viewport', work_id: 'work', sessionId: 'ui_12345678901234567890', width: 1280 });
-await publicValid('relai_ui', { action: 'viewport', work_id: 'work', sessionId: 'ui_12345678901234567890', width: 1280, height: 720 });
-
-await publicValid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
-await publicInvalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
-await publicInvalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
-await publicInvalid('relai_validate', { action: 'checks', work_id: 'work', route: '/health' });
-
-await publicInvalid('relai_changes', { action: 'restore', work_id: 'work' });
-await publicValid('relai_changes', { action: 'restore', work_id: 'work', paths: ['README.md'] });
-await publicInvalid('relai_changes', { action: 'reset', work_id: 'work' });
-await publicValid('relai_changes', { action: 'reset', work_id: 'work', confirmation: 'RESET' });
-await publicInvalid('relai_changes', { action: 'tidy_run', work_id: 'work' });
-await publicValid('relai_changes', { action: 'tidy_run', work_id: 'work', planId: 'tidy_12345678901234567890' });
-
-await publicInvalid('relai_publish', { action: 'commit', work_id: 'work' });
-await publicValid('relai_publish', { action: 'commit', work_id: 'work', message: 'Fix schema parity' });
-await publicInvalid('relai_publish', { action: 'push', work_id: 'work', message: 'wrong-action-field' });
-await publicValid('relai_publish', { action: 'push', work_id: 'work', remote: 'origin' });
-
-await publicValid('relai_exec', { work_id: 'work', command: 'node -v' });
-await publicValid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-v'] });
-await publicInvalid('relai_exec', { work_id: 'work' });
-await publicInvalid('relai_exec', { work_id: 'work', command: 'node -v', executable: 'node' });
-await publicValid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n' });
-await publicInvalid('relai_edit', { work_id: 'work', path: 'README.md' });
-await publicInvalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', oldText: 'before', newText: 'after' });
+// Discovery still rejects universally invalid shapes: unknown fields, missing
+// universal task/action identity, and wrong primitive types.
+await publicInvalid('relai_search', { action: 'text', pattern: 'needle' });
+await publicInvalid('relai_search', { action: 'text', work_id: 'work', unknown: true });
+await publicInvalid('relai_edit', { work_id: 'work', content: 42 });
 
 // Internal/direct invocation gets the same canonical validation before a handler runs.
 await validateExecutableOperationInput(OP.SEARCH_TEXT, { workspace: 'repo', work_id: 'work', pattern: 'needle', maxFiles: 200 });
