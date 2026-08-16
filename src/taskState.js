@@ -54,6 +54,16 @@ function isTerminalTaskStatus(value) {
   return TERMINAL_TASK_STATUSES.has(normalizeStatusToken(value));
 }
 
+function activeLogicalTaskCount(activity = {}) {
+  const declared = Math.max(0, Number(activity.activeTaskCount || 0));
+  const activeCalls = Math.max(0, Number(activity.activeCalls || 0));
+  const liveTasks = (Array.isArray(activity.tasks) ? activity.tasks : []).filter(task => {
+    const status = normalizeHistoricalTaskStatus(task?.status, task);
+    return status !== 'inactive' && !isTerminalTaskStatus(status);
+  }).length;
+  return Math.max(declared, liveTasks, activeCalls > 0 ? 1 : 0);
+}
+
 function normalizeHistoricalTaskStatus(value, record = {}) {
   const status = normalizeStatusToken(value);
   if (legacyInactivityRecord(record)) return 'inactive';
@@ -137,6 +147,7 @@ export {
   NATIVE_TASK_STATUSES,
   TERMINAL_TASK_STATUSES,
   TASK_TRANSITIONS,
+  activeLogicalTaskCount,
   assertTaskStatusTransition,
   canTransitionTaskStatus,
   internalStatusToDashboardStatus,

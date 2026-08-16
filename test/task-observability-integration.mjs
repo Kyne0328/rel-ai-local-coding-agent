@@ -1,6 +1,12 @@
 import { callTool as rawCallTool } from "../src/tools.js";
-import { readTaskHistorySession } from "../src/taskHistoryStore.js";
+import { flushAuditWrites } from '../src/audit.js';
+import { flushLocalAnalytics } from '../src/localAnalytics.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
+import { flushTaskHistoryPersistence, readTaskHistorySession } from "../src/taskHistoryStore.js";
+import { resetTaskHistoryCaches } from '../src/taskHistoryStorage.js';
+import { resetToolActivity } from '../src/toolActivity.js';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,6 +29,11 @@ const configPath = path.join(sandbox, 'config.json');
 fs.mkdirSync(workspacePath, { recursive: true });
 fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ name: 'fixture' }, null, 2));
 fs.writeFileSync(path.join(workspacePath, 'src.txt'), 'session activity model\n');
+execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore' });
+execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
+execFileSync('git', ['config', 'user.name', 'RelAI Test'], { cwd: workspacePath });
+execFileSync('git', ['add', '.'], { cwd: workspacePath });
+execFileSync('git', ['commit', '-m', 'fixture'], { cwd: workspacePath, stdio: 'ignore' });
 fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir,
@@ -77,9 +88,15 @@ try {
   assert.equal(session.events.at(-1)?.status, 'succeeded');
   assert.match(session.events[0]?.summary, /Started logical task/);
 } finally {
+  await flushAuditWrites();
+  await flushTaskHistoryPersistence();
+  await flushLocalAnalytics();
+  await repositoryIntelligence.shutdown();
+  resetTaskHistoryCaches();
+  resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
-  fs.rmSync(sandbox, { recursive: true, force: true });
+  fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }
 
 console.log('End-to-end tool execution persists canonical task and activity lifecycle records.');

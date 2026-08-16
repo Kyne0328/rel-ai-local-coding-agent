@@ -92,6 +92,8 @@ assert.equal(shown[2].options.title, 'Update ready to install');
 service.handleUpdateStatus({ state: 'error', error: 'download failed' });
 assert.equal(shown.length, 4);
 assert.equal(shown[3].options.title, 'Application update failed');
+assert.doesNotMatch(shown[3].options.body, /download failed/i, 'native update errors should keep raw updater detail in diagnostics');
+assert.match(shown[3].options.body, /retry/i);
 
 service.handleDesktopStatusChange(
   normalizeDesktopStatus({ serverRunning: false, tunnelStatus: 'stopped', errorCode: '', error: '' }),
@@ -124,6 +126,18 @@ assert.doesNotMatch(shown[7].options.body, /Tunnel failed/, 'desktop alerts shou
 const reloaded = createDesktopNotifications(options);
 assert.deepEqual(reloaded.getPreferences(), service.getPreferences(), 'preferences must persist across application launches');
 assert.equal(logs.length, 0);
+
+const unsupportedLogs = [];
+const unsupportedService = createDesktopNotifications({
+  ...options,
+  Notification: class UnsupportedNotification { static isSupported() { return false; } },
+  onLog: (message, details) => unsupportedLogs.push({ message, details })
+});
+assert.equal(unsupportedService.show('taskCompleted', { title: 'Unavailable', body: 'No alert.' }), false);
+assert.equal(unsupportedService.show('taskCompleted', { title: 'Unavailable again', body: 'No alert.' }), false);
+assert.equal(unsupportedLogs.length, 1, 'repeated platform notification failures must not spam diagnostics');
+assert.equal(unsupportedLogs[0].details.code, 'notification_delivery_unavailable');
+assert.equal(unsupportedLogs[0].details.source, 'desktop-notifications');
 
 const blockedStatePath = path.join(root, 'not-a-directory');
 fs.writeFileSync(blockedStatePath, 'blocked');

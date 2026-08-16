@@ -7,6 +7,7 @@ import * as connection from "../connectionProfile.js";
 import { deriveConnectionState, ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 import { buildDiagnosticReport } from "../diagnostics.js";
 import { taskHistoryPersistenceSnapshot } from '../taskHistoryStore.js';
+import { activeLogicalTaskCount } from '../taskState.js';
 import { readJsonBody, sendJson } from "./io.js";
 
 function handleApiDiagnostics(ctx) {
@@ -41,7 +42,7 @@ function handleApiDiagnostics(ctx) {
     runtimeLogs,
     auditLogs,
     taskHistoryPersistence: taskHistoryPersistenceSnapshot(),
-    activeCalls: activity.activeCalls || 0
+    activeTaskCount: activeLogicalTaskCount(activity)
   });
   sendJson(ctx.res, 200, report);
 }
@@ -59,8 +60,10 @@ async function handleApiDiagnosticsReset(ctx) {
   }
 
   const activity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
-  if ((target === 'history' || target === 'all') && Number(activity.activeCalls || 0) > 0) {
-    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, 'Cannot clear session and activity history while a Rel.AI tool call is running.'));
+  const activeTasks = activeLogicalTaskCount(activity);
+  if ((target === 'history' || target === 'all') && activeTasks > 0) {
+    const noun = activeTasks === 1 ? 'task is' : 'tasks are';
+    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, `Cannot clear session and activity history while ${activeTasks} Rel.AI ${noun} still active.`));
     return;
   }
 

@@ -3,6 +3,7 @@
 import { readConfig } from "../config.js";
 import { clearAuditHistory } from "../audit.js";
 import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
+import { activeLogicalTaskCount } from '../taskState.js';
 import { readJsonBody, sendJson } from "./io.js";
 
 async function handleApiHistoryReset(ctx) {
@@ -12,8 +13,10 @@ async function handleApiHistoryReset(ctx) {
     return;
   }
   const activity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : null;
-  if (Number(activity?.activeCalls || 0) > 0) {
-    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, 'Cannot clear session history while a Rel.AI tool call is running.'));
+  const activeTasks = activeLogicalTaskCount(activity || {});
+  if (activeTasks > 0) {
+    const noun = activeTasks === 1 ? 'task is' : 'tasks are';
+    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, `Cannot clear session history while ${activeTasks} Rel.AI ${noun} still active.`));
     return;
   }
   if (typeof ctx.options.resetTaskActivity === 'function') {
