@@ -41,7 +41,7 @@ try {
   } finally { db.close(); }
   console.log('Ecosystem-aware graph import and call resolution tests passed.');
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive:true, force:true });
 }
 
