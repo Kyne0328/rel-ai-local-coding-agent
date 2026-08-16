@@ -76,6 +76,28 @@ assert.doesNotMatch(JSON.stringify(report), new RegExp(secret));
 assert.match(report.reportText, /Rel\.AI MCP diagnostic report/);
 assert.doesNotMatch(report.reportText, new RegExp(secret));
 
+const persistenceFailure = buildDiagnosticReport({
+  connection: { tunnelId: 'tunnel_12345678', token: 'set' },
+  connectionState: { publicEndpoint: { status: 'available' }, error: null },
+  runtimeLogs: { available: true, entries: [] },
+  auditLogs: {
+    entries: [],
+    persistence: {
+      healthy: false,
+      pending: 3,
+      retryCount: 4,
+      droppedEntries: 0,
+      lastFailureAt: '2026-07-25T00:05:00.000Z',
+      lastError: `EACCES password=${secret}`
+    }
+  }
+});
+const persistenceFinding = persistenceFailure.findings.find(item => item.code === 'local_history_persistence_failed');
+assert.ok(persistenceFinding, 'persistent audit write failures must become a visible troubleshooting finding');
+assert.match(persistenceFinding.title, /Activity history/);
+assert.match(persistenceFinding.recommendation, /disk space|write permissions/i);
+assert.doesNotMatch(JSON.stringify(persistenceFinding), new RegExp(secret), 'technical persistence errors must still be sanitized');
+
 const disconnected = buildDiagnosticReport({
   connection: { tunnelId: '', token: 'set' },
   connectionState: { publicEndpoint: { status: 'disabled' }, error: null },

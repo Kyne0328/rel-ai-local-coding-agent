@@ -35,7 +35,8 @@ function buildDiagnosticReport(input = {}) {
   const findings = [
     ...healthFindings(input.health, workspace),
     ...connectionFindings(input.connection, input.connectionState),
-    ...cautionFindings(input.cautionData, workspace)
+    ...cautionFindings(input.cautionData, workspace),
+    ...auditPersistenceFindings(input.auditLogs)
   ];
   const ordered = dedupeFindings(findings).sort(compareDiagnosticFindings);
   const runtime = normalizeRuntimeLogs(input.runtimeLogs);
@@ -142,6 +143,26 @@ function cautionFindings(cautionData, workspace) {
         details: item
       });
     });
+}
+
+function auditPersistenceFindings(auditLogs = {}) {
+  const persistence = auditLogs?.persistence || {};
+  const activeFailure = Boolean(String(persistence.lastError || '').trim());
+  const droppedEntries = Math.max(0, Number(persistence.droppedEntries || 0));
+  if (!activeFailure && droppedEntries === 0) return [];
+  const pending = Math.max(0, Number(persistence.pending || 0));
+  const impact = activeFailure
+    ? `Rel.AI cannot currently save activity history to disk. ${pending ? `${pending} recent ${pending === 1 ? 'entry is' : 'entries are'} being kept in memory while saving is retried.` : 'Saving will be retried automatically.'}`
+    : `${droppedEntries} older ${droppedEntries === 1 ? 'activity entry was' : 'activity entries were'} not saved during an earlier storage failure.`;
+  return [diagnosticFinding({
+    severity: 'warning',
+    code: 'local_history_persistence_failed',
+    title: activeFailure ? 'Activity history is not being saved' : 'Some activity history was not saved',
+    impact,
+    recommendation: 'Check available disk space and write permissions for the Rel.AI local data folder. If saving does not recover, restart Rel.AI and review Troubleshooting again.',
+    action: { label: 'Review troubleshooting', href: '#diagnostics' },
+    details: persistence
+  })];
 }
 
 function findingFromCode(code, severity, impact, details) {
