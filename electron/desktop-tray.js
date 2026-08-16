@@ -9,6 +9,7 @@ function createDesktopTray(deps) {
     quit, onError = () => {}
   } = deps;
   let tray = null;
+  let menuKey = '';
 
   function setup() {
     if (tray) return tray;
@@ -22,8 +23,11 @@ function createDesktopTray(deps) {
   }
 
   function update() {
-    if (!tray) return;
+    if (!tray) return false;
     const status = getStatus();
+    const updateStatus = getUpdateStatus() || {};
+    const nextMenuKey = menuSignature(status, updateStatus);
+    if (nextMenuKey === menuKey) return false;
     const menu = Menu.buildFromTemplate([
       { label: status.serverRunning ? 'Rel.AI: running' : 'Rel.AI: stopped', enabled: false },
       { label: `Connection: ${status.tunnelStatus || 'stopped'}`, enabled: false },
@@ -41,17 +45,18 @@ function createDesktopTray(deps) {
           : void startServer().catch(onError)
       },
       { type: 'separator' },
-      updateMenuItem(),
+      updateMenuItem(updateStatus),
       { label: 'Troubleshooting', click: () => void openDiagnostics().catch(onError) },
       { label: 'Settings', click: () => void openSettings().catch(onError) },
       { type: 'separator' },
       { label: 'Quit Rel.AI MCP', click: quit }
     ]);
     tray.setContextMenu(menu);
+    menuKey = nextMenuKey;
+    return true;
   }
 
-  function updateMenuItem() {
-    const status = getUpdateStatus() || {};
+  function updateMenuItem(status = {}) {
     const version = status.availableVersion ? ` v${status.availableVersion}` : '';
     if (status.state === 'checking') return { label: 'Checking for updates…', enabled: false };
     if (status.state === 'downloading') return { label: `Downloading update… ${Math.round(status.progress?.percent || 0)}%`, enabled: false };
@@ -71,6 +76,17 @@ function createDesktopTray(deps) {
   }
 
   return { setup, update };
+}
+
+function menuSignature(status = {}, updateStatus = {}) {
+  return JSON.stringify([
+    status.serverRunning === true,
+    String(status.tunnelStatus || 'stopped'),
+    String(status.localMcpUrl || ''),
+    String(updateStatus.state || ''),
+    String(updateStatus.availableVersion || ''),
+    Math.round(Number(updateStatus.progress?.percent || 0))
+  ]);
 }
 
 export { createDesktopTray };

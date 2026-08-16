@@ -5,9 +5,13 @@ import * as path from "node:path";
 import { sanitizeText } from "../src/diagnostics.js";
 
 function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISOString(), filePath = '' } = {}) {
+  const entryLimit = Math.max(1, Math.floor(Number(maxEntries) || 200));
+  const compactAfterEntries = entryLimit * 2;
   const entries = [];
   const listeners = new Set();
   let hydratedPath = '';
+  let persistedEntries = 0;
+  let preparedDirectory = '';
   let writeQueue = Promise.resolve();
   let revision = 0;
 
@@ -20,17 +24,16 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     });
     if (!entry) return null;
     entries.push(entry);
-    const overflow = entries.length > maxEntries;
-    if (overflow) entries.splice(0, entries.length - maxEntries);
-    persist(entry, overflow);
+    if (entries.length > entryLimit) entries.splice(0, entries.length - entryLimit);
+    persist(entry);
     revision += 1;
-    emit({ type: 'append', revision, count: entries.length, maxEntries, entry: { ...entry } });
+    emit({ type: 'append', revision, count: entries.length, maxEntries: entryLimit, entry: { ...entry } });
     return { ...entry };
   }
 
   function snapshot(options = {}) {
     hydrate();
-    const limit = Math.min(Math.max(Number(options.limit || maxEntries), 1), maxEntries);
+    const limit = Math.min(Math.max(Number(options.limit || entryLimit), 1), entryLimit);
     return {
       available: true,
       revision,
@@ -46,7 +49,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     entries.length = 0;
     rewriteFile();
     revision += 1;
-    emit({ type: 'reset', revision, count: 0, maxEntries, removed });
+    emit({ type: 'reset', revision, count: 0, maxEntries: entryLimit, removed });
     return { ok: true, removed };
   }
 
@@ -64,24 +67,29 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
     const target = resolveFilePath();
     if (!target || hydratedPath === target) return;
     hydratedPath = target;
+    entries.length = 0;
+    persistedEntries = 0;
     try {
-      const lines = fs.readFileSync(target, 'utf8').split(/\r?\n/).filter(Boolean).slice(-maxEntries);
+      const persistedLines = fs.readFileSync(target, 'utf8').split(/\r?\n/).filter(Boolean);
+      persistedEntries = persistedLines.length;
+      const lines = persistedLines.slice(-entryLimit);
       for (const line of lines) {
         try {
           const entry = normalizeEntry(JSON.parse(line));
           if (entry) entries.push(entry);
         } catch {}
       }
-      if (entries.length > maxEntries) entries.splice(0, entries.length - maxEntries);
+      if (persistedEntries > compactAfterEntries) rewriteFile();
     } catch (error) {
       if (error?.code !== 'ENOENT' && process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] runtime log hydrate:', error);
     }
   }
 
-  function persist(entry, rewrite) {
+  function persist(entry) {
     const target = resolveFilePath();
     if (!target) return;
-    if (rewrite) {
+    persistedEntries += 1;
+    if (persistedEntries > compactAfterEntries) {
       rewriteFile();
       return;
     }
@@ -91,13 +99,18 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
   function rewriteFile() {
     const target = resolveFilePath();
     if (!target) return;
+    persistedEntries = entries.length;
     const text = entries.map(entry => JSON.stringify(entry)).join('\n');
     enqueueWrite(target, () => fs.promises.writeFile(target, text ? `${text}\n` : '', { encoding: 'utf8', mode: 0o600 }));
   }
 
   function enqueueWrite(target, operation) {
     writeQueue = writeQueue.then(async () => {
-      await fs.promises.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+      const directory = path.dirname(target);
+      if (preparedDirectory !== directory) {
+        await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 });
+        preparedDirectory = directory;
+      }
       await operation();
     }).catch(error => {
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] runtime log persist:', error);
