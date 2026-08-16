@@ -73,6 +73,7 @@ applicationOpen = false;
 for (let index = 4; index < 120; index += 1) badge.markCompleted({ taskId: `task-${index}` });
 assert.equal(badge.getStatus().count, MAX_BADGE_COUNT);
 assert.notEqual(Buffer.compare(badgeBuffers[0], badgeBuffers.at(-1)), 0, 'the capped count must still render its numeric badge');
+assert.equal(badgeBuffers.length, 10, 'Windows must rasterize only the nine digit badges plus one shared 9+ image');
 const rendersAtCap = badgeBuffers.length;
 badge.markCompleted({ taskId: 'task-over-cap' });
 assert.equal(badgeBuffers.length, rendersAtCap, 'additional completions at the 99 cap must not regenerate an identical overlay');

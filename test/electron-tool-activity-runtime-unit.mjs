@@ -8,6 +8,7 @@ const statusChanges = [];
 const notifications = [];
 const completedTasks = [];
 const blockerState = new Set();
+const blockerTypes = [];
 let nextBlockerId = 1;
 const toolActivity = {
   getToolActivity() {
@@ -23,7 +24,7 @@ const toolActivity = {
 const runtime = createTaskActivityRuntime({
   toolActivity,
   powerSaveBlocker: {
-    start() { const id = nextBlockerId++; blockerState.add(id); return id; },
+    start(type) { blockerTypes.push(type); const id = nextBlockerId++; blockerState.add(id); return id; },
     stop(id) { blockerState.delete(id); return true; },
     isStarted(id) { return blockerState.has(id); }
   },
@@ -46,7 +47,15 @@ assert.equal(snapshotReads, 1, 'live activity must not rebuild the global task s
 assert.equal(runtime.getStatus().tasks.length, 1);
 assert.equal(Object.hasOwn(runtime.getStatus().tasks[0], 'events'), false, 'desktop status must not retain task timelines');
 assert.equal(Object.hasOwn(runtime.getStatus().tasks[0], 'currentOperations'), false, 'desktop status must not retain operation payloads');
-assert.equal(blockerState.size, 1, 'active work keeps the display awake');
+assert.equal(blockerState.size, 1, 'active connector work keeps the app eligible to continue running');
+assert.deepEqual(blockerTypes, ['prevent-app-suspension'], 'background work must not keep the user display awake');
+listener({
+  phase: 'finished', revision: 2, activeConnectorCalls: 0, activeCalls: 0, activeTaskCount: 1,
+  taskId: 'task-a', ok: true, task: { ...task, status: 'waiting', state: 'waiting', activeCalls: 0 }
+});
+assert.equal(runtime.getStatus().activeTaskCount, 1, 'the logical task remains open between connector calls');
+assert.equal(runtime.getStatus().activeConnectorCalls, 0);
+assert.equal(blockerState.size, 0, 'reasoning and approval gaps must allow normal app suspension');
 
 const completedEvent = {
   phase: 'completed', revision: 2, activeConnectorCalls: 0, activeCalls: 0, activeTaskCount: 0,
@@ -68,7 +77,7 @@ assert.equal(snapshotReads, 1, 'terminal activity must remain event-driven');
 assert.equal(runtime.getStatus().activeTaskCount, 0);
 assert.equal(runtime.getStatus().tasks.length, 0);
 assert.equal(runtime.getStatus().lastTask?.taskId, 'task-a');
-assert.equal(blockerState.size, 0, 'terminal work releases the display sleep blocker');
+assert.equal(blockerState.size, 0, 'terminal work releases the app-suspension blocker');
 assert.ok(statusChanges.length >= 3, 'initial, running, and terminal status changes must be published');
 
 runtime.stop();

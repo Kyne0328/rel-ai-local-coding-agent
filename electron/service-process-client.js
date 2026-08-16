@@ -250,7 +250,7 @@ function createServiceProcessClient(options = {}) {
 }
 
 function emptyActivity() {
-  return { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: '', workspace: '', tool: '', operation: '', startedAt: null, lastTask: null };
+  return { state: 'idle', activeConnectorCalls: 0, activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: '', workspace: '', tool: '', operation: '', startedAt: null, lastTask: null };
 }
 
 function cloneActivity(activity = {}) {

@@ -51,7 +51,7 @@ function createToolSleepBlocker(powerSaveBlocker) {
 
   function start() {
     if (blockerId !== null && powerSaveBlocker.isStarted(blockerId)) return blockerId;
-    blockerId = powerSaveBlocker.start('prevent-display-sleep');
+    blockerId = powerSaveBlocker.start('prevent-app-suspension');
     return blockerId;
   }
 
@@ -116,8 +116,8 @@ function createTaskActivityRuntime(options) {
   function syncBlocker(activity = status, event = {}) {
     const connectorCalls = Number(Object.hasOwn(event, 'activeConnectorCalls')
       ? event.activeConnectorCalls
-      : activity.activeCalls || 0);
-    blocker.update(Math.max(connectorCalls, Number(activity.activeTaskCount || 0)));
+      : activity.activeConnectorCalls || 0);
+    blocker.update(Math.max(0, connectorCalls));
   }
 
   function currentStatus() {
@@ -160,6 +160,7 @@ function normalizeActivityStatus(activity = {}) {
   const primary = tasks.find(task => Number(task.activeCalls || 0) > 0) || tasks[0] || null;
   return {
     state: activity.state || (Number(activity.activeCalls || 0) > 0 ? 'working' : tasks.length ? 'waiting' : 'idle'),
+    activeConnectorCalls: Math.max(0, Number(activity.activeConnectorCalls || 0)),
     activeCalls: Math.max(0, Number(activity.activeCalls || 0)),
     activeTaskCount: Math.max(0, Number(activity.activeTaskCount ?? tasks.length)),
     completionKnown: activity.completionKnown === true,
@@ -183,6 +184,7 @@ function reduceActivityStatus(current, event) {
     if (isTerminalTask(changedTask, event.phase)) tasks.delete(id);
     else tasks.set(id, { ...(tasks.get(id) || {}), ...changedTask });
   }
+  const activeConnectorCalls = Math.max(0, Number(event.activeConnectorCalls ?? current.activeConnectorCalls ?? 0));
   const activeCalls = Math.max(0, Number(event.activeCalls ?? current.activeCalls ?? 0));
   const taskList = [...tasks.values()].sort((left, right) => Number(left.startedAt || 0) - Number(right.startedAt || 0));
   const activeTaskCount = taskList.length;
@@ -190,6 +192,7 @@ function reduceActivityStatus(current, event) {
   const lastTask = changedTask && isTerminalTask(changedTask, event.phase) ? changedTask : current.lastTask;
   return {
     state: activeCalls > 0 ? 'working' : activeTaskCount > 0 ? 'waiting' : 'idle',
+    activeConnectorCalls,
     activeCalls,
     activeTaskCount,
     completionKnown: false,
