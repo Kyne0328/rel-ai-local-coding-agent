@@ -155,7 +155,7 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
 function supportPolicyHtml(policy) {
   if (!policy || String(policy.state || '') === 'current') return '';
   const view = supportPolicyView(policy);
-  return `<div class="application-update-policy"><div class="application-update-summary"><div><span class="application-update-label">Update requirement</span><strong>${escapeHtml(policy.minimumSupportedVersion ? `v${policy.minimumSupportedVersion} or newer` : 'Remote requirement')}</strong></div>${pillHtml(view.label, view.tone)}</div><p class="muted application-update-copy">${escapeHtml(view.description)}</p></div>`;
+  return `<div class="application-update-policy"><div class="application-update-summary"><div><span class="application-update-label">Version support</span><strong>${escapeHtml(policy.minimumSupportedVersion ? `v${policy.minimumSupportedVersion} or newer` : 'Check unavailable')}</strong></div>${pillHtml(view.label, view.tone)}</div><p class="muted application-update-copy">${escapeHtml(view.description)}</p></div>`;
 }
 
 function progressHtml(state, progress) {

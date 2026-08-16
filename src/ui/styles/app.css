@@ -587,6 +587,7 @@
   .mobile-nav::-webkit-scrollbar { display: none; }
   .mobile-nav a { @apply min-h-11 flex-col justify-center gap-1 px-1 py-1 text-xs; line-height: 1.1; text-align: center; }
   .mobile-nav .nav-icon { @apply size-4; }
+  .mobile-nav .nav-label { display: block; max-width: 100%; font-size: 10px; line-height: 1.1; white-space: normal; }
   .topbar { @apply sticky top-0 px-0; }
   .page-title { @apply text-xl; }
   .page-subtitle { @apply whitespace-normal; }
@@ -617,6 +618,8 @@
   .page-title, .page-subtitle { overflow-wrap: anywhere; white-space: normal; }
   .top-controls { grid-template-columns: minmax(0,1fr); }
   .top-controls > *, .command-trigger { width: 100%; min-width: 0; }
+  .command-trigger { @apply justify-start px-3; }
+  .command-trigger-label { display: inline; }
   .card-head, .feature-toolbar, .section-head-actions { flex-direction: column; align-items: stretch; }
   .status-pill { white-space: normal; }
 }

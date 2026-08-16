@@ -30,9 +30,9 @@ function openCommandPalette() {
   content.className = 'command-palette';
   content.innerHTML = `
     <label class="command-search-wrap">
-      <span class="sr-only">Search pages, settings, actions, and workspaces</span>
+      <span class="sr-only">Search pages, settings, actions, and projects</span>
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
-      <input class="command-search" type="search" role="combobox" autocomplete="off" placeholder="Search pages, actions, or workspaces" aria-autocomplete="list" aria-expanded="true" aria-controls="commandPaletteList" aria-describedby="commandPaletteHelp">
+      <input class="command-search" type="search" role="combobox" autocomplete="off" placeholder="Search pages, actions, or projects" aria-autocomplete="list" aria-expanded="true" aria-controls="commandPaletteList" aria-describedby="commandPaletteHelp">
       <kbd>Esc</kbd>
     </label>
     <div class="command-help" id="commandPaletteHelp">Use ↑ and ↓ to move, then press Enter.</div>
@@ -110,7 +110,7 @@ function buildCommands(data) {
     item.href,
     item.group
   ));
-  commands.push(actionCommand('add-workspace', 'Add workspace', 'Choose another project folder for ChatGPT.', 'Action', async () => {
+  commands.push(actionCommand('add-workspace', 'Add project', 'Choose another project folder for ChatGPT.', 'Action', async () => {
     closePalette();
     const module = await import('./features/workspaces/form.js');
     module.openWorkspaceForm({ mode: 'add' });
@@ -121,10 +121,10 @@ function buildCommands(data) {
     if (!alias) continue;
     commands.push(routeCommand(
       `workspace-${alias}`,
-      `Workspace · ${alias}`,
-      workspace.path || 'Open workspace readiness and actions.',
+      `Project · ${alias}`,
+      workspace.path || 'Open project status and actions.',
       routeHref('workspaces', { workspace: alias, focus: '1' }),
-      'Workspace'
+      'Project'
     ));
   }
   return commands.map(command => ({

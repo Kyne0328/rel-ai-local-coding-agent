@@ -141,7 +141,7 @@ app.whenReady().then(async () => {
   win.setSize(1600, 900);
   await delay(150);
   await win.webContents.executeJavaScript(`location.hash = '#activity'`);
-  await waitFor(win, `document.querySelector('.activity-table tbody .clickable-row')`);
+  await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-button')`);
   const activityDesktopGeometry = await win.webContents.executeJavaScript(`(() => {
     const table = document.querySelector('.activity-table');
     const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
@@ -206,7 +206,7 @@ app.whenReady().then(async () => {
   win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'TAB' });
   await delay(50);
   const afterFocus = await win.webContents.executeJavaScript(`({tag: document.activeElement?.tagName || '', className: document.activeElement?.className || ''})`);
-  await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .clickable-row')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .activity-row-button')?.click()`);
   await waitFor(win, `document.querySelector('.drawer-panel .activity-detail-head')`);
   const activityInteraction = await win.webContents.executeJavaScript(`(() => {
     const detail = document.querySelector('.drawer-panel .activity-detail-head');
@@ -288,11 +288,11 @@ app.whenReady().then(async () => {
       };
     })()`);
     await win.webContents.executeJavaScript(`location.hash = '#activity'`);
-    await waitFor(win, `document.querySelector('.activity-table tbody .clickable-row .activity-message-cell')`);
+    await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-button')`);
     const activityMeasurement = await win.webContents.executeJavaScript(`(() => {
       const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
       if (wrap) wrap.scrollLeft = 0;
-      const cell = document.querySelector('.activity-table tbody .clickable-row .activity-message-cell');
+      const cell = document.querySelector('.activity-table tbody .activity-row-button')?.closest('tr')?.querySelector('.activity-message-cell');
       const rect = cell?.getBoundingClientRect();
       const wrapRect = wrap?.getBoundingClientRect();
       return {

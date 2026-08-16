@@ -52,7 +52,7 @@ function cleanLaunchQuery() {
   if (rawHash) cleanUrl += `#${normalizeRouteKey(rawHash)}`;
   history.replaceState(null, '', cleanUrl);
   const note = document.querySelector('.sidebar-note');
-  if (note && surface === 'desktop') note.textContent = 'Desktop dashboard · live MCP state';
+  if (note && surface === 'desktop') note.textContent = 'Desktop app · live status';
 }
 
 function restoreRoute() {
@@ -503,20 +503,20 @@ function shellPresentation(ok, task, workspaceCount, connectionState) {
   const callCount = Number(task.activeCalls || 0);
   if (task.state === 'working') {
     return {
-      subtitle: `${taskCount} ${pluralLabel(taskCount, 'ChatGPT task')} running · ${callCount} ${pluralLabel(callCount, 'active tool call')}`,
+      subtitle: `${taskCount} ${pluralLabel(taskCount, 'ChatGPT task')} running · ${callCount} ${pluralLabel(callCount, 'action')} in progress`,
       label: `${taskCount} running`,
       tone: 'working'
     };
   }
   if (task.state === 'settling') {
     return {
-      subtitle: `${taskCount} ${pluralLabel(taskCount, 'task')} waiting for follow-up tool calls`,
+      subtitle: `${taskCount} ${pluralLabel(taskCount, 'task')} waiting for the next ChatGPT action`,
       label: `${taskCount} open`,
       tone: 'warn'
     };
   }
   return {
-    subtitle: `${workspaceCount} ${pluralLabel(workspaceCount, 'workspace')} available to ChatGPT`,
+    subtitle: `${workspaceCount} ${pluralLabel(workspaceCount, 'project')} available to ChatGPT`,
     label: 'Available',
     tone: 'ok'
   };

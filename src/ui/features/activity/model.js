@@ -182,10 +182,19 @@ export function activityAbsoluteTime(entry) {
   return timestamp ? new Date(timestamp).toLocaleString() : 'Time unavailable';
 }
 
+export function activityDisplayAction(entry) {
+  return displayText(entry?.title)
+    || displayText(entry?.operation)
+    || displayText(entry?.tool?.operation)
+    || displayText(entry?.tool?.title)
+    || displayText(entry?.tool?.name || entry?.tool || entry?.type)
+    || 'Activity';
+}
+
 export function activityActionLabel(entry) {
-  const tool = displayText(entry?.tool?.name || entry?.tool || entry?.type) || 'activity';
+  const action = activityDisplayAction(entry);
   const message = activityMessage(entry).replace(/\s+/g, ' ').slice(0, 120);
-  return `Open ${tool} event details: ${message}`;
+  return `Open ${action} details: ${message}`;
 }
 
 function mergeActivityEntry(existing, incoming) {

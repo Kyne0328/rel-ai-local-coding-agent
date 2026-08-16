@@ -405,7 +405,7 @@ ${renderDashboardWindowTitlebar()}
 <div class="app-shell">
   <aside class="sidebar" id="desktopSidebar">
     <div class="brand">
-      <div class="brand-identity"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo" width="193" height="187"></div><div class="brand-copy"><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
+      <div class="brand-identity"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo" width="193" height="187"></div><div class="brand-copy"><strong>Rel.AI MCP</strong><span>project access</span></div></div>
       <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-controls="desktopSidebar" aria-expanded="true" aria-label="Minimize sidebar" title="Minimize sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 7-5 5 5 5" /></svg></button>
     </div>
     <div class="sidebar-group">
@@ -417,7 +417,7 @@ ${renderDashboardWindowTitlebar()}
       ${renderDashboardAccordion(APPLICATION_NAV_ITEMS[0], SYSTEM_NAV_ITEMS)}
       ${renderDashboardAccordion(APPLICATION_NAV_ITEMS[1], SETTINGS_NAV_ITEMS)}
     </div>
-    <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
+    <div class="sidebar-note">Live status from this computer.</div>
   </aside>
   <main id="main" class="main" tabindex="-1" aria-labelledby="pageTitle">
     <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardNav(MOBILE_NAV_ITEMS)}</nav>
