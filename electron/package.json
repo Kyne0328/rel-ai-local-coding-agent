@@ -286,6 +286,7 @@
     },
     "nsis": {
       "artifactName": "Rel.AI-MCP-Setup-${version}.${ext}",
+      "installerIcon": "build/installer-icon.ico",
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
