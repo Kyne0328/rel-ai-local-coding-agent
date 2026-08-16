@@ -5,8 +5,17 @@
       "entry": [
         "scripts/knip-production-runtime.mjs!",
         "bin/**/*.js!",
-        "src/**/*.js!",
-        "public/**/*.js!"
+        "src/connectionProfile.js!",
+        "src/config.js!",
+        "src/desktopUxContracts.js!",
+        "src/process.js!",
+        "src/localAnalytics.js!",
+        "src/telemetry.js!",
+        "src/httpServer.js!",
+        "src/toolActivity.js!",
+        "src/http/dashboardSessions.js!",
+        "src/processManager.js!",
+        "public/dashboard.js!"
       ],
       "project": [
         "scripts/knip-production-runtime.mjs!",
@@ -25,10 +34,13 @@
     },
     "electron": {
       "entry": [
-        "*.js!",
-        "*.cjs!",
-        "renderer/**/*.js!",
-        "build/**/*.js!"
+        "main.js!",
+        "preload.cjs!",
+        "service-process.js!",
+        "renderer/status.js!",
+        "renderer/wizard.js!",
+        "build/after-pack.js!",
+        "scripts/verify-fuses.js!"
       ],
       "project": [
         "*.js!",
