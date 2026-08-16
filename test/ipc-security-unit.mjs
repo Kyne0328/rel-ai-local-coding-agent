@@ -12,6 +12,7 @@ const calls = [];
 let clipboardText = '';
 let stopCalls = 0;
 let restartCalls = 0;
+let relaunchCalls = 0;
 
 const deps = {
   ipcMain: { handle: (channel, handler) => handles.set(channel, handler), on: (channel, handler) => listeners.set(channel, handler) },
@@ -26,6 +27,7 @@ const deps = {
   startServer: () => ({ ok: true, started: true }),
   stopServer: () => { stopCalls += 1; return { ok: true }; },
   launchConfiguredDesktop: async options => { restartCalls += 1; calls.push(['launch', options]); return { serverRunning: true }; },
+  relaunchApplication: async () => { relaunchCalls += 1; return { ok: true }; },
   openSettingsWindow: () => ({ ok: true }),
   openDashboardWindow: () => ({ ok: true }),
   getDesktopSettings: () => ({ ok: true }),
@@ -60,14 +62,20 @@ await handles.get('wizard:done')(eventFor(wizard), { port: 3333, tunnelId: 'tunn
 assert.ok(calls.some(entry => entry[0] === 'tunnelKey'));
 assert.ok(calls.some(entry => entry[0] === 'save'));
 assert.ok(calls.some(entry => entry[0] === 'launch' && entry[1].firstRun === true));
-listeners.get('desktop:restart-service')(eventFor(other));
+assert.throws(() => handles.get('desktop:restart-service')(eventFor(other)), /not available/);
+assert.throws(() => handles.get('recovery:restart-service')(eventFor(other)), /not available/);
+assert.throws(() => handles.get('desktop:relaunch')(eventFor(other)), /not available/);
+assert.equal(restartCalls, 1);
+assert.equal(relaunchCalls, 0);
+await handles.get('desktop:restart-service')(eventFor(dashboard));
+await handles.get('recovery:restart-service')(eventFor(fallback));
+await handles.get('desktop:relaunch')(eventFor(dashboard));
+assert.equal(restartCalls, 3);
+assert.equal(relaunchCalls, 1);
 listeners.get('desktop:stop-service')(eventFor(other));
 await new Promise(resolve => setImmediate(resolve));
-assert.equal(restartCalls, 1);
 assert.equal(stopCalls, 0);
-listeners.get('desktop:restart-service')(eventFor(dashboard));
 listeners.get('desktop:stop-service')(eventFor(dashboard));
 await new Promise(resolve => setImmediate(resolve));
-assert.equal(restartCalls, 2);
 assert.equal(stopCalls, 1);
 console.log('IPC secure tunnel boundary tests passed.');
