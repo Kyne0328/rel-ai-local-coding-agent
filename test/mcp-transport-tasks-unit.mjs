@@ -3,12 +3,14 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 
 import {
   CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
+import { readRawBody } from '../src/http/io.js';
 import { createHttpRequestAbortScope, expectedMcpName } from '../src/http/mcpTransport.js';
 import {
   createNativeTask,
@@ -92,27 +94,42 @@ try {
     signal => signal.aborted
       ? Promise.resolve({ stopped: true })
       : new Promise(resolve => signal.addEventListener('abort', () => resolve({ stopped: true }), { once: true })),
-    { bounds: { maxDurationMs: 20, maxCapturedOutputBytes: 1024 } }
+    { bounds: { maxDurationMs: 20 } }
   );
   assert.equal(timeout.ok, false);
   assert.equal(timeout.error.code, -32024);
   assert.equal(timeout.error.reason, 'synchronous_timeout');
 
-  const outputLimit = await runBoundedExecution(
-    async () => ({ value: 'x'.repeat(200) }),
-    { bounds: { maxDurationMs: 1000, maxCapturedOutputBytes: 64 } }
+  const largeOutput = await runBoundedExecution(
+    async () => ({ value: 'x'.repeat(3 * 1024 * 1024) }),
+    { bounds: { maxDurationMs: 1000 } }
   );
-  assert.equal(outputLimit.ok, false);
-  assert.equal(outputLimit.error.code, -32024);
-  assert.equal(outputLimit.error.reason, 'synchronous_output_limit');
-  assert.ok(outputLimit.error.data.capturedOutputBytes > 64);
+  assert.equal(largeOutput.ok, true, 'transport execution must not impose a second output-size policy after the tool has shaped its result');
+  assert.equal(largeOutput.value.value.length, 3 * 1024 * 1024);
+
+  const splitUtf8 = Readable.from([
+    Buffer.from([0xf0, 0x9f]),
+    Buffer.from([0x98, 0x80])
+  ]);
+  splitUtf8.headers = { 'content-length': '4' };
+  assert.equal(await readRawBody(splitUtf8, 4), '😀', 'request decoding must preserve UTF-8 split across chunks');
+
+  let preflightResumed = false;
+  let preflightDestroyed = false;
+  const oversizedDeclaredBody = new EventEmitter();
+  oversizedDeclaredBody.headers = { 'content-length': '128' };
+  oversizedDeclaredBody.resume = () => { preflightResumed = true; };
+  oversizedDeclaredBody.destroy = () => { preflightDestroyed = true; };
+  await assert.rejects(readRawBody(oversizedDeclaredBody, 64), error => error?.status === 413);
+  assert.equal(preflightResumed, true, 'oversized request bodies should be drained so the connection can return a structured 413');
+  assert.equal(preflightDestroyed, false, 'oversized request bodies must not be force-destroyed before the HTTP response is sent');
 
   const externalAbort = new AbortController();
   const aborted = runBoundedExecution(
     signal => signal.aborted
       ? Promise.resolve({ stopped: true })
       : new Promise(resolve => signal.addEventListener('abort', () => resolve({ stopped: true }), { once: true })),
-    { bounds: { maxDurationMs: 1000, maxCapturedOutputBytes: 1024 }, signal: externalAbort.signal }
+    { bounds: { maxDurationMs: 1000 }, signal: externalAbort.signal }
   );
   externalAbort.abort(new Error('client disconnected'));
   const abortedResult = await aborted;
@@ -145,6 +162,27 @@ try {
   });
   assert.equal(synchronousFallback.body.result?.resultType, undefined, 'clients without Tasks capability must keep the synchronous result path');
   assert.equal(synchronousFallback.body.result?.structuredContent?.exitCode, 0);
+
+  let directArguments = null;
+  const directResult = await handleTransportTaskRequest(config, request(102, 'tools/call', {
+    name: 'relai_exec',
+    arguments: {
+      work_id: 'work-session',
+      command: 'echo bounded execution',
+      timeoutMs: 5_000,
+      maxOutputBytes: 8 * 1024 * 1024
+    }
+  }, tasksCapabilities), {
+    principal: owner,
+    transportType: 'streamable-http',
+    executeToolResult: async (_config, _name, args) => {
+      directArguments = args;
+      return { isError: false, structuredContent: { ok: true, exitCode: 0 } };
+    }
+  });
+  assert.equal(directResult.body.result?.structuredContent?.exitCode, 0);
+  assert.equal(directArguments.timeoutMs, 5_000, 'transport must preserve the tool timeout selected by the caller');
+  assert.equal(directArguments.maxOutputBytes, 8 * 1024 * 1024, 'transport must preserve tool-owned output limits instead of silently clamping them');
   const req = new EventEmitter();
   const socket = new EventEmitter();
   req.socket = socket;

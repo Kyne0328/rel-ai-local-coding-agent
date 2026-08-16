@@ -94,7 +94,6 @@ async function handleTransportTaskRequest(config, message, options = {}) {
     taskEligibility: TASK_ELIGIBILITY.ELIGIBLE,
     canCompleteSynchronously: estimate.safe,
     estimatedDurationMs: estimate.durationMs,
-    estimatedOutputBytes: estimate.outputBytes,
     synchronousBounds: bounds,
     abortSignals: options.signal ? [options.signal] : []
   });
@@ -110,7 +109,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   }
 
   const bounded = await runBoundedExecution(
-    signal => execute(config, name, boundedArguments(name, validated.value, selection.bounds), {
+    signal => execute(config, name, validated.value, {
       ...options,
       capabilities,
       signal,
@@ -157,21 +156,17 @@ function isTransportTaskRequestCandidate(config, message) {
   }
 }
 
-function synchronousEstimate(name, args, capabilities, bounds, options = {}) {
+function synchronousEstimate(_name, args, capabilities, bounds, options = {}) {
   const tasksSupported = negotiateTasksCapability(capabilities).supported;
   if (!tasksSupported) {
     return {
       safe: options.synchronousFallback !== false,
-      durationMs: bounds.maxDurationMs,
-      outputBytes: bounds.maxCapturedOutputBytes
+      durationMs: bounds.maxDurationMs
     };
   }
   const timeoutMs = Number(args?.timeoutMs);
   const explicitBound = Number.isFinite(timeoutMs) && timeoutMs > 0;
   const directDurationLimit = Math.min(bounds.maxDurationMs, 10_000);
-  let outputBytes = bounds.maxCapturedOutputBytes;
-  if (name === 'relai_exec') outputBytes = Math.min(Number(args?.maxOutputBytes) || outputBytes, outputBytes);
-  else outputBytes = Math.min(outputBytes, 512 * 1024);
   const commandCount = Array.isArray(args?.checks)
     ? args.checks.length
     : Array.isArray(args?.commands)
@@ -181,12 +176,10 @@ function synchronousEstimate(name, args, capabilities, bounds, options = {}) {
         : Number.POSITIVE_INFINITY;
   const safe = explicitBound
     && timeoutMs <= directDurationLimit
-    && outputBytes <= bounds.maxCapturedOutputBytes
     && commandCount <= 1;
   return {
     safe,
-    durationMs: explicitBound ? timeoutMs : undefined,
-    outputBytes
+    durationMs: explicitBound ? timeoutMs : undefined
   };
 }
 
@@ -402,11 +395,7 @@ async function runBoundedExecution(executor, options = {}) {
     return { ok: false, error: abortedExecutionError() };
   }
   if (settled.kind === 'error') throw settled.error;
-  const bytes = Buffer.byteLength(JSON.stringify(settled.value), 'utf8');
-  if (bytes > bounds.maxCapturedOutputBytes) {
-    return { ok: false, error: executionLimitError('synchronous_output_limit', 'Bounded synchronous execution exceeded its captured-output limit.', bounds, bytes) };
-  }
-  return { ok: true, value: settled.value, bytes };
+  return { ok: true, value: settled.value };
 }
 
 async function awaitCleanup(execution) {
@@ -421,17 +410,6 @@ async function awaitCleanup(execution) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function boundedArguments(name, args, bounds) {
-  const value = { ...args };
-  if (['relai_exec', 'relai_validate'].includes(name)) {
-    value.timeoutMs = Math.min(Number(args.timeoutMs) || bounds.maxDurationMs, bounds.maxDurationMs);
-  }
-  if (name === 'relai_exec') {
-    value.maxOutputBytes = Math.min(Number(args.maxOutputBytes) || bounds.maxCapturedOutputBytes, bounds.maxCapturedOutputBytes);
-  }
-  return value;
 }
 
 function transportToolContext(options) {
@@ -484,16 +462,12 @@ function nativeTaskErrorResponse(id, error) {
   return errorResponse(id, -32603, 'Native task request failed.', { reason: 'internal_error', retryable: true });
 }
 
-function executionLimitError(reason, message, bounds, capturedOutputBytes) {
+function executionLimitError(reason, message, bounds) {
   const error = new Error(message);
   error.code = SYNCHRONOUS_EXECUTION_LIMIT_CODE;
   error.reason = reason;
   error.retryable = reason === 'synchronous_timeout';
-  error.data = {
-    reason,
-    limits: bounds,
-    ...(capturedOutputBytes == null ? {} : { capturedOutputBytes })
-  };
+  error.data = { reason, limits: bounds };
   return error;
 }
 
@@ -519,7 +493,6 @@ function toolExecutionErrorResponse(id, error) {
 function executionErrorCode(error) {
   switch (String(error?.reason || '')) {
     case 'synchronous_timeout': return 'SYNCHRONOUS_EXECUTION_TIMEOUT';
-    case 'synchronous_output_limit': return 'SYNCHRONOUS_OUTPUT_LIMIT';
     case 'execution_aborted': return 'EXECUTION_ABORTED';
     default: return String(error?.code || 'TOOL_EXECUTION_FAILED');
   }

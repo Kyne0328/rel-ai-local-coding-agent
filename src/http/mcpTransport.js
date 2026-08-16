@@ -24,9 +24,6 @@ import { readJsonBody, readRawBody, sendJson } from './io.js';
 
 let coreHandler = null;
 let coreNodeHandler = null;
-const activePrincipalRequests = new Map();
-const MAX_CONCURRENT_REQUESTS_PER_PRINCIPAL = 8;
-const DEFAULT_MCP_BODY_LIMIT = 10 * 1024 * 1024;
 
 function getCoreNodeHandler() {
   if (coreNodeHandler) return coreNodeHandler;
@@ -80,7 +77,7 @@ async function handleMcpStreamable(ctx) {
 
   let message;
   try {
-    const raw = await readRawBody(ctx.req, Math.min(ctx.options.maxBodyBytes, DEFAULT_MCP_BODY_LIMIT));
+    const raw = await readRawBody(ctx.req, ctx.options.maxBodyBytes);
     message = raw.trim() ? JSON.parse(raw) : null;
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -107,11 +104,6 @@ async function handleMcpStreamable(ctx) {
   const legacy = await isLegacyHttpRequest(ctx.req, message);
   const params = objectValue(message?.params);
   const meta = legacy ? {} : objectValue(params._meta);
-  const releasePrincipalRequest = acquirePrincipalRequest(principalId);
-  if (!releasePrincipalRequest) {
-    sendMcpProtocolError(ctx.res, 429, -32023, 'Too many concurrent MCP requests for this client.', message?.id, { retryable: true });
-    return;
-  }
   const requestId = mcpConnectionManager.beginRequest({
     principal: principalId,
     method: message?.method,
@@ -178,8 +170,6 @@ async function handleMcpStreamable(ctx) {
   } catch (error) {
     finishRequest(false);
     throw error;
-  } finally {
-    releasePrincipalRequest();
   }
 }
 
@@ -206,21 +196,6 @@ function runMcpRequestSpan(config, details, callback) {
     'mcp.method': String(details.method || ''),
     'mcp.client_id': String(details.principalId || '')
   }, callback, { carrier: details.headers });
-}
-
-function acquirePrincipalRequest(principalId) {
-  const key = String(principalId || 'anonymous');
-  const active = Number(activePrincipalRequests.get(key) || 0);
-  if (active >= MAX_CONCURRENT_REQUESTS_PER_PRINCIPAL) return null;
-  activePrincipalRequests.set(key, active + 1);
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    const remaining = Number(activePrincipalRequests.get(key) || 1) - 1;
-    if (remaining > 0) activePrincipalRequests.set(key, remaining);
-    else activePrincipalRequests.delete(key);
-  };
 }
 
 async function handleUnsupportedHttpMethod(ctx) {
