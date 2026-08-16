@@ -17,6 +17,7 @@ const policyResolverSource = fs.readFileSync(new URL('../src/policyResolver.js',
 assert.doesNotMatch(policyResolverSource, /spawnSync/, 'session baseline capture must never block the MCP event loop');
 assert.match(policyResolverSource, /await runProcess\('git'/, 'session baseline capture must use the asynchronous process runner');
 import { classifyStatusOwnership } from "../src/localRepoBridge.js";
+import { workspaceGitStatus } from "../src/repo/gitOps.js";
 
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-baseline-'));
@@ -158,6 +159,16 @@ assert.deepEqual(await captureBaselineDirty(''), []);
   assert.deepEqual(ownership.baselineChanged, ['tracked.txt'], 'pre-existing dirty content must remain baseline-owned for safety');
   assert.deepEqual(ownership.sessionChanged, [], 'baseline ownership must not be reclassified as disposable session work');
   assert.deepEqual(ownership.sessionTouched, ['tracked.txt'], 'an explicit active task must count its mutation even with concurrent sessions');
+
+  await recordTaskIntegrityEvent(config, {
+    ts: new Date().toISOString(), taskId: 'other-active-task', workspace: 'myapp', taskIdentityVersion: 2, tool: 'work.begin', ok: true
+  });
+  fs.writeFileSync(path.join(repo, 'other-task.txt'), 'owned by another task\n');
+  await recordTaskIntegrityEvent(config, {
+    ts: new Date().toISOString(), taskId: 'other-active-task', workspace: 'myapp', taskIdentityVersion: 2, tool: 'edit', ok: true, changedFiles: ['other-task.txt']
+  });
+  const scopedStatus = await workspaceGitStatus({ alias: 'myapp', path: repo }, config, { work_id: taskId });
+  assert.deepEqual(scopedStatus.sessionChangedFiles, ['tracked.txt'], 'work-scoped repository status must not absorb concurrent edits from another task');
 
   const activity = { tasks: [{ id: taskId, workspace: 'myapp', state: 'working', status: 'planning' }] };
   let workspaceState = buildWorkspaceStates(config, [], activity).myapp;

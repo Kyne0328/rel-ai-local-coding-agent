@@ -143,6 +143,40 @@ try {
   assert.equal(completion.work_id, validatingTask);
   assert.equal(completion.completionSource, 'relai_validate:checks');
 
+  fs.rmSync(validationStartedPath, { force: true });
+  fs.rmSync(validationReleasePath, { force: true });
+  const scopedTask = await startTask('Atomic validation ignores unrelated writers');
+  await callTool('relai_edit', {
+    workspace: 'app',
+    work_id: scopedTask,
+    path: 'src/scoped-validation.js',
+    content: 'export const scoped = true;\n'
+  }, context);
+
+  const scopedValidationStarted = waitForFile(validationStartedPath);
+  const scopedCompletionPromise = callTool('relai_validate', {
+    action: 'checks',
+    workspace: 'app',
+    work_id: scopedTask,
+    checks: ['node validation-gate.mjs'],
+    complete: true,
+    summary: 'Unrelated concurrent changes do not invalidate task-scoped validation.'
+  }, context);
+
+  await scopedValidationStarted;
+  await callTool('relai_edit', {
+    workspace: 'app',
+    work_id: primaryTask,
+    path: 'src/unrelated-validation.js',
+    content: 'export const unrelated = true;\n'
+  }, context);
+  fs.writeFileSync(validationReleasePath, 'release\\n');
+
+  const scopedCompletion = await scopedCompletionPromise;
+  assert.equal(scopedCompletion.ok, true, 'unrelated concurrent changes must not invalidate task-scoped validation');
+  assert.equal(scopedCompletion.completionKnown, true);
+  assert.equal(scopedCompletion.work_id, scopedTask);
+
   await callTool('relai_work', {
     action: 'cancel',
     workspace: 'app',
@@ -151,14 +185,14 @@ try {
   }, context);
 } finally {
   await flushAuditWrites();
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }
 
-console.log('Atomic validation resolves one relevant Rel.AI race internally under the source-workspace lock.');
+console.log('Atomic validation resolves relevant races internally and ignores unrelated concurrent task changes.');
 // Nested raw tool calls can leave Windows piped stdio referenced after app resources close.
 // Teardown above is complete, so exit explicitly to keep this isolated integration test deterministic.
 process.exit(0);
