@@ -230,7 +230,7 @@ try {
 
   resetToolActivity();
   const noValidationContext = { publicHttpOnly: true };
-  const noValidationTask = await callTool('relai_work', { action: 'begin', workspace: 'app' }, noValidationContext);
+  const noValidationTask = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none' }, noValidationContext);
   await callTool('relai_exec', {
     workspace: 'app',
     work_id: noValidationTask.work_id,
@@ -246,7 +246,7 @@ try {
 
   resetToolActivity();
   const validatedContext = { publicHttpOnly: true };
-  const validatedTask = await callTool('relai_work', { action: 'begin', workspace: 'app' }, validatedContext);
+  const validatedTask = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none' }, validatedContext);
   await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: validatedTask.work_id, level: 'standard' }, validatedContext);
   await callTool('relai_exec', {
     workspace: 'app',
@@ -262,7 +262,7 @@ try {
 
   resetToolActivity();
   const mutationContext = { publicHttpOnly: true };
-  const mutationTask = await callTool('relai_work', { action: 'begin', workspace: 'app' }, mutationContext);
+  const mutationTask = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none' }, mutationContext);
   await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: mutationTask.work_id, level: 'standard' }, mutationContext);
   await callTool('relai_exec', {
     workspace: 'app',

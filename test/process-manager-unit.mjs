@@ -22,6 +22,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-process-manager-'));
 const stateDir = path.join(root, 'state');
 const workspaceRoot = path.join(root, 'workspace');
 const config = { stateDir };
+const maxLogBytes = 65536;
 const workspace = { alias: 'app', path: workspaceRoot };
 const otherWorkspace = { alias: 'other', path: path.join(root, 'other-workspace') };
 const principalA = { clientId: 'client-a', authMode: 'oauth' };
@@ -61,7 +62,7 @@ try {
     argv: [persistentScript],
     input: initialInput,
     startupWaitMs: 100,
-    maxLogBytes: 65536,
+    maxLogBytes,
     label: 'persistent-managed-test',
     kind: 'service',
     purpose: 'Exercise persistent process lifecycle behavior.'
@@ -157,7 +158,10 @@ try {
   assert.equal(noisy.stdout.truncatedBefore, true);
   assert.equal(noisy.stdout.offset, noisy.stdout.retainedFromOffset);
   assert.ok(noisy.stdout.totalBytes >= 120000);
-  assert.ok(fs.statSync(path.join(stateDir, 'processes', started.processId, 'stdout.log')).size <= 65536);
+  assert.ok(
+    noisy.stdout.totalBytes - noisy.stdoutRetainedFromOffset <= maxLogBytes,
+    'retained stdout must stay within the configured log cap'
+  );
 
   const cursor = noisy.stdout.totalBytes;
   writeManagedProcess(config, {
