@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { callTool as rawCallTool } from '../src/tools.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-unborn-workspace-'));
@@ -97,6 +98,7 @@ try {
   assert.equal(cancelled.ok, true);
 } finally {
   resetToolActivity();
+  await repositoryIntelligence.shutdown();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
   fs.rmSync(root, { recursive: true, force: true });
