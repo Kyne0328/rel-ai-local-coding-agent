@@ -1,23 +1,23 @@
 import { toast } from '../../components/toast.js';
 import { requestDashboardRefresh } from '../../api.js';
 import { markUnsaved } from '../../interaction-safety.js';
-import { header, panel, field, numberControl } from './shared.js';
+import { field, numberControl } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 
 let state = null;
 let savedState = '';
 
-export function mountDesktopConnection(container) {
+export function mountDesktopConnection(container, options = {}) {
   container.id = 'connectionControls';
   container.innerHTML = '<div class="settings-loading">Loading connection settings…</div>';
   if (!window.relaiDesktop?.getSettings || !window.relaiDesktop?.saveSettings) {
     container.innerHTML = '<div class="empty">Connection settings are available inside the installed Rel.AI desktop app.</div>';
     return;
   }
-  return loadAndRender(container);
+  return loadAndRender(container, options);
 }
 
-async function loadAndRender(container) {
+async function loadAndRender(container, options = {}) {
   try {
     const settings = await window.relaiDesktop.getSettings();
     state = {
@@ -28,35 +28,50 @@ async function loadAndRender(container) {
     };
     savedState = snapshot(state);
     markUnsaved(container, false);
-    render(container);
+    render(container, options);
   } catch (error) {
     container.innerHTML = `<div class="empty">Connection settings could not be loaded: ${escapeHtml(messageOf(error))}</div>`;
   }
 }
 
-function render(container) {
+function render(container, { expanded = false } = {}) {
   container.innerHTML = '';
-  container.appendChild(header('ChatGPT connection', 'Rel.AI connects ChatGPT to your project files while file access and commands stay on this computer.'));
-  const connection = panel('Connection settings');
-  connection.el.id = 'tunnelSettings';
-  connection.body.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI Secure MCP Tunnel ID for this computer.'));
-  connection.body.appendChild(field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.'));
+
+  const disclosure = document.createElement('details');
+  disclosure.className = 'card connector-details connection-settings-disclosure';
+  disclosure.id = 'tunnelSettings';
+  disclosure.open = Boolean(expanded);
+  disclosure.innerHTML = '<summary class="connector-details-summary"><span><strong>Connection settings</strong><small>Secure tunnel credentials and local port</small></span><span aria-hidden="true">›</span></summary>';
+
+  const disclosureBody = document.createElement('div');
+  disclosureBody.className = 'card-body settings-panel-body';
+  const intro = document.createElement('p');
+  intro.className = 'muted';
+  intro.textContent = 'Use these settings when connecting this computer for the first time or fixing a connection problem.';
+
+  const fields = document.createElement('div');
+  fields.className = 'settings-panel-body';
+  fields.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI Secure MCP Tunnel ID for this computer.'));
+  fields.appendChild(field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.'));
+
   const advanced = document.createElement('details');
   advanced.className = 'settings-advanced connection-advanced-settings';
   advanced.innerHTML = '<summary>Advanced local settings</summary>';
-  const body = document.createElement('div');
-  body.className = 'settings-panel-body';
-  body.appendChild(field('Local connection port', numberControl(state.port, value => { state.port = Number(value); dirty(container); }, { min: 1024, max: 65535 }), 'Change this only when port 3333 conflicts with another local application.'));
-  advanced.appendChild(body);
-  connection.body.appendChild(advanced);
-  container.appendChild(connection.el);
+  const advancedBody = document.createElement('div');
+  advancedBody.className = 'settings-panel-body';
+  advancedBody.appendChild(field('Local connection port', numberControl(state.port, value => { state.port = Number(value); dirty(container); }, { min: 1024, max: 65535 }), 'Change this only when port 3333 conflicts with another local application.'));
+  advanced.appendChild(advancedBody);
+  fields.appendChild(advanced);
 
   const footer = document.createElement('div');
-  footer.className = 'settings-save-row';
+  footer.className = 'connection-actions';
   footer.innerHTML = '<div class="muted">Saving restarts the local Rel.AI connection.</div>';
   const save = button('Save and restart connection', 'primary', () => saveSettings(container, save));
   footer.appendChild(save);
-  container.appendChild(footer);
+
+  disclosureBody.append(intro, fields, footer);
+  disclosure.appendChild(disclosureBody);
+  container.appendChild(disclosure);
 }
 
 async function saveSettings(container, saveButton) {

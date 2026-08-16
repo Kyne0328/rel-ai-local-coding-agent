@@ -17,8 +17,8 @@ export async function mountUsage(container) {
     <section class="usage-page" data-usage-page>
       <div class="feature-toolbar usage-toolbar">
         <div>
-          <h2>Usage</h2>
-          <p>Usage is stored on this computer. Prompts, file paths, command output, and action results are not stored.</p>
+          <h2>Analytics</h2>
+          <p>Analytics are stored on this computer. Prompts, file paths, command output, and action results are not stored.</p>
         </div>
         <div class="usage-toolbar-controls">
           <label class="usage-workspace-control">
@@ -89,16 +89,16 @@ async function loadUsage(controls) {
       customEnd: controls.endInput.value
     });
   } catch (error) {
-    status.textContent = 'Usage could not be loaded.';
+    status.textContent = 'Analytics could not be loaded.';
     renderUnavailable(content, messageOf(error), () => controls.rangeSelect.focus());
     return;
   }
 
   refreshButton.disabled = true;
   refreshButton.textContent = 'Loading…';
-  status.textContent = 'Loading usage…';
+  status.textContent = 'Loading analytics…';
   content.setAttribute('aria-busy', 'true');
-  content.innerHTML = '<div class="usage-loading">Loading usage…</div>';
+  content.innerHTML = '<div class="usage-loading">Loading analytics…</div>';
   try {
     const workspace = getWorkspaceFilter();
     const { models, current, previous } = await loadAnalyticsData({
@@ -109,11 +109,11 @@ async function loadUsage(controls) {
     if (!active(root, generation)) return;
     syncWorkspaceControl(controls.workspaceSelect, models, workspace);
     renderUsage(content, { bounds, current, previous });
-    status.textContent = `Usage updated for ${bounds.label}.`;
+    status.textContent = `Analytics updated for ${bounds.label}.`;
   } catch (error) {
     if (active(root, generation)) {
       renderUnavailable(content, messageOf(error), () => loadUsage(controls));
-      status.textContent = 'Usage could not be loaded.';
+      status.textContent = 'Analytics could not be loaded.';
     }
   } finally {
     if (active(root, generation)) {
@@ -142,7 +142,7 @@ function syncWorkspaceControl(select, models, workspace) {
 }
 
 function renderUnavailable(content, message, retry) {
-  content.innerHTML = `<section class="usage-unavailable empty-state"><strong>Usage unavailable</strong><p>${escapeHtml(message || 'Usage could not be loaded.')}</p><button type="button" class="secondary" data-usage-retry>Retry</button></section>`;
+  content.innerHTML = `<section class="usage-unavailable empty-state"><strong>Analytics unavailable</strong><p>${escapeHtml(message || 'Analytics could not be loaded.')}</p><button type="button" class="secondary" data-usage-retry>Retry</button></section>`;
   content.querySelector('[data-usage-retry]')?.addEventListener('click', retry);
 }
 
@@ -160,5 +160,5 @@ function active(root, generation) {
 }
 
 function messageOf(error) {
-  return error instanceof Error ? error.message : String(error || 'Usage unavailable.');
+  return error instanceof Error ? error.message : String(error || 'Analytics unavailable.');
 }

@@ -81,6 +81,8 @@ try {
   assert.equal(result.diagnostics.liveTailStarted, true);
   assert.equal(result.diagnostics.liveTailStopped, true);
   assert.equal(result.diagnostics.searchEmpty, true);
+  assert.equal(result.diagnostics.technicalFindingCodesGated, true);
+  assert.equal(result.diagnostics.findingSeveritiesReadable, true);
   assert.deepEqual(result.diagnostics.applied.chips.sort(), ['Scope: Failed activity ×', 'Severity: Blocking ×']);
   assert.equal(result.diagnostics.applied.badge, 'Filters (2)');
   assert.match(result.diagnostics.applied.summary, /findings.*log entries shown/);
@@ -100,6 +102,7 @@ try {
   assert.equal(result.settings.legacyDensityIgnored, true);
   assert.equal(result.settings.navigationLabel, 'Settings navigation');
   assert.equal(result.settings.currentPageCount, 1);
+  assert.equal(result.settings.labelsAssociated, true);
   assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, scopeName: 'Project filter: All projects' });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
