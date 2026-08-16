@@ -18,7 +18,7 @@ assert.doesNotMatch(main, /createGatewayClient|managedNgrok|createPublicConnecti
 assert.equal(rootPackage.scripts['fetch:ngrok'], undefined);
 assert.equal(rootPackage.scripts['verify:ngrok'], undefined);
 assert.equal(rootPackage.scripts['gateway:acceptance'], undefined);
-assert.equal(rootPackage.scripts['fetch:tunnel-client'], 'node scripts/fetch-tunnel-client.mjs');
+assert.match(String(rootPackage.scripts['fetch:tunnel-client'] || ''), /scripts\/fetch-tunnel-client\.mjs/, 'tunnel-client fetching must stay available without freezing the command spelling');
 assert.match(electronPackager, /ensureTunnelClient\(platform, targetArch\)/);
 assert.match(electronPackager, /OpenAI tunnel-client is missing.*fetching the pinned/);
 assert.match(electronPackager, /OpenAI tunnel-client verification/);

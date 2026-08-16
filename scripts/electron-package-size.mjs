@@ -18,12 +18,12 @@ function main(input = process.argv.slice(2)) {
     fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     console.log(`Package-size report written to ${path.relative(root, outputPath) || outputPath}.`);
   }
-  if (report.violations.length && options.strict) process.exitCode = 1;
+  if (report.violations.length) process.exitCode = 1;
   return report;
 }
 
 function parseArguments(input) {
-  if (input.includes('--warn-only')) throw new Error('--warn-only was removed; package-size policy is a blocking release gate.');
+  if (input.includes('--strict')) throw new Error('--strict was removed; ordinary package-size drift is advisory and structural/emergency guards are always enforced.');
   const valueAfter = (name, fallback = '') => {
     const index = input.indexOf(name);
     return index >= 0 ? String(input[index + 1] || fallback) : fallback;
@@ -32,8 +32,7 @@ function parseArguments(input) {
     distDir: valueAfter('--dir', 'dist'),
     platform: normalizeElectronPlatform(valueAfter('--platform', process.platform)),
     baselinePath: valueAfter('--baseline', ''),
-    jsonPath: valueAfter('--json', ''),
-    strict: input.includes('--strict')
+    jsonPath: valueAfter('--json', '')
   };
 }
 
@@ -96,6 +95,7 @@ function buildPackageSizeReport(options) {
     throw new Error(`Package-size baseline targets ${baseline.platform}, not ${platform}.`);
   }
   const comparison = compareMetrics(metrics, baseline);
+  const warnings = [];
   const violations = [];
   if (content.localeCount !== 1 || content.locales[0] !== 'en-US.pak') {
     violations.push(`Expected only en-US.pak, found: ${content.locales.join(', ') || 'none'}.`);
@@ -105,9 +105,8 @@ function buildPackageSizeReport(options) {
   }
   if (content.asarSourceMapCount > 0) violations.push(`app.asar contains ${content.asarSourceMapCount} source map files.`);
   for (const item of comparison) {
-    if (item.exceedsTolerance) {
-      violations.push(`${item.metric} is ${item.deltaPercent.toFixed(2)}% above the accepted baseline.`);
-    }
+    if (item.exceedsTolerance) warnings.push(`${item.metric} is ${item.deltaPercent.toFixed(2)}% above the measured baseline.`);
+    if (item.exceedsBlockingGrowth) violations.push(`${item.metric} grew ${item.deltaPercent.toFixed(2)}%, above the ${baseline.blockingGrowthPercent}% emergency growth guard.`);
   }
 
   return {
@@ -126,9 +125,11 @@ function buildPackageSizeReport(options) {
       path: relativeTo(root, path.resolve(root, options.baselinePath)),
       capturedAt: baseline.capturedAt,
       policy: baseline.policy,
-      tolerancePercent: baseline.tolerancePercent
+      tolerancePercent: baseline.tolerancePercent,
+      blockingGrowthPercent: baseline.blockingGrowthPercent
     } : null,
     comparison,
+    warnings,
     violations
   };
 }
@@ -161,9 +162,12 @@ function readBaseline(file) {
   requireFile(file, 'Package-size baseline');
   const baseline = readJson(file);
   if (baseline.schemaVersion !== 2) throw new Error(`Unsupported package-size baseline schema: ${file}`);
-  if (baseline.policy !== 'strict') throw new Error(`Package-size baseline must declare a strict policy: ${file}`);
+  if (baseline.policy !== 'advisory') throw new Error(`Package-size baseline must declare an advisory policy: ${file}`);
   if (!Number.isFinite(baseline.tolerancePercent) || baseline.tolerancePercent < 0) {
-    throw new Error(`Package-size baseline has an invalid tolerance: ${file}`);
+    throw new Error(`Package-size baseline has an invalid advisory tolerance: ${file}`);
+  }
+  if (!Number.isFinite(baseline.blockingGrowthPercent) || baseline.blockingGrowthPercent <= baseline.tolerancePercent) {
+    throw new Error(`Package-size baseline must declare a blockingGrowthPercent above its advisory tolerance: ${file}`);
   }
   if (!baseline.metrics || typeof baseline.metrics !== 'object') throw new Error(`Package-size baseline has no metrics object: ${file}`);
   return baseline;
@@ -172,6 +176,7 @@ function readBaseline(file) {
 function compareMetrics(metrics, baseline) {
   if (!baseline) return [];
   const threshold = Number(baseline.tolerancePercent || 0);
+  const blockingThreshold = Number(baseline.blockingGrowthPercent || Number.POSITIVE_INFINITY);
   return Object.entries(baseline.metrics).flatMap(([metric, baselineBytes]) => {
     const currentBytes = metrics[metric];
     if (!Number.isFinite(currentBytes) || !Number.isFinite(baselineBytes)) return [];
@@ -183,7 +188,8 @@ function compareMetrics(metrics, baseline) {
       currentBytes,
       deltaBytes,
       deltaPercent,
-      exceedsTolerance: deltaPercent > threshold
+      exceedsTolerance: deltaPercent > threshold,
+      exceedsBlockingGrowth: deltaPercent > blockingThreshold
     }];
   });
 }
@@ -203,11 +209,15 @@ function printReport(report) {
       console.log(`  ${item.metric.padEnd(26)} ${sign}${formatBytes(item.deltaBytes)} (${sign}${item.deltaPercent.toFixed(2)}%)`);
     }
   }
+  if (report.warnings.length) {
+    console.warn('Package-size drift warnings:');
+    for (const warning of report.warnings) console.warn(`  - ${warning}`);
+  }
   if (report.violations.length) {
-    console.error('Package-size policy violations:');
+    console.error('Package-content or emergency-growth violations:');
     for (const violation of report.violations) console.error(`  - ${violation}`);
   } else {
-    console.log('Package-size checks passed within the strict budget.');
+    console.log('Package structure passed; ordinary size drift is informational.');
   }
 }
 

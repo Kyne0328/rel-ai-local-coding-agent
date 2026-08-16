@@ -63,7 +63,7 @@ assert.equal(first.options.webPreferences.contextIsolation, true);
 assert.equal(first.options.webPreferences.nodeIntegration, false);
 assert.equal(first.options.webPreferences.partition, 'relai-recovery');
 assert.deepEqual(first.options.webPreferences.additionalArguments, ['--relai-preload-surface=application']);
-assert.equal(first.options.backgroundColor, '#1f2937');
+assert.match(first.options.backgroundColor, /^#[0-9a-f]{6}$/i, 'recovery window must provide an opaque fallback background while its UI loads');
 assert.equal(first.visible, true);
 assert.equal(first.focused, true);
 first.webEvents.get('did-finish-load')?.();

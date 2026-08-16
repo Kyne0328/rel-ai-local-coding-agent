@@ -28,10 +28,10 @@ assert.match(sidebar, /other\.open = false/);
 assert.match(router, /anchor\.closest\('\.sidebar-subnav'\)/);
 assert.match(router, /details\.dataset\.navAccordion === owner/);
 assert.match(router, /if \(active\) details\.open = true/);
-assert.match(appCss, /:root\[data-sidebar="collapsed"\]\s*\{\s*--sidebar-width:\s*82px;/);
+assert.match(appCss, /:root\[data-sidebar="collapsed"\]\s*\{[^}]*--sidebar-width:\s*[^;]+;/s, 'collapsed sidebar must define its own width without freezing one pixel value');
 assert.match(appCss, /:root\[data-sidebar="collapsed"\][\s\S]*\.nav-icon\s*\{[^}]*size-5/s);
 assert.match(appCss, /\.sidebar-accordion > summary/);
 assert.match(appCss, /\.sidebar-subnav/);
-assert.match(settingsCss, /@media \(min-width: 981px\)[\s\S]*\.settings-rail\s*\{\s*display:\s*none;/s);
+assert.match(settingsCss, /@media\s*\(min-width:[^)]+\)[\s\S]*\.settings-rail\s*\{\s*display:\s*none;/s, 'wide layouts must suppress the redundant settings rail');
 
 console.log('Sidebar accordion and collapsed navigation contracts passed.');

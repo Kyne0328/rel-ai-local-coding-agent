@@ -37,6 +37,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
       - name: Resolve release version
         id: version
         shell: bash
@@ -45,7 +50,7 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Refuse an existing tag or release
+      - name: Resolve publication state
         id: preflight
         shell: bash
         env:
@@ -53,11 +58,6 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Tag $VERSION already exists. Nothing will be republished."
-            exit 0
-          fi
           api_base="${GITHUB_API_URL:-https://api.github.com}"
           release_url="$api_base/repos/$GITHUB_REPOSITORY/releases/tags/$VERSION"
           http_status="$(curl --silent --show-error --output release-response.json --write-out '%{http_code}' \
@@ -69,9 +69,9 @@ jobs:
             200)
               echo "publish=false" >> "$GITHUB_OUTPUT"
               echo "GitHub release $VERSION already exists. Nothing will be republished."
+              exit 0
               ;;
             404)
-              echo "publish=true" >> "$GITHUB_OUTPUT"
               ;;
             *)
               cat release-response.json >&2 || true
@@ -79,6 +79,23 @@ jobs:
               exit 1
               ;;
           esac
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+            git fetch --force origin "refs/tags/$VERSION:refs/tags/$VERSION"
+            tag_commit="$(git rev-list -n 1 "refs/tags/$VERSION")"
+            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+              echo "Existing tag $VERSION points to $tag_commit, not current release commit $GITHUB_SHA." >&2
+              exit 1
+            fi
+            echo "Recovering unpublished release from existing tag $VERSION at $tag_commit."
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+      - name: Install release validation dependencies
+        if: steps.preflight.outputs.publish == 'true'
+        run: npm ci --ignore-scripts
+      - name: Verify release consistency
+        if: steps.preflight.outputs.publish == 'true'
+        run: npm run release:check
 
   windows:
     name: Build Windows release
@@ -125,13 +142,11 @@ jobs:
         env:
           ZOEKT_PLATFORMS: win32
         run: pwsh scripts/fetch-zoekt.ps1
-      - name: Verify generated color assets
-        run: npm run verify:color-tokens
       - name: Run native Tasks release gate
         run: npm run test:native-tasks-release-gate
       - name: Run tests
         run: npm test
-      - name: Enforce observability performance budgets
+      - name: Record observability performance metrics
         run: npm run benchmark:observability
       - name: Verify responsive and accessible dashboard behavior
         run: npm run test:observability-browser

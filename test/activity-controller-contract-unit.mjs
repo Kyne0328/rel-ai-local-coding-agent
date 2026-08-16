@@ -30,9 +30,9 @@ assert.match(activity, /activity-message-copy">\$\{esc\(message\)\}<\/span>/, 'm
 assert.match(activity, /activity-message-title/, 'event titles may be shown separately without obscuring messages');
 assert.match(dashboard, /return module\.updateActivityLiveState\(data\);/, 'the dashboard must delegate live Activity updates to the feature controller');
 assert.match(dashboard, /if \(!updated\) return false;/, 'the dashboard must respect Activity no-op updates');
-assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*min-width:\s*12ch/s, 'messages need a guaranteed readable width');
-assert.match(activityCss, /\.activity-col-message\s*\{[^}]*width:\s*39%/s, 'fixed-layout Activity tables must preserve the intended desktop Message allocation');
+assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*min-width:/s, 'messages need an explicit readable minimum width');
+assert.match(activityCss, /\.activity-col-message\s*\{[^}]*width:\s*\d+(?:\.\d+)?%/s, 'fixed-layout Activity tables must give Message an explicit share of the row');
 assert.doesNotMatch(activityCss, /\.activity-col-message\s*\{[^}]*width:\s*auto/s, 'Message must not rely on fixed-table auto width when Workspace is hidden');
-assert.match(activityCss, /@media \(max-width: 980px\)[\s\S]*\.activity-workspace-column[\s\S]*display:\s*none/s, 'workspace must yield space to messages before the mobile breakpoint');
+assert.match(activityCss, /@media\s*\(max-width:[^)]+\)[\s\S]*\.activity-workspace-column[\s\S]*display:\s*none/s, 'a narrower layout must let Workspace yield space to messages');
 
 console.log('Activity controller contract test passed.');

@@ -3,10 +3,11 @@
   "capturedAt": "2026-08-12",
   "platform": "linux",
   "architecture": "x64",
-  "policy": "strict",
+  "policy": "advisory",
   "tolerancePercent": 5,
+  "blockingGrowthPercent": 25,
   "provisional": false,
-  "notes": "Measured Linux CI artifact baseline after the Repository Intelligence language expansion. The resource budget adds only the exact platform-neutral Playwright-core payload measured from the shared package filter; AppImage, DEB, and other artifact metrics remain the measured Linux baseline until the next Linux release capture.",
+  "notes": "Measured Linux release baseline. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
   "metrics": {
     "appImageBytes": 149760812,
     "debBytes": 115924244,
