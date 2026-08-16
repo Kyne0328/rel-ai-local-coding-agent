@@ -1,9 +1,8 @@
 import { getToolSchemas } from './tools.js';
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } from "./config.js";
+import { publicConfigSummary, resolveWorkspace, getConfigPath, makeDefaultConfig } from "./config.js";
 import { resolvePolicy } from "./policyResolver.js";
 import { readAudit } from './audit.js';
 import { getStateDir } from './statePaths.js';
@@ -212,27 +211,6 @@ function writableJsonPath(rawPath, label, baseDir = process.cwd()) {
   return path.join(realParent, path.basename(relativePath));
 }
 
-function trustedDefaultConfigPath() {
-  return path.join(os.homedir(), ".rel-ai", "opencode.json");
-}
-
-function importOriginalRelAiConfig(args = {}) {
-  const sourcePath = args.sourcePath
-    ? existingReadableJsonPath(args.sourcePath, "sourcePath")
-    : trustedDefaultConfigPath();
-  const source = safeReadJson(sourcePath);
-  if (!source) throw new Error(`Original Rel.AI config file is corrupted or empty: ${sourcePath}`);
-  const config = readConfig({ allowMissing: true });
-  const imported = [];
-  for (const [alias, entry] of Object.entries(source.workspaces || {})) {
-    if (!entry?.path) continue;
-    config.workspaces[alias] = { ...(config.workspaces[alias] || {}), path: entry.path };
-    imported.push(alias);
-  }
-  if (args.dryRun !== true) writeConfig(config);
-  return { ok: true, dryRun: args.dryRun === true, sourcePath, imported, configPath: getConfigPath() };
-}
-
 function stateExport(config, args = {}) {
   if (config.productUx?.enableStateExport === false) {
     throw new Error("State export is disabled (productUx.enableStateExport=false).");
@@ -373,4 +351,4 @@ function cautionSummary(config, options = {}) {
   };
 }
 
-export { dashboardData, liveLogTail, healthMonitor, cautionSummary, doctorFix, setupWizard, importOriginalRelAiConfig, stateExport, stateImport };
+export { dashboardData, liveLogTail, healthMonitor, cautionSummary, doctorFix, setupWizard, stateExport, stateImport };
