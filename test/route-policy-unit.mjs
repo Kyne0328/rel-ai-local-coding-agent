@@ -20,6 +20,7 @@ assert.equal(normalizeRouteKey('activity?status=ok'), 'activity?status=ok');
 assert.equal(normalizeRouteKey('activity?status=succeeded'), 'activity?status=succeeded');
 assert.equal(normalizeRouteKey('activity?status=active'), 'activity?status=active');
 assert.equal(normalizeRouteKey('activity?status=other'), 'activity?status=other');
+assert.equal(normalizeRouteKey('tasks?workspace=app&task=task-123'), 'tasks?workspace=app&task=task-123', 'task deep links must preserve the selected task');
 assert.equal(normalizeRouteKey('activity?token=secret&search=hello'), 'activity?search=hello');
 assert.equal(normalizeRouteKey('workspaces?focus=1'), 'workspaces');
 assert.equal(normalizeRouteKey('workspaces?workspace=myapp&focus=1'), 'workspaces?workspace=myapp&focus=1');

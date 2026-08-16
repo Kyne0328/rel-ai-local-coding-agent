@@ -15,7 +15,7 @@ const CANONICAL_PATHS = new Set([
 
 const ALLOWED_PARAMS = {
   home: new Set(['workspace']),
-  tasks: new Set(['workspace']),
+  tasks: new Set(['workspace', 'task']),
   workspaces: new Set(['workspace', 'focus']),
   processes: new Set(['workspace']),
   activity: new Set(['workspace', 'search', 'time', 'tool', 'status', 'task', 'event']),
