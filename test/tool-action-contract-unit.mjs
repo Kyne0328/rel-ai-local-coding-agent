@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { fromJsonSchema } from '@modelcontextprotocol/server';
 
 import { approvalRequirement } from '../src/mcp/approval.js';
 import { requiredCapability } from '../src/mcp/authorizationPolicy.js';
 import { buildToolManifest, stableJson } from '../src/mcp/toolManifest.js';
 import { catalogApprovalRequirement, getToolActionCatalog } from '../src/tools/actionCatalog.js';
+import { isToolSurfaceSourcePath } from '../src/tools/actionRegistry.js';
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
@@ -64,16 +66,26 @@ const scopedDiff = resolveExecutableToolCall('relai_changes', {
   workspace: 'fixture', work_id: 'work_contract', action: 'diff', scope: 'task'
 }, {});
 assert.equal(scopedDiff.operationArgs.scope, 'task', 'diff scope must be exposed by the public action contract');
-const restoreWithIrrelevantScope = resolveExecutableToolCall('relai_changes', {
+assert.throws(() => resolveExecutableToolCall('relai_changes', {
   workspace: 'fixture', work_id: 'work_contract', action: 'restore', paths: ['README.md'], scope: 'task'
-}, {});
-assert.equal(restoreWithIrrelevantScope.operationArgs.scope, undefined, 'known fields from another action should be ignored before runtime dispatch');
+}, {}), /Unsupported field 'scope'/, 'fields owned by another action must be rejected instead of silently discarded');
 
+assert.equal(isToolSurfaceSourcePath('src/tools/publicSchema.js'), true, 'public discovery schema changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/publicOperationSchemas.js'), true, 'public operation schema changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/outputValidation.js'), true, 'output validation changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/handlers.js'), true, 'handler registration changes are tool-surface changes');
+assert.equal(isToolSurfaceSourcePath('src/tools/compactResult.js'), true, 'connector output compaction changes are tool-surface changes');
+
+const publicSchemaByName = new Map(gatewayManifest.tools.map(tool => [tool.name, tool.inputSchema]));
 const resolvedKeys = [];
 for (const entry of catalog) {
   const args = sampleArgs(entry);
   const resolved = resolveExecutableToolCall(entry.publicTool, args, {});
   assert.ok(resolved, `${entry.publicTool}:${entry.action} must resolve`);
+  if (entry.action !== 'default') {
+    const publicValidation = await fromJsonSchema(publicSchemaByName.get(entry.publicTool))['~standard'].validate(args);
+    assert.equal(publicValidation.issues, undefined, `${entry.publicTool}:${entry.action} sample must satisfy advertised discovery schema`);
+  }
   resolvedKeys.push(`${entry.publicTool}:${entry.action}`);
   assert.equal(resolved.operationName, entry.operationName);
   assert.equal(resolved.executionDefinition.handlerName, entry.handlerName);
@@ -114,6 +126,24 @@ for (const entry of catalog) {
     const addAllArgs = { ...args, addAll: true };
     assert.deepEqual(catalogApprovalRequirement(entry.publicTool, addAllArgs), approvalRequirement(entry.publicTool, addAllArgs));
   }
+}
+
+for (const entry of catalog.filter(item => item.action !== 'default')) {
+  const baseArgs = sampleArgs(entry);
+  const siblings = catalog.filter(item => item.publicTool === entry.publicTool && item.action !== entry.action);
+  const siblingSamples = siblings.map(sampleArgs);
+  const foreignFields = siblingSamples.flatMap(sample => Object.entries(sample))
+    .filter(([field]) => field !== 'action' && !entry.fields.includes(field));
+  if (!foreignFields.length) continue;
+  const [field, value] = foreignFields[0];
+  const invalidArgs = { ...baseArgs, [field]: value };
+  const publicValidation = await fromJsonSchema(publicSchemaByName.get(entry.publicTool))['~standard'].validate(invalidArgs);
+  assert.ok(publicValidation.issues?.length, `${entry.publicTool}:${entry.action} discovery schema must reject sibling-only field ${field}`);
+  assert.throws(
+    () => resolveExecutableToolCall(entry.publicTool, invalidArgs, {}),
+    new RegExp(`Unsupported field '${field}'`),
+    `${entry.publicTool}:${entry.action} runtime resolver must reject sibling-only field ${field}`
+  );
 }
 
 const discoveredKeys = definitions.flatMap(definition => {

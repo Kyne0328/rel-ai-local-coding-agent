@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { fromJsonSchema } from '@modelcontextprotocol/server';
 import { serializeConnectorResult } from '../src/tools/connector.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
+import { getPublicToolSchemas } from '../src/tools/schema.js';
 import { taskBootstrapFromSnapshot } from '../src/tools/task.js';
 
 const compactBootstrap = taskBootstrapFromSnapshot({
@@ -90,9 +92,14 @@ const cases = [
     ok: true, workspace: 'repo', commit: 'abc123', message: 'Committed.', changedFiles: []
   }, { ok: true, workspace: 'repo', commit: 'abc123', message: 'Committed.', work_id: 'work_commit' }),
   fixture('relai_publish:push', 'relai_publish', 'push', OP.PUBLISH_PUSH, 'work_push', {
-    ok: true, workspace: 'repo', remote: 'origin', branch: 'main', pushed: true
-  }, { ok: true, workspace: 'repo', remote: 'origin', branch: 'main', pushed: true, work_id: 'work_push' })
+    ok: true, workspace: 'repo', remote: 'origin', branch: 'main', dryRun: false, setUpstream: false, push: { exitCode: 0 }
+  }, { ok: true, workspace: 'repo', remote: 'origin', branch: 'main', dryRun: false, setUpstream: false, push: { exitCode: 0 }, work_id: 'work_push' })
 ];
+
+const publicOutputValidators = new Map(getPublicToolSchemas().map(tool => [
+  tool.name,
+  fromJsonSchema(tool.outputSchema)['~standard']
+]));
 
 for (const item of cases) {
   const before = structuredClone(item.internal);
@@ -106,6 +113,8 @@ for (const item of cases) {
   });
   assert.deepEqual(item.internal, before, `${item.name} serialization mutated the internal result`);
   assert.deepEqual(external, item.expected, `${item.name} connector contract changed`);
+  const validation = await publicOutputValidators.get(item.publicTool).validate(external);
+  assert.equal(validation.issues, undefined, `${item.name} serialized result must satisfy its advertised public output schema`);
 }
 console.log(`${cases.length} internal-to-connector result contracts passed.`);
 

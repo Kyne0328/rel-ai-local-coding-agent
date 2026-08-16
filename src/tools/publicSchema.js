@@ -12,8 +12,8 @@ function compactPublicInputSchema(name, inputSchema) {
   // Keep shared connector properties at the top level. OpenAI's MCP importer can
   // project a top-level oneOf branch as a complete argument object, hiding shared
   // properties. Preserve the constraints that help callers construct a valid
-  // request (required fields, bounds, and primary modes), while leaving known
-  // action-only extras to runtime normalization.
+  // request (required fields, bounds, primary modes, and action-specific fields)
+  // so discovery and executable validation reject the same malformed calls.
   const schema = connectorSafeInputSchema(inputSchema || {});
   return stripPublicDescriptions(schema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
 }
@@ -47,10 +47,16 @@ function actionVariantGuard(branch, sharedProperties) {
   const specificProperties = Object.fromEntries(Object.entries(branchProperties)
     .filter(([name, fieldSchema]) => JSON.stringify(fieldSchema) !== JSON.stringify(sharedProperties[name])));
   const branchRequired = required.filter(field => field !== 'action');
+  const allowedFields = ['action', ...Object.keys(branchProperties)];
+  const forbiddenFields = Object.keys(sharedProperties).filter(field => !allowedFields.includes(field));
+  const propertyNames = forbiddenFields.length < allowedFields.length
+    ? { not: { enum: forbiddenFields } }
+    : { enum: allowedFields };
   return {
     if: { properties: { action }, required: ['action'] },
     then: {
       ...constraints,
+      propertyNames,
       ...(Object.keys(specificProperties).length ? { properties: specificProperties } : {}),
       ...(branchRequired.length ? { required: branchRequired } : {})
     }
