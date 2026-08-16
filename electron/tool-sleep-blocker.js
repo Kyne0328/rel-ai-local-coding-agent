@@ -2,7 +2,7 @@
 
 const NOTIFICATION_BODY_LIMIT = 260;
 const NOTIFICATION_SUMMARY_LIMIT = 150;
-const NOTIFICATION_ERROR_LIMIT = 170;
+const NOTIFICATION_DEDUPE_LIMIT = 512;
 
 function cleanNotificationText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -15,14 +15,12 @@ function truncateNotificationText(value, limit) {
 }
 
 function buildFailureNotification(event = {}) {
-  const operation = truncateNotificationText(event.operation || event.tool || 'Workspace action', 80);
+  const operation = truncateNotificationText(event.operation || event.tool || 'Project action', 80);
   const workspace = truncateNotificationText(event.workspace, 64);
-  const error = truncateNotificationText(event.error, NOTIFICATION_ERROR_LIMIT);
   const location = workspace ? ` in ${workspace}` : '';
-  const detail = error ? ` ${error}` : ' Open Rel.AI for details.';
   return {
-    title: 'Workspace action failed',
-    body: truncateNotificationText(`${operation} failed${location}.${detail}`, NOTIFICATION_BODY_LIMIT)
+    title: 'Project action failed',
+    body: truncateNotificationText(`${operation} failed${location}. Open Rel.AI for details and recovery options.`, NOTIFICATION_BODY_LIMIT)
   };
 }
 
@@ -31,7 +29,7 @@ function buildCompletionNotification(task = {}) {
   const workspace = truncateNotificationText(task.workspace, 64);
   const validationLevel = truncateNotificationText(task.validationLevel, 24).toLowerCase();
   const parts = [summary || 'The coding task completed successfully.'];
-  if (workspace) parts.push(`Workspace: ${workspace}.`);
+  if (workspace) parts.push(`Project: ${workspace}.`);
   parts.push(validationLevel ? `Final ${validationLevel} checks passed.` : 'Final checks passed.');
   return {
     title: 'Task completed',
@@ -81,6 +79,7 @@ function createTaskActivityRuntime(options) {
     onStatusChange = () => {}
   } = options;
   const blocker = createToolSleepBlocker(powerSaveBlocker);
+  const notifiedEvents = new Set();
   let status = normalizeActivityStatus(toolActivity.getToolActivity?.() || {});
 
   const unsubscribe = toolActivity.onToolActivity(handleActivity);
@@ -96,12 +95,22 @@ function createTaskActivityRuntime(options) {
     }
     status = reduceActivityStatus(status, event);
     syncBlocker(status, event);
-    if (event.phase === 'finished' && event.ok === false) notify('errors', buildFailureNotification(event));
-    if (event.phase === 'completed' && event.task?.completionKnown === true) {
+    if (event.phase === 'finished' && event.ok === false && rememberNotificationEvent(failureNotificationKey(event))) {
+      notify('errors', buildFailureNotification(event));
+    }
+    if (event.phase === 'completed' && event.task?.completionKnown === true && rememberNotificationEvent(completionNotificationKey(event))) {
       notify('taskCompleted', buildCompletionNotification(event.task));
       onTaskCompleted(event.task);
     }
     emitStatus();
+  }
+
+  function rememberNotificationEvent(key) {
+    if (!key) return true;
+    if (notifiedEvents.has(key)) return false;
+    notifiedEvents.add(key);
+    while (notifiedEvents.size > NOTIFICATION_DEDUPE_LIMIT) notifiedEvents.delete(notifiedEvents.values().next().value);
+    return true;
   }
 
   function syncBlocker(activity = status, event = {}) {
@@ -204,6 +213,16 @@ function lightweightTask(task = {}) {
 
 function taskId(task) {
   return String(task?.taskId || task?.id || task?.sessionId || '').trim();
+}
+
+function failureNotificationKey(event = {}) {
+  const eventId = String(event.activityEvent?.eventId || event.activityEvent?.operationId || event.operationId || '').trim();
+  return eventId ? `failure:${eventId}` : '';
+}
+
+function completionNotificationKey(event = {}) {
+  const id = taskId(event.task) || String(event.taskId || '').trim();
+  return id ? `completion:${id}` : '';
 }
 
 function isTerminalTask(task, phase = '') {

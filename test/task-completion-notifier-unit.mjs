@@ -105,11 +105,12 @@ const finishFailed = tracker.beginConnectorToolCall({
   scopeId: 'conversation-c',
   taskId: failedTask
 });
-finishFailed({ ok: false, error: 'check failed' });
+finishFailed({ ok: false, error: 'internal diagnostic detail' });
 assert.equal(notifications.length, 1);
-assert.equal(notifications[0].options.title, 'Workspace action failed');
+assert.equal(notifications[0].options.title, 'Project action failed');
 assert.match(notifications[0].options.body, /Running validation 1\/2: npm run check failed in repo/);
-assert.match(notifications[0].options.body, /check failed/);
+assert.match(notifications[0].options.body, /Open Rel\.AI for details and recovery options\./);
+assert.doesNotMatch(notifications[0].options.body, /internal diagnostic detail/, 'native notifications should keep technical error detail in Activity and Diagnostics');
 assert.equal(notifications[0].category, 'errors');
 
 nowValue = 152_000;
@@ -143,7 +144,7 @@ assert.equal(runtime.getStatus().lastTask.endReason, 'explicit_completion');
 assert.equal(notifications.length, 2);
 assert.equal(notifications[1].options.title, 'Task completed');
 assert.match(notifications[1].options.body, /Implemented and validated the requested changes\./);
-assert.match(notifications[1].options.body, /Workspace: repo\./);
+assert.match(notifications[1].options.body, /Project: repo\./);
 assert.match(notifications[1].options.body, /Final standard checks passed\./);
 assert.doesNotMatch(notifications[1].options.body, /completion reported|ChatGPT explicitly/i);
 assert.equal(notifications[1].category, 'taskCompleted');
