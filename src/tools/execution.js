@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { resolveWorkspace } from '../config.js';
+import { fallbackExecutionStatus } from '../mcp/fallbackExecutions.js';
 import {
   finalizeTaskSandbox,
   findTaskSandbox,
@@ -15,13 +16,20 @@ import {
 import { addSpanEvent, runSpan, setSpanAttributes } from '../telemetry.js';
 import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { getToolActivity, runWithToolActivity, taskError, updateCurrentToolActivity } from '../toolActivity.js';
-import { runWorkspaceOperation } from '../workspaceOperationQueue.js';
+import { hasPendingTaskWriter, runWorkspaceOperation } from '../workspaceOperationQueue.js';
 import { finalizeValidationResult } from './completion.js';
 import { invalidateSessionCacheForCall, maybeStartSession } from './session.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 const SANDBOX_CREATE_OPERATIONS = new Set([OP.EDIT, OP.EXEC]);
 const RECOVERABLE_SANDBOX_RECONCILIATION_OPERATIONS = new Set([OP.WORK_BEGIN, OP.EDIT, OP.EXEC]);
+const STABLE_READ_DURING_TASK_WRITE_OPERATIONS = new Set([
+  OP.SNAPSHOT,
+  OP.READ,
+  OP.SEARCH_TEXT,
+  OP.SEARCH_SEMANTIC,
+  OP.INSPECT
+]);
 const UNSAFE_READ_ONLY_GIT_OPTIONS = new Set([
   '--ext-diff', '--textconv', '--filters', '--open-files-in-pager'
 ]);
@@ -33,6 +41,9 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
     spanAttributes(name, effectiveArgs, context, finishActivity),
     async () => {
       const taskId = String(finishActivity?.taskId || effectiveArgs?.work_id || '').trim();
+      const backgroundStatusMode = executionName === OP.WORK_STATUS
+        && Boolean(taskId)
+        && fallbackExecutionStatus(taskId)?.status === 'running';
       const sourceWorkspace = effectiveArgs?.workspace ? resolveWorkspace(config, effectiveArgs.workspace) : null;
       const branchChange = isExplicitBranchChange(executionName, effectiveArgs);
       const activeTasks = sourceWorkspace ? getToolActivity().tasks : [];
@@ -42,12 +53,27 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         && hasRecoverableTaskSandboxes(config, sourceWorkspace.alias, activeTasks, taskId)) {
         await runWorkspaceOperation(sourceWorkspace.alias, () =>
           reconcileRecoverableTaskSandboxes(sourceWorkspace, config, getToolActivity().tasks, taskId),
-        queueOptions('write', 'workspace', taskId));
+        queueOptions('write', 'workspace', taskId, context?.signal));
       }
-      const hadSandbox = Boolean(sourceWorkspace && taskId && findTaskSandbox(config, sourceWorkspace.alias, taskId));
+      const existingSandbox = sourceWorkspace && taskId
+        ? findTaskSandbox(config, sourceWorkspace.alias, taskId)
+        : null;
+      const hadSandbox = Boolean(existingSandbox);
+      const stableSourceRead = shouldReadStableSourceDuringTaskWrite(executionName, definition, existingSandbox, taskId);
       let executionWorkspace = sourceWorkspace;
 
-      if (sourceWorkspace && taskId && shouldPrepareSandbox(config, sourceWorkspace.alias, taskId, executionName, effectiveArgs)) {
+      if (stableSourceRead) {
+        addSpanEvent('workspace.queue.stable_source_read', {
+          'relai.workspace': sourceWorkspace.alias,
+          'relai.task_id': taskId,
+          'relai.operation': executionName
+        });
+        updateCurrentToolActivity({
+          currentStage: 'Reading stable visible workspace',
+          currentActivity: 'A private task operation is still writing. This inspection is reading the synchronized visible workspace instead of waiting on the mutating sandbox.',
+          metadata: { stableSourceRead: true, operation: executionName }
+        });
+      } else if (sourceWorkspace && taskId && shouldPrepareSandbox(config, sourceWorkspace.alias, taskId, executionName, effectiveArgs)) {
         executionWorkspace = await runWorkspaceOperation(sourceWorkspace.alias, async () => {
           if (branchChange && findTaskSandbox(config, sourceWorkspace.alias, taskId)) {
             await finalizeTaskSandbox(sourceWorkspace, config, taskId);
@@ -57,7 +83,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             activeTasks: getToolActivity().tasks,
             forceSource: branchChange
           });
-        }, queueOptions('write', 'workspace', taskId));
+        }, queueOptions('write', 'workspace', taskId, context?.signal));
       }
 
       const sandboxEntry = executionWorkspace?.taskSandbox === true && sourceWorkspace
@@ -87,6 +113,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
           executionMode: context?.executionMode || '',
           cancel: context?.cancel || null,
           requestTaskContext,
+          backgroundStatusMode,
           mutationBaselineCommit: baselineEntry?.syncCommit || '',
           mutationTrackingRequired: executionName !== OP.EXEC || !isClearlyReadOnlyExec(args || {})
         });
@@ -99,7 +126,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       let result;
       try {
         result = await runWorkspaceOperation(
-          executionName === OP.WORK_CANCEL ? '' : handlerArgs?.workspace,
+          executionName === OP.WORK_CANCEL || backgroundStatusMode ? '' : handlerArgs?.workspace,
           async () => {
           sessionStart = await maybeStartSession(config, executionName, effectiveArgs || {}, { taskId });
           const handled = await invokeHandler(handlerArgs);
@@ -115,14 +142,16 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
             hadSandbox && executionName === OP.WORK_FINISH
               ? 'workspace'
               : definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
-            taskId
+            taskId,
+            context?.signal
           )
         );
       } catch (error) {
         if (executionWorkspace?.taskSandbox === true
           && !deferSandboxCompletion
           && SANDBOX_CREATE_OPERATIONS.has(executionName)
-          && !isTaskCancelled(config, taskId)) {
+          && !isTaskCancelled(config, taskId)
+          && !isRequestAbort(error, context)) {
           await runWorkspaceOperation(sourceWorkspace.alias, () => isTaskCancelled(config, taskId)
             ? { promoted: false, changedFiles: [] }
             : promoteTaskSandbox(sourceWorkspace, config, taskId),
@@ -184,6 +213,19 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
     }, { carrier: context?.requestHeaders || {} }
   ));
   return { value, sessionStart };
+}
+
+function shouldReadStableSourceDuringTaskWrite(executionName, definition, sandboxEntry, taskId) {
+  if (!sandboxEntry || definition?.annotations?.readOnlyHint !== true) return false;
+  if (!STABLE_READ_DURING_TASK_WRITE_OPERATIONS.has(executionName)) return false;
+  return hasPendingTaskWriter(sandboxEntry.alias, taskId);
+}
+
+function isRequestAbort(error) {
+  // Only the queue's pre-execution abort means the handler never ran. A process
+  // or native-task AbortError can happen after repository side effects already
+  // occurred, so the existing sandbox recovery/promotion path must still run.
+  return error?.code === 'WORKSPACE_OPERATION_ABORTED';
 }
 
 function isTaskCancelled(config, taskId) {
@@ -308,11 +350,12 @@ function isExplicitBranchChange(executionName, args = {}) {
   return /\bgit(?:\.exe)?\b[^\n;&|]*\b(?:switch|checkout)\b/i.test(String(args.command || ''));
 }
 
-function queueOptions(mode, scope, taskId) {
+function queueOptions(mode, scope, taskId, signal) {
   return {
     mode,
     scope,
     taskId,
+    ...(signal ? { signal } : {}),
     onWait: (waitMs, details) => {
       addSpanEvent('workspace.queue.admitted', {
         'relai.workspace': details.workspace,

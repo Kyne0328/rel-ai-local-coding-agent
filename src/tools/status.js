@@ -27,26 +27,33 @@ async function relaiStatus(config, args = {}, context = {}) {
   const scripts = localDiagnostics ? (safeReadPackageJson().scripts || {}) : {};
   const ci = localDiagnostics ? ciScriptStatus(scripts) : null;
   const workspaceAliases = allWorkspaceAliases(config);
+  const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id) : null;
   let selectedWorkspace = null;
   if (args.workspace) {
     try {
       const workspace = resolveWorkspace(config, args.workspace);
-      const discovered = discoverCommands(workspace.path);
-      const discoveryWarnings = commandDiscoveryWarnings(workspace.path);
-      selectedWorkspace = {
-        alias: workspace.alias,
-        root: workspace.path,
-        discoveredCommandKeys: sortedKeys(discovered),
-        ...(discoveryWarnings.length > 0 ? { discoveryWarnings } : {}),
-        policy: resolvePolicy(workspace, config),
-        repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes, work_id: args.work_id })
-      };
+      if (context.backgroundStatusMode === true) {
+        // The workspace may be actively mutating in the same logical task. For a
+        // running detached fallback, status is a control-plane query: return its
+        // task state immediately instead of waiting for or racing repository I/O.
+        selectedWorkspace = { alias: workspace.alias, root: workspace.path };
+      } else {
+        const discovered = discoverCommands(workspace.path);
+        const discoveryWarnings = commandDiscoveryWarnings(workspace.path);
+        selectedWorkspace = {
+          alias: workspace.alias,
+          root: workspace.path,
+          discoveredCommandKeys: sortedKeys(discovered),
+          ...(discoveryWarnings.length > 0 ? { discoveryWarnings } : {}),
+          policy: resolvePolicy(workspace, config),
+          repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes, work_id: args.work_id })
+        };
+      }
     } catch (error) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };
     }
   }
   const { getToolNames, getToolGroups, getToolSurfaceManifest } = toolSchema;
-  const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id) : null;
   const taskActivity = typeof context.getTaskActivity === 'function' ? context.getTaskActivity() : getToolActivity();
   const compatibility = runtimeCompatibility(config, {
     workspace: args.workspace,
