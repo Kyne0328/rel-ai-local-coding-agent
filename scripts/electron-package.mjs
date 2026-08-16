@@ -7,10 +7,13 @@ import { assertSafeControllerOperation } from './active-controller-guard.mjs';
 import { electronPlatformSpec, normalizeElectronArch, normalizeElectronPlatform } from './electron-platform.mjs';
 import { invalidateDerivedReleaseEvidence, releaseArtifactNames } from './release-artifacts.mjs';
 import { writeWindowsUpdaterConfig } from './electron-updater-config.mjs';
+import { assertInstalledElectronDependencies } from './electron-package-dependencies.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronRoot = path.join(root, 'electron');
 const electronManifest = JSON.parse(fs.readFileSync(path.join(electronRoot, 'package.json'), 'utf8'));
+const electronLockfile = JSON.parse(fs.readFileSync(path.join(electronRoot, 'package-lock.json'), 'utf8'));
+assertInstalledElectronDependencies({ electronRoot, manifest: electronManifest, lockfile: electronLockfile });
 const RELEASE_ARCHIVE_COMPRESSION_LEVEL = '5';
 const options = parseArgs(process.argv.slice(2));
 const mode = options.mode;

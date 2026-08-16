@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isReleaseChangeFile } from './release-surfaces.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
@@ -12,15 +13,6 @@ const skipTests = args.includes('--skip-tests');
 const allowExtraChanges = args.includes('--allow-extra-changes');
 const remote = valueAfter('--remote') || 'origin';
 const branch = valueAfter('--branch') || 'main';
-
-const releaseFiles = new Set([
-  'CHANGELOG.md',
-  'package.json',
-  'package-lock.json',
-  'electron/package.json',
-  'electron/package-lock.json',
-  'electron/renderer/status.html'
-]);
 
 function valueAfter(flag) {
   const index = args.indexOf(flag);
@@ -83,12 +75,12 @@ try {
 
   const entries = gitStatusEntries();
   if (!entries.length) die('no release changes to commit');
-  const unexpected = entries.filter((entry) => !releaseFiles.has(entry.path));
+  const unexpected = entries.filter((entry) => !isReleaseChangeFile(entry.path));
   if (unexpected.length && !allowExtraChanges) {
     die(`unexpected changed files: ${unexpected.map((entry) => entry.path).join(', ')}. Pass --allow-extra-changes only when intentionally finalizing a larger patch.`);
   }
 
-  const pathsToAdd = allowExtraChanges ? entries.map((entry) => entry.path) : entries.filter((entry) => releaseFiles.has(entry.path)).map((entry) => entry.path);
+  const pathsToAdd = allowExtraChanges ? entries.map((entry) => entry.path) : entries.filter((entry) => isReleaseChangeFile(entry.path)).map((entry) => entry.path);
   run('git', ['add', '--', ...pathsToAdd], { stdio: 'inherit' });
   run('git', ['commit', '-m', `Release ${version}`], { stdio: 'inherit' });
 
