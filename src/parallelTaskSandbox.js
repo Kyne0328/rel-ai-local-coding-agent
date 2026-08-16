@@ -104,8 +104,6 @@ function resolveTaskSandboxWorkspace(config, alias) {
   return {
     alias: entry.alias,
     path: fs.realpathSync(entry.path),
-    testCommands: source.testCommands || {},
-    commands: source.commands || {},
     repoSlug: source.repoSlug || '',
     context: source.context || {},
     validationRules: source.validationRules || {},
@@ -734,6 +732,5 @@ export {
   readSandboxRegistry,
   reconcileInactiveTaskSandboxes,
   resolveTaskSandboxWorkspace,
-  shouldPromoteTaskSandbox,
-  workspaceSnapshotCommit
+  shouldPromoteTaskSandbox
 };

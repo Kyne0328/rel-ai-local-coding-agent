@@ -119,15 +119,10 @@ function cleanWorkspace(value) {
 }
 
 export {
-  ALL_CAPABILITIES,
-
-
   CAPABILITIES,
   assertAuthorizedToolCall,
-
   createConsentPolicy,
   createLocalAdminPolicy,
   isTrustedLocalPrincipal,
-  normalizeAuthorizationPolicy,
   requiredCapability
 };

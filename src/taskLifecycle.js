@@ -9,7 +9,6 @@ import { isTerminalTaskStatus, normalizeHistoricalTaskStatus } from './taskState
 import { eventIdentityKey, eventTimestampMs, operationForTool, timestampMs, unique } from './taskEvents.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
-const TASK_LIFECYCLE_VERSION = 1;
 const MAX_SESSION_EVENTS = 200;
 const DURABLE_FIELDS = Object.freeze([
   'changedFiles', 'changedFileCount', 'validation', 'committed', 'pushed', 'prDrafted',
@@ -234,12 +233,8 @@ function sameValue(left, right) {
 }
 
 export {
-  MAX_SESSION_EVENTS,
-  TASK_LIFECYCLE_VERSION,
   canonicalTaskSnapshot,
-  compactLifecycleEvent,
   lifecycleChangedFields,
-  mergeLifecycleEvents,
   mergeTaskLifecycleSnapshots,
   reduceTaskLifecycleAuditEvent
 };

@@ -653,9 +653,7 @@ function createTaskAwareStdioTransport(options = {}) {
 
 export {
   createTaskAwareStdioTransport,
-  executeToolResult as executeTransportToolResult,
   handleTransportTaskRequest,
   isTransportTaskRequestCandidate,
-  runBoundedExecution,
-  validateToolArguments as validateTransportToolArguments
+  runBoundedExecution
 };

@@ -1,71 +1,49 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { aliasConsistencyCheck } from "../src/productUx.js";
+import { normalizeConfig, publicConfigSummary } from '../src/config.js';
+import { buildDiagnosticReport } from '../src/diagnostics.js';
 
-for (const config of [{}, { workspaces: {} }, { workspaces: null }]) {
-  const result = aliasConsistencyCheck(config);
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.workspaces, []);
-  assert.match(result.generatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-}
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-command-discovery-'));
+try {
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+    scripts: {
+      test: 'node test.js',
+      lint: 'node lint.js'
+    }
+  }, null, 2));
 
-for (const testCommands of [undefined, null, {}]) {
-  const result = aliasConsistencyCheck({
-    workspaces: { myapp: { path: '/nonexistent-relai-test-path', testCommands } }
-  });
-  assert.equal(result.ok, true);
-  assert.deepEqual(result.workspaces[0].configuredKeys, []);
-  assert.deepEqual(result.workspaces[0].staleKeys, []);
-}
-
-{
-  const result = aliasConsistencyCheck({
+  const config = normalizeConfig({
     workspaces: {
-      myapp: {
-        path: '/nonexistent-relai-test-path-xyz789',
-        testCommands: { test: 'npm test', lint: 'npm run lint' }
+      app: {
+        path: root,
+        commands: { obsolete: 'npm run removed' },
+        testCommands: { obsolete: 'npm run removed-test' }
       }
     }
   });
-  assert.equal(result.ok, false);
-  assert.deepEqual(result.workspaces[0].configuredKeys, ['lint', 'test']);
-  assert.deepEqual(result.workspaces[0].staleKeys, ['lint', 'test']);
-}
+  assert.equal(Object.hasOwn(config.workspaces.app, 'commands'), false);
+  assert.equal(Object.hasOwn(config.workspaces.app, 'testCommands'), false);
 
-for (const workspace of [
-  { path: '', testCommands: { test: 'npm test' } },
-  { testCommands: { test: 'npm test' } }
-]) {
-  const result = aliasConsistencyCheck({ workspaces: { myapp: workspace } });
-  assert.equal(result.ok, false);
-  assert.deepEqual(result.workspaces[0].staleKeys, ['test']);
-}
+  const workspace = publicConfigSummary(config).workspaces.find(item => item.alias === 'app');
+  assert.deepEqual(workspace.discoveredTestCommandKeys, ['npm:lint', 'npm:test']);
+  assert.equal(Object.hasOwn(workspace, 'staleCommandKeys'), false);
+  assert.equal(Object.hasOwn(workspace, 'staleTestCommandKeys'), false);
 
-{
-  const malformed = aliasConsistencyCheck({
-    workspaces: { myapp: { path: '/nope', testCommands: ['npm test'] } }
+  const report = buildDiagnosticReport({
+    workspace: 'app',
+    health: { findings: [] },
+    connection: { token: 'set', tunnelId: 'configured' },
+    connectionState: { publicEndpoint: { status: 'available' } },
+    cautionData: { workspaces: [] },
+    runtimeLogs: { available: false, entries: [] },
+    auditLogs: { entries: [] }
   });
-  assert.equal(malformed.ok, false);
-  assert.deepEqual(malformed.workspaces[0].configuredKeys, ['0']);
-  assert.deepEqual(malformed.workspaces[0].staleKeys, ['0']);
-
-  const falsy = aliasConsistencyCheck({
-    workspaces: { myapp: { path: '/nope', testCommands: { ignored: 0 } } }
-  });
-  assert.equal(falsy.ok, true);
-  assert.deepEqual(falsy.workspaces[0].staleKeys, []);
+  assert.equal(report.findings.some(item => item.code === 'stale_validation_commands'), false);
+} finally {
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
-{
-  const result = aliasConsistencyCheck({
-    workspaces: {
-      clean: { path: '/nonexistent-relai-test-path-xyz789', testCommands: {} },
-      stale: { path: '/nonexistent-relai-test-path-xyz789', testCommands: { test: 'npm test' } }
-    }
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.workspaces.find(workspace => workspace.alias === 'clean').ok, true);
-  assert.equal(result.workspaces.find(workspace => workspace.alias === 'stale').ok, false);
-}
-
-console.log('Alias consistency tests passed, including malformed and missing configuration cases.');
+console.log('Manifest-backed command discovery hard-cutover tests passed.');

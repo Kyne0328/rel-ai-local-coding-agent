@@ -53,12 +53,19 @@ try {
   assert.equal(health.ok, true);
   assert.ok(health.transports.includes('streamable-http'));
 
-  const compressed = await fetch(`${base}/api/tools?token=${encodeURIComponent(token)}`, { headers: { 'accept-encoding': 'gzip' } });
+  const dashboardLogin = await fetch(`${base}/dashboard?token=${encodeURIComponent(token)}`);
+  assert.equal(dashboardLogin.status, 200);
+  const dashboardCookie = String(dashboardLogin.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(dashboardCookie, /^relai_dashboard_session=/);
+  await dashboardLogin.arrayBuffer();
+  const dashboardHeaders = { cookie: dashboardCookie };
+
+  const compressed = await fetch(`${base}/api/tools`, { headers: { ...dashboardHeaders, 'accept-encoding': 'gzip' } });
   assert.equal(compressed.headers.get('content-encoding'), 'gzip');
   const compressedTools = await compressed.json();
   assert.equal(compressedTools.length, activeToolCount);
 
-  const dashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
+  const dashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(dashboard.ok, true);
   assert.equal(dashboard.application.name, 'Rel.AI MCP');
   assert.ok(Array.isArray(dashboard.tasks));
@@ -87,7 +94,7 @@ try {
   assert.ok(Number.isFinite(discovery.body.result?.ttlMs) && discovery.body.result.ttlMs > 0, 'discovery cache TTL must remain finite and positive');
   assert.equal(discovery.response.headers.get('mcp-session-id'), null);
 
-  const liveDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
+  const liveDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(liveDashboard.mcpConnection.status, 'ready');
   assert.equal(liveDashboard.mcpConnection.requestModel, 'stateless');
   assert.equal(liveDashboard.mcpConnection.connectedClientCount, 0);
@@ -159,9 +166,9 @@ try {
 
   const secondaryPath = path.join(stateDir, 'secondary-workspace');
   fs.mkdirSync(secondaryPath);
-  const workspaceMutation = await fetch(`${base}/api/workspaces?token=${encodeURIComponent(token)}`, {
+  const workspaceMutation = await fetch(`${base}/api/workspaces`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { ...dashboardHeaders, 'content-type': 'application/json' },
     body: JSON.stringify({
       action: 'upsert',
       alias: 'secondary',
@@ -169,14 +176,14 @@ try {
     })
   }).then(response => response.json());
   assert.equal(workspaceMutation.ok, true);
-  const changedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
+  const changedDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(changedDashboard.mcpConnection.status, 'ready');
   assert.equal(changedDashboard.mcpConnection.metrics.toolManifestChanges, 0);
   assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
 
   const synchronizedTools = await client.request('tools/list');
   assert.equal(synchronizedTools.body.result?.tools?.length, activeToolCount);
-  const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
+  const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.equal(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
 

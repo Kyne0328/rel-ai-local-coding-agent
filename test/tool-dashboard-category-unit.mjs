@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { getToolMetadata } from '../src/tools/schema.js';
+import { getToolMetadata, getToolNames } from '../src/tools/schema.js';
 
 const byName = new Map(getToolMetadata().map(tool => [tool.name, tool]));
 const expected = new Map([
@@ -18,5 +18,5 @@ const expected = new Map([
 for (const [name, capabilities] of expected) {
   assert.deepEqual(byName.get(name)?.capabilities, capabilities, `${name} dashboard category is wrong`);
 }
-assert.equal(byName.size, 12);
-console.log('Tool dashboard categories match the semantic 12-tool surface.');
+assert.equal(byName.size, getToolNames().length, 'dashboard metadata must cover the complete canonical tool surface');
+console.log('Tool dashboard categories match the canonical public tool surface.');

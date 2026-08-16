@@ -23,7 +23,7 @@ const ALLOWED = Object.freeze({
   dashboardUpdates: new Set(['live','connecting','reconnecting','paused','offline'])
 });
 
-export function normalizeConnectionState(state = {}) {
+function normalizeConnectionState(state = {}) {
   return {
     localService: normalizeLayer('localService', state.localService, DEFAULT_STATE.localService.status),
     publicEndpoint: normalizeLayer('publicEndpoint', state.publicEndpoint, DEFAULT_STATE.publicEndpoint.status),

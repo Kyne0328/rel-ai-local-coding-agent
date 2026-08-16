@@ -52,37 +52,6 @@ function readJsonBody(req, maxBytes) {
   });
 }
 
-function tryParseJsonOrNull(raw) {
-  if (!raw.trim()) return {};
-  try { return JSON.parse(raw); } catch { return null; }
-}
-
-// Some local form endpoints and clients use application/x-www-form-urlencoded; other clients use
-// JSON. Parse by content-type, with a best-effort fallback for unlabeled JSON bodies.
-async function readFormOrJsonBody(req, maxBytes) {
-  const raw = await readRawBody(req, maxBytes);
-  const contentType = String(req.headers?.["content-type"] || "").toLowerCase();
-  if (contentType.includes("application/json")) {
-    const parsed = tryParseJsonOrNull(raw);
-    if (parsed !== null) return parsed;
-    throw requestError('Invalid JSON body.');
-  }
-  if (contentType.includes("application/x-www-form-urlencoded")) {
-    const obj = {};
-    for (const [key, value] of new URLSearchParams(raw)) {
-      if (!Object.hasOwn(obj, key)) obj[key] = value;
-      else if (Array.isArray(obj[key])) obj[key].push(value);
-      else obj[key] = [obj[key], value];
-    }
-    if (Object.keys(obj).length) return obj;
-  }
-  if (raw.trim().startsWith("{")) {
-    const parsed = tryParseJsonOrNull(raw);
-    if (parsed !== null) return parsed;
-  }
-  return {};
-}
-
 // Origin-scoped CORS. Only local dashboard/tooling origins are allowed to read
 // local HTTP responses cross-origin. Requests with no Origin header (server-to-server
 // MCP, curl, the same-origin dashboard) are unaffected; CORS only governs browser
@@ -203,4 +172,4 @@ function jsonForHtmlScript(value) {
   return JSON.stringify(value).replaceAll("<", String.raw`\u003c`).replaceAll(">", String.raw`\u003e`).replaceAll("&", String.raw`\u0026`);
 }
 
-export { isAuthorized, timingSafeEqual, readRawBody, readJsonBody, readFormOrJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };
+export { isAuthorized, readRawBody, readJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };

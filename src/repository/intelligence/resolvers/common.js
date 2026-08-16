@@ -63,12 +63,6 @@ function followingSymbolForNode(node, symbols, kinds = []) {
     .sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine)[0] || null;
 }
 
-function nearestSymbolByOffset(source, symbols, offset) {
-  const line = String(source || '').slice(0, Math.max(0, Number(offset || 0))).split(/\r\n|\n|\r/).length;
-  return (symbols || []).filter(item => item.startLine <= line && item.endLine >= line)
-    .sort((a, b) => (a.endLine - a.startLine) - (b.endLine - b.startLine))[0] || null;
-}
-
 function importBindingMap(imports) {
   const result = new Map();
   for (const item of imports || []) for (const binding of item.bindings || []) result.set(binding.local, { ...binding, specifier: item.specifier });
@@ -138,11 +132,10 @@ function dedupeRelations(items) {
   });
 }
 
-function splitTypeList(value) { return String(value || '').split(',').map(item => item.trim()).filter(Boolean); }
 function stripQuotes(value) { return String(value || '').trim().replace(/^['"`]|['"`]$/g, ''); }
 
 export {
-  boundTarget, dedupeRelations, descendantsOfTypes, endpointRelation, fieldNode, followingSymbolForNode, httpKey,
-  importBindingMap, namedChildren, nearestSymbolByOffset, nodeText, nodesOfTypes, relation, simpleName, splitTypeList,
+  dedupeRelations, descendantsOfTypes, endpointRelation, fieldNode, followingSymbolForNode, httpKey,
+  importBindingMap, namedChildren, nodeText, nodesOfTypes, relation, simpleName,
   stripQuotes, symbolForNode
 };

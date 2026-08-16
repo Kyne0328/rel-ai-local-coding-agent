@@ -22,10 +22,8 @@ export function updateHomeLiveState(container, data = {}) {
   const current = container.querySelector('.section');
   if (!current) return false;
   const state = overviewState(data);
-  const attention = buildAttention(state.workspaces, state.findings, state.effectiveEndpoint);
   syncHomeRegion(current, taskActivityCard(data.taskActivity, state.tasks[0]), '[data-home-live-activity]', '[data-home-live-connection]');
   syncHomeRegion(current, connectionHero(state.bridgeState), '[data-home-live-connection]', '.layout-grid');
-  syncHomeRegion(current, attention.length ? attentionCard(attention) : null, '[data-home-live-attention]', '[data-home-analytics]');
   syncHomeRegion(current, recentTasksCard(state.tasks), '[data-home-live-sessions]');
   refreshHomeAnalyticsAfterTaskBoundary(current, data);
   return true;
@@ -111,7 +109,7 @@ function overviewState(data = {}) {
 }
 
 function buildOverview(data) {
-  const { workspaces, tasks, findings, effectiveEndpoint, bridgeState } = overviewState(data);
+  const { workspaces, tasks, bridgeState } = overviewState(data);
   const root = document.createElement('div');
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
@@ -120,8 +118,6 @@ function buildOverview(data) {
   if (setupChecklist) root.appendChild(setupChecklist);
   root.appendChild(connectionHero(bridgeState));
 
-  const attention = buildAttention(workspaces, findings, effectiveEndpoint);
-  if (attention.length) root.appendChild(attentionCard(attention));
   root.appendChild(homeAnalyticsShell(analyticsTaskBoundary(tasks)));
 
   const grid = document.createElement('div');
@@ -285,34 +281,6 @@ function taskAction(tool) {
   if (/git_commit|git_push/.test(value)) return 'Publishing changes';
   if (/edit|write|replace|tidy_run|restore|reset_workspace/.test(value)) return 'Applying changes';
   return 'Looking through the project';
-}
-
-export function buildAttention(_workspaces, findings, _endpoint) {
-  const items = [];
-  if (findings.length) {
-    items.push({ priority: 0, tone: 'bad', title: 'Problems need attention', copy: `${findings.length} problem${findings.length === 1 ? '' : 's'} may affect project access or reliability.`, href: routeMetadata('diagnostics').href, cta: 'Troubleshoot' });
-  }
-  return items
-    .sort((left, right) => left.priority - right.priority || left.title.localeCompare(right.title, 'en-US', { sensitivity: 'base' }))
-    .slice(0, 2)
-    .map(({ priority: _priority, ...item }) => item);
-}
-
-function attentionCard(items) {
-  const card = document.createElement('section');
-  card.dataset.homeLiveAttention = '';
-  card.className = 'card attention-card';
-  card.innerHTML = '<div class="card-head"><h3>Needs attention</h3><span class="section-action">recommended next actions</span></div>';
-  const body = document.createElement('div');
-  body.className = 'card-body attention-list';
-  body.innerHTML = items.map(item => `
-    <div class="attention-item">
-      <span class="attention-icon ${item.tone === 'bad' ? 'bad' : ''}"></span>
-      <div><div class="attention-title">${esc(item.title)}</div><div class="attention-copy">${esc(item.copy)}</div></div>
-      <a class="buttonlike secondary compact-button" href="${esc(item.href)}">${esc(item.cta)}</a>
-    </div>`).join('');
-  card.appendChild(body);
-  return card;
 }
 
 function homeAnalyticsShell(taskBoundary = '') {

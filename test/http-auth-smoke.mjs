@@ -53,8 +53,13 @@ try {
   assert.equal(unauthorizedDashboardBody.errorCode, 'dashboard_unavailable');
   assert.match(unauthorizedDashboardBody.error || '', /Dashboard authorization expired/i);
   assert.doesNotMatch(unauthorizedDashboardBody.error || '', /Bearer|REL_AI_MCP_TOKEN/i);
-  assert.equal((await fetch(`${base}/dashboard`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
-  assert.equal((await fetch(`${base}/api/settings`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
+  assert.equal((await fetch(`${base}/dashboard`, { headers: { authorization: `Bearer ${token}` } })).status, 401, 'MCP bearer credentials must not authorize the dashboard');
+  const dashboardLogin = await fetch(`${base}/dashboard?token=${encodeURIComponent(token)}`);
+  assert.equal(dashboardLogin.status, 200);
+  const dashboardCookie = String(dashboardLogin.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(dashboardCookie, /^relai_dashboard_session=/);
+  await dashboardLogin.arrayBuffer();
+  assert.equal((await fetch(`${base}/api/settings`, { headers: { cookie: dashboardCookie } })).status, 200);
 
   const challenge = await fetch(`${base}/mcp`, {
     method: 'POST',

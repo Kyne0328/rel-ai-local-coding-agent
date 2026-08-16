@@ -1,10 +1,6 @@
-import { importResourceModule, resolveResourcePath } from './resource-path.js';
+import { importResourceModule } from './resource-path.js';
 
 const connection = await importResourceModule('src/connectionProfile.js');
-
-function resolveSrcPath() {
-  return resolveResourcePath('src');
-}
 
 function normalizePort(value, fallback = 3333) {
   const port = Number(value || fallback);
@@ -44,4 +40,4 @@ function readGuiConfig() {
   };
 }
 
-export { resolveSrcPath, normalizePort, normalizeTunnelId, hasExistingConfig, readGuiConfig };
+export { normalizePort, normalizeTunnelId, hasExistingConfig, readGuiConfig };

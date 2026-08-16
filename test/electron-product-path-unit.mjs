@@ -36,7 +36,7 @@ const sharedPublicPatterns = [
 for (const relative of publicDocuments) {
   const source = read(relative);
   const setupFacingSource = relative === 'README.md'
-    ? (source.match(/^## Start using Rel\.AI[\s\S]*?(?=^## )/m)?.[0] || source)
+    ? (source.match(/^## (?:Start using Rel\.AI|Quick start)[\s\S]*?(?=^## )/m)?.[0] || source)
     : source;
   for (const pattern of [...documentOnlyPatterns, ...sharedPublicPatterns]) {
     assert.doesNotMatch(setupFacingSource, pattern, `${relative} exposes developer-only setup language: ${pattern}`);
@@ -55,7 +55,7 @@ assert.match(read('README.md'), /docs\/DEVELOPMENT\.md/, 'README must route sour
 assert.equal(fs.existsSync(path.join(root, 'docs/DEVELOPMENT.md')), true, 'technical development instructions need a dedicated document');
 const publicJourney = publicDocuments.map(read).join('\n');
 for (const outcome of [
-  /Install Rel\.AI MCP/i,
+  /(?:Download|Install) Rel\.AI MCP/i,
   /create an OpenAI Secure MCP Tunnel/i,
   /Tunnel[\s\S]{0,40}connection option/i,
   /add (?:a|your first) workspace/i,

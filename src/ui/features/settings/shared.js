@@ -1,29 +1,6 @@
-import { fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from '../../api.js';
-import { runButtonAction } from '../../action-state.js';
-import { markUnsaved } from '../../interaction-safety.js';
-import { toast } from '../../components/toast.js';
 import { Toggle } from '../../components/toggle.js';
 import { Select } from '../../components/select.js';
 import { esc } from '../../utils.js';
-
-export async function loadSettingsConfig(container) {
-  const payload = await fetchJson('/api/settings');
-  if (!payload?.ok) {
-    container.innerHTML = `<div class="empty">${esc(payload?.error || 'Failed to load settings.')}</div>`;
-    return null;
-  }
-  return payload.config || {};
-}
-
-export async function saveSettings(settings, { confirmDangerous = false } = {}) {
-  const body = confirmDangerous ? { settings, confirmDangerous: true } : { settings };
-  const response = await postJson('/api/settings', body);
-  invalidateCache('/api/settings');
-  invalidateCache(DASHBOARD_DATA_URL);
-  if (response?.ok) toast(response.message || 'Settings saved.', { variant: 'success' });
-  else toast('Error: ' + (response?.error || 'settings update failed'), { variant: 'error' });
-  return response;
-}
 
 export function header(title, body) {
   const wrapper = document.createElement('div');
@@ -92,31 +69,3 @@ export function numberControl(value, onChange, { min = 0, max = 1000000, step = 
 
 
 
-function saveRow(onSave, onReload) {
-  const row = document.createElement('div');
-  row.className = 'settings-save-row';
-  const saveButton = document.createElement('button');
-  saveButton.textContent = 'Save changes';
-  saveButton.onclick = async () => {
-    await runButtonAction(saveButton, {
-      idleText: 'Save changes',
-      loadingText: 'Saving settings…',
-      successText: 'Settings saved',
-      errorText: 'Save failed'
-    }, onSave);
-  };
-  const reloadButton = document.createElement('button');
-  reloadButton.className = 'secondary';
-  reloadButton.textContent = 'Discard changes';
-  reloadButton.onclick = onReload;
-  row.append(saveButton, reloadButton);
-  return row;
-}
-
-export function hiddenSaveRow(onSave, onReload) {
-  const row = saveRow(onSave, onReload);
-  row.id = '__settings-save-row';
-  row.hidden = true;
-  markUnsaved(row, false);
-  return row;
-}

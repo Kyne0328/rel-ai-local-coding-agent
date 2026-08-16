@@ -4,10 +4,10 @@ import { orderToolsForCatalog, toolCapabilities } from '../src/ui/features/tools
 import { getToolMetadata } from '../src/tools/surface.js';
 import { orderChangedFiles, orderSessionsForDisplay } from '../src/ui/features/sessions/index.js';
 import { orderWorkspacesAlphabetically } from '../src/ui/components/workspace-menu.js';
-import { buildAttention, orderOverviewTasks, orderOverviewWorkspaces } from '../src/ui/features/home/index.js';
+import { orderOverviewTasks, orderOverviewWorkspaces } from '../src/ui/features/home/index.js';
 import { sortEntries as orderActivityEntries } from '../src/ui/features/activity/index.js';
 
-import { aliasConsistencyCheck, cautionSummary } from "../src/productUx.js";
+import { cautionSummary } from "../src/productUx.js";
 
 const orderedTools = orderToolsForCatalog([
   { name: 'relai_publish', title: 'Publish', capabilities: ['git'] },
@@ -94,25 +94,6 @@ const workspaces = [{ alias: 'zeta' }, { alias: 'Alpha' }, { alias: 'repo10' }, 
 const expectedAliases = ['Alpha', 'repo2', 'repo10', 'zeta'];
 assert.deepEqual(orderWorkspacesAlphabetically(workspaces).map(item => item.alias), expectedAliases);
 assert.deepEqual(orderOverviewWorkspaces(workspaces).map(item => item.alias), expectedAliases);
-
-const attention = buildAttention(
-  [{ alias: 'repo', testCommandKeys: [], discoveredTestCommandKeys: [] }],
-  [{ severity: 'error', code: 'workspace_unavailable' }],
-  ''
-);
-assert.deepEqual(attention.map(item => item.title), ['Problems need attention']);
-assert.equal(attention[0].tone, 'bad');
-assert.equal(Object.hasOwn(attention[0], 'priority'), false);
-
-const aliasReport = aliasConsistencyCheck({
-  workspaces: {
-    zeta: { path: '/missing-zeta', commands: { zebra: 'z', alpha: 'a' }, testCommands: {} },
-    Alpha: { path: '/missing-alpha', commands: {}, testCommands: {} }
-  }
-});
-assert.deepEqual(aliasReport.workspaces.map(item => item.alias), ['Alpha', 'zeta']);
-assert.deepEqual(aliasReport.workspaces[1].configuredKeys, ['alpha', 'zebra']);
-assert.deepEqual(aliasReport.workspaces[1].staleKeys, ['alpha', 'zebra']);
 
 const now = new Date().toISOString();
 const caution = cautionSummary({}, {

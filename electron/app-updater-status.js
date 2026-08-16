@@ -120,4 +120,4 @@ function cleanText(value, limit) {
   return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
-export { assessUpdateSynchronization, cleanText, cleanVersion, normalizeStatus, progressPayload, updateCompatibilityMetadata };
+export { assessUpdateSynchronization, cleanText, normalizeStatus, progressPayload, updateCompatibilityMetadata };

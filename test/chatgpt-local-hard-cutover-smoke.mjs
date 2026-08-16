@@ -77,7 +77,7 @@ try {
   assert.equal(failedCheck.result.structuredContent.ok, false);
   assert.equal(failedCheck.result.structuredContent.results[0].exitCode, 1);
 
-  console.log('Hard cutover exposes only the current 12-tool surface and canonical internal operation IDs.');
+  console.log('Hard cutover exposes only the current canonical public tool surface and canonical internal operation IDs.');
 } finally {
   await client.close();
   fs.rmSync(temp, { recursive: true, force: true });

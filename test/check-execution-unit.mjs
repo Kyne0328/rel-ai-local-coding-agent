@@ -18,7 +18,7 @@ try {
       typecheck: 'tsc --noEmit',
       test: 'vitest run',
       'test:all': 'npm run lint && npm run typecheck',
-      'testcmd:add': 'node bin/config.js test-command add',
+      'config:add': 'node bin/config.js workspace add',
       build: 'vite build'
     }
   }, null, 2));
@@ -30,11 +30,11 @@ try {
   const typecheck = byName('typecheck');
   const test = byName('test');
   const testAll = byName('test:all');
-  const testCommandAdd = byName('testcmd:add');
+  const configAdd = byName('config:add');
   const build = byName('build');
 
   assert.equal(classifyCheckKind('test:all', 'npm run lint && npm run typecheck'), 'test', 'script identity must win over nested tool names');
-  assert.equal(testCommandAdd.kind, 'other', 'configuration commands containing the word test must not become validation tests');
+  assert.equal(configAdd.kind, 'other', 'configuration commands must not become validation checks');
   assert.equal(checkExecutionPolicy(lint).parallelSafe, true);
   assert.equal(checkExecutionPolicy(typecheck).parallelSafe, true);
   assert.equal(checkExecutionPolicy(lintFix).parallelSafe, false, 'mutating npm script bodies must stay serial');

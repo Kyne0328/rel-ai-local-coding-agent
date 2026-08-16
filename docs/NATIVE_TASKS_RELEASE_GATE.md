@@ -94,7 +94,7 @@ The source gate covers:
 - principal-bound repository work-session isolation;
 - HTTP and stdio parity;
 - persistent-process independence;
-- the canonical 12-tool public surface and its catalog-derived action contracts;
+- the canonical public tool surface and its catalog-derived action contracts;
 - dashboard terminal-state behavior.
 
 Critical regressions include:

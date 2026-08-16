@@ -5,7 +5,7 @@ import { setBaseHeaders, sendJson } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
-import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
+import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
@@ -240,7 +240,6 @@ const GET_ROUTES = {
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
   "/api/health-monitor": { auth: authDashboard, handler: handleHealthMonitor },
-  "/api/alias-diagnostics": { auth: authDashboard, handler: handleAliasDiagnostics },
   "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
   "/api/caution-summary": { auth: authDashboard, handler: handleCautionSummary },
   "/api/readiness": { auth: authDashboard, handler: handleReadiness },

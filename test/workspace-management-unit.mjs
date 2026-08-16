@@ -21,8 +21,7 @@ try {
     workspaces: {
       alpha: {
         path: first,
-        context: { snapshotMaxFiles: 321 },
-        testCommands: { test: 'npm test' }
+        context: { snapshotMaxFiles: 321 }
       }
     }
   };
@@ -42,7 +41,6 @@ try {
   const beta = renamed.config.workspaces.find(item => item.alias === 'beta');
   assert.equal(beta.path, second);
   assert.equal(beta.context.snapshotMaxFiles, 321);
-  assert.deepEqual(beta.testCommandKeys, ['test']);
 
   const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   assert.equal(saved.workspaces.alpha, undefined);
@@ -63,6 +61,14 @@ try {
     path: second,
     enforceUniquePath: true
   }), /already configured as workspace 'beta'/);
+
+  for (const staleAction of ['remove', 'rename', 'prune-tests', 'prune-stale-tests']) {
+    assert.throws(
+      () => updateWorkspace(saved, { action: staleAction, alias: 'beta' }),
+      /Unknown workspace action/,
+      `${staleAction} must not survive as a compatibility workspace action`
+    );
+  }
 
   const unchanged = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   assert.deepEqual(unchanged, saved, 'failed duplicate operations must not partially rename or rewrite configuration');
