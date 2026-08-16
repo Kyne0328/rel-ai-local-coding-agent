@@ -21,7 +21,7 @@ function supportPolicyModalView(policy) {
       allowLater: false,
       minimumVersion,
       title: 'Critical update required',
-      description: policy?.message || `Rel.AI MCP v${currentVersion || 'this version'} requires an urgent update before it can be used again.`
+      description: policy?.message || `Rel.AI MCP v${currentVersion || 'this version'} needs an urgent update before Rel.AI can work with ChatGPT again.`
     };
   }
   if (state === 'required') {
@@ -45,8 +45,8 @@ function supportPolicyModalView(policy) {
       minimumVersion,
       title: 'Update required soon',
       description: deadline
-        ? `This version is below the supported baseline. Update to v${minimumVersion || 'the current release'} or newer before ${deadline}.`
-        : `This version is below the supported baseline. Update to v${minimumVersion || 'the current release'} or newer soon to stay supported.`
+        ? `Support for this version ends on ${deadline}. Update to v${minimumVersion || 'the current release'} or newer before then.`
+        : `Support for this version is ending. Update to v${minimumVersion || 'the current release'} or newer soon to stay supported.`
     };
   }
   return {
@@ -56,7 +56,7 @@ function supportPolicyModalView(policy) {
     allowLater: true,
     minimumVersion,
     title: 'Update recommended',
-    description: `Rel.AI MCP v${minimumVersion || 'a newer version'} or newer is recommended for the current supported experience.`
+    description: `Rel.AI MCP v${minimumVersion || 'a newer version'} or newer is recommended.`
   };
 }
 
@@ -132,8 +132,8 @@ function initUpdateAvailableModal(options = {}) {
     const detail = document.createElement('p');
     detail.className = 'muted';
     detail.textContent = view.blocking
-      ? 'Rel.AI keeps the dashboard and update controls available, but MCP work is paused until a supported version is installed.'
-      : 'You can update now or continue for this launch. This notice will appear again on a future launch while the policy still applies.';
+      ? 'You can still use the dashboard and update controls, but Rel.AI cannot work with ChatGPT until a supported version is installed.'
+      : 'You can update now or continue for this launch. This notice will appear again on a future launch while this version is nearing the end of support.';
     const actions = document.createElement('div');
     actions.className = 'connection-actions';
     const action = supportUpdateAction(status);

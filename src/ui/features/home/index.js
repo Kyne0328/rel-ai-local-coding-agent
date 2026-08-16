@@ -143,14 +143,14 @@ function resolveBridgeState({ findings, connectionState }) {
       tone: 'bad',
       kicker: 'Needs attention',
       title: 'Rel.AI is connected, but diagnostics found a problem.',
-      description: 'The secure endpoint is available, but one or more findings should be resolved before relying on automated changes.'
+      description: 'Rel.AI can connect to ChatGPT, but one or more issues should be resolved before automated changes.'
     };
   }
   return {
     tone: 'good',
     kicker: 'Connection ready',
-    title: 'ChatGPT can work on your repositories.',
-    description: 'Rel.AI local coding tools are authenticated and reachable from ChatGPT web.'
+    title: 'ChatGPT can work on your projects.',
+    description: 'Rel.AI is connected and ready for ChatGPT to use on your projects.'
   };
 }
 

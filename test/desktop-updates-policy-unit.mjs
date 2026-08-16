@@ -6,7 +6,7 @@ assert.equal(supportPolicyView({ state: 'current', currentVersion: '0.25.0', min
 assert.equal(supportPolicyView({ state: 'required', currentVersion: '0.24.9', minimumSupportedVersion: '0.25.0' }).tone, 'bad');
 assert.match(supportPolicyView({ state: 'required', currentVersion: '0.24.9', minimumSupportedVersion: '0.25.0' }).description, /v0\.25\.0/);
 assert.match(supportPolicyView({ state: 'deprecated', currentVersion: '0.24.9', minimumSupportedVersion: '0.25.0', enforceAfter: '2026-09-01T00:00:00.000Z' }).description, /2026|September|Sep/);
-assert.match(supportPolicyView({ state: 'unavailable' }).description, /does not block|fail/i);
+assert.match(supportPolicyView({ state: 'unavailable' }).description, /keep using the app/i);
 
 const availableNotes = releaseNotesHtml({
   state: 'available',
@@ -22,7 +22,7 @@ const installedNotes = releaseNotesHtml({ state: 'up_to_date' }, {
   headline: 'Release notes',
   bullets: ['First change', 'Second change']
 });
-assert.match(installedNotes, /Changelog · v0\.25\.2/);
+assert.match(installedNotes, /v0\.25\.2/);
 assert.match(installedNotes, /First change/);
 
 console.log('Desktop update support policy and release-note view tests passed.');

@@ -148,5 +148,7 @@ test('detail timestamps and action labels have safe, distinguishable fallbacks',
     activityActionLabel(entry({ eventId: 'a', summary: 'First operation.' })),
     activityActionLabel(entry({ eventId: 'b', summary: 'Second operation.' }))
   );
-  assert.match(activityActionLabel(entry()), /^Open relai_read event details: Read the requested files\./);
+  assert.equal(activityModel.activityDisplayAction(entry()), 'Read repository');
+  assert.equal(activityModel.activityDisplayAction(entry({ title: '', operation: '', tool: 'relai_edit' })), 'relai_edit');
+  assert.match(activityActionLabel(entry()), /^Open Read repository details: Read the requested files\./);
 });
