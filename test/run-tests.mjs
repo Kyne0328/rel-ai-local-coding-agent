@@ -59,35 +59,50 @@ const files = [
   'window-security-unit.mjs'
 ];
 
+const serialFiles = new Set([
+  'http-auth-smoke.mjs',
+  'http-smoke.mjs',
+  'process-manager-unit.mjs'
+]);
+const parallelEntries = files
+  .map((name, index) => ({ name, index }))
+  .filter(({ name }) => !serialFiles.has(name));
+const serialEntries = files
+  .map((name, index) => ({ name, index }))
+  .filter(({ name }) => serialFiles.has(name));
 const requestedJobs = Number.parseInt(process.env.REL_AI_TEST_JOBS || '', 10);
 const availableJobs = Math.max(1, Number(os.availableParallelism?.() || os.cpus().length || 1));
-const jobCount = Math.min(files.length, Number.isFinite(requestedJobs) && requestedJobs > 0 ? requestedJobs : Math.min(4, availableJobs));
+const jobCount = Math.min(parallelEntries.length, Number.isFinite(requestedJobs) && requestedJobs > 0 ? requestedJobs : Math.min(4, availableJobs));
 const suiteStarted = Date.now();
 const results = new Array(files.length);
 let nextIndex = 0;
 
 await Promise.all(Array.from({ length: jobCount }, async () => {
   while (true) {
-    const index = nextIndex;
+    const queueIndex = nextIndex;
     nextIndex += 1;
-    if (index >= files.length) return;
-    const name = files[index];
-    const started = Date.now();
-    console.log(`RUN ${name}`);
-    const result = await runTest(name);
-    const durationMs = Date.now() - started;
-    results[index] = { name, durationMs, ...result };
-    const seconds = (durationMs / 1000).toFixed(1);
-    if (result.exitCode === 0) {
-      console.log(`PASS ${name} (${seconds}s)`);
-    } else {
-      console.error(`FAIL ${name} (${seconds}s)`);
-      if (result.error) console.error(result.error.message);
-      if (result.stdout) console.error(result.stdout.trim());
-      if (result.stderr) console.error(result.stderr.trim());
-    }
+    if (queueIndex >= parallelEntries.length) return;
+    await runEntry(parallelEntries[queueIndex]);
   }
 }));
+for (const entry of serialEntries) await runEntry(entry);
+
+async function runEntry({ name, index }) {
+  const started = Date.now();
+  console.log(`RUN ${name}`);
+  const result = await runTest(name);
+  const durationMs = Date.now() - started;
+  results[index] = { name, durationMs, ...result };
+  const seconds = (durationMs / 1000).toFixed(1);
+  if (result.exitCode === 0) {
+    console.log(`PASS ${name} (${seconds}s)`);
+  } else {
+    console.error(`FAIL ${name} (${seconds}s)`);
+    if (result.error) console.error(result.error.message);
+    if (result.stdout) console.error(result.stdout.trim());
+    if (result.stderr) console.error(result.stderr.trim());
+  }
+}
 
 const failures = results.filter(result => result.exitCode !== 0);
 

@@ -7,12 +7,13 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-work-principal-'));
 const workspacePath = path.join(root, 'workspace');
 const stateDir = path.join(root, 'state');
 const configPath = path.join(root, 'config.json');
+const auditLogPath = path.join(stateDir, 'audit.jsonl');
 fs.mkdirSync(workspacePath, { recursive: true });
 fs.writeFileSync(path.join(workspacePath, 'probe.txt'), 'principal-bound work session\n');
 fs.writeFileSync(configPath, `${JSON.stringify({
   version: 3,
   stateDir,
-  auditLogPath: path.join(stateDir, 'audit.jsonl'),
+  auditLogPath,
   workspaces: {
     repo: {
       path: workspacePath,
@@ -28,9 +29,13 @@ const previousState = process.env.REL_AI_MCP_STATE_DIR;
 process.env.REL_AI_MCP_CONFIG = configPath;
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 
+let taskHistoryStore = null;
+let auditModule = null;
 try {
   const { callTool } = await import('../src/tools.js');
-  const { readTaskHistorySession, readTaskHistorySessionRecord } = await import('../src/taskHistoryStore.js');
+  taskHistoryStore = await import('../src/taskHistoryStore.js');
+  auditModule = await import('../src/audit.js');
+  const { readTaskHistorySession, readTaskHistorySessionRecord } = taskHistoryStore;
   const { createLocalAdminPolicy } = await import('../src/mcp/authorizationPolicy.js');
   const authorizationPolicy = createLocalAdminPolicy();
   const owner = {
@@ -73,16 +78,21 @@ try {
     error => error?.code === 'TASK_NOT_FOUND'
   );
 
-  const privateRecord = readTaskHistorySessionRecord({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.work_id);
+  const privateRecord = readTaskHistorySessionRecord({ stateDir, auditLogPath }, started.work_id);
   assert.match(privateRecord.principalFingerprint, /^[A-Za-z0-9_-]{43}$/);
-  const publicRecord = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.work_id);
+  const publicRecord = readTaskHistorySession({ stateDir, auditLogPath }, started.work_id);
   assert.equal(Object.hasOwn(publicRecord, 'principalFingerprint'), false);
 } finally {
+  if (taskHistoryStore) {
+    await taskHistoryStore.flushTaskHistoryPersistence();
+    taskHistoryStore.clearTaskHistory({ stateDir, auditLogPath });
+  }
+  if (auditModule) await auditModule.clearAuditHistory({ stateDir, auditLogPath });
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
   if (previousState == null) delete process.env.REL_AI_MCP_STATE_DIR;
   else process.env.REL_AI_MCP_STATE_DIR = previousState;
-  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 }
 
 console.log('Work sessions are principal-bound, reconnectable by the same identity, and private ownership is not exposed.');

@@ -224,6 +224,11 @@ function verifyWorkflowContracts() {
   assert.doesNotMatch(workflow, /test:installed|REL_AI_SMOKE_INSTALLER|release-evidence-check|uninstall/i);
   assert.match(workflow, /publish:[\s\S]*needs:[\s\S]*- windows-install-upgrade[\s\S]*- linux-install-upgrade/,
     'publishing must wait for installed release lifecycle validation');
+  assert.match(
+    workflow,
+    /linux-install-upgrade:[\s\S]*apt-get install --yes --no-install-recommends xvfb xauth[\s\S]*Validate fresh install and in-place upgrade/,
+    'Linux installed-release validation must explicitly provision Xvfb and xauth on its fresh runner'
+  );
   assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node|upload-artifact|download-artifact|attest-build-provenance|attest-sbom)@v\d+/);
 
   const fuseWrapper = fs.readFileSync(path.join(tmp, 'scripts', 'verify-fuses.mjs'), 'utf8');
