@@ -7,15 +7,16 @@ let updateStatus = { state: 'downloading', availableVersion: '0.27.0', progress:
 let buildCount = 0;
 let currentMenu = null;
 let clipboardText = '';
+let trayConstructionCount = 0;
 
 class FakeTray {
-  constructor() { this.menu = null; }
+  constructor(image) { this.image = image; this.menu = null; trayConstructionCount += 1; }
   setToolTip() {}
   on() {}
   setContextMenu(menu) { this.menu = menu; currentMenu = menu; }
 }
 
-const tray = createDesktopTray({
+const dependencies = {
   Tray: FakeTray,
   Menu: {
     buildFromTemplate(template) {
@@ -24,8 +25,15 @@ const tray = createDesktopTray({
     }
   },
   nativeImage: {
-    createFromPath() { return { isEmpty: () => true }; },
-    createEmpty() { return {}; }
+    createFromPath() {
+      return {
+        isEmpty: () => false,
+        resize(options) {
+          assert.deepEqual(options, { width: 32, height: 32 });
+          return this;
+        }
+      };
+    }
   },
   clipboard: { writeText(value) { clipboardText = value; } },
   iconPath: 'icon.png',
@@ -41,8 +49,9 @@ const tray = createDesktopTray({
   downloadUpdate: async () => ({ ok: true }),
   installUpdate: async () => ({ ok: true }),
   quit() {}
-});
+};
 
+const tray = createDesktopTray(dependencies);
 tray.setup();
 assert.equal(buildCount, 1, 'tray setup builds the initial menu once');
 updateStatus = { ...updateStatus, progress: { percent: 12.4 } };
@@ -60,4 +69,15 @@ const copyItem = currentMenu.find(item => item.label === 'Copy local MCP address
 copyItem.click();
 assert.equal(clipboardText, status.localMcpUrl);
 
-console.log('Desktop tray avoids redundant native menu rebuilds while preserving visible state changes.');
+let trayIconError = null;
+const constructionsBeforeMissingIcon = trayConstructionCount;
+const missingIconTray = createDesktopTray({
+  ...dependencies,
+  nativeImage: { createFromPath() { return { isEmpty: () => true }; } },
+  onError(error) { trayIconError = error; }
+});
+assert.equal(missingIconTray.setup(), null, 'an unreadable tray icon must not create an invisible tray item');
+assert.equal(trayConstructionCount, constructionsBeforeMissingIcon, 'an unreadable tray icon must not construct a native tray');
+assert.match(trayIconError?.message || '', /Tray icon could not be loaded/);
+
+console.log('Desktop tray preserves visible state changes and refuses invisible empty-icon tray items.');

@@ -107,6 +107,10 @@ function createDashboardWindowManager(deps) {
       void persistBounds();
       if (isQuitting()) return;
       event.preventDefault();
+      if (platform === 'linux') {
+        app.quit();
+        return;
+      }
       dashboardWindow.hide();
     });
     dashboardWindow.on('closed', () => { dashboardWindow = null; });

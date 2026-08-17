@@ -14,12 +14,27 @@ function createDesktopTray(deps) {
   function setup() {
     if (tray) return tray;
     const raw = nativeImage.createFromPath(iconPath);
-    const image = raw.isEmpty() ? raw : raw.resize({ width: 32, height: 32 });
-    tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
-    tray.setToolTip('Rel.AI MCP');
-    tray.on('double-click', focusPrimaryWindow);
-    update();
-    return tray;
+    if (raw.isEmpty()) {
+      onError(new Error(`Tray icon could not be loaded: ${iconPath}`));
+      return null;
+    }
+    const image = raw.resize({ width: 32, height: 32 });
+    if (image.isEmpty()) {
+      onError(new Error(`Tray icon could not be prepared: ${iconPath}`));
+      return null;
+    }
+    try {
+      tray = new Tray(image);
+      tray.setToolTip('Rel.AI MCP');
+      tray.on('double-click', focusPrimaryWindow);
+      update();
+      return tray;
+    } catch (error) {
+      tray?.destroy?.();
+      tray = null;
+      onError(error);
+      return null;
+    }
   }
 
   function update() {

@@ -20,6 +20,7 @@ const webContentsEvents = new Map();
 const originalWriteFile = fs.promises.writeFile;
 let dashboardAuthGeneration = 1;
 let dashboardBootstrap = 'one-time-code';
+let appQuitCount = 0;
 const workArea = { x: 0, y: 0, width: 1366, height: 728 };
 const fakeScreen = {
   getPrimaryDisplay: () => ({ workArea }),
@@ -106,7 +107,8 @@ const dependencies = {
   },
   app: {
     getPath(name) { assert.equal(name, 'userData'); return sandbox; },
-    focus() {}
+    focus() {},
+    quit() { appQuitCount += 1; }
   },
   dialog: { async showOpenDialog() { return { canceled: false, filePaths: [folderToOpen] }; } },
   screen: fakeScreen,
@@ -203,7 +205,8 @@ try {
   win.emit('unmaximize');
   assert.equal(win.webContents.sent.at(-1).payload.maximized, false);
   assert.deepEqual(manager.requestClose(), { ok: true });
-  assert.equal(win.hidden, true, 'normal close must hide the dashboard to the tray');
+  assert.equal(win.hidden, true, 'Windows close must hide the dashboard to the tray');
+  assert.equal(appQuitCount, 0, 'Windows close-to-tray must not quit the app');
 
   win.bounds = { x: 0, y: 0, width: workArea.width, height: workArea.height };
   win.normalBounds = { x: 90, y: 54, width: 1080, height: 640 };
@@ -256,6 +259,13 @@ try {
     width: 1020,
     height: 610
   }, 'a stale debounced bounds write must not overwrite the final close-time window state');
+
+  const linuxManager = createDashboardWindowManager({ ...dependencies, platform: 'linux' });
+  const linuxWindow = await linuxManager.open();
+  assert.deepEqual(linuxManager.requestClose(), { ok: true });
+  assert.equal(appQuitCount, 1, 'Linux close must use the normal Electron quit path instead of depending on tray visibility');
+  assert.notEqual(linuxWindow.hidden, true, 'Linux close must not hide the dashboard behind an unavailable tray');
+  await linuxManager.close();
 
   assert.deepEqual(
     restoreDashboardBounds({ x: 0, y: 0, width: 1240, height: 820 }, fakeScreen),
