@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.1] — 2026-08-17
+
+### Linux DEB updates
+- **Enable in-app updates for installed Linux DEB builds.** Rel.AI now recognizes electron-builder's `resources/package-type = deb` marker, uses the existing GitHub Releases updater flow to download the newer DEB, requests Linux administrator authorization for installation, and relaunches after the package upgrade instead of sending users through Ubuntu App Center.
+- **Guard the DEB updater contract in release validation.** Installed Linux release testing now verifies that the packaged application contains the `resources/package-type` marker required for `electron-updater` to select its DEB updater while preserving the existing in-place package upgrade and user-state checks.
+
+### Reliability fixes not included in the 0.26.0 build
+- **Keep Linux shutdown reachable when the tray is unavailable.** Closing the Linux dashboard now follows the normal application quit path, and tray creation refuses empty or unusable icons instead of leaving an invisible tray-only process behind.
+- **Make long fallback operations less fragile.** Fallback execution gets a longer grace window, and an operation that is still running is returned as in-progress rather than being treated like a terminal task failure.
+- **Tighten task cleanup and release-gate reliability.** Task-history metadata handles are closed before history directories are removed, and native-task release validation now keeps stdio discovery and temporary-workspace cleanup covered.
+- **Make connection restart and shutdown deterministic.** Local service start/stop requests are serialized, a requested stop no longer advertises a stale listener while IPC cleanup is pending, invalid runtime configuration can no longer orphan the old HTTP listener, and forced HTTP shutdown waits for the real server close plus MCP teardown before a replacement connection can start.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.1.
+
 ## [0.26.0] — 2026-08-16
 
 ### ChatGPT coding-agent product and supported connection

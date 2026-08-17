@@ -131,19 +131,16 @@ if (!allowSame && compareVersions(version, current) <= 0) {
 
 for (const file of VERSION_JSON_FILES) updateJsonVersion(file, version);
 const releaseManifest = readJson('release-manifest.json');
+releaseManifest.applicationVersion = version;
 if (!dryRun) {
   const runtimeMetadataPath = rel('src', 'runtimeCompatibility.js');
   if (fs.existsSync(runtimeMetadataPath)) {
     const { runtimeMetadata } = await import(`${pathToFileURL(runtimeMetadataPath).href}?releaseBump=${Date.now()}`);
     const runtime = runtimeMetadata();
-    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion']) {
+    for (const field of ['protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion']) {
       releaseManifest[field] = runtime[field];
     }
-  } else {
-    releaseManifest.applicationVersion = version;
   }
-} else {
-  releaseManifest.applicationVersion = version;
 }
 writeJson('release-manifest.json', releaseManifest);
 replaceExact(path.join('electron', 'renderer', 'status.html'), `id="appVersion">v${current}</span>`, `id="appVersion">v${version}</span>`);

@@ -107,6 +107,7 @@ async function validateLinuxLifecycle({ currentArtifact, currentVersion, previou
     console.log(`No earlier matching Linux DEB was published; validated fresh installation of v${currentVersion}.`);
   }
   verifyInstalledPackage(installedRoot, currentVersion);
+  verifyLinuxUpdaterPackageType(installedRoot);
   verifyLinuxSandbox(installedRoot);
   verifyInstalledLinuxDesktop(installedRoot, testRoot);
   verifyInstalledConnector(installedRoot);
@@ -163,6 +164,13 @@ function verifyInstalledPackage(applicationRoot, expectedVersion) {
     ? path.join(applicationRoot, `${electronPackage.build.productName}.exe`)
     : path.join(applicationRoot, electronPackage.build.linux.executableName);
   assert.ok(fs.existsSync(executable), `Installed application executable is missing: ${executable}`);
+}
+
+function verifyLinuxUpdaterPackageType(applicationRoot) {
+  const packageTypePath = path.join(applicationRoot, 'resources', 'package-type');
+  assert.ok(fs.existsSync(packageTypePath), `Installed DEB updater marker is missing: ${packageTypePath}`);
+  assert.equal(fs.readFileSync(packageTypePath, 'utf8').trim(), 'deb',
+    'Installed DEB must identify itself to electron-updater through resources/package-type.');
 }
 
 function verifyLinuxSandbox(applicationRoot) {

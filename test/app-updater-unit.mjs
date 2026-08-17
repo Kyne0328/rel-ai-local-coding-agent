@@ -97,7 +97,12 @@ assert.deepEqual(detectUpdateSupport({ app: { ...supportApp, isPackaged: false }
 assert.match(detectUpdateSupport({ app: supportApp, platform: 'win32', env: { PORTABLE_EXECUTABLE_DIR: 'C:\\Portable' } }).reason, /Portable builds/);
 assert.equal(detectUpdateSupport({ app: supportApp, platform: 'win32', env: {} }).supported, true);
 assert.equal(detectUpdateSupport({ app: supportApp, platform: 'linux', env: { APPIMAGE: '/opt/Rel.AI-MCP.AppImage' } }).supported, true);
-assert.match(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {} }).reason, /install a newer Rel\.AI MCP DEB over the current installation to upgrade it/);
+const debResources = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-deb-'));
+roots.push(debResources);
+fs.writeFileSync(path.join(debResources, 'package-type'), 'deb\n');
+assert.equal(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {}, resourcesPath: debResources }).supported, true,
+  'installed DEB builds must use electron-updater instead of sending users to App Center');
+assert.match(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {}, resourcesPath: os.tmpdir() }).reason, /installed Linux AppImage and DEB builds/);
 assert.match(detectUpdateSupport({ app: supportApp, platform: 'darwin', env: {} }).reason, /not available/);
 assert.deepEqual(progressPayload({ percent: 44.44, transferred: -2, total: 100.8, bytesPerSecond: 20.2 }), {
   percent: 44.4,

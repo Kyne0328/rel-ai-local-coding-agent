@@ -79,6 +79,8 @@ assert.match(installedReleaseValidation, /REL_AI_RELEASE_INSTALL_TEST/,
   'installed release validation must require an explicit release-only opt in');
 assert.match(installedReleaseValidation, /createInstallerTestContext/,
   'Windows production-identity validation must retain the installer safety guard');
+assert.match(installedReleaseValidation, /resources[',\s]+['"]package-type/,
+  'Linux release validation must keep the electron-updater DEB package-type marker check');
 
 const rootOwnedSetuidSandbox = { uid: 0, mode: 0o104755 };
 const rootOwnedNamespaceSandbox = { uid: 0, mode: 0o100755 };

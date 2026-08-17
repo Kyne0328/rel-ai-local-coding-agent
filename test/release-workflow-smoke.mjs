@@ -76,6 +76,11 @@ function verifyReleaseBump() {
   run('release-check.mjs');
   const changelogPath = path.join(tmp, 'CHANGELOG.md');
   fs.writeFileSync(changelogPath, fs.readFileSync(changelogPath, 'utf8').replace(/\r?\n/g, '\r\n'));
+  run('release-bump.mjs', ['0.98.0', '--date', '2099-01-01', '--no-changelog']);
+  assert.equal(readJson('release-manifest.json').applicationVersion, '0.98.0',
+    'release manifest must follow the requested bump even when changelog insertion is intentionally deferred');
+  assert.doesNotMatch(fs.readFileSync(changelogPath, 'utf8'), /^## \[0\.98\.0\]/m);
+
   run('release-bump.mjs', [
     '0.99.0',
     '--date', '2099-01-02',

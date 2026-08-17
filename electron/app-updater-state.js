@@ -1,5 +1,6 @@
 
 
+import fs from 'node:fs';
 import * as path from "node:path";
 import { importResourceModule } from './resource-path.js';
 import { assessUpdateSynchronization, cleanText, normalizeStatus, progressPayload, updateCompatibilityMetadata } from './app-updater-status.js';
@@ -41,7 +42,7 @@ function createUpdateStateStore({ app, onLog = () => {} }) {
   return { readLastCheck, writeLastCheck };
 }
 
-function detectUpdateSupport({ app, platform, env }) {
+function detectUpdateSupport({ app, platform, env, resourcesPath = process.resourcesPath }) {
   if (!app.isPackaged) return { supported: false, reason: 'Updates are available only in an installed Rel.AI MCP build.' };
   if (platform === 'win32') {
     if (env.PORTABLE_EXECUTABLE_DIR || env.PORTABLE_EXECUTABLE_FILE) {
@@ -50,12 +51,18 @@ function detectUpdateSupport({ app, platform, env }) {
     return { supported: true, reason: '' };
   }
   if (platform === 'linux') {
-    if (!env.APPIMAGE) {
-      return { supported: false, reason: 'Automatic updates are available for the Linux AppImage. For DEB installations, install a newer Rel.AI MCP DEB over the current installation to upgrade it while keeping your existing Rel.AI settings.' };
-    }
-    return { supported: true, reason: '' };
+    if (env.APPIMAGE || readLinuxPackageType(resourcesPath) === 'deb') return { supported: true, reason: '' };
+    return { supported: false, reason: 'Automatic updates are available for installed Linux AppImage and DEB builds.' };
   }
   return { supported: false, reason: 'Automatic updates are not available for this operating system.' };
+}
+
+function readLinuxPackageType(resourcesPath) {
+  try {
+    return fs.readFileSync(path.join(String(resourcesPath || ''), 'package-type'), 'utf8').trim().toLowerCase();
+  } catch {
+    return '';
+  }
 }
 
 function isoNow(now) {
