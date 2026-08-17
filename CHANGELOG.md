@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.26.4] — 2026-08-17
+
+### Dashboard live-state reliability
+- **Refresh project changes without a manual reload.** Adding or renaming a project now updates the Projects surface immediately instead of leaving stale cards on screen.
+- **Keep connection and diagnostics state synchronized as runtime events arrive.** First-launch tunnel health and later connection changes now propagate through the dashboard live-update path instead of waiting for a manual status refresh.
+- **Apply live dashboard updates across active product surfaces.** Work, Settings, Diagnostics, Usage, and project views now consume the relevant server-side state updates so users see current data without disruptive full-page refreshes.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.4.
+
 ## [0.26.3] — 2026-08-17
 
 ### Secure tunnel recovery since the 0.26.2 GitHub build
