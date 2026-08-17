@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.26.3",
+  "version": "0.26.4",
   "description": "Use ChatGPT web like a coding agent with local repository tools for search, edit, run, inspect, validate, review, and Git.",
   "private": true,
   "type": "module",

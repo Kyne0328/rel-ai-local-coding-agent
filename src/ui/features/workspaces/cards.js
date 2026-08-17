@@ -5,7 +5,7 @@ import { workspaceDetailsHtml, branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
 import { hydrateWorkspaceAnalytics } from './analytics.js';
 
-function buildWorkspaces(data) {
+function buildWorkspaces(data, options = {}) {
   const config = data.config || {};
   const health = data.health || {};
   const workspaceFilter = getWorkspaceFilter();
@@ -52,7 +52,7 @@ function buildWorkspaces(data) {
   grid.className = 'workspace-grid workspace-grid-detailed';
   grid.innerHTML = views.map(workspaceCard).join('');
   root.appendChild(grid);
-  void hydrateWorkspaceAnalytics(grid, views.map(view => view.alias));
+  if (options.hydrateAnalytics !== false) void hydrateWorkspaceAnalytics(grid, views.map(view => view.alias));
 
   if (findings.length) root.appendChild(healthFindingsCard(findings));
   return root;

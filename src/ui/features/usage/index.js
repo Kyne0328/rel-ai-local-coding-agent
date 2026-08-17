@@ -5,9 +5,14 @@ import { loadAnalyticsData } from './data.js';
 import { renderUsage } from './render.js';
 
 let mountedGeneration = 0;
+let liveControls = null;
+let liveRefreshTimer = 0;
 
 export async function mountUsage(container) {
   const generation = ++mountedGeneration;
+  if (liveRefreshTimer) window.clearTimeout(liveRefreshTimer);
+  liveRefreshTimer = 0;
+  liveControls = null;
   const params = getRouteParams();
   const requestedRange = params.get('range');
   const range = ANALYTICS_RANGES.some(([key]) => key === requestedRange) ? requestedRange : '24h';
@@ -57,6 +62,7 @@ export async function mountUsage(container) {
     status: root.querySelector('[data-usage-status]'),
     content: root.querySelector('[data-usage-content]')
   };
+  liveControls = controls;
   const refresh = () => loadUsage(controls);
 
   controls.workspaceSelect.addEventListener('change', () => {
@@ -95,8 +101,25 @@ export async function mountUsage(container) {
   await refresh();
 }
 
-async function loadUsage(controls) {
+export function updateUsageLiveState(container) {
+  const controls = liveControls;
+  if (!controls || !container.contains(controls.root) || !active(controls.root, controls.generation)) return false;
+  if (liveRefreshTimer) window.clearTimeout(liveRefreshTimer);
+  liveRefreshTimer = window.setTimeout(() => {
+    liveRefreshTimer = 0;
+    void loadUsage(controls, { silent: true });
+  }, 180);
+  return true;
+}
+
+async function loadUsage(controls, options = {}) {
   const { root, generation, refreshButton, status, content } = controls;
+  const silent = options.silent === true;
+  if (controls.loading) {
+    if (silent) controls.pendingLiveRefresh = true;
+    return;
+  }
+  controls.loading = true;
   let bounds;
   try {
     bounds = analyticsBounds(controls.rangeSelect.value, {
@@ -104,16 +127,19 @@ async function loadUsage(controls) {
       customEnd: controls.endInput.value
     });
   } catch (error) {
+    controls.loading = false;
     status.textContent = 'Analytics could not be loaded.';
     renderUnavailable(content, messageOf(error), () => controls.rangeSelect.focus());
     return;
   }
 
-  refreshButton.disabled = true;
-  refreshButton.textContent = 'Loading…';
-  status.textContent = 'Loading analytics…';
-  content.setAttribute('aria-busy', 'true');
-  content.innerHTML = '<div class="usage-loading">Loading analytics…</div>';
+  if (!silent) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = 'Loading…';
+    status.textContent = 'Loading analytics…';
+    content.setAttribute('aria-busy', 'true');
+    content.innerHTML = '<div class="usage-loading">Loading analytics…</div>';
+  }
   try {
     const workspace = getWorkspaceFilter();
     const { models, current, previous } = await loadAnalyticsData({
@@ -127,14 +153,19 @@ async function loadUsage(controls) {
     status.textContent = `Analytics updated for ${bounds.label}.`;
   } catch (error) {
     if (active(root, generation)) {
-      renderUnavailable(content, messageOf(error), () => loadUsage(controls));
-      status.textContent = 'Analytics could not be loaded.';
+      if (!silent) renderUnavailable(content, messageOf(error), () => loadUsage(controls));
+      status.textContent = silent ? 'Analytics could not be refreshed.' : 'Analytics could not be loaded.';
     }
   } finally {
-    if (active(root, generation)) {
+    controls.loading = false;
+    if (active(root, generation) && !silent) {
       refreshButton.disabled = false;
       refreshButton.textContent = 'Refresh';
       content.removeAttribute('aria-busy');
+    }
+    if (controls.pendingLiveRefresh && active(root, generation)) {
+      controls.pendingLiveRefresh = false;
+      queueMicrotask(() => void loadUsage(controls, { silent: true }));
     }
   }
 }

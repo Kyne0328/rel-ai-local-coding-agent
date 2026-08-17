@@ -185,6 +185,9 @@ function readConfigCached() {
 
 const DASHBOARD_EVENT_STREAM_ID = crypto.randomUUID();
 let dashboardEventSequence = 0;
+let dashboardConnectionRevision = 0;
+let dashboardConnectionMcpRevision = -1;
+let dashboardConnectionDesktopRevision = '';
 
 function statSignature(file) {
   try {
@@ -246,6 +249,8 @@ function dashboardLiveMetadata(options = {}, overrides = {}) {
   const taskActivity = overrides.taskActivity
     ?? (typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : null);
   const connectionSnapshot = overrides.connectionSnapshot ?? mcpConnectionManager.snapshot();
+  const desktopStatus = overrides.desktopStatus
+    ?? (typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null);
   const runtimeLogs = typeof options.getRuntimeLogs === 'function'
     ? options.getRuntimeLogs({ limit: 1 })
     : null;
@@ -253,12 +258,23 @@ function dashboardLiveMetadata(options = {}, overrides = {}) {
     streamId: DASHBOARD_EVENT_STREAM_ID,
     revisions: {
       task: Number(taskActivity?.revision || 0),
-      connection: Number(connectionSnapshot?.revision || 0),
+      connection: connectionLiveRevision(connectionSnapshot, desktopStatus),
       workspace: Number(workspaceStateRevision() || 0),
       process: Number(managedProcessStateRevision() || 0),
       diagnostics: Number(runtimeLogs?.revision || 0)
     }
   };
+}
+
+function connectionLiveRevision(connectionSnapshot = null, desktopStatus = null) {
+  const mcpRevision = Number(connectionSnapshot?.revision || 0);
+  const desktopRevision = desktopStatusRevision(desktopStatus);
+  if (mcpRevision !== dashboardConnectionMcpRevision || desktopRevision !== dashboardConnectionDesktopRevision) {
+    dashboardConnectionMcpRevision = mcpRevision;
+    dashboardConnectionDesktopRevision = desktopRevision;
+    dashboardConnectionRevision += 1;
+  }
+  return dashboardConnectionRevision;
 }
 
 function openDashboardEvents(res, req, options) {
@@ -287,7 +303,8 @@ function openDashboardEvents(res, req, options) {
     try {
       const config = readConfigCached();
       const mcp = snapshot || mcpConnectionManager.snapshot();
-      sendDomain('connection.updated', 'connection', mcp.revision, buildDashboardConnectionProjection(config, options, mcp));
+      const desktopStatus = typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null;
+      sendDomain('connection.updated', 'connection', connectionLiveRevision(mcp, desktopStatus), buildDashboardConnectionProjection(config, options, mcp));
     } catch (error) { sendDashboardStreamError(res, error); }
   };
 

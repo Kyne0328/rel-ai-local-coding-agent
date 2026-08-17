@@ -83,12 +83,24 @@ export function updateTaskSessions(container, data = {}) {
   const summary = current.querySelector('[data-session-summary]');
   const summaryText = sessionSummary(sessions);
   if (summary && summary.textContent !== summaryText) summary.textContent = summaryText;
+  syncSessionWorkspaceMenu(current, data.config?.workspaces || [], workspace);
 
   const body = current.querySelector('.task-list');
   if (body) reconcileSessionRows(body, sessions, scopeKey);
   refreshOpenSession(data);
   maybeOpenRequestedSession();
   return true;
+}
+
+function syncSessionWorkspaceMenu(current, workspaces, selected) {
+  const existing = current.querySelector('[data-workspace-menu]');
+  if (!existing) return;
+  const template = document.createElement('template');
+  template.innerHTML = workspaceMenuHtml(workspaces, selected, { id: 'sessionsWorkspaceMenu' }).trim();
+  const next = template.content.firstElementChild;
+  if (!next || existing.isEqualNode(next)) return;
+  existing.replaceWith(next);
+  bindWorkspaceMenus(current);
 }
 
 function sessionsForDisplay(data, workspace) {

@@ -20,8 +20,8 @@ const usageData = read('src/ui/features/usage/data.js');
 const usageCss = read('src/ui/features/usage/styles.css');
 const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageData}`;
 
-assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
-assert.match(navigationCatalog, /See how Rel\.AI is used and where problems happen/i);
+assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Analytics['"]/);
+assert.match(navigationCatalog, /See activity trends, reliability, and where problems happen/i);
 assert.match(dashboard, /usage: systemSection\(['"]usage['"]\)/, 'Usage must mount through the generation-safe lazy system route wrapper');
 assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.doesNotMatch(preload, /getGatewayUsage|desktop:gateway:usage/);
@@ -31,14 +31,15 @@ assert.doesNotMatch(ipc, /gateway/i);
 assert.match(usageData, /desktop\.getLocalUsage/);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
-assert.match(usageSource, /Usage is stored on this computer\. Prompts, file paths, command output, and action results are not stored/i);
+assert.match(usageSource, /Analytics are stored on this computer\. Prompts, file paths, command output, and action results are not stored/i);
 assert.match(usageSource, /import \{ esc as escapeHtml \} from '\.\.\/\.\.\/utils\.js'/);
 assert.doesNotMatch(usageSource, /function escapeHtml\(/);
 assert.match(usageRender, /import \{ esc \} from '\.\.\/\.\.\/utils\.js'/);
 assert.doesNotMatch(usageRender, /function esc\(/);
 assert.match(usageSource, /data-usage-status role="status" aria-live="polite" aria-atomic="true"/);
 assert.doesNotMatch(usageSource, /data-usage-content aria-live=/);
-assert.match(usageSource, /Usage updated for \$\{bounds\.label\}/);
+assert.match(usageSource, /Analytics updated for \$\{bounds\.label\}/);
+assert.match(usageSource, /export function updateUsageLiveState/, 'Analytics must refresh current metrics from live task activity');
 assert.match(usageRender, /aria-pressed="\$\{i \? 'false' : 'true'\}"/);
 assert.match(usageRender, /setAttribute\('aria-pressed', String\(active\)\)/);
 assert.match(usageRender, /Overall trend \$\{trend\}/, 'Analytics charts must expose the computed trend to assistive technology');
@@ -81,7 +82,7 @@ for (const label of ['Actions', 'Reliable actions', 'System errors', 'Retryable 
 for (const field of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) {
   assert.match(usageCombined, new RegExp(`\\b${field}\\b`), `Analytics must consume ${field}.`);
 }
-assert.match(usageSource, /Usage unavailable/);
+assert.match(usageSource, /Analytics unavailable/);
 assert.match(usageSource, /Retry/);
 assert.match(usageSource, /Refresh/);
 assert.match(usageRender, /operationSuccessRate/);

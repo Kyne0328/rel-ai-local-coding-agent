@@ -138,6 +138,7 @@ try {
     desktopConnection = JSON.parse((await stream.nextType('connection.updated')).data);
   }
   assert.equal(desktopConnection?.desktopStatus?.tunnelStatus, 'running', 'desktop tunnel status must stream without unrelated task activity');
+  assert.ok(desktopConnection.revision > connectionEvent.revision, 'desktop-only tunnel changes must advance the shared connection revision instead of being deduplicated behind the MCP revision');
 
   const secondController = new AbortController();
   let secondReader;

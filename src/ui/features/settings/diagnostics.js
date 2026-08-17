@@ -324,6 +324,13 @@ function severityLabel(value) {
   return { error: 'Blocking', warning: 'Warnings', info: 'Recommendations', debug: 'Debug logs' }[value] || value;
 }
 
+export function updateDiagnosticsLiveState(container) {
+  if (!container?.querySelector('#diagnosticSummary')) return false;
+  currentContainer = container;
+  scheduleLiveTailRefresh();
+  return true;
+}
+
 function startLiveTail(container) {
   stopLiveTail();
   liveTailEnabled = true;

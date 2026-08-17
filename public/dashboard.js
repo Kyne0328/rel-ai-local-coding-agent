@@ -251,7 +251,7 @@ async function performRefresh(options = {}) {
       const refreshed = getStore();
       updateShell(refreshed);
       if (!_routerReady) activateRouter(ensureRouteRoot());
-      else if (options.render === true) await renderViewIfChanged(refreshed);
+      else if (options.render === true) await renderViewIfChanged(refreshed, { force: true });
       else if (options.render !== false) await syncLiveView(refreshed);
       _lastEventAt = Date.now();
       clearRecoveryNotice({ announce: true });
@@ -490,14 +490,18 @@ async function updateLiveView(data) {
       const module = await import('./ui/features/sessions/index.js');
       return module.updateTaskSessions(root, data);
     }
+    case 'workspaces': {
+      const module = await import('./ui/features/workspaces/index.js');
+      return module.updateWorkspacesLiveState(root, data);
+    }
     case 'system':
     case 'connection':
-    case 'processes': {
+    case 'processes':
+    case 'diagnostics':
+    case 'usage': {
       const module = await import('./ui/features/system/index.js');
       return module.updateSystemLiveState(root, currentSection(), data);
     }
-    case 'usage':
-      return true;
     default:
       return false;
   }
@@ -568,7 +572,7 @@ function pluralLabel(count, singular) {
   return Number(count) === 1 ? singular : `${singular}s`;
 }
 
-function renderViewIfChanged(data) {
+function renderViewIfChanged(data, options = {}) {
   if (!_routerReady) return Promise.resolve(false);
   if (hasBlockingInteraction()) {
     _deferredViewRender = true;
@@ -576,7 +580,7 @@ function renderViewIfChanged(data) {
   }
   _deferredViewRender = false;
   const nextRevisionKey = viewRevisionKey(data);
-  if (nextRevisionKey === _renderRevisionKey) return Promise.resolve(false);
+  if (options.force !== true && nextRevisionKey === _renderRevisionKey) return Promise.resolve(false);
   _renderRevisionKey = nextRevisionKey;
   return new Promise(resolve => {
     _renderWaiters.push(resolve);

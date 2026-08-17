@@ -1,9 +1,9 @@
 import { get as getStore } from '../../store.js';
 import { mountConnector, updateConnectorLiveState } from '../settings/connector.js';
-import { mountDiagnostics } from '../settings/diagnostics.js';
+import { mountDiagnostics, updateDiagnosticsLiveState } from '../settings/diagnostics.js';
 import { mountProcesses, updateProcessesLiveState } from '../processes/index.js';
 import { mountTools } from '../tools/index.js';
-import { mountUsage } from '../usage/index.js';
+import { mountUsage, updateUsageLiveState } from '../usage/index.js';
 
 const MOUNTS = {
   connection: mountConnector,
@@ -30,5 +30,7 @@ export function updateSystemLiveState(container, pageId, dashboardState = {}) {
   const currentPage = pageId === 'system' ? 'connection' : pageId;
   if (currentPage === 'connection') return updateConnectorLiveState(content, dashboardState);
   if (currentPage === 'processes') return updateProcessesLiveState(content, dashboardState);
+  if (currentPage === 'diagnostics') return updateDiagnosticsLiveState(content);
+  if (currentPage === 'usage') return updateUsageLiveState(content);
   return false;
 }

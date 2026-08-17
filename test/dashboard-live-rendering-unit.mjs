@@ -13,6 +13,8 @@ const connector = read('src/ui/features/settings/connector.js');
 const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const home = read('src/ui/features/home/index.js');
 const diagnostics = read('src/ui/features/settings/diagnostics.js');
+const usage = read('src/ui/features/usage/index.js');
+const workspaces = read('src/ui/features/workspaces/index.js');
 const drawer = read('src/ui/components/drawer.js');
 
 function functionSource(source, name) {
@@ -88,6 +90,8 @@ assert.match(connector, /replaceRegion\(page,\s*'\.connection-layer-disclosure'/
 assert.match(connector, /replaceRegion\(page,\s*'\.connection-guide-region'/);
 assert.match(home, /export function updateHomeLiveState/);
 assert.match(home, /syncHomeRegion/);
+assert.match(functionSource(home, 'updateHomeLiveState'), /createDesktopSetupChecklist/, 'Overview live updates must refresh onboarding completion state');
+assert.match(functionSource(home, 'updateHomeLiveState'), /data-home-live-workspaces/, 'Overview live updates must refresh project status summaries');
 assert.match(functionSource(home, 'updateHomeLiveState'), /overviewState\(data\)/, 'Home live updates must derive data without rebuilding the full overview tree');
 assert.doesNotMatch(functionSource(home, 'updateHomeLiveState'), /buildOverview\(/, 'Home live updates must not build a detached full overview tree');
 assert.match(home, /function syncHomeClockText/, 'Home live regions must neutralize clock-only text before structural comparison');
@@ -106,6 +110,7 @@ assert.doesNotMatch(
 assert.equal(dashboard.includes('return updateHomeLiveState(root, data);'), true);
 assert.equal(dashboard.includes('module.updateTaskSessions(root, data)'), true);
 assert.equal(dashboard.includes('module.updateActivityLiveState(data)'), true, 'Activity live updates must receive the full dashboard snapshot for session correlation');
+assert.equal(dashboard.includes('module.updateWorkspacesLiveState(root, data)'), true, 'Projects must apply live operational state without a manual refresh');
 assert.equal(dashboard.includes('module.updateSystemLiveState(root, currentSection(), data)'), true);
 {
   const supported = await exerciseSyncLiveView(true);
@@ -143,6 +148,7 @@ assert.doesNotMatch(activity, /<th scope="col" class="activity-session-column">S
 assert.match(activity, /routeHref\('tasks'/, 'Activity details must deep-link back to Sessions');
 assert.match(sessions, /data-session-fingerprint/, 'session rows must carry semantic fingerprints for keyed reconciliation');
 assert.match(functionSource(sessions, 'timingHtml'), /data-clock-relative/, 'ended and inactive task rows must show relative age instead of total duration');
+assert.match(functionSource(sessions, 'updateTaskSessions'), /syncSessionWorkspaceMenu\(current, data\.config\?\.workspaces \|\| \[\], workspace\)/, 'task live updates must keep the project filter synchronized with current configuration');
 assert.match(functionSource(sessions, 'updateTaskSessions'), /refreshOpenSession\(data\)/, 'live task updates must refresh an already-open task detail drawer');
 assert.match(functionSource(sessions, 'refreshOpenSession'), /updateDrawer/, 'open task details must update in place without reopening the drawer');
 assert.match(drawer, /export function updateDrawer/, 'shared drawers must support in-place content refreshes');
@@ -159,6 +165,10 @@ assert.match(functionSource(processes, 'updateProcessesLiveState'), /reconcilePr
 assert.match(processes, /function copyProcessDisclosureState/, 'Process live updates must preserve output disclosure state');
 assert.match(processes, /function captureProcessFocus/, 'Process live updates must preserve focused process controls');
 assert.doesNotMatch(functionSource(processes, 'updateProcessesLiveState'), /currentList\.replaceWith\(nextList\)/, 'Process live updates must not replace the whole process list');
+assert.match(diagnostics, /export function updateDiagnosticsLiveState/, 'Troubleshooting must refresh snapshot-backed findings and capability state on shared live events');
+assert.match(usage, /export function updateUsageLiveState/, 'Analytics must reload current local metrics when live activity changes');
+assert.match(workspaces, /export function updateWorkspacesLiveState/, 'Projects must expose a live updater for repository state changes');
+assert.match(workspaces, /hydrateWorkspaceAnalytics/, 'Projects live updates must refresh per-project analytics instead of leaving mount-time metrics');
 assert.match(diagnostics, /function syncDiagnosticRegions/, 'Diagnostics live updates must reconcile stable report regions');
 assert.match(diagnostics, /data-diagnostic-region="maintenance"/, 'Diagnostics maintenance controls must live in a stable region');
 assert.match(diagnostics, /function copyDiagnosticDisclosureState/, 'Diagnostics must preserve technical disclosure state when a changed region is replaced');
@@ -183,6 +193,8 @@ const reconcileSessionsSource = functionSource(sessions, 'reconcileSessionRows')
 assert.match(reconcileSessionsSource, /body\.children\[index\]/, 'keyed reconciliation must compare against the current DOM child after a row replacement');
 assert.doesNotMatch(reconcileSessionsSource, /let cursor/, 'keyed reconciliation must not retain a cursor that can become detached by replaceWith');
 assert.match(connector, /export function updateConnectorLiveState/);
+assert.match(connector, /dashboardState\.mcpConnection\|\|payload\.mcpConnection/, 'Connection live state must prefer the canonical dashboard MCP snapshot over its mount-time payload');
+assert.match(connector, /getStore\(\)\.desktopStatus\?\.tunnelId\|\|payload\.tunnelId/, 'Connection guidance must prefer the current desktop Tunnel ID over its mount-time payload');
 assert.doesNotMatch(connector, /connector-technical-details|Execution mode|Native MCP Tasks/, 'Connection must not expose protocol execution internals in the normal UI.');
 for (const moduleSource of [home, processes, connector]) {
   assert.match(moduleSource, /isEqualNode/, 'live region updaters must preserve unchanged DOM nodes');
@@ -205,7 +217,8 @@ assert.doesNotMatch(dashboard, /\.then\(module => module\.mount[^\n]*\.catch\(de
 
 const refreshSource = functionSource(dashboard, 'performRefresh');
 assert.match(refreshSource, /initStore\(hydrated\)[\s\S]*replayLiveEventsDuringRefresh\(\)[\s\S]*const refreshed = getStore\(\)/, 'aggregate refreshes must replay typed live events that arrived while the snapshot was in flight');
-assert.match(refreshSource, /options\.render === true[\s\S]*renderViewIfChanged\(refreshed\)/, 'explicit structural refreshes must retain rerender support');
+assert.match(refreshSource, /options\.render === true[\s\S]*renderViewIfChanged\(refreshed,\s*\{\s*force:\s*true\s*\}\)/, 'explicit structural refreshes must force a rerender even when typed domain revisions are unchanged');
+assert.match(functionSource(dashboard, 'renderViewIfChanged'), /options\.force !== true/, 'forced structural refreshes must bypass the passive revision gate');
 assert.match(refreshSource, /options\.render !== false[\s\S]*syncLiveView\(refreshed\)/, 'ordinary refreshes must use passive synchronization');
 assert.match(functionSource(dashboard, 'liveOnEvent'), /bufferLiveEventDuringRefresh\(event\)/, 'live events must be retained while an aggregate refresh is in flight');
 const refreshCoordinatorSource = functionSource(dashboard, 'doRefresh');

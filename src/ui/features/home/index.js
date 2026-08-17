@@ -23,10 +23,28 @@ export function updateHomeLiveState(container, data = {}) {
   if (!current) return false;
   const state = overviewState(data);
   syncHomeRegion(current, taskActivityCard(data.taskActivity, state.tasks[0]), '[data-home-live-activity]', '[data-home-live-connection]');
+  syncHomeInteractiveRegion(current, createDesktopSetupChecklist(desktopSetupState(data)), '[data-desktop-setup-checklist]', '[data-home-live-connection]');
   syncHomeRegion(current, connectionHero(state.bridgeState), '[data-home-live-connection]', '.layout-grid');
+  syncHomeRegion(current, workspaceSummaryCard(state.workspaces, state.findings), '[data-home-live-workspaces]');
   syncHomeRegion(current, recentTasksCard(state.tasks), '[data-home-live-sessions]');
   refreshHomeAnalyticsAfterTaskBoundary(current, data);
+  void finalizeSetupChecklist(data);
   return true;
+}
+
+function syncHomeInteractiveRegion(current, nextNode, selector, beforeSelector = '') {
+  const currentNode = current.querySelector(selector);
+  if (currentNode && nextNode) {
+    if (!currentNode.isEqualNode(nextNode)) currentNode.replaceWith(nextNode);
+    return;
+  }
+  if (currentNode) {
+    currentNode.remove();
+    return;
+  }
+  if (!nextNode) return;
+  const before = beforeSelector ? current.querySelector(beforeSelector) : null;
+  current.insertBefore(nextNode, before);
 }
 
 function syncHomeRegion(current, nextNode, selector, beforeSelector = '') {
@@ -427,6 +445,7 @@ function formatAnalyticsDuration(value) {
 
 function workspaceSummaryCard(workspaces, findings) {
   const card = document.createElement('section');
+  card.dataset.homeLiveWorkspaces = '';
   card.className = 'card';
   card.innerHTML = `<div class="card-head"><h3>Projects</h3><a class="section-action" href="${routeMetadata('workspaces').href}">Manage</a></div>`;
   const body = document.createElement('div');
