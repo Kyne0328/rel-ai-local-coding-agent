@@ -20,14 +20,14 @@ export function connectionRestartResult(status = {}) {
 }
 
 export async function restartConnection() {
-  if (typeof window.relaiDesktop?.restartService !== 'function') {
-    return { ok: false, error: 'Restarting the connection is available in the installed Rel.AI desktop app.' };
+  if (typeof window.relaiDesktop?.restartConnection !== 'function') {
+    return { ok: false, error: 'Retrying the connection is available in the installed Rel.AI desktop app.' };
   }
   try {
-    const status = await window.relaiDesktop.restartService();
+    const status = await window.relaiDesktop.restartConnection();
     requestDashboardRefresh({ structural: true });
     return connectionRestartResult(status);
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error || 'Connection restart failed.') };
+    return { ok: false, error: error instanceof Error ? error.message : String(error || 'Connection retry failed.') };
   }
 }

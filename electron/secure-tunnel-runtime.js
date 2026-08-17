@@ -57,16 +57,23 @@ function createSecureTunnelRuntime({
     const apiKey = normalizeRequiredSecret(config.apiKey, 'OpenAI tunnel runtime API key');
     const localToken = normalizeRequiredSecret(config.localToken, 'Rel.AI local bearer token');
     const port = normalizePort(config.port);
-    const executable = await resolveExecutable();
-    if (!executable) throw new Error('Bundled OpenAI tunnel-client is missing. Fetch and verify vendor/tunnel-client before starting Rel.AI.');
-    await ensureExecutable(executable);
-
     const runGeneration = ++generation;
     stopping = false;
+    update({ state: 'starting', tunnelId, healthUrl: '', error: '', errorCode: '', consecutiveFailures: 0, outageStartedAt: null });
+
+    let executable;
+    try {
+      executable = await resolveExecutable();
+      if (!executable) throw new Error('Bundled OpenAI tunnel-client is missing. Fetch and verify vendor/tunnel-client before starting Rel.AI.');
+      await ensureExecutable(executable);
+    } catch (error) {
+      if (runGeneration === generation) update({ state: 'failed', tunnelId, healthUrl: '', error: messageOf(error), errorCode: 'secure_tunnel_failed' });
+      throw error;
+    }
+
     const healthUrlFile = path.join(path.resolve(stateDir), `tunnel-health-${process.pid}.url`);
     await fs.promises.mkdir(path.dirname(healthUrlFile), { recursive: true, mode: 0o700 });
     await fs.promises.rm(healthUrlFile, { force: true });
-    update({ state: 'starting', tunnelId, healthUrl: '', error: '', errorCode: '', consecutiveFailures: 0, outageStartedAt: null });
 
     const args = [
       'run',

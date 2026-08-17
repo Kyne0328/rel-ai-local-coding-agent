@@ -348,8 +348,8 @@ function recommendationForHealth(finding, code) {
 
 function actionFromGuidance(code) {
   const guidance = errorGuidance(code);
-  if (code === ERROR_CODES.SECURE_TUNNEL_FAILED || code === ERROR_CODES.PUBLIC_ENDPOINT_FAILED) {
-    return { kind: 'restart_connection', label: 'Restart connection', href: guidance.href || '#connection' };
+  if ([ERROR_CODES.SECURE_TUNNEL_FAILED, ERROR_CODES.PUBLIC_ENDPOINT_FAILED, ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED].includes(code)) {
+    return { kind: 'restart_connection', label: 'Retry now', href: guidance.href || '#connection' };
   }
   return { label: guidance.actionLabel, href: guidance.href || '#diagnostics' };
 }

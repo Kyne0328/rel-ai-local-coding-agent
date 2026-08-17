@@ -49,6 +49,7 @@
       "preload.cjs",
       "launcher-utils.js",
       "secure-tunnel-runtime.js",
+      "tunnel-recovery-supervisor.js",
       "tunnel-credentials.js",
       "ipc-handlers.js",
       "ipc-handlers-dashboard.js",

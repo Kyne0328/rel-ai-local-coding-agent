@@ -121,7 +121,11 @@ function deriveConnectionState(status = {}) {
   const message = String(status.error || '').trim();
   return {
     localService: { status: localServiceStatus },
-    publicEndpoint: { status: publicEndpointStatus },
+    publicEndpoint: {
+      status: publicEndpointStatus,
+      retryAttempt: Math.max(0, Number(status.tunnelRetryAttempt || 0)),
+      nextRetryAt: status.tunnelNextRetryAt || null
+    },
     chatgptReadiness: { status: chatgptReadinessStatus },
     dashboardUpdates: { status: normalizeDashboardUpdateStatus(status.dashboardUpdateStatus) },
     error: message ? { code: errorCode || ERROR_CODES.UNKNOWN, message } : null

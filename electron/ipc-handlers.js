@@ -38,7 +38,7 @@ function registerIpcHandlers(deps) {
     getDashboardWindow: deps.getDashboardWindow,
     startServer: deps.startServer,
     stopServer: deps.stopServer,
-    launchConfiguredDesktop: deps.launchConfiguredDesktop,
+    restartConnection: deps.restartConnection,
     relaunchApplication: deps.relaunchApplication
   });
   registerDashboardWindowIpc({
@@ -121,11 +121,11 @@ function registerRecoveryIpc({ ipcMain, windowOnly, getFallbackWindow, openRecov
   ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
 }
 
-function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, launchConfiguredDesktop, relaunchApplication }) {
+function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, restartConnection, relaunchApplication }) {
   ipcMain.handle('server:start', event => windowOnly(event, getFallbackWindow, 'Service startup', startServer));
   ipcMain.handle('server:stop', event => windowOnly(event, getFallbackWindow, 'Service shutdown', stopServer));
-  ipcMain.handle('recovery:restart-service', event => windowOnly(event, getFallbackWindow, 'Connection restart', () => launchConfiguredDesktop({ restart: true })));
-  ipcMain.handle('desktop:restart-service', event => windowOnly(event, getDashboardWindow, 'Connection restart', () => launchConfiguredDesktop({ restart: true })));
+  ipcMain.handle('recovery:restart-connection', event => windowOnly(event, getFallbackWindow, 'Connection retry', restartConnection));
+  ipcMain.handle('desktop:restart-connection', event => windowOnly(event, getDashboardWindow, 'Connection retry', restartConnection));
   ipcMain.handle('recovery:relaunch', event => windowOnly(event, getFallbackWindow, 'Application restart', relaunchApplication));
   ipcMain.handle('desktop:relaunch', event => windowOnly(event, getDashboardWindow, 'Application restart', relaunchApplication));
   ipcMain.on('desktop:stop-service', event => {

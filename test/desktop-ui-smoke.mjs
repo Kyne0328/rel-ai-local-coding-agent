@@ -84,7 +84,7 @@ assert.match(statusJs, /Tunnel ID copied/);
 assert.match(statusJs, /The Secure MCP Tunnel did not become ready/);
 assert.match(statusJs, /debugLogsToggle/);
 assert.match(statusJs, /tunnelStatus === 'degraded'/);
-assert.match(statusJs, /restartService\(\)/);
+assert.match(statusJs, /restartConnection\(\)/);
 assert.match(statusJs, /relaunchApp\(\)/);
 assert.match(statusJs, /Secure tunnel:/);
 assert.match(statusJs, /Local MCP:/);
@@ -95,7 +95,7 @@ assert.match(statusJs, /desktop notification setting could not be saved/i);
 assert.doesNotMatch(statusJs, /updateUI\(\{\s*error:[\s\S]{0,160}tunnelStatus:\s*'failed'/, 'recovery action failures must not falsify the tunnel connection state');
 assert.doesNotMatch(statusJs, /currentStatus\.mcpUrl|approval token|ngrok|gateway/i);
 
-for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close','desktop:restart-service','desktop:reload-dashboard','desktop:relaunch','recovery:restart-service','recovery:relaunch']) {
+for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close','desktop:restart-connection','desktop:reload-dashboard','desktop:relaunch','recovery:restart-connection','recovery:relaunch']) {
   assert.match(preload, new RegExp(channel.replaceAll(':', '\\:')));
   assert.match(ipc, new RegExp(channel.replaceAll(':', '\\:')));
 }
@@ -123,7 +123,7 @@ assert.match(desktopConnection, /saved key for this Secure MCP Tunnel is encrypt
 assert.match(desktopConnection, /Save and restart connection/);
 assert.doesNotMatch(desktopConnection, /ngrok|gateway|pairing|approval token/i);
 
-for (const file of ['secure-tunnel-runtime.js','tunnel-log-parser.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));
+for (const file of ['secure-tunnel-runtime.js','tunnel-recovery-supervisor.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));
 for (const removed of ['managed-ngrok.js','ngrok-token.js','public-connection-runtime.js','gateway-client.js','gateway-actions.js','gateway-device-identity.js','approval-token.js']) assert.equal(electronPackage.build.files.includes(removed), false);
 assert.ok(electronPackage.build.win.extraResources.some(item => item.from === '../vendor/tunnel-client' && item.to === 'bin/tunnel-client'));
 assert.equal(electronPackage.build.win.extraResources.some(item => /ngrok|gateway/i.test(String(item.from || ''))), false);
@@ -143,7 +143,7 @@ assert.doesNotMatch(main, /dashboard:\s*false/, 'tunnel state changes must reach
 assert.match(main, /setImmediate\(\(\) => \{[\s\S]*appUpdater\.start\(\)[\s\S]*updateSupportPolicy\.start\(\)/, 'updater policy work should begin after the first useful desktop startup path is scheduled');
 assert.doesNotMatch(main, /createGatewayClient|createPublicConnectionRuntime|createApprovalTokenManager|managedNgrok/);
 assert.match(dashboardJs, /AUTO_RECOVERY_DELAYS_MS/);
-assert.match(dashboardJs, /Restart connection/);
+assert.match(dashboardJs, /Retry connection/);
 assert.match(dashboardJs, /Reload dashboard/);
 assert.match(dashboardJs, /Restart Rel\.AI/);
 assert.match(dashboardJs, /Connection restored/);

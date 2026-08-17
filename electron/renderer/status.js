@@ -585,7 +585,7 @@ function bindEvents() {
       : window.electronAPI.startServer()));
   });
   document.getElementById('retryBtn').addEventListener('click', () => {
-    runAsync(withBusy(document.getElementById('retryBtn'), 'Restarting connection…', () => window.electronAPI.restartService()));
+    runAsync(withBusy(document.getElementById('retryBtn'), 'Retrying connection…', () => window.electronAPI.restartConnection()));
   });
   document.getElementById('restartAppBtn').addEventListener('click', () => {
     runAsync(withBusy(document.getElementById('restartAppBtn'), 'Restarting Rel.AI…', () => window.electronAPI.relaunchApp()));

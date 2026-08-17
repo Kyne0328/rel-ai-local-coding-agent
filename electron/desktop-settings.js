@@ -42,7 +42,7 @@ async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
     clearTunnelApiKey = () => {},
     canRestart = () => '',
     getCurrentStatus = () => ({}),
-    restartTunnel,
+    restartConnection,
     restartDesktop
   } = runtimeActions;
   if (typeof restartDesktop !== 'function') throw new TypeError('restartDesktop is required.');
@@ -69,10 +69,10 @@ async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
   const previousApiKey = replacementApiKey ? String(getTunnelApiKey() || '') : '';
   const previousNotifications = getNotificationsEnabled() !== false;
   const previousStatus = getCurrentStatus() || {};
-  const canReconnectTunnelOnly = connectionChanged
+  const canReconnectWithoutLocalRestart = connectionChanged
     && !portChanged
     && previousStatus.serverRunning === true
-    && typeof restartTunnel === 'function';
+    && typeof restartConnection === 'function';
 
   try {
     saveLauncherConfig(next);
@@ -81,8 +81,8 @@ async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
 
     if (!connectionChanged) return { ok: true, status: previousStatus };
 
-    const status = canReconnectTunnelOnly
-      ? await restartTunnel()
+    const status = canReconnectWithoutLocalRestart
+      ? await restartConnection()
       : await restartDesktop();
     if (!status?.serverRunning) {
       throw new Error(status?.error || 'Desktop settings were saved, but the local service did not restart.');
@@ -111,7 +111,7 @@ async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
     }
     if (connectionChanged) {
       try {
-        if (canReconnectTunnelOnly) await restartTunnel();
+        if (canReconnectWithoutLocalRestart) await restartConnection();
         else await restartDesktop();
       } catch (rollbackError) {
         rollbackErrors.push(rollbackError);

@@ -97,7 +97,23 @@ assert.deepEqual(
 );
 assert.deepEqual(
   connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'unavailable' } }),
-  { kind: 'restart', label: 'Restart connection' }
+  { kind: 'restart', label: 'Retry now' }
+);
+assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'degraded' }, error: { code: 'tunnel_connection_interrupted', message: 'offline' } }),
+  { kind: 'restart', label: 'Retry now' }
+);
+assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'unavailable' }, error: { code: 'tunnel_authentication_failed', message: 'rejected' } }),
+  { kind: 'settings', label: 'Replace runtime key' }
+);
+assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'unavailable' }, error: { code: 'tunnel_access_denied', message: 'forbidden' } }),
+  { kind: 'settings', label: 'Review key permissions' }
+);
+assert.deepEqual(
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'unavailable' }, error: { code: 'tunnel_not_found', message: 'missing' } }),
+  { kind: 'settings', label: 'Review Tunnel ID' }
 );
 assert.equal(connectionRestartResult({ serverRunning: true, tunnelStatus: 'running' }).ok, true);
 const failedRestart = connectionRestartResult({ serverRunning: true, tunnelStatus: 'failed' });
@@ -198,7 +214,8 @@ assert.match(desktopConnectionSource, /connection-settings-disclosure/, 'low-fre
 assert.match(settingsSharedSource, /labelElement\.htmlFor = labelTarget\.id/, 'shared settings fields must associate visible labels with their controls');
 assert.doesNotMatch(connectorSource, /connection-status-body[\s\S]{0,600}field-caption[^\n]*Tunnel ID/, 'primary connection status must not duplicate technical setup identifiers');
 assert.match(connectorSource, /action\.href===['"]#diagnostics['"]/, 'connection recovery must not render a duplicate Troubleshooting link beside the primary recovery action');
-assert.match(connectorSource, /data-restart-connection/, 'an unavailable Secure MCP Tunnel must expose the existing desktop restart operation directly');
+assert.match(connectorSource, /data-restart-connection/, 'a retryable Secure MCP Tunnel failure must expose the desktop retry operation directly');
+assert.match(connectorSource, /relai:desktop-status-refresh/, 'manual Connection refresh must apply authoritative Electron status before the aggregate dashboard refresh');
 assert.match(diagnosticsSource, /data-restart-connection/, 'Troubleshooting must offer a direct tunnel restart instead of only routing back to Connection');
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/advanced.js')), false, 'technical Advanced settings must not remain in the product surface');
 

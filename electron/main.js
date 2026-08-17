@@ -27,6 +27,7 @@ import { createShutdownCoordinator } from './shutdown-coordinator.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
 import { configureTunnelSafeStorage, createTunnelCredentialStore } from './tunnel-credentials.js';
 import { createSecureTunnelRuntime } from './secure-tunnel-runtime.js';
+import { createTunnelRecoverySupervisor } from './tunnel-recovery-supervisor.js';
 import { hasExistingConfig } from './launcher-utils.js';
 const { autoUpdater } = electronUpdater;
 const electronRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -62,7 +63,7 @@ const { terminateProcessTree } = processModule;
 const { readLocalUsageSnapshotAsync } = localAnalytics;
 const { shutdownTelemetry } = telemetry;
 const { makeServiceProcessEnvironment, makeTunnelProcessEnvironment } = processEnvironment;
-let serviceRuntime = null, desktopTray = null;
+let serviceRuntime = null, desktopTray = null, tunnelRecoverySupervisor = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
 let lastServiceContextKey = '';
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
@@ -97,11 +98,22 @@ const secureTunnelRuntime = createSecureTunnelRuntime({
   onLog: entry => publicConnectionLog('openai-tunnel', entry),
   onStatus: status => {
     const common = { tunnelStatus: status.state, tunnelId: status.tunnelId, tunnelHealthUrl: status.healthUrl || '' };
-    if (status.state === 'running') setStatus({ ...common, error: '', errorCode: '' });
-    else if (['starting', 'locally_ready', 'authenticating'].includes(status.state)) setStatus({ ...common, error: '', errorCode: '' });
-    else if (status.state === 'degraded') setStatus({ ...common, error: status.error, errorCode: status.errorCode || ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED });
-    else if (status.state === 'failed') setStatus({ ...common, error: status.error, errorCode: status.errorCode || ERROR_CODES.SECURE_TUNNEL_FAILED });
-    else if (status.state === 'stopped') setStatus({ ...common, error: '', errorCode: '' });
+    if (status.state === 'running') {
+      setStatus({ ...common, tunnelRetryAttempt: 0, tunnelNextRetryAt: null, error: '', errorCode: '' });
+      tunnelRecoverySupervisor?.observe(status);
+    } else if (['starting', 'locally_ready', 'authenticating'].includes(status.state)) {
+      setStatus({ ...common, error: '', errorCode: '' });
+    } else if (status.state === 'degraded') {
+      setStatus({ ...common, error: status.error, errorCode: status.errorCode || ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED });
+    } else if (status.state === 'failed') {
+      const recovery = tunnelRecoverySupervisor?.observe(status);
+      if (!recovery?.scheduled && !recovery?.inFlight) {
+        setStatus({ ...common, tunnelRetryAttempt: 0, tunnelNextRetryAt: null, error: status.error, errorCode: status.errorCode || ERROR_CODES.SECURE_TUNNEL_FAILED });
+      }
+    } else if (status.state === 'stopped') {
+      setStatus({ ...common, error: '', errorCode: '' });
+      tunnelRecoverySupervisor?.observe(status);
+    }
   }
 });
 const dashboardWindowManager = createDashboardWindowManager({
@@ -187,6 +199,25 @@ serviceRuntime = createDesktopServiceRuntime({
   setStatus,
   replaceCurrentStatus,
   pushStatus
+});
+tunnelRecoverySupervisor = createTunnelRecoverySupervisor({
+  restartConnection: () => serviceRuntime.restartConnection(),
+  onSchedule: ({ attempt, delayMs, nextRetryAt, lastError }) => {
+    runtimeLogs.append('Secure MCP Tunnel reconnect scheduled.', {
+      level: 'warning',
+      source: 'openai-tunnel',
+      code: ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED,
+      details: { retryAttempt: attempt, retryInMs: delayMs, lastError }
+    });
+    setStatus({
+      serverRunning: currentStatus.serverRunning,
+      tunnelStatus: 'degraded',
+      tunnelRetryAttempt: attempt,
+      tunnelNextRetryAt: nextRetryAt,
+      error: 'Secure MCP Tunnel is unavailable. Rel.AI is retrying automatically.',
+      errorCode: ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED
+    });
+  }
 });
 const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
@@ -292,7 +323,7 @@ function updateDesktopSettings(settings) {
     clearTunnelApiKey: tunnelCredentials.clear,
     canRestart: action => taskActivityBlockReason(toolActivityRuntime.getStatus(), action),
     getCurrentStatus: () => currentStatus,
-    restartTunnel: () => serviceRuntime.restartTunnel(),
+    restartConnection,
     restartDesktop: () => launchConfiguredDesktop({ restart: true })
   });
 }
@@ -426,7 +457,12 @@ function startServer() {
   return serviceRuntime.startServer();
 }
 
+function restartConnection() {
+  return tunnelRecoverySupervisor?.retryNow() || serviceRuntime.restartConnection();
+}
+
 function stopServer(options = {}) {
+  tunnelRecoverySupervisor?.cancel();
   return serviceRuntime.stopServer(options);
 }
 
@@ -528,6 +564,7 @@ registerIpcHandlers({
   startServer,
   stopServer,
   launchConfiguredDesktop,
+  restartConnection,
   relaunchApplication,
   openSettingsWindow,
   openDashboardWindow,

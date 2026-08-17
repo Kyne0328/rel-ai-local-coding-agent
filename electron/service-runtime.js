@@ -26,6 +26,7 @@ function createDesktopServiceRuntime(deps) {
 
   let startPromise = null;
   let stopPromise = null;
+  let restartPromise = null;
   let localReadyPromise = null;
   let lifecycleToken = 0;
   let activePort = 0;
@@ -44,7 +45,7 @@ function createDesktopServiceRuntime(deps) {
         pushStatus();
         return getCurrentStatus();
       }
-      if (activePort) return restartTunnel();
+      if (activePort) return restartConnection();
     }
 
     if (startPromise) return startPromise;
@@ -122,7 +123,18 @@ function createDesktopServiceRuntime(deps) {
     return startTunnel({ runToken, guiConfig, apiKey, actualPort });
   }
 
-  async function restartTunnel() {
+  function restartConnection() {
+    if (restartPromise) return restartPromise;
+    const pendingRestart = restartConnectionNow();
+    restartPromise = pendingRestart;
+    const clearPending = () => {
+      if (restartPromise === pendingRestart) restartPromise = null;
+    };
+    void pendingRestart.then(clearPending, clearPending);
+    return pendingRestart;
+  }
+
+  async function restartConnectionNow() {
     if (stopPromise) {
       try { await stopPromise; } catch {}
     }
@@ -171,6 +183,13 @@ function createDesktopServiceRuntime(deps) {
     const localUrl = `http://127.0.0.1:${actualPort}`;
     let result;
     try {
+      connection.writeConnectionProfile({
+        host: '127.0.0.1',
+        port: actualPort,
+        tunnelId: guiConfig.tunnelId,
+        tunnelProvider: 'openai-secure-mcp',
+        configPath: configModule.getConfigPath()
+      });
       result = await secureTunnelRuntime.start({
         tunnelId: guiConfig.tunnelId,
         port: actualPort,
@@ -179,26 +198,28 @@ function createDesktopServiceRuntime(deps) {
       });
     } catch (error) {
       if (runToken !== lifecycleToken) return getCurrentStatus();
-      setStatus(desktopStatusFailure(tunnelErrorCode(error, errorCodes), error, {
-        serverRunning: true,
-        tunnelStatus: 'failed',
-        tunnelId: guiConfig.tunnelId,
-        tunnelHealthUrl: '',
-        mcpUrl: '',
-        localMcpUrl: `${localUrl}/mcp`,
-        localUrl
-      }));
+      const code = tunnelErrorCode(error, errorCodes);
+      const terminal = isTerminalTunnelCode(code, errorCodes);
+      const current = getCurrentStatus();
+      setStatus(desktopStatusFailure(
+        terminal ? code : (errorCodes.TUNNEL_CONNECTION_INTERRUPTED || 'tunnel_connection_interrupted'),
+        terminal ? error : 'Secure MCP Tunnel is unavailable. Rel.AI is retrying automatically.',
+        {
+          serverRunning: true,
+          tunnelStatus: terminal ? 'failed' : 'degraded',
+          tunnelId: guiConfig.tunnelId,
+          tunnelHealthUrl: '',
+          tunnelRetryAttempt: terminal ? 0 : Number(current.tunnelRetryAttempt || 0),
+          tunnelNextRetryAt: terminal ? null : (current.tunnelNextRetryAt || null),
+          mcpUrl: '',
+          localMcpUrl: `${localUrl}/mcp`,
+          localUrl
+        }
+      ));
       return getCurrentStatus();
     }
     if (runToken !== lifecycleToken || result.cancelled) return getCurrentStatus();
 
-    connection.writeConnectionProfile({
-      host: '127.0.0.1',
-      port: actualPort,
-      tunnelId: guiConfig.tunnelId,
-      tunnelProvider: 'openai-secure-mcp',
-      configPath: configModule.getConfigPath()
-    });
     setStatus({
       serverRunning: true,
       tunnelStatus: 'running',
@@ -306,7 +327,7 @@ function createDesktopServiceRuntime(deps) {
     };
   }
 
-  return { startServer, restartTunnel, stopServer, isListening, waitUntilListening, buildDashboardConnection };
+  return { startServer, restartConnection, stopServer, isListening, waitUntilListening, buildDashboardConnection };
 }
 
 async function waitForLocalApplicationReady(fetchImpl, port, token, timeoutMs = LOCAL_READY_TIMEOUT_MS) {
@@ -338,6 +359,15 @@ function tunnelErrorCode(error, errorCodes) {
   if (code === 'tunnel_not_found') return errorCodes.TUNNEL_NOT_FOUND || code;
   if (code === 'tunnel_connection_interrupted') return errorCodes.TUNNEL_CONNECTION_INTERRUPTED || code;
   return errorCodes.SECURE_TUNNEL_FAILED;
+}
+
+function isTerminalTunnelCode(code, errorCodes) {
+  return code === errorCodes.TUNNEL_AUTHENTICATION_FAILED
+    || code === errorCodes.TUNNEL_ACCESS_DENIED
+    || code === errorCodes.TUNNEL_NOT_FOUND
+    || code === 'tunnel_authentication_failed'
+    || code === 'tunnel_access_denied'
+    || code === 'tunnel_not_found';
 }
 
 function deferred() {

@@ -618,7 +618,7 @@ function metric(label, count, severity) {
 }
 
 function findingCard(finding) {
-  const canRestart = finding.action?.kind === 'restart_connection' && typeof window.relaiDesktop?.restartService === 'function';
+  const canRestart = finding.action?.kind === 'restart_connection' && typeof window.relaiDesktop?.restartConnection === 'function';
   const action = canRestart
     ? `<button class="secondary compact-button" type="button" data-restart-connection data-diagnostic-action="${esc(finding.code)}">${esc(finding.action.label || 'Restart connection')}</button> <a class="buttonlike secondary compact-button" href="${esc(finding.action.href || '#connection')}">Review connection settings</a>`
     : finding.action?.href
@@ -647,13 +647,13 @@ function bindFindingActions(root, container) {
   for (const button of root.querySelectorAll('[data-restart-connection]')) {
     button.onclick = async () => {
       const result = await runButtonAction(button, {
-        idleText: 'Restart connection', loadingText: 'Restarting connection…', successText: 'Restarted', errorText: 'Review settings'
+        idleText: button.textContent || 'Retry now', loadingText: 'Retrying connection…', successText: 'Retry started', errorText: 'Review settings'
       }, restartConnection);
       if (!result?.ok) {
         toast(result?.error || 'The connection could not be restarted.', { variant: 'error' });
         return;
       }
-      toast('Connection restarted. Rel.AI is checking the Secure MCP Tunnel.', { variant: 'success' });
+      toast('Connection retry started. Rel.AI is checking the Secure MCP Tunnel.', { variant: 'success' });
       await loadDiagnostics(container, { silent: true });
     };
   }

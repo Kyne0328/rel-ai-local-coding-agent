@@ -128,6 +128,7 @@ async function boot() {
     source: 'local-change',
     render: event.detail?.structural === true ? true : undefined
   }));
+  window.addEventListener('relai:desktop-status-refresh', event => applyDesktopStatus(event.detail));
   document.addEventListener('focusout', event => {
     if (event.target instanceof HTMLSelectElement) flushDeferredViewRender();
   }, true);
@@ -375,8 +376,8 @@ function recoveryAction(data = {}) {
   if (data?.status === 401 && typeof window.relaiDesktop?.reloadDashboard === 'function') {
     return { kind: 'reload', label: 'Reload dashboard', busyLabel: 'Reloading dashboard…' };
   }
-  if (typeof window.relaiDesktop?.restartService === 'function') {
-    return { kind: 'restart', label: 'Restart connection', busyLabel: 'Restarting connection…' };
+  if (typeof window.relaiDesktop?.restartConnection === 'function') {
+    return { kind: 'restart', label: 'Retry connection', busyLabel: 'Retrying connection…' };
   }
   return { kind: 'retry', label: 'Retry connection', busyLabel: 'Retrying connection…' };
 }
@@ -391,7 +392,7 @@ async function runDashboardRecovery(recovery, data, button) {
       return;
     }
     if (recovery.kind === 'restart') {
-      const status = await window.relaiDesktop.restartService();
+      const status = await window.relaiDesktop.restartConnection();
       if (status) applyDesktopStatus(status);
     }
     await recoverDashboard({ source: 'manual-recovery', render: true });

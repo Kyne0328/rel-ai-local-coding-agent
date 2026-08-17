@@ -142,6 +142,7 @@ const disconnected = buildDiagnosticReport({
 const disconnectedTunnelFinding = disconnected.findings.find(item => item.code === 'public_endpoint_failed');
 assert.ok(disconnectedTunnelFinding);
 assert.equal(disconnectedTunnelFinding.action.kind, 'restart_connection');
+assert.equal(disconnectedTunnelFinding.action.label, 'Retry now');
 assert.equal(disconnectedTunnelFinding.action.href, '#connection');
 assert.equal(disconnected.findings.some(item => item.code === 'configuration_invalid'), false);
 

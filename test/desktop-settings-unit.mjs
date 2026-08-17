@@ -56,7 +56,7 @@ try {
   const tunnelOnly = await saveDesktopSettings({ tunnelApiKey: 'sk-runtime-tunnel-only-123456' }, {
     ...runtimeActions,
     getCurrentStatus: () => ({ serverRunning: true, tunnelStatus: 'running' }),
-    restartTunnel: async () => { tunnelRestarts += 1; return { serverRunning: true, tunnelStatus: 'running' }; }
+    restartConnection: async () => { tunnelRestarts += 1; return { serverRunning: true, tunnelStatus: 'running' }; }
   });
   assert.equal(tunnelOnly.ok, true);
   assert.equal(tunnelRestarts, 1, 'runtime-key replacement must restart only the tunnel when the local service is healthy');
@@ -66,7 +66,7 @@ try {
   const rejected = await saveDesktopSettings({ tunnelApiKey: 'sk-runtime-rejected-123456' }, {
     ...runtimeActions,
     getCurrentStatus: () => ({ serverRunning: true, tunnelStatus: 'running' }),
-    restartTunnel: async () => ({
+    restartConnection: async () => ({
       serverRunning: true,
       tunnelStatus: 'failed',
       errorCode: 'tunnel_authentication_failed',
