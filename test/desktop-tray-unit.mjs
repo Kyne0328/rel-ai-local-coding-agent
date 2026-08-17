@@ -8,11 +8,12 @@ let buildCount = 0;
 let currentMenu = null;
 let clipboardText = '';
 let trayConstructionCount = 0;
+let trayEvents = [];
 
 class FakeTray {
   constructor(image) { this.image = image; this.menu = null; trayConstructionCount += 1; }
   setToolTip() {}
-  on() {}
+  on(name) { trayEvents.push(name); }
   setContextMenu(menu) { this.menu = menu; currentMenu = menu; }
 }
 
@@ -35,6 +36,7 @@ const dependencies = {
       };
     }
   },
+  platform: 'win32',
   clipboard: { writeText(value) { clipboardText = value; } },
   iconPath: 'icon.png',
   getStatus: () => status,
@@ -54,6 +56,8 @@ const dependencies = {
 const tray = createDesktopTray(dependencies);
 tray.setup();
 assert.equal(buildCount, 1, 'tray setup builds the initial menu once');
+assert.equal(tray.isAvailable(), true, 'successful tray construction must be observable by window close behavior');
+assert.ok(trayEvents.includes('double-click'));
 updateStatus = { ...updateStatus, progress: { percent: 12.4 } };
 assert.equal(tray.update(), false, 'sub-percent updater progress that renders identically must not rebuild the native menu');
 assert.equal(buildCount, 1);
@@ -79,5 +83,11 @@ const missingIconTray = createDesktopTray({
 assert.equal(missingIconTray.setup(), null, 'an unreadable tray icon must not create an invisible tray item');
 assert.equal(trayConstructionCount, constructionsBeforeMissingIcon, 'an unreadable tray icon must not construct a native tray');
 assert.match(trayIconError?.message || '', /Tray icon could not be loaded/);
+assert.equal(missingIconTray.isAvailable(), false);
+
+trayEvents = [];
+const linuxTray = createDesktopTray({ ...dependencies, platform: 'linux' });
+linuxTray.setup();
+assert.ok(trayEvents.includes('click'), 'Linux tray activation must use the supported click event');
 
 console.log('Desktop tray preserves visible state changes and refuses invisible empty-icon tray items.');

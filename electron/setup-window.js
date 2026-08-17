@@ -4,7 +4,7 @@ import { localWindowWebPreferences, secureLocalWindow } from './window-security.
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
 
 function createSetupWindowManager(deps) {
-  const { BrowserWindow, preloadPath, rendererRoot, runtimeLogs, isQuitting, recoveryWindowManager } = deps;
+  const { BrowserWindow, iconPath = '', preloadPath, rendererRoot, runtimeLogs, isQuitting, recoveryWindowManager } = deps;
   let window = null;
   let recoveryMode = false;
   let returnToFallback = false;
@@ -29,6 +29,7 @@ function createSetupWindowManager(deps) {
       webPreferences: localWindowWebPreferences(preloadPath, 'relai-setup', 'application'),
       backgroundColor: STARTUP_BACKGROUND_COLOR,
       title: recoveryMode ? 'Rel.AI MCP - Connection Recovery' : 'Rel.AI MCP - Setup',
+      icon: iconPath || undefined,
       autoHideMenuBar: true
     });
     installLocalProtocol(window.webContents.session.protocol, rendererRoot);

@@ -101,6 +101,7 @@ class FakeWindow {
 
 const dependencies = {
   BrowserWindow: FakeWindow,
+  iconPath: 'app-icon.png',
   shell: {
     openExternal: url => external.push(url),
     async openPath(target) { openedPaths.push(target); return ''; }
@@ -135,6 +136,7 @@ try {
   assert.equal(win.options.frame, false);
   assert.equal(win.options.thickFrame, true);
   assert.equal(win.options.titleBarStyle, 'hidden');
+  assert.equal(win.options.icon, 'app-icon.png', 'desktop windows must carry the application icon on Linux and Windows');
   assert.equal(win.options.webPreferences.nodeIntegration, false);
   assert.equal(win.options.webPreferences.contextIsolation, true);
   assert.ok(win.options.webPreferences.preload.endsWith('preload.cjs'));
@@ -260,12 +262,19 @@ try {
     height: 610
   }, 'a stale debounced bounds write must not overwrite the final close-time window state');
 
-  const linuxManager = createDashboardWindowManager({ ...dependencies, platform: 'linux' });
+  const linuxManager = createDashboardWindowManager({ ...dependencies, platform: 'linux', canHideOnClose: () => true });
   const linuxWindow = await linuxManager.open();
   assert.deepEqual(linuxManager.requestClose(), { ok: true });
-  assert.equal(appQuitCount, 1, 'Linux close must use the normal Electron quit path instead of depending on tray visibility');
-  assert.notEqual(linuxWindow.hidden, true, 'Linux close must not hide the dashboard behind an unavailable tray');
+  assert.equal(appQuitCount, 0, 'Linux close must keep the app alive when its tray is available');
+  assert.equal(linuxWindow.hidden, true, 'Linux close must hide the dashboard to the tray when the tray is available');
   await linuxManager.close();
+
+  const linuxNoTrayManager = createDashboardWindowManager({ ...dependencies, platform: 'linux', canHideOnClose: () => false });
+  const linuxNoTrayWindow = await linuxNoTrayManager.open();
+  assert.deepEqual(linuxNoTrayManager.requestClose(), { ok: true });
+  assert.equal(appQuitCount, 1, 'Linux close must still quit safely when no tray is available');
+  assert.notEqual(linuxNoTrayWindow.hidden, true, 'Linux must not hide the only reachable window when tray creation failed');
+  await linuxNoTrayManager.close();
 
   assert.deepEqual(
     restoreDashboardBounds({ x: 0, y: 0, width: 1240, height: 820 }, fakeScreen),

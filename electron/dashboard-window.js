@@ -15,6 +15,8 @@ function createDashboardWindowManager(deps) {
   const {
     BrowserWindow, shell, app, dialog, screen, getConnection,
     platform = process.platform,
+    iconPath = '',
+    canHideOnClose = () => true,
     isQuitting = () => false,
     onError = () => {},
     onLoadError = onError
@@ -92,6 +94,7 @@ function createDashboardWindowManager(deps) {
       show: false,
       autoHideMenuBar: true,
       title: 'Rel.AI MCP Dashboard',
+      icon: iconPath || undefined,
       backgroundColor: STARTUP_BACKGROUND_COLOR,
       webPreferences: {
         ...localWindowWebPreferences(dashboardPreloadPath, 'relai-dashboard', 'dashboard')
@@ -107,7 +110,7 @@ function createDashboardWindowManager(deps) {
       void persistBounds();
       if (isQuitting()) return;
       event.preventDefault();
-      if (platform === 'linux') {
+      if (platform === 'linux' && !canHideOnClose()) {
         app.quit();
         return;
       }

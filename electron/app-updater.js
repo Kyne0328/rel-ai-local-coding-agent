@@ -82,7 +82,7 @@ function createAppUpdater(options = {}) {
       log,
       currentCompatibility: installedCompatibility
     });
-    void scheduleAutomaticCheck();
+    void scheduleAutomaticCheck(true);
     emit({ state: 'idle' });
     return snapshot();
   }
@@ -148,9 +148,17 @@ function createAppUpdater(options = {}) {
     return { ok: true, installing: true, status: snapshot() };
   }
 
-  async function scheduleAutomaticCheck() {
+  async function scheduleAutomaticCheck(forceLaunchCheck = false) {
     if (!support.supported || !started) return;
     if (autoCheckTimer) clearTimer(autoCheckTimer);
+    if (forceLaunchCheck) {
+      autoCheckTimer = setTimer(() => {
+        autoCheckTimer = null;
+        void checkForUpdates();
+      }, AUTO_CHECK_DELAY_MS);
+      autoCheckTimer?.unref?.();
+      return;
+    }
     const lastCheck = await store.readLastCheck();
     if (!support.supported || !started) return;
     const elapsed = lastCheck > 0 ? Math.max(0, now() - lastCheck) : 0;

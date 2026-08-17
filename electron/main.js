@@ -31,7 +31,9 @@ import { hasExistingConfig } from './launcher-utils.js';
 const { autoUpdater } = electronUpdater;
 const electronRoot = path.dirname(fileURLToPath(import.meta.url));
 const preloadPath = path.join(electronRoot, 'preload.cjs');
-const APP_ICON_PATH = path.join(electronRoot, 'build', 'icon.png');
+const APP_ICON_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, 'app-icon.png')
+  : path.join(electronRoot, 'build', 'icon.png');
 const RENDERER_ROOT = path.join(electronRoot, 'renderer');
 
 registerLocalScheme(protocol);
@@ -60,7 +62,7 @@ const { terminateProcessTree } = processModule;
 const { readLocalUsageSnapshotAsync } = localAnalytics;
 const { shutdownTelemetry } = telemetry;
 const { makeServiceProcessEnvironment, makeTunnelProcessEnvironment } = processEnvironment;
-let serviceRuntime = null;
+let serviceRuntime = null, desktopTray = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
 let lastServiceContextKey = '';
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
@@ -71,6 +73,7 @@ const desktopNotifications = createDesktopNotifications({
 const tunnelCredentials = createTunnelCredentialStore({ safeStorage });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
+  iconPath: APP_ICON_PATH,
   preloadPath,
   rendererUrl: localRendererUrl('status.html'),
   limits: WINDOW_SIZE_LIMITS.status,
@@ -81,6 +84,7 @@ const recoveryWindowManager = createRecoveryWindowManager({
 });
 const setupWindowManager = createSetupWindowManager({
   BrowserWindow,
+  iconPath: APP_ICON_PATH,
   preloadPath,
   rendererRoot: RENDERER_ROOT,
   runtimeLogs,
@@ -104,6 +108,8 @@ const dashboardWindowManager = createDashboardWindowManager({
   BrowserWindow,
   shell,
   app, dialog, screen,
+  iconPath: APP_ICON_PATH,
+  canHideOnClose: () => desktopTray?.isAvailable() === true,
   getConnection: buildDashboardConnection,
   isQuitting: () => isQuitting,
   onError: error => setStatus({ error: formatError(error), errorCode: ERROR_CODES.UNKNOWN }),
@@ -139,11 +145,12 @@ const serviceProcessClient = createServiceProcessClient({
   }
 });
 runtimeLogs.onChange(change => serviceProcessClient.updateContext({ runtimeLogChange: change }));
-const desktopTray = createDesktopTray({
+desktopTray = createDesktopTray({
   Tray,
   Menu,
   nativeImage,
   clipboard,
+  platform: process.platform,
   iconPath: APP_ICON_PATH,
   getStatus: () => currentStatus,
   openDashboard: openDashboardWindow,

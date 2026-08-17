@@ -164,6 +164,8 @@ function verifyInstalledPackage(applicationRoot, expectedVersion) {
     ? path.join(applicationRoot, `${electronPackage.build.productName}.exe`)
     : path.join(applicationRoot, electronPackage.build.linux.executableName);
   assert.ok(fs.existsSync(executable), `Installed application executable is missing: ${executable}`);
+  const runtimeIcon = path.join(applicationRoot, 'resources', 'app-icon.png');
+  assert.ok(fs.existsSync(runtimeIcon), `Installed application runtime icon is missing: ${runtimeIcon}`);
 }
 
 function verifyLinuxUpdaterPackageType(applicationRoot) {

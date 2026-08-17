@@ -5,6 +5,7 @@ import { localWindowWebPreferences, secureLocalWindow } from './window-security.
 
 function createRecoveryWindowManager({
   BrowserWindow,
+  iconPath = '',
   preloadPath,
   rendererUrl,
   limits,
@@ -29,6 +30,7 @@ function createRecoveryWindowManager({
       webPreferences: localWindowWebPreferences(preloadPath, 'relai-recovery', 'application'),
       backgroundColor: STARTUP_BACKGROUND_COLOR,
       title: 'Rel.AI MCP Recovery',
+      icon: iconPath || undefined,
       autoHideMenuBar: true
     });
     installProtocol(window.webContents.session.protocol);

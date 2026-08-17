@@ -70,6 +70,11 @@ assert.equal(electronPackage.build.deb.packageName, 'rel-ai-mcp-launcher',
 
 assert.equal(electronPackage.build.appId, 'com.relai.mcp');
 assert.equal(electronPackage.build.productName, 'Rel.AI MCP');
+assert.deepEqual(
+  electronPackage.build.extraResources.find(resource => resource.to === 'app-icon.png'),
+  { from: 'build/icon.png', to: 'app-icon.png' },
+  'packaged desktop builds must keep a filesystem-backed runtime icon outside app.asar'
+);
 assert.ok(!Object.keys(packageJson.scripts).some(name => /installer|installed/.test(name)),
   'installer lifecycle tests must not be exposed through ordinary package scripts');
 const installedReleaseValidation = read('scripts/validate-installed-release.mjs');

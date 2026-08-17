@@ -47,6 +47,7 @@ let readyCalls = 0;
 const securityErrors = [];
 const manager = createRecoveryWindowManager({
   BrowserWindow: FakeWindow,
+  iconPath: 'app-icon.png',
   preloadPath: 'preload.cjs',
   rendererUrl: 'relai-app://renderer/status.html',  limits: { minWidth: 480, minHeight: 420 },
   isQuitting: () => quitting,
@@ -58,6 +59,7 @@ const first = manager.show();
 assert.equal(windows.length, 1);
 assert.equal(first.loadedUrl, 'relai-app://renderer/status.html');
 assert.equal(first.options.title, 'Rel.AI MCP Recovery');
+assert.equal(first.options.icon, 'app-icon.png');
 assert.equal(first.options.webPreferences.sandbox, true);
 assert.equal(first.options.webPreferences.webSecurity, true);
 assert.equal(first.options.webPreferences.contextIsolation, true);

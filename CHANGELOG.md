@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.26.2] — 2026-08-17
+
+### Linux desktop and update reliability
+- **Restore close-to-tray behavior without making the app unreachable.** Closing the Linux dashboard now hides it when the tray was created successfully, matching the Windows workflow; if tray creation failed, Linux still quits normally instead of hiding the only reachable window.
+- **Repair Linux application and tray icon wiring.** Packaged builds now ship a filesystem-backed runtime icon, desktop windows receive it explicitly, and Linux tray activation uses the supported click event instead of the Windows/macOS double-click path.
+- **Check for updates on every application launch.** Supported installed builds schedule a fresh update scan shortly after each startup even when the previous check happened less than a day ago, while the existing daily recheck remains in place for long-running sessions.
+- **Guard the packaged icon contract.** Installed-release validation now verifies that the runtime icon required by desktop windows and tray notifications is present in packaged builds.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.2.
+
 ## [0.26.1] — 2026-08-17
 
 ### Linux DEB updates

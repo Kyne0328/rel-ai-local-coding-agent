@@ -38,9 +38,10 @@ async function waitFor(condition, message, timeoutMs = 2000) {
   }
 }
 
-function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null } = {}) {
+function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null, lastCheckAt = 0 } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-'));
   roots.push(temp);
+  if (lastCheckAt > 0) fs.writeFileSync(path.join(temp, 'update-state.json'), `${JSON.stringify({ lastCheckAt })}\n`);
   const fake = new FakeUpdater({ checkFailures, downloadFailures });
   const statuses = [];
   const logs = [];
@@ -131,6 +132,13 @@ assert.equal(valid.fake.allowPrerelease, false);
 await waitFor(
   () => valid.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
   'starting the updater must eventually schedule its automatic update check'
+);
+
+const recentLaunch = createHarness({ lastCheckAt: Date.parse('2026-07-24T23:59:00.000Z') });
+recentLaunch.updater.start();
+await waitFor(
+  () => recentLaunch.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
+  'every application launch must schedule a fresh update check even when the previous check was recent'
 );
 
 const checkPromise = valid.updater.checkForUpdates();

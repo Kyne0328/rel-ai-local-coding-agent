@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.26.1",
+  "version": "0.26.2",
   "description": "Use ChatGPT web like a coding agent with guarded local repository tools and bundled Rel.AI workflow skills.",
   "author": {
     "name": "Kyne",
