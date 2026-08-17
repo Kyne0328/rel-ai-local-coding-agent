@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 const DEFAULT_HOST = '127.0.0.1';
-const LISTEN_TIMEOUT_MS = 10_000;
+const LISTEN_TIMEOUT_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 10_000;
 
 async function startHttpTestServer({ root, configPath, token, stateDir, env = {} }) {

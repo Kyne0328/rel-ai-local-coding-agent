@@ -205,7 +205,7 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
       error: error instanceof Error ? error.message : String(error),
       errorCode: String(error?.code || 'TASK_OPERATION_IN_PROGRESS'),
       nextAction: `Call relai_work with action "status" and work_id "${workId}" before starting another long operation.`
-    }, true));
+    }, false));
   }
 
   if (!started.reused && graceMs > 0) {

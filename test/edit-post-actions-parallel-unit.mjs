@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { planEdit } from '../src/executionPlanner.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 function git(root, args, options = {}) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', ...options });
@@ -43,8 +44,9 @@ try {
   assert.equal(result.execution.maxConcurrentSteps, 1);
   assert.match(String(result.diff.diff || ''), /value = 2/);
 } finally {
-  fs.rmSync(safeRoot, { recursive: true, force: true });
-  fs.rmSync(safeState, { recursive: true, force: true });
+  await repositoryIntelligence.shutdown();
+  fs.rmSync(safeRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  fs.rmSync(safeState, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }
 
 const mutatingRoot = createRepo({
@@ -65,8 +67,9 @@ try {
   const actual = git(mutatingRoot, ['diff', '--', 'app.js', 'generated.txt']);
   assert.equal(String(result.diff.diff || '').trim(), actual.trim(), 'returned diff must equal the final workspace diff after validation');
 } finally {
-  fs.rmSync(mutatingRoot, { recursive: true, force: true });
-  fs.rmSync(mutatingState, { recursive: true, force: true });
+  await repositoryIntelligence.shutdown();
+  fs.rmSync(mutatingRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  fs.rmSync(mutatingState, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }
 
 console.log('Edit post-actions preserve parallel validation while capturing the final diff only after checks finish.');

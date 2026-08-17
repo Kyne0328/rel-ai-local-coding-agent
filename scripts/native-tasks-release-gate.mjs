@@ -31,6 +31,7 @@ const SERIAL_RELEASE_GATE_CHECK_IDS = Object.freeze([
   'http_matrix',
   'process_lifecycle',
   'process_cancellation',
+  'stdio_discovery',
   'http_discovery',
   'http_authentication'
 ]);

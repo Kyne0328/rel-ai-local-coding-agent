@@ -93,6 +93,18 @@ const duplicate = await handleTransportTaskRequest({}, message(3, slowWorkId), {
 assert.equal(duplicate.body.result.structuredContent.status, 'running');
 assert.equal(executionCount, 1, 'a retry while the same fallback is running must not duplicate execution');
 
+const busy = await handleTransportTaskRequest({}, message(4, slowWorkId, 'node other-test.js'), {
+  principal: 'principal-a',
+  transportType: 'test',
+  synchronousFallbackGraceMs: 5,
+  executeToolResult: slowExecute
+});
+assert.equal(busy.body.result.isError, false, 'an occupied work session is recoverable control flow, not a tool-level failure');
+assert.equal(busy.body.result.structuredContent.ok, false);
+assert.equal(busy.body.result.structuredContent.errorCode, 'TASK_OPERATION_IN_PROGRESS');
+assert.match(busy.body.result.structuredContent.nextAction, /relai_work.*status/i);
+assert.equal(executionCount, 1, 'a different long operation must not start while the work session is occupied');
+
 await delay(60);
 const completed = fallbackExecutionStatus(slowWorkId);
 assert.equal(completed.status, 'completed');

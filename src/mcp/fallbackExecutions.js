@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
 
-const DEFAULT_FALLBACK_GRACE_MS = 5000;
+const DEFAULT_FALLBACK_GRACE_MS = 30_000;
 const FALLBACK_RECORD_TTL_MS = 15 * 60_000;
 const MAX_FALLBACK_RECORDS = 128;
 const executionsByWorkId = new Map();
