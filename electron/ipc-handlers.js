@@ -39,7 +39,8 @@ function registerIpcHandlers(deps) {
     startServer: deps.startServer,
     stopServer: deps.stopServer,
     restartConnection: deps.restartConnection,
-    relaunchApplication: deps.relaunchApplication
+    relaunchApplication: deps.relaunchApplication,
+    quitApplication: deps.quitApplication
   });
   registerDashboardWindowIpc({
     ipcMain: deps.ipcMain,
@@ -121,13 +122,14 @@ function registerRecoveryIpc({ ipcMain, windowOnly, getFallbackWindow, openRecov
   ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
 }
 
-function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, restartConnection, relaunchApplication }) {
+function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, restartConnection, relaunchApplication, quitApplication }) {
   ipcMain.handle('server:start', event => windowOnly(event, getFallbackWindow, 'Service startup', startServer));
   ipcMain.handle('server:stop', event => windowOnly(event, getFallbackWindow, 'Service shutdown', stopServer));
   ipcMain.handle('recovery:restart-connection', event => windowOnly(event, getFallbackWindow, 'Connection retry', restartConnection));
   ipcMain.handle('desktop:restart-connection', event => windowOnly(event, getDashboardWindow, 'Connection retry', restartConnection));
   ipcMain.handle('recovery:relaunch', event => windowOnly(event, getFallbackWindow, 'Application restart', relaunchApplication));
   ipcMain.handle('desktop:relaunch', event => windowOnly(event, getDashboardWindow, 'Application restart', relaunchApplication));
+  ipcMain.handle('desktop:quit', event => windowOnly(event, getDashboardWindow, 'Application quit', quitApplication));
   ipcMain.on('desktop:stop-service', event => {
     if (!isSenderWindow(event, getDashboardWindow)) return;
     setImmediate(() => Promise.resolve(stopServer()).catch(logIpcFailure));

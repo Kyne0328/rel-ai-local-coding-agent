@@ -39,6 +39,7 @@ if (surface === 'dashboard') {
     restartConnection: () => ipcRenderer.invoke('desktop:restart-connection'),
     reloadDashboard: routeHash => ipcRenderer.invoke('desktop:reload-dashboard', routeHash),
     relaunchApp: () => ipcRenderer.invoke('desktop:relaunch'),
+    quitApp: () => ipcRenderer.invoke('desktop:quit'),
     stopService: () => ipcRenderer.send('desktop:stop-service'),
     onStatus: callback => subscribe('server:status', callback, 'Status'),
     onWindowState: callback => subscribe('desktop:window-state', callback, 'Window-state'),

@@ -13,6 +13,7 @@ let clipboardText = '';
 let stopCalls = 0;
 let restartCalls = 0;
 let relaunchCalls = 0;
+let quitCalls = 0;
 
 const deps = {
   ipcMain: { handle: (channel, handler) => handles.set(channel, handler), on: (channel, handler) => listeners.set(channel, handler) },
@@ -29,6 +30,7 @@ const deps = {
   launchConfiguredDesktop: async options => { calls.push(['launch', options]); return { serverRunning: true }; },
   restartConnection: async () => { restartCalls += 1; return { serverRunning: true, tunnelStatus: 'running' }; },
   relaunchApplication: async () => { relaunchCalls += 1; return { ok: true }; },
+  quitApplication: async () => { quitCalls += 1; return { ok: true }; },
   openSettingsWindow: () => ({ ok: true }),
   openDashboardWindow: () => ({ ok: true }),
   getDesktopSettings: () => ({ ok: true }),
@@ -66,13 +68,17 @@ assert.ok(calls.some(entry => entry[0] === 'launch' && entry[1].firstRun === tru
 assert.throws(() => handles.get('desktop:restart-connection')(eventFor(other)), /not available/);
 assert.throws(() => handles.get('recovery:restart-connection')(eventFor(other)), /not available/);
 assert.throws(() => handles.get('desktop:relaunch')(eventFor(other)), /not available/);
+assert.throws(() => handles.get('desktop:quit')(eventFor(other)), /not available/);
 assert.equal(restartCalls, 0, 'wizard startup must stay separate from the tunnel-only retry operation');
 assert.equal(relaunchCalls, 0);
+assert.equal(quitCalls, 0);
 await handles.get('desktop:restart-connection')(eventFor(dashboard));
 await handles.get('recovery:restart-connection')(eventFor(fallback));
 await handles.get('desktop:relaunch')(eventFor(dashboard));
+await handles.get('desktop:quit')(eventFor(dashboard));
 assert.equal(restartCalls, 2);
 assert.equal(relaunchCalls, 1);
+assert.equal(quitCalls, 1);
 listeners.get('desktop:stop-service')(eventFor(other));
 await new Promise(resolve => setImmediate(resolve));
 assert.equal(stopCalls, 0);

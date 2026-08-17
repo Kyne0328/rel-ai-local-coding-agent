@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.3] — 2026-08-17
+
+### Secure tunnel recovery since the 0.26.2 GitHub build
+- **Reconnect transient Secure MCP Tunnel failures automatically.** Rel.AI now schedules bounded backoff retries when the tunnel drops, exposes the degraded/retrying state to the desktop UI and diagnostics, and resets retry state after recovery.
+- **Keep terminal tunnel errors actionable instead of retrying forever.** Authentication failures, access denial, and missing tunnels stop automatic retry so users can correct the credential or tunnel configuration directly.
+- **Serialize connection recovery around one restart path.** Manual retry, settings recovery, and automatic reconnect share the same guarded connection restart, while the local connection profile is persisted before tunnel startup so recovery keeps the intended tunnel identity.
+
+### Linux desktop and update reliability
+- **Roll the Electron runtime back to 43.2.0 without rolling back Rel.AI features.** Linux packages return to the runtime family used before the recent tray and launcher regressions while keeping the current application code and release behavior.
+- **Render updater release notes as readable text instead of escaped HTML source.** Updater-provided headings, lists, emphasis, breaks, and common entities are normalized to plain text and then escaped for display, so tags such as `<h3>`, `<li>`, and `<strong>` no longer appear literally or become executable markup.
+- **Add a reliable in-app exit when tray access is unavailable.** Settings → About now exposes **Quit Rel.AI MCP** only in the installed desktop app and routes it through the existing coordinated shutdown path that stops Rel.AI cleanly.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.3.
+
 ## [0.26.2] — 2026-08-17
 
 ### Linux desktop and update reliability

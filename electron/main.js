@@ -566,6 +566,7 @@ registerIpcHandlers({
   launchConfiguredDesktop,
   restartConnection,
   relaunchApplication,
+  quitApplication,
   openSettingsWindow,
   openDashboardWindow,
   getDesktopSettings: currentDesktopSettings,

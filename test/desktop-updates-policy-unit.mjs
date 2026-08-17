@@ -23,6 +23,20 @@ assert.match(availableNotes, /What's new in v0\.25\.3/);
 assert.match(availableNotes, /Updater closes immediately/);
 assert.match(availableNotes, /Changelog is now visible/);
 
+const htmlNotes = releaseNotesHtml({
+  state: 'available',
+  availableVersion: '0.26.3',
+  releaseNotes: [{
+    version: '0.26.3',
+    note: '<h3>Linux desktop and update reliability</h3><ul><li><strong>Restore close-to-tray behavior</strong></li><li>Fix &amp; verify updates</li></ul>'
+  }]
+});
+assert.match(htmlNotes, /Linux desktop and update reliability/);
+assert.match(htmlNotes, /Restore close-to-tray behavior/);
+assert.match(htmlNotes, /Fix &amp; verify updates/);
+assert.doesNotMatch(htmlNotes, /&lt;\/?(?:h3|ul|li|strong)&gt;/i, 'updater HTML tags must not be displayed as escaped source');
+assert.doesNotMatch(htmlNotes, /<\/?(?:h3|ul|li|strong)>/i, 'updater HTML must not be injected into the dashboard');
+
 const installedNotes = releaseNotesHtml({ state: 'up_to_date' }, {
   version: '0.25.2',
   headline: 'Release notes',

@@ -39,6 +39,8 @@ assert.doesNotMatch(dashboard, /settings\/connection|settings\/diagnostics/);
 assert.match(settings, /mountApplication/);
 assert.match(settingsShared, /<h2>\$\{esc\(title\)\}<\/h2>/, 'Settings pages must continue the shell H1 with an H2');
 assert.match(settingsAbout, /document\.createElement\('h4'\)/, 'About product identity must remain below the panel H3');
+assert.match(settingsAbout, /typeof window\.relaiDesktop\?\.quitApp === 'function'/, 'About must expose Quit only inside the installed desktop app');
+assert.match(settingsAbout, /Quit Rel\.AI MCP/, 'About must provide a graceful desktop quit action');
 assert.doesNotMatch(connector, /clientCapabilityViews|Native MCP Tasks|Execution mode/, 'Connection page must keep protocol capability details out of the normal connection UI');
 assert.match(read('src/ui/features/settings/diagnostics.js'), /clientCapabilityViews/);
 assert.match(read('src/ui/features/settings/diagnostics.js'), /Tasks extension advertised: \$\{supported\}/, 'Troubleshooting must show the observed MCP Tasks capability without stale internal field names');

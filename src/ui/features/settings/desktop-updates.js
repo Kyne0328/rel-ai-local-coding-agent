@@ -134,7 +134,7 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
       const noteVersion = entry?.version && entry.version !== status.availableVersion
         ? `<strong>v${escapeHtml(entry.version)}</strong>`
         : '';
-      return `<div class="application-update-release-note">${noteVersion}<p>${escapeHtml(entry.note)}</p></div>`;
+      return `<div class="application-update-release-note">${noteVersion}<p>${escapeHtml(normalizeReleaseNoteText(entry.note))}</p></div>`;
     }).join('');
     return `<details class="application-update-release-notes" open><summary>What's new in ${version}</summary><div class="application-update-release-notes-body">${notes}</div></details>`;
   }
@@ -158,6 +158,34 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
     bullets.length ? `<ul>${bullets.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''
   ].join('');
   return `<details class="application-update-release-notes"><summary>What changed · v${escapeHtml(version)}</summary><div class="application-update-release-notes-body">${body}</div></details>`;
+}
+
+function normalizeReleaseNoteText(value) {
+  let text = String(value || '');
+  if (!text.trim()) return '';
+  text = text
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\s*li(?:\s[^>]*)?>/gi, '\n• ')
+    .replace(/<\s*\/\s*li\s*>/gi, '\n')
+    .replace(/<\s*\/?\s*(?:h[1-6]|p|div|ul|ol|section|article)(?:\s[^>]*)?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, decodeReleaseNoteEntity)
+    .replace(/\r/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+  return text.trim();
+}
+
+function decodeReleaseNoteEntity(match, entity) {
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  const key = String(entity || '').toLowerCase();
+  if (Object.hasOwn(named, key)) return named[key];
+  const codePoint = key.startsWith('#x')
+    ? Number.parseInt(key.slice(2), 16)
+    : Number.parseInt(key.slice(1), 10);
+  if (!Number.isSafeInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return match;
+  try { return String.fromCodePoint(codePoint); } catch { return match; }
 }
 
 function changelogReleaseHtml(release = {}) {
