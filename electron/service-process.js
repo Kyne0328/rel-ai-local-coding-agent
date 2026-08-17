@@ -17,6 +17,7 @@ const [httpModule, toolActivity, dashboardSessions, processManager, configModule
 let httpServer = null;
 let activeToken = '';
 let activePort = 0;
+let lifecycleQueue = Promise.resolve();
 let desktopContext = {
   status: null,
   runtimeAccess: { blocked: false, errorCode: '', message: '' },
@@ -64,11 +65,17 @@ async function handleRequest(message) {
 }
 
 async function dispatchRequest(method, payload) {
-  if (method === 'start') return startService(payload);
-  if (method === 'stop') return stopService();
+  if (method === 'start') return runLifecycle(() => startService(payload));
+  if (method === 'stop') return runLifecycle(stopService);
   if (method === 'dashboard-bootstrap') return createDashboardBootstrap();
   if (method === 'activity-snapshot') return projectServiceActivitySnapshot(toolActivity.getToolActivity());
   throw new Error(`Unknown service-process request: ${method}`);
+}
+
+function runLifecycle(action) {
+  const next = lifecycleQueue.then(action, action);
+  lifecycleQueue = next.catch(() => {});
+  return next;
 }
 
 async function startService(payload = {}) {
@@ -132,10 +139,19 @@ async function stopService() {
   httpServer = null;
   activeToken = '';
   activePort = 0;
-  const runtimeConfig = configModule.readConfig();
+  let runtimeConfig = null;
+  let configError = null;
+  try {
+    runtimeConfig = configModule.readConfig();
+  } catch (error) {
+    configError = error;
+  }
+  const managedProcessStop = runtimeConfig
+    ? processManager.stopAllManagedProcesses(runtimeConfig)
+      .catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: errorMessage(error) }))
+    : Promise.resolve({ attempted: 0, stopped: 0, orphaned: 1, error: errorMessage(configError) });
   const [managedProcesses, localService] = await Promise.all([
-    processManager.stopAllManagedProcesses(runtimeConfig)
-      .catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: errorMessage(error) })),
+    managedProcessStop,
     closeHttpServer(ownedServer)
   ]);
   dashboardSessions.clearDashboardSessions();

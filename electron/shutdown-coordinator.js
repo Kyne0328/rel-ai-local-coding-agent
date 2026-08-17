@@ -71,6 +71,7 @@ function closeHttpServer(server, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 2500);
   return new Promise(resolve => {
     let settled = false;
+    let forced = false;
     const finish = value => {
       if (settled) return;
       settled = true;
@@ -78,18 +79,18 @@ function closeHttpServer(server, options = {}) {
       Promise.resolve(server.waitForShutdown?.()).catch(() => {}).finally(() => resolve(value));
     };
     const timer = setTimeout(() => {
+      forced = true;
       try { server.closeAllConnections?.(); } catch {}
-      finish({ closed: false, forced: true });
     }, timeoutMs);
     try {
       server.close(error => finish({
         closed: !error,
-        forced: false,
+        forced,
         ...(error ? { error: errorMessage(error) } : {})
       }));
       server.closeIdleConnections?.();
     } catch (error) {
-      finish({ closed: false, forced: false, error: errorMessage(error) });
+      finish({ closed: false, forced, error: errorMessage(error) });
     }
   });
 }

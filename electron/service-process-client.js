@@ -45,9 +45,8 @@ function createServiceProcessClient(options = {}) {
 
   async function stop() {
     if (!child) return { ok: true, cleanup: { clean: true, managedProcesses: { attempted: 0, stopped: 0, orphaned: 0 }, localService: { closed: true, forced: false } } };
-    const result = await request('stop', {}, 12_000);
     activePort = 0;
-    return result;
+    return request('stop', {}, 12_000);
   }
 
   async function dashboardBootstrap() {

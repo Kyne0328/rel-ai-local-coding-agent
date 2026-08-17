@@ -32,12 +32,18 @@ class FakeUtilityProcess extends EventEmitter {
     this.stderr = new PassThrough();
     this.sent = [];
     this.killed = false;
+    this.deferStop = false;
+    this.deferredStopRequest = null;
     queueMicrotask(() => this.emit('spawn'));
   }
 
   postMessage(message) {
     this.sent.push(message);
     if (message.type !== 'request') return;
+    if (message.method === 'stop' && this.deferStop) {
+      this.deferredStopRequest = message;
+      return;
+    }
     const responses = {
       start: { ok: true, port: 4567 },
       'dashboard-bootstrap': { ok: true, port: 4567, bootstrap: 'bootstrap-token' },
@@ -174,6 +180,26 @@ const respawnContext = child.sent.find(message => message.type === 'context');
 assert.equal(respawnContext.context.runtimeLogs.revision, 2, 'a respawned service must receive the reconstructed current log snapshot');
 assert.deepEqual(respawnContext.context.runtimeLogs.entries.map(entry => entry.message), ['first', 'second']);
 assert.equal(Object.hasOwn(respawnContext.context, 'runtimeLogChange'), false);
+
+child.deferStop = true;
+const delayedStop = client.stop();
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(client.isListening(), false, 'a requested stop must stop advertising the old listener before the utility response arrives');
+assert.ok(child.deferredStopRequest, 'the stop request must still be in flight for the delayed-response regression case');
+child.emit('message', {
+  type: 'response',
+  id: child.deferredStopRequest.id,
+  ok: true,
+  result: {
+    ok: true,
+    cleanup: {
+      clean: true,
+      managedProcesses: { attempted: 0, stopped: 0, orphaned: 0 },
+      localService: { closed: true, forced: false }
+    }
+  }
+});
+await delayedStop;
 
 await client.dispose({ stop: false });
 assert.equal(child.killed, true);
