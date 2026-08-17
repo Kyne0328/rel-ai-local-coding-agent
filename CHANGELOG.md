@@ -9,6 +9,7 @@
 
 ### Linux desktop and update reliability
 - **Roll the Electron runtime back to 43.2.0 without rolling back Rel.AI features.** Linux packages return to the runtime family used before the recent tray and launcher regressions while keeping the current application code and release behavior.
+- **Restore the proven v0.25.1 tray interaction path while keeping the new icon.** Successful tray setup again uses the same 32px native-image preparation, double-click activation, and direct context-menu refresh behavior as v0.25.1; the current packaged icon and newer safety checks remain in place.
 - **Render updater release notes as readable text instead of escaped HTML source.** Updater-provided headings, lists, emphasis, breaks, and common entities are normalized to plain text and then escaped for display, so tags such as `<h3>`, `<li>`, and `<strong>` no longer appear literally or become executable markup.
 - **Add a reliable in-app exit when tray access is unavailable.** Settings → About now exposes **Quit Rel.AI MCP** only in the installed desktop app and routes it through the existing coordinated shutdown path that stops Rel.AI cleanly.
 

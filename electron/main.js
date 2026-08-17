@@ -162,7 +162,6 @@ desktopTray = createDesktopTray({
   Menu,
   nativeImage,
   clipboard,
-  platform: process.platform,
   iconPath: APP_ICON_PATH,
   getStatus: () => currentStatus,
   openDashboard: openDashboardWindow,

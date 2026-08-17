@@ -36,7 +36,6 @@ const dependencies = {
       };
     }
   },
-  platform: 'win32',
   clipboard: { writeText(value) { clipboardText = value; } },
   iconPath: 'icon.png',
   getStatus: () => status,
@@ -59,12 +58,12 @@ assert.equal(buildCount, 1, 'tray setup builds the initial menu once');
 assert.equal(tray.isAvailable(), true, 'successful tray construction must be observable by window close behavior');
 assert.ok(trayEvents.includes('double-click'));
 updateStatus = { ...updateStatus, progress: { percent: 12.4 } };
-assert.equal(tray.update(), false, 'sub-percent updater progress that renders identically must not rebuild the native menu');
-assert.equal(buildCount, 1);
+assert.equal(tray.update(), true, 'tray updates must rebuild the native context menu like the v0.25.1 implementation');
+assert.equal(buildCount, 2);
 
 updateStatus = { ...updateStatus, progress: { percent: 12.6 } };
 assert.equal(tray.update(), true, 'a visible updater percentage change must refresh the native menu');
-assert.equal(buildCount, 2);
+assert.equal(buildCount, 3);
 assert.ok(currentMenu.some(item => item.label === 'Downloading update… 13%'));
 
 status = { ...status, localMcpUrl: 'http://127.0.0.1:4444/mcp' };
@@ -86,8 +85,9 @@ assert.match(trayIconError?.message || '', /Tray icon could not be loaded/);
 assert.equal(missingIconTray.isAvailable(), false);
 
 trayEvents = [];
-const linuxTray = createDesktopTray({ ...dependencies, platform: 'linux' });
+const linuxTray = createDesktopTray(dependencies);
 linuxTray.setup();
-assert.ok(trayEvents.includes('click'), 'Linux tray activation must use the supported click event');
+assert.ok(trayEvents.includes('double-click'), 'Linux tray activation must preserve the v0.25.1 double-click behavior');
+assert.equal(trayEvents.includes('click'), false, 'Linux tray activation must not substitute a platform-specific click handler');
 
-console.log('Desktop tray preserves visible state changes and refuses invisible empty-icon tray items.');
+console.log('Desktop tray preserves v0.25.1 activation/menu behavior with current icon safety.');
