@@ -274,7 +274,7 @@ function sessionDescription(session, live, operation) {
   if (live) return session.currentActivity || session.currentStage || operation || 'Ready for the next step';
   if (session.summary) return session.summary;
   if (session.status === 'validation_failed') return 'Checks failed';
-  if (session.status === 'blocked') return session.endReason || 'Blocked';
+  if (session.status === 'blocked') return session.endReason || workSessionStateView(session).label;
   if (session.status === 'cancelled') return 'Cancelled before completion';
   return session.currentActivity || session.currentStage || operation || 'Task ended';
 }
@@ -284,7 +284,8 @@ function sessionFacts(session, live) {
   const toolCalls = Number(session.toolCallCount ?? session.calls ?? 0);
   const changed = sessionChangedFileCount(session);
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
-  const completed = workSessionStateView(session).status === 'completed';
+  const state = workSessionStateView(session);
+  const completed = state.status === 'completed';
   facts.push(`${toolCalls} action${toolCalls === 1 ? '' : 's'}`);
   facts.push(`${changed} file${changed === 1 ? '' : 's'} edited`);
   if (failures > 0) facts.push(completed
@@ -292,7 +293,7 @@ function sessionFacts(session, live) {
     : `${failures} failed action${failures === 1 ? '' : 's'}`);
   if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('checks failed');
   if (session.status === 'waiting_for_approval') facts.push('approval required');
-  if (session.status === 'blocked') facts.push('blocked');
+  if (session.status === 'blocked') facts.push(state.label.toLowerCase());
   const publish = publishLabel(session);
   if (!live && publish) facts.push(publish.toLowerCase());
   return facts.join(' · ');
@@ -514,7 +515,7 @@ function attentionSection(session) {
   const failures = Number(session.failures || session.failedToolCallCount || 0);
   if (failures) items.push(`${failures} action${failures === 1 ? '' : 's'} failed`);
   if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Checks failed');
-  if (session.status === 'blocked') items.push(session.endReason || 'Task is blocked');
+  if (session.status === 'blocked') items.push(session.endReason || workSessionStateView(session).label);
   if (session.status === 'failed') items.push(session.endReason || 'The task ended with an unresolved problem');
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
 }

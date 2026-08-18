@@ -209,6 +209,16 @@ export function nativeTaskStatusView(statusValue, options = {}) {
 
 export function workSessionStateView(value = {}) {
   const status = normalize(typeof value === 'string' ? value : value.status);
+  const validationRequired = typeof value === 'object' && value !== null && [
+    value.currentStage,
+    value.progress?.label,
+    value.currentActivity
+  ].some(item => {
+    const signal = normalize(item);
+    return signal === 'validation_required'
+      || signal.includes('final_validation_required')
+      || signal.includes('successful_final_validation');
+  });
   const states = {
     queued: ['Queued', false, true, 'working'],
     planning: ['Planning', false, true, 'working'],
@@ -218,7 +228,7 @@ export function workSessionStateView(value = {}) {
     waiting: ['Open', false, false, 'working'],
     settling: ['Settling', false, true, 'working'],
     waiting_for_approval: ['Approval required', false, false, 'warn'],
-    blocked: ['Blocked', false, false, 'bad'],
+    blocked: validationRequired ? ['Final validation required', false, false, 'warn'] : ['Blocked', false, false, 'bad'],
     validation_failed: ['Validation failed', false, false, 'bad'],
     completed: ['Completed', true, false, 'ok'],
     failed: ['Failed', true, false, 'bad'],

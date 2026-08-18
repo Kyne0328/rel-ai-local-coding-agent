@@ -171,6 +171,21 @@ for (const status of ['blocked', 'validating', 'validation_failed', 'completed',
 assert.equal(workSessionStateView({ status: 'expired' }).terminal, true);
 assert.equal(workSessionStateView({ status: 'validating' }).active, true);
 assert.equal(workSessionStateView({ status: 'blocked' }).terminal, false);
+const validationRequiredView = workSessionStateView({
+  status: 'blocked',
+  currentStage: 'Validation required',
+  progress: { mode: 'indeterminate', label: 'Final validation required' }
+});
+assert.equal(validationRequiredView.label, 'Final validation required');
+assert.equal(validationRequiredView.pillClass, 'warn');
+assert.equal(validationRequiredView.terminal, false);
+const inactiveValidationView = workSessionStateView({
+  status: 'inactive',
+  resumeStatus: 'blocked',
+  currentStage: 'Inactive',
+  currentActivity: 'Task completion paused because no successful final validation is recorded.'
+});
+assert.equal(inactiveValidationView.label, 'Final validation required');
 const inactiveProgress = taskProgressHtml({ mode: 'indeterminate', label: 'Waiting for the next task step' }, 'inactive');
 assert.match(inactiveProgress, /Inactive|Ready to resume/i);
 assert.doesNotMatch(inactiveProgress, /expired/i, 'resumable inactive sessions must not be presented as expired');

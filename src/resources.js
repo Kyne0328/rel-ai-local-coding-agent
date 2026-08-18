@@ -133,7 +133,7 @@ Call \`relai_work\` with action \`begin\` once per independent objective. Use \`
 
 Use \`relai_edit\` as the single file mutation tool. Destructive operations may return \`input_required\`; retry with the accepted response and integrity-protected requestState. Native asynchronous work is returned only when the current request advertises \`io.modelcontextprotocol/tasks\`, then polled with \`tasks/get\` and controlled with \`tasks/update\` or \`tasks/cancel\`.
 
-Complete through \`relai_validate\` action \`checks\` with \`complete:true\` and a summary, or \`relai_work\` action \`finish\` after post-validation review.
+After repository mutations, make the final \`relai_validate\` action \`checks\` call with \`complete:true\` and a summary so validation and completion happen atomically. Use \`relai_work\` action \`finish\` for read-only work, or when validation already passed without \`complete:true\` and no repository content changed afterward.
 
 ## Configured workspaces
 

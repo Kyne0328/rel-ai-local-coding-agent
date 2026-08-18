@@ -253,7 +253,7 @@ function renderInactiveSessionCard(card, task) {
   if (attention) {
     mark = '!';
     title = task.status === 'blocked'
-      ? 'Last task was blocked'
+      ? workSessionStateView(task).label === 'Final validation required' ? 'Last task needs final validation' : 'Last task was blocked'
       : task.status === 'validation_failed'
         ? 'Last task needs attention'
         : 'Last task failed';
@@ -469,7 +469,7 @@ function recentTasksCard(tasks) {
   const body = document.createElement('div');
   body.className = 'card-body';
   body.innerHTML = tasks.slice(0, 5).map(task => {
-    const status = recentTaskStatus(task.status);
+    const status = recentTaskStatus(task);
     const endedAt = task.endedAt || task.completedAt;
     const time = endedAt ? timeAgo(endedAt) : 'now';
     const timeClock = endedAt ? `data-clock-relative="${esc(endedAt)}"` : '';
@@ -484,9 +484,13 @@ function recentTasksCard(tasks) {
   return card;
 }
 
-function recentTaskStatus(status) {
+function recentTaskStatus(task) {
+  const status = String(task?.status || '');
   if (status === 'failed') return pillHtml('failed');
-  if (status === 'blocked') return pillHtml('blocked');
+  if (status === 'blocked') {
+    const state = workSessionStateView(task);
+    return pillHtml(state.label.toLowerCase(), state.pillClass);
+  }
   if (status === 'completed') return pillHtml('completed');
   if (status === 'running' || status === 'working') return pillHtml('running');
   if (status === 'validating') return pillHtml('validating');

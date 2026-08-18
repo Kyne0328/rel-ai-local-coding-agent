@@ -125,7 +125,7 @@ Historical records that used `inactivity_window` as cancellation/failure are nor
 
 Validation evidence and workflow stage do not complete a task by themselves. `src/taskIntegrity.js` remains the authority for task-owned mutations, validation freshness, and workspace conflicts.
 
-After the last relevant mutation, use current structured validation only when the boundary requires it. Do not rerun an unchanged exact check simply to create a second "final" verification. Once the required evidence is current and review is sufficient, complete once with `relai_work` using `action:"finish"`, or close atomically from a validating call with `complete:true` and a non-empty summary.
+After the last relevant mutation, use current structured validation only when the boundary requires it. Do not rerun an unchanged exact check simply to create a second "final" verification. For work that changed repository content, make the final validating call with `complete:true` and a non-empty summary so validation and completion happen atomically. Use `relai_work` with `action:"finish"` for read-only work, or when validation already passed without `complete:true` and no repository content changed afterward.
 
 `relai_exec { command:"npm test" }`, a running development process, a completed plan checklist, or an advisory `workflow.stage === "complete"` does not independently satisfy hard completion requirements.
 

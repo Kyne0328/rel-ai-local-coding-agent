@@ -250,7 +250,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   });
 
   const nextAction = ok
-    ? 'Validation is current for this work_id. Do not rerun unchanged checks; review task-owned changes if needed, then call relai_work with action "finish" once, or use complete:true on the validating call to close atomically.'
+    ? 'Validation is current for this work_id. Do not rerun unchanged checks. If this validation call did not complete the task atomically, review task-owned changes if needed, then call relai_work with action "finish" once.'
     : cancelled
       ? 'Validation was cancelled. Review the partial result and resume only the smallest still-relevant check.'
       : scopeChanged
