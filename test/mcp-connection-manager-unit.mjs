@@ -131,6 +131,16 @@ assert.equal(manager.snapshot().activityStatus, 'request_failed');
 assert.equal(manager.snapshot().metrics.requestsFailed, 1);
 assert.equal(manager.snapshot().lastAuthMode, 'static_bearer');
 
+now += 100;
+const recoveredId = manager.beginRequest({ principal: 'local-bearer-client', method: 'tools/list', authMode: 'static_bearer' });
+manager.finishRequest(recoveredId, { ok: true });
+const recoveredSnapshot = manager.snapshot();
+assert.equal(recoveredSnapshot.status, 'ready', 'one failed request must not mark the stateless MCP server failed');
+assert.equal(recoveredSnapshot.activityStatus, 'recent');
+assert.equal(recoveredSnapshot.metrics.requestRecoveries, 1);
+assert.ok(recoveredSnapshot.lastRecoveredRequestAt);
+assert.equal(recoveredSnapshot.recentEvents.at(-1)?.type, 'mcp_request_recovered');
+
 const changedManifest = { ...neutralManifest, version: 'changed-manifest', hash: 'changed-manifest-hash' };
 assert.equal(await manager.observeManifest(changedManifest, 'tools/call'), true);
 assert.equal(manager.snapshot().status, 'ready');

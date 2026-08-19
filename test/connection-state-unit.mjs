@@ -44,7 +44,8 @@ const failed = connectionStateFor({
 });
 assert.equal(connectionSummary(failed).label, 'Last request failed');
 assert.equal(connectionSummary(failed).title, 'The last ChatGPT request failed');
-assert.doesNotMatch(connectionSummary(failed).message, /MCP|tools\//i);
+assert.doesNotMatch(connectionSummary(failed).message, /tools\//i);
+assert.match(connectionSummary(failed).message, /local MCP service and Secure MCP Tunnel remain ready for another request/i);
 
 const legacyClientState = connectionStateFor({
   ...base,

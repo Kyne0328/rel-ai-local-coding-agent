@@ -9,7 +9,7 @@ import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handle
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
 import { getMcpAccess } from "./http/mcp.js";
-import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, shutdownMcpTransport } from "./http/mcpTransport.js";
+import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, sendMcpTransportError, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
 import { flushAuditWrites } from './audit.js';
@@ -89,6 +89,11 @@ function startHttpServer(options = {}) {
       await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, pickFolder, openFolder, getTaskActivity, getDesktopStatus, onDesktopStatusChange, getRuntimeAccess, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs, onRuntimeLogChange });
     } catch (error) {
       const status = Number(error?.status || 500);
+      const pathname = safeRequestPath(req.url);
+      if (getMcpAccess(pathname).kind !== 'none') {
+        sendMcpTransportError(res, { status });
+        return;
+      }
       const code = error?.errorCode || errorCodeForRequest(req);
       sendJson(res, status, errorPayload(code, error instanceof Error ? error.message : String(error)));
     }
@@ -158,6 +163,10 @@ function startHttpServer(options = {}) {
   });
 
   return server;
+}
+
+function safeRequestPath(value) {
+  try { return new URL(value || '/', 'http://127.0.0.1').pathname; } catch { return '/'; }
 }
 
 function authDashboard(ctx) {

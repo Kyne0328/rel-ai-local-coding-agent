@@ -92,7 +92,6 @@ async function handleMcpStreamable(ctx) {
   const principalId = authInfo.clientId;
   const principal = createHttpTaskPrincipal(authInfo, authMode);
   ctx.req.auth = authInfo;
-  const config = readConfig();
   if (Array.isArray(message)) {
     sendMcpProtocolError(ctx.res, 400, -32600, 'One JSON-RPC request object is required; batches are not supported.');
     return;
@@ -119,6 +118,7 @@ async function handleMcpStreamable(ctx) {
   };
 
   try {
+    const config = readConfig();
     if (legacy) {
       await handleLegacyMcpRequest(ctx, message, { config, params, principalId, finishRequest });
       return;
@@ -169,7 +169,10 @@ async function handleMcpStreamable(ctx) {
     });
   } catch (error) {
     finishRequest(false);
-    throw error;
+    debug('MCP request failed', error);
+    if (!sendMcpTransportError(ctx.res, { status: 500, id: message?.id })) {
+      if (!ctx.res.writableEnded && !ctx.res.destroyed) ctx.res.end();
+    }
   }
 }
 
@@ -347,6 +350,19 @@ function sendMcpProtocolError(res, status, code, message, id = null, data) {
   });
 }
 
+function sendMcpTransportError(res, { status = 500, id = null } = {}) {
+  if (res.headersSent || res.writableEnded || res.destroyed) return false;
+  const internal = Number(status) >= 500;
+  sendMcpProtocolError(
+    res,
+    Number(status) || 500,
+    internal ? -32603 : -32600,
+    internal ? 'Internal error.' : 'Request could not be accepted.',
+    id
+  );
+  return true;
+}
+
 function rejection(status, code, error, data) {
   return { ok: false, status, code, error, ...(data === undefined ? {} : { data }) };
 }
@@ -403,6 +419,7 @@ export {
   handleMcpDelete,
   handleMcpGetDiagnostic,
   handleMcpStreamable,
+  sendMcpTransportError,
   shutdownMcpTransport,
   transportSecurityOptions,
   validateMcpRequestHeaders

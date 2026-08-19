@@ -11,11 +11,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const token = 'auth-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-'));
 const configPath = path.join(stateDir, 'config.json');
-fs.writeFileSync(configPath, JSON.stringify({
+const validConfig = JSON.stringify({
   version: 2,
   stateDir,
   workspaces: { repo: { path: root } }
-}, null, 2));
+}, null, 2);
+fs.writeFileSync(configPath, validConfig);
 const { child, base, getStderr } = await startHttpTestServer({
   root,
   configPath,
@@ -57,6 +58,20 @@ try {
   const listed = await session.request('tools/list');
   assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${getStderr()}`);
   assert.equal(listed.body.result?.tools?.length, activeToolCount);
+
+  await new Promise(resolve => setTimeout(resolve, 300));
+  fs.writeFileSync(configPath, '{ invalid json');
+  const failedRequest = await session.request('tools/list', {}, { id: 9001 });
+  assert.equal(failedRequest.response.status, 500);
+  assert.equal(failedRequest.body?.jsonrpc, '2.0');
+  assert.equal(failedRequest.body?.id, 9001, 'unexpected MCP failures must preserve the JSON-RPC request id');
+  assert.equal(failedRequest.body?.error?.code, -32603);
+  assert.equal(failedRequest.body?.error?.message, 'Internal error.');
+  assert.equal(child.exitCode, null, 'an unexpected MCP request failure must not terminate the server process');
+  fs.writeFileSync(configPath, validConfig);
+  const recoveredRequest = await session.request('tools/list', {}, { id: 9002 });
+  assert.equal(recoveredRequest.response.status, 200, `${JSON.stringify(recoveredRequest.body)}\n${getStderr()}`);
+  assert.equal(recoveredRequest.body?.result?.tools?.length, activeToolCount, 'the same stateless MCP server must accept the next request after an internal error');
 
   const legacyInitializeResponse = await fetch(`${base}/mcp`, {
     method: 'POST',

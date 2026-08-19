@@ -29,6 +29,7 @@ class McpConnectionManager {
     this.lastCompletedRequestAt = null;
     this.lastSuccessfulRequestAt = null;
     this.lastFailedRequestAt = null;
+    this.lastRecoveredRequestAt = null;
     this.lastRequestSucceeded = null;
   }
 
@@ -104,6 +105,9 @@ class McpConnectionManager {
     this.activeRequests.delete(normalizedRequestId);
     const completedAt = this.clock();
     const requestMethod = String(method || active?.method || this.lastRequestMethod || '');
+    const recoveredFromFailure = ok === true
+      && Boolean(this.lastFailedRequestAt)
+      && (!this.lastSuccessfulRequestAt || this.lastFailedRequestAt > this.lastSuccessfulRequestAt);
     this.lastCompletedRequestAt = completedAt;
     this.lastRequestMethod = requestMethod;
     this.lastRequestSucceeded = ok === true;
@@ -111,6 +115,10 @@ class McpConnectionManager {
     else this.metrics.requestsFailed += 1;
     if (ok) {
       this.lastSuccessfulRequestAt = completedAt;
+      if (recoveredFromFailure) {
+        this.lastRecoveredRequestAt = completedAt;
+        this.metrics.requestRecoveries += 1;
+      }
       this.scheduleActivityExpiry();
     } else {
       this.lastFailedRequestAt = completedAt;
@@ -120,6 +128,13 @@ class McpConnectionManager {
       method: requestMethod,
       activeRequestCount: this.activeRequests.size
     });
+    if (recoveredFromFailure) {
+      this.record('mcp_request_recovered', {
+        requestId: normalizedRequestId,
+        method: requestMethod,
+        activeRequestCount: this.activeRequests.size
+      });
+    }
     return this.snapshot();
   }
 
@@ -178,6 +193,7 @@ class McpConnectionManager {
       lastCompletedRequestAt: iso(this.lastCompletedRequestAt),
       lastSuccessfulRequestAt: iso(this.lastSuccessfulRequestAt),
       lastFailedRequestAt: iso(this.lastFailedRequestAt),
+      lastRecoveredRequestAt: iso(this.lastRecoveredRequestAt),
       lastRequestSucceeded: this.lastRequestSucceeded,
       metrics: { ...this.metrics },
       recentEvents: this.eventHistory.slice(-50),
@@ -233,6 +249,7 @@ class McpConnectionManager {
     this.lastCompletedRequestAt = null;
     this.lastSuccessfulRequestAt = null;
     this.lastFailedRequestAt = null;
+    this.lastRecoveredRequestAt = null;
     this.lastRequestSucceeded = null;
   }
 
@@ -258,6 +275,7 @@ function emptyMetrics() {
     requestsReceived: 0,
     requestsSucceeded: 0,
     requestsFailed: 0,
+    requestRecoveries: 0,
     discoveryRequests: 0,
     toolListRequests: 0,
     taskRequests: 0,
