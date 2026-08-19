@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.26.5] — 2026-08-19
+
+### Desktop continuity and task completion recovery
+- **Keep the computer awake across the full Rel.AI task, not only individual connector calls.** Open logical tasks now keep Electron's app-suspension blocker active while ChatGPT is thinking, waiting, or otherwise between tool calls, and the blocker releases when the task becomes terminal.
+- **Add a persistent Keep computer awake setting.** Settings → Application can keep the same app-suspension blocker active for the entire time Rel.AI is running, while still allowing the display to turn off normally; the preference survives restarts and shares the existing blocker instead of creating a second power-management path.
+- **Improve recovery when a mutated task still needs final validation.** Rel.AI now steers repository-changing work toward atomic final validation plus completion and presents validation-required blocked tasks as **Final validation required** instead of a generic blocked state.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.26.5.
+
 ## [0.26.4] — 2026-08-17
 
 ### Dashboard live-state reliability

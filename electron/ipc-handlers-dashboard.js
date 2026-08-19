@@ -9,6 +9,7 @@ function registerDesktopSettingsIpc({
   saveDesktopSettings,
   getLifecycleStatus,
   setLaunchAtLogin,
+  setKeepAwake,
   getNotificationsEnabled,
   setNotificationsEnabled,
   getNotificationPreferences,
@@ -18,6 +19,7 @@ function registerDesktopSettingsIpc({
   ipcMain.handle('desktop:settings:save', (event, settings) => dashboardOnly(event, () => saveDesktopSettings(settings)));
   ipcMain.handle('desktop:lifecycle:get', event => dashboardOnly(event, getLifecycleStatus));
   ipcMain.handle('desktop:startup:set', (event, enabled) => dashboardOnly(event, () => setLaunchAtLogin(enabled)));
+  ipcMain.handle('desktop:keep-awake:set', (event, enabled) => dashboardOnly(event, () => setKeepAwake(enabled)));
   ipcMain.handle('desktop:notifications:get', event => dashboardOnly(event, () => ({ ok: true, enabled: getNotificationsEnabled() })));
   ipcMain.handle('desktop:notifications:set', (event, enabled) => dashboardOnly(event, () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
   ipcMain.handle('desktop:notification-preferences:get', event => dashboardOnly(event, () => ({ ok: true, preferences: getNotificationPreferences() })));

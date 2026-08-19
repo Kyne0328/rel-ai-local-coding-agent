@@ -277,6 +277,7 @@ if (!gotLock) {
       writeControllerRuntimeMarker(app),
       desktopLifecycle.start()
     ]);
+    toolActivityRuntime.setKeepAwakeEnabled(lifecycleStatus.keepAwake === true);
     desktopTray.setup();
     if (hasExistingConfig()) void launchConfiguredDesktop({ background: lifecycleStatus.openedAtLogin });
     else setupWindowManager.create();
@@ -325,6 +326,12 @@ function updateDesktopSettings(settings) {
     restartConnection,
     restartDesktop: () => launchConfiguredDesktop({ restart: true })
   });
+}
+
+async function setKeepAwake(enabled) {
+  const result = await desktopLifecycle.setKeepAwake(enabled);
+  toolActivityRuntime.setKeepAwakeEnabled(result?.status?.keepAwake === true);
+  return result;
 }
 
 function getRecoveryConfig() {
@@ -577,6 +584,7 @@ registerIpcHandlers({
   installUpdate: installApplicationUpdate,
   getLifecycleStatus: desktopLifecycle.getStatus,
   setLaunchAtLogin: desktopLifecycle.setLaunchAtLogin,
+  setKeepAwake,
   getCurrentStatus: () => currentStatus,
   getNotificationsEnabled: () => desktopNotifications.getPreferences().enabled,
   setNotificationsEnabled: desktopNotifications.setEnabled,

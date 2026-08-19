@@ -55,7 +55,10 @@ listener({
 });
 assert.equal(runtime.getStatus().activeTaskCount, 1, 'the logical task remains open between connector calls');
 assert.equal(runtime.getStatus().activeConnectorCalls, 0);
-assert.equal(blockerState.size, 0, 'reasoning and approval gaps must allow normal app suspension');
+assert.equal(blockerState.size, 1, 'reasoning and approval gaps must keep an open logical task awake between connector calls');
+
+runtime.setKeepAwakeEnabled(true);
+assert.equal(blockerState.size, 1, 'the persistent keep-awake setting must share the existing blocker');
 
 const completedEvent = {
   phase: 'completed', revision: 2, activeConnectorCalls: 0, activeCalls: 0, activeTaskCount: 0,
@@ -86,7 +89,9 @@ assert.equal(snapshotReads, 1, 'terminal activity must remain event-driven');
 assert.equal(runtime.getStatus().activeTaskCount, 0);
 assert.equal(runtime.getStatus().tasks.length, 0);
 assert.equal(runtime.getStatus().lastTask?.taskId, 'task-a');
-assert.equal(blockerState.size, 0, 'terminal work releases the app-suspension blocker');
+assert.equal(blockerState.size, 1, 'persistent keep-awake remains active after terminal work');
+runtime.setKeepAwakeEnabled(false);
+assert.equal(blockerState.size, 0, 'disabling persistent keep-awake releases the blocker after terminal work');
 assert.ok(statusChanges.length >= 3, 'initial, running, and terminal status changes must be published');
 
 runtime.stop();

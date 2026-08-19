@@ -45,16 +45,10 @@ function createDesktopLifecycleManager(options = {}) {
       launchedAt: now(),
       lastCleanExitAt: cleanText(previous.lastCleanExitAt, 80),
       launchAtLogin,
+      keepAwake: previous.keepAwake === true,
       openedAtLogin: argv.includes('--background') || launchAtLogin.openedAtLogin === true
     };
-    await writeState({
-      version: currentVersion,
-      running: true,
-      launchId,
-      launchCount: status.launchCount,
-      launchedAt: status.launchedAt,
-      lastCleanExitAt: status.lastCleanExitAt
-    });
+    await writeState(persistedState(true));
     recordLaunch();
     return snapshot();
   }
@@ -62,14 +56,7 @@ function createDesktopLifecycleManager(options = {}) {
   async function markCleanShutdown() {
     if (!launchId) return snapshot();
     const cleanExitAt = now();
-    await writeState({
-      version: status.currentVersion,
-      running: false,
-      launchId,
-      launchCount: status.launchCount,
-      launchedAt: status.launchedAt,
-      lastCleanExitAt: cleanExitAt
-    });
+    await writeState(persistedState(false, cleanExitAt));
     status = { ...status, lastCleanExitAt: cleanExitAt };
     launchId = '';
     onLog('Desktop lifecycle recorded a clean shutdown.', { source: 'desktop-lifecycle' });
@@ -101,6 +88,24 @@ function createDesktopLifecycleManager(options = {}) {
     }
   }
 
+  async function setKeepAwake(enabled) {
+    const previous = status.keepAwake === true;
+    const next = enabled === true;
+    if (next === previous) return { ok: true, status: snapshot() };
+    status = { ...status, keepAwake: next };
+    if (!await writeState(persistedState(Boolean(launchId)))) {
+      status = { ...status, keepAwake: previous };
+      return {
+        ok: false,
+        errorCode: codes.state,
+        error: 'Keep-awake setting could not be saved. Try again.',
+        status: snapshot()
+      };
+    }
+    onLog(`Keep computer awake ${next ? 'enabled' : 'disabled'}.`, { source: 'desktop-lifecycle' });
+    return { ok: true, status: snapshot() };
+  }
+
   function readLaunchAtLogin() {
     if (!startupSupport.supported) {
       return { supported: false, enabled: false, openedAtLogin: false, reason: startupSupport.reason };
@@ -130,13 +135,27 @@ function createDesktopLifecycleManager(options = {}) {
   async function writeState(value) {
     try {
       await writeJsonAtomicAsync(statePath, value, { mode: 0o600, backup: true });
+      return true;
     } catch (error) {
       onLog(`Desktop lifecycle state could not be saved: ${cleanText(error?.message || error, 240)}`, {
         source: 'desktop-lifecycle',
         level: 'warning',
         code: codes.state
       });
+      return false;
     }
+  }
+
+  function persistedState(running, lastCleanExitAt = status.lastCleanExitAt) {
+    return {
+      version: status.currentVersion,
+      running,
+      launchId,
+      launchCount: status.launchCount,
+      launchedAt: status.launchedAt,
+      lastCleanExitAt,
+      keepAwake: status.keepAwake === true
+    };
   }
 
   function recordLaunch() {
@@ -158,7 +177,7 @@ function createDesktopLifecycleManager(options = {}) {
     return { ...status, launchAtLogin: { ...status.launchAtLogin } };
   }
 
-  return { start, markCleanShutdown, getStatus, setLaunchAtLogin };
+  return { start, markCleanShutdown, getStatus, setLaunchAtLogin, setKeepAwake };
 }
 
 function baseStatus(app, support) {
@@ -172,6 +191,7 @@ function baseStatus(app, support) {
     launchedAt: '',
     lastCleanExitAt: '',
     launchAtLogin: { supported: support.supported, enabled: false, openedAtLogin: false, reason: support.reason },
+    keepAwake: false,
     openedAtLogin: false
   };
 }

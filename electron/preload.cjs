@@ -30,6 +30,7 @@ if (surface === 'dashboard') {
     installUpdate: () => ipcRenderer.invoke('desktop:update:install'),
     getLifecycleStatus: () => ipcRenderer.invoke('desktop:lifecycle:get'),
     setLaunchAtLogin: enabled => ipcRenderer.invoke('desktop:startup:set', enabled === true),
+    setKeepAwake: enabled => ipcRenderer.invoke('desktop:keep-awake:set', enabled === true),
     getNotificationsEnabled: () => ipcRenderer.invoke('desktop:notifications:get'),
     setNotificationsEnabled: enabled => ipcRenderer.invoke('desktop:notifications:set', enabled === true),
     getNotificationPreferences: () => ipcRenderer.invoke('desktop:notification-preferences:get'),

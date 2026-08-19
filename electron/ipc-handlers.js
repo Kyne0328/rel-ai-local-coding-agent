@@ -61,6 +61,7 @@ function registerIpcHandlers(deps) {
     saveDesktopSettings: deps.saveDesktopSettings,
     getLifecycleStatus: deps.getLifecycleStatus,
     setLaunchAtLogin: deps.setLaunchAtLogin,
+    setKeepAwake: deps.setKeepAwake,
     getNotificationsEnabled: deps.getNotificationsEnabled,
     setNotificationsEnabled: deps.setNotificationsEnabled,
     getNotificationPreferences: deps.getNotificationPreferences,

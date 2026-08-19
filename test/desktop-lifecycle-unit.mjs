@@ -38,6 +38,7 @@ assert.equal(firstStatus.recoveredAfterUncleanShutdown, false);
 assert.equal(firstStatus.launchCount, 1);
 assert.equal(firstStatus.launchAtLogin.supported, true);
 assert.equal(firstStatus.launchAtLogin.enabled, false);
+assert.equal(firstStatus.keepAwake, false);
 assert.equal(first.setLaunchAtLogin(true).ok, true);
 assert.equal(first.getStatus().launchAtLogin.enabled, true);
 assert.deepEqual(loginReadSettings, { path: process.execPath, args: ['--background'] }, 'login-item readback must identify the same executable and background args used during registration');
@@ -47,6 +48,7 @@ assert.deepEqual(loginSettings, {
   path: process.execPath,
   args: ['--background']
 });
+assert.equal((await first.setKeepAwake(true)).status.keepAwake, true);
 const cleanStatus = await first.markCleanShutdown();
 assert.equal((await first.markCleanShutdown()).lastCleanExitAt, cleanStatus.lastCleanExitAt);
 
@@ -56,6 +58,8 @@ assert.equal(secondStatus.firstLaunch, false);
 assert.equal(secondStatus.updated, false);
 assert.equal(secondStatus.recoveredAfterUncleanShutdown, false);
 assert.equal(secondStatus.launchCount, 2);
+assert.equal(secondStatus.keepAwake, true, 'keep-awake preference must persist across desktop restarts');
+assert.equal((await second.setKeepAwake(false)).status.keepAwake, false);
 await second.markCleanShutdown();
 
 const statePath = path.join(stateDir, 'desktop-lifecycle.json');

@@ -300,11 +300,11 @@ boundListener({ phase: 'started', activeConnectorCalls: 1, activeCalls: 1, task:
 assert.equal(started.has(41), true);
 runtimeStatus = { state: 'waiting', activeConnectorCalls: 0, activeTaskCount: 1, tasks: [{ id: 'task', state: 'waiting', activeCalls: 0 }] };
 boundListener({ phase: 'finished', activeConnectorCalls: 0, activeCalls: 0, ok: true, task: runtimeStatus.tasks[0] });
-assert.equal(started.has(41), false, 'waiting work sessions must allow normal app suspension between connector calls');
+assert.equal(started.has(41), true, 'waiting logical tasks must stay awake between connector calls');
 assert.equal(runtime.getStatus().activeConnectorCalls, 0);
 assert.equal(runtime.getStatus().activeTaskCount, 1);
 assert.deepEqual(runtime.resetHistory(), { ok: true });
-assert.equal(started.has(41), false, 'clearing a waiting session must not need an additional blocker release');
+assert.equal(started.has(41), false, 'clearing the waiting task releases its blocker');
 assert.equal(resetCalls, 1);
 runtimeStatus = { state: 'working', activeCalls: 1, activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
 boundListener({ phase: 'started', activeConnectorCalls: 1, activeCalls: 1, task: runtimeStatus.tasks[0] });

@@ -21,6 +21,7 @@ const desktopConnection = read('src/ui/features/settings/desktop-connection.js')
 const appUpdater = read('electron/app-updater.js');
 const appUpdaterEvents = read('electron/app-updater-events.js');
 const desktopLifecycle = read('electron/desktop-lifecycle.js');
+const desktopStartup = read('src/ui/features/settings/desktop-startup.js');
 const dashboardJs = read('public/dashboard.js');
 const dashboardServer = `${read('src/http/dashboard.js')}\n${read('src/http/dashboardShellChrome.js')}`;
 const windowChromePolicy = read('electron/window-chrome.js');
@@ -95,7 +96,7 @@ assert.match(statusJs, /desktop notification setting could not be saved/i);
 assert.doesNotMatch(statusJs, /updateUI\(\{\s*error:[\s\S]{0,160}tunnelStatus:\s*'failed'/, 'recovery action failures must not falsify the tunnel connection state');
 assert.doesNotMatch(statusJs, /currentStatus\.mcpUrl|approval token|ngrok|gateway/i);
 
-for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close','desktop:restart-connection','desktop:reload-dashboard','desktop:relaunch','desktop:quit','recovery:restart-connection','recovery:relaunch']) {
+for (const channel of ['desktop:settings:get','desktop:settings:save','desktop:analytics:local','desktop:update:get','desktop:update:check','desktop:update:download','desktop:update:install','desktop:lifecycle:get','desktop:startup:set','desktop:keep-awake:set','desktop:notifications:get','desktop:notifications:set','desktop:notification-preferences:get','desktop:notification-preferences:set','desktop:diagnostics:export','desktop:diagnostics:open-folder','desktop:window:get-state','desktop:window:minimize','desktop:window:toggle-maximize','desktop:window:close','desktop:restart-connection','desktop:reload-dashboard','desktop:relaunch','desktop:quit','recovery:restart-connection','recovery:relaunch']) {
   assert.match(preload, new RegExp(channel.replaceAll(':', '\\:')));
   assert.match(ipc, new RegExp(channel.replaceAll(':', '\\:')));
 }
@@ -163,6 +164,10 @@ assert.match(appUpdater, /integrityVerified/);
 assert.match(appUpdaterEvents, /does not match expected version/);
 assert.match(desktopLifecycle, /openAtLogin/);
 assert.match(desktopLifecycle, /--background/);
+assert.match(desktopLifecycle, /keepAwake/);
+assert.match(desktopStartup, /Keep computer awake/);
+assert.match(desktopStartup, /display can still turn off normally/i);
+assert.match(main, /setKeepAwakeEnabled\(lifecycleStatus\.keepAwake === true\)/, 'saved keep-awake preference must activate before normal desktop work starts');
 
 assert.match(dashboardJs, /dataset\.surface = surface/);
 assert.match(dashboardJs, /initWindowChrome/);

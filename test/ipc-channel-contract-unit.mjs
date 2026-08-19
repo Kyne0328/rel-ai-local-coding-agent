@@ -29,6 +29,7 @@ const inventory = {
   'desktop:settings:save': spec('handle', ['dashboard'], 'reject'),
   'desktop:lifecycle:get': spec('handle', ['dashboard'], 'reject'),
   'desktop:startup:set': spec('handle', ['dashboard'], 'reject'),
+  'desktop:keep-awake:set': spec('handle', ['dashboard'], 'reject'),
   'desktop:notifications:get': spec('handle', ['dashboard'], 'reject'),
   'desktop:notifications:set': spec('handle', ['dashboard'], 'reject'),
   'desktop:notification-preferences:get': spec('handle', ['dashboard'], 'reject'),
@@ -86,6 +87,7 @@ registerIpcHandlers({
   saveDesktopSettings: value => ({ ok: true, value }),
   getLifecycleStatus: () => ({ ok: true }),
   setLaunchAtLogin: value => value,
+  setKeepAwake: value => value,
   getNotificationPreferences: () => ({ enabled: true }),
   updateNotificationPreferences: value => ({ ok: true, preferences: value }),
   getUpdateStatus: () => ({ state: 'idle' }),
@@ -133,6 +135,7 @@ function argsFor(channel) {
     case 'desktop:settings:save': return [{ port: 3333, tunnelId: 'tunnel_12345678' }];
     case 'desktop:reload-dashboard': return ['#tasks'];
     case 'desktop:startup:set':
+    case 'desktop:keep-awake:set':
     case 'desktop:notifications:set':
     case 'desktop:notification-preferences:set':
     case 'notifications:set-enabled': return [true];

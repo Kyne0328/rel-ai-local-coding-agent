@@ -14,7 +14,7 @@ async function loadAndRender(container) {
     : null;
 
   container.innerHTML = '';
-  container.appendChild(header('Application', 'Startup and updates.'));
+  container.appendChild(header('Application', 'Startup, availability, and updates.'));
   container.appendChild(desktopStartupPanel(lifecycle).el);
   container.appendChild(applicationUpdatesPanel().el);
 }

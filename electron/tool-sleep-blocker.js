@@ -81,6 +81,7 @@ function createTaskActivityRuntime(options) {
   const blocker = createToolSleepBlocker(powerSaveBlocker);
   const notifiedEvents = new Set();
   let status = normalizeActivityStatus(toolActivity.getToolActivity?.() || {});
+  let keepAwakeEnabled = false;
 
   const unsubscribe = toolActivity.onToolActivity(handleActivity);
   syncBlocker(status);
@@ -117,7 +118,17 @@ function createTaskActivityRuntime(options) {
     const connectorCalls = Number(Object.hasOwn(event, 'activeConnectorCalls')
       ? event.activeConnectorCalls
       : activity.activeConnectorCalls || 0);
-    blocker.update(Math.max(0, connectorCalls));
+    const activeTaskCount = Math.max(
+      Math.max(0, Number(Object.hasOwn(event, 'activeTaskCount') ? event.activeTaskCount : activity.activeTaskCount || 0)),
+      Array.isArray(activity.tasks) ? activity.tasks.length : 0
+    );
+    blocker.update(keepAwakeEnabled || activeTaskCount > 0 || Math.max(0, connectorCalls) > 0 ? 1 : 0);
+  }
+
+  function setKeepAwakeEnabled(enabled) {
+    keepAwakeEnabled = enabled === true;
+    syncBlocker(status);
+    return keepAwakeEnabled;
   }
 
   function currentStatus() {
@@ -151,6 +162,7 @@ function createTaskActivityRuntime(options) {
   return {
     getStatus: currentStatus,
     resetHistory,
+    setKeepAwakeEnabled,
     stop
   };
 }
