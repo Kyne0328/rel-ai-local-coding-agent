@@ -103,7 +103,7 @@ function runFilesystemSearch(workspace, args, maxResults, signal) {
   let expression = null;
   if (args.fixed !== true) {
     try { expression = new RegExp(pattern, flags); }
-    catch (error) { throw new Error(`Invalid search pattern: ${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { throw new Error(`Invalid search pattern: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
   }
   const needle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
   const glob = String(args.glob || '').trim();
