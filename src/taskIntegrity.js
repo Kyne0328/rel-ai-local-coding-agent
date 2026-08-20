@@ -339,7 +339,7 @@ async function repositoryStateForEvent(workspace, config, event) {
 function eventMutatedCode(event) {
   const tool = clean(event.tool);
   if (tool === OP.EXEC) {
-    return exactChangedFiles(event).length > 0;
+    return exactChangedFiles(event).length > 0 || event.mutationUnknown === true;
   }
   return CODE_MUTATING_TOOLS.has(tool);
 }

@@ -7,6 +7,7 @@
 // invalidation — keep them in sync via this constant, not copied literals.
 export const DASHBOARD_DATA_URL = '/api/dashboard/v10?limit=100';
 const _cache = new Map();
+let _dashboardReloadPromise = null;
 
 
 export function requestDashboardRefresh(options = {}) {
@@ -53,8 +54,21 @@ async function parseJsonResponse(res) {
 function normalizeResponseData(res, data) {
   data.status = res.status;
   if (!res.ok && data.ok !== true) data.ok = false;
-  if (res.status === 401) data.error = data.error || 'Dashboard authorization expired. Reopen the dashboard from the Rel.AI desktop app.';
+  if (res.status === 401) {
+    data.error = data.error || 'Dashboard authorization expired. Reopening the dashboard…';
+    recoverDashboardAuthorization();
+  }
   return data;
+}
+
+function recoverDashboardAuthorization() {
+  const desktop = globalThis.window?.relaiDesktop;
+  if (typeof desktop?.reloadDashboard !== 'function' || _dashboardReloadPromise) return;
+  _dashboardReloadPromise = Promise.resolve(desktop.reloadDashboard(globalThis.location?.hash || '#home'))
+    .catch(error => {
+      if (globalThis.window?.localStorage?.getItem('relai_debug') === '1') console.error(error);
+    })
+    .finally(() => { _dashboardReloadPromise = null; });
 }
 
 function structuredRequestError(message, status = 0) {

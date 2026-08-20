@@ -64,6 +64,7 @@ const files = [
 const serialFiles = new Set([
   'http-auth-smoke.mjs',
   'http-smoke.mjs',
+  'smoke.mjs',
   'process-manager-unit.mjs'
 ]);
 const parallelEntries = files

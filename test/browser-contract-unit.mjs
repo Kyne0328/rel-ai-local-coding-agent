@@ -26,6 +26,21 @@ const server = http.createServer((request, response) => {
     response.end('<!doctype html><title>Route OK</title><p>ready</p>');
     return;
   }
+  if (request.url === '/large') {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    response.end(`<!doctype html><title>Large Route</title>${'x'.repeat(200000)}`);
+    return;
+  }
+  if (request.url === '/redirect-local') {
+    response.writeHead(302, { location: '/ok' });
+    response.end();
+    return;
+  }
+  if (request.url === '/redirect-external') {
+    response.writeHead(302, { location: 'https://example.com/' });
+    response.end();
+    return;
+  }
   response.writeHead(404, { 'content-type': 'text/plain' });
   response.end('missing');
 });
@@ -46,6 +61,21 @@ try {
   assert.equal(probe.statusCode, 200);
   assert.equal(probe.title, 'Route OK');
   assert.equal(probe.reachable, true);
+
+  const localRedirect = await relaiHttpProbe(workspace, {}, { route: '/redirect-local' });
+  assert.equal(localRedirect.ok, true);
+  assert.equal(localRedirect.title, 'Route OK');
+  assert.match(localRedirect.finalUrl, /\/ok$/);
+
+  const externalRedirect = await relaiHttpProbe(workspace, {}, { route: '/redirect-external' });
+  assert.equal(externalRedirect.ok, false);
+  assert.equal(externalRedirect.reachable, false);
+  assert.match(externalRedirect.error, /redirect outside the configured local Rel\.AI origin/i);
+
+  const large = await relaiHttpProbe(workspace, {}, { route: '/large' });
+  assert.equal(large.ok, true);
+  assert.equal(large.title, 'Large Route');
+  assert.ok(large.responseBytes > 200000, 'the probe must count the full streamed response without buffering it all');
 
   await assert.rejects(
     () => relaiHttpProbe(workspace, {}, { route: 'https://example.com/' }),

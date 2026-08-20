@@ -136,7 +136,9 @@ function createToolActivityTracker(options = {}) {
         return { taskId: task.id, scopeId: task.scopeId, duplicate: true };
       }
       const conflicting = [...task.currentOperations.values()].filter(item =>
-        item.id !== operationId && item.internalOperation !== OP.WORK_FINISH
+        item.id !== operationId
+        && item.internalOperation !== OP.WORK_FINISH
+        && item.internalOperation !== OP.WORK_STATUS
       );
       if (conflicting.length > 0) {
         throw taskError(

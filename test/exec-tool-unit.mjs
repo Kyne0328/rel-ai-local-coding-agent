@@ -16,6 +16,7 @@ const callTool = (name, args, context = {}) => rawCallTool(name, args, { princip
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-exec-tool-'));
 const workspace = path.join(temp, 'workspace');
+const plainWorkspace = path.join(temp, 'plain-workspace');
 const nested = path.join(workspace, 'nested');
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
@@ -36,6 +37,7 @@ function nodeCommand(script, ...args) {
 }
 
 fs.mkdirSync(nested, { recursive: true });
+fs.mkdirSync(plainWorkspace, { recursive: true });
 fs.mkdirSync(path.join(workspace, 'scripts'), { recursive: true });
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'module.exports = true;\n');
@@ -67,6 +69,12 @@ fs.writeFileSync(configPath, JSON.stringify({
       path: workspace,
       commands: {},
       testCommands: { check: 'npm run check' }
+    },
+    plain: {
+      path: plainWorkspace,
+      commands: {},
+      testCommands: {},
+      context: { includeRoots: ['src'] }
     }
   }
 }, null, 2));
@@ -227,6 +235,34 @@ try {
   assert.equal(quotedMutation.ok, true);
   assert.deepEqual(quotedMutation.changedFiles, [quotedMutationPath], 'mutation tracking must preserve spaces and non-ASCII names');
   fs.rmSync(path.join(workspace, quotedMutationPath));
+
+  resetToolActivity();
+  const plainContext = { publicHttpOnly: true };
+  const plainTask = await callTool('relai_work', { action: 'begin', workspace: 'plain', bootstrap: 'none' }, plainContext);
+  const plainMutation = await callTool('relai_exec', {
+    workspace: 'plain',
+    work_id: plainTask.work_id,
+    command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'generated.txt')
+  }, plainContext);
+  assert.equal(plainMutation.commandSucceeded, true);
+  assert.equal(plainMutation.mutationTracking, 'filesystem');
+  assert.deepEqual(plainMutation.changedFiles, ['generated.txt'], 'non-Git exec must report workspace mutations');
+  const sensitiveMutation = await callTool('relai_exec', {
+    workspace: 'plain',
+    work_id: plainTask.work_id,
+    command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), '.env')
+  }, plainContext);
+  assert.deepEqual(sensitiveMutation.changedFiles, ['.env'], 'mutation accounting must cover sensitive filenames without reading their contents');
+  await assert.rejects(
+    () => callTool('relai_work', {
+      action: 'finish', workspace: 'plain', work_id: plainTask.work_id,
+      summary: 'A non-Git exec mutation must require validation.'
+    }, plainContext),
+    error => error?.code === 'TASK_VALIDATION_REQUIRED'
+  );
+  await callTool('relai_work', {
+    action: 'cancel', workspace: 'plain', work_id: plainTask.work_id, reason: 'Non-Git mutation regression complete.'
+  }, plainContext);
 
   resetToolActivity();
   const noValidationContext = { publicHttpOnly: true };

@@ -31,7 +31,7 @@ function createDashboardWindowManager(deps) {
   let persistPromise = null;
   let persistRevision = 0;
 
-  async function open(routeHash = '') {
+  async function open(routeHash = '', options = {}) {
     if (isQuitting()) throw new Error('Dashboard window is unavailable while Rel.AI is quitting.');
     const connection = await getConnection();
     const target = validateConnection(connection);
@@ -41,8 +41,10 @@ function createDashboardWindowManager(deps) {
     dashboardOrigin = target.origin;
     const win = await getOrCreateWindow();
     const current = safeUrl(win.webContents.getURL());
+    const forceReload = options.forceReload === true;
+    if (forceReload && !requestedHash && current?.hash) target.hash = current.hash;
     const { sameDashboard, authRefreshRequired } = planDashboardNavigation(current, target, { requestedHash, currentAuthGeneration: dashboardAuthGeneration, nextAuthGeneration: authGeneration });
-    if (!sameDashboard || authRefreshRequired) {
+    if (!sameDashboard || authRefreshRequired || forceReload) {
       try {
         await win.loadURL(target.href);
         if (authGeneration) dashboardAuthGeneration = authGeneration;

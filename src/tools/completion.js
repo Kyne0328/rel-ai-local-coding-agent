@@ -5,7 +5,8 @@ import { readTaskIntegrity } from '../taskIntegrity.js';
 import { workspaceDirtyPaths } from '../repo/gitOps.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
-import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
+import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
+import { runWorkspaceMutationBoundary } from '../workspaceOperationQueue.js';
 
 const WORK_FINISH_SOURCE = 'relai_work:finish';
 const VALIDATE_CHECKS_SOURCE = 'relai_validate:checks';
@@ -150,13 +151,17 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
 }
 
 async function finalizeValidationResult(config, workspace, validationResult, summary) {
-  const completion = await finalizeValidatedTask(config, workspace, {
+  const context = getCurrentToolActivityContext();
+  const completion = await runWorkspaceMutationBoundary(workspace.alias, () => finalizeValidatedTask(config, workspace, {
     summary,
     validationStatus: 'passed',
     validationLevel: validationResult.validationLevel,
     validationAt: new Date().toISOString(),
     validationFingerprint: validationResult.validationFingerprint,
     completionSource: VALIDATE_CHECKS_SOURCE
+  }), {
+    taskId: context?.taskId || '',
+    signal: getCurrentTaskAbortSignal()
   });
   return {
     ...validationResult,

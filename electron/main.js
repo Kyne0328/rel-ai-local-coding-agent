@@ -476,12 +476,12 @@ function buildDashboardConnection() {
   return serviceRuntime.buildDashboardConnection();
 }
 
-async function showDashboardWindow(routeHash = '') {
-  await dashboardWindowManager.open(routeHash); taskbarCompletionBadge.clear();
+async function showDashboardWindow(routeHash = '', options = {}) {
+  await dashboardWindowManager.open(routeHash, options); taskbarCompletionBadge.clear();
   recoveryWindowManager.hide();
 }
 
-async function openDashboardWindow(routeHash = '') {
+async function openDashboardWindow(routeHash = '', options = {}) {
   if (!serviceRuntime.isListening()) {
     void startServer();
     await serviceRuntime.waitUntilListening();
@@ -491,7 +491,7 @@ async function openDashboardWindow(routeHash = '') {
     throw new Error(currentStatus.error || 'Rel.AI connection is not running.');
   }
   try {
-    await showDashboardWindow(routeHash);
+    await showDashboardWindow(routeHash, options);
     return { ok: true };
   } catch (error) {
     setStatus(desktopStatusFailure(ERROR_CODES.DASHBOARD_UNAVAILABLE, `Dashboard failed to open: ${formatError(error)}`));

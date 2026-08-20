@@ -192,6 +192,13 @@ try {
   await manager.open();
   assert.equal(win.loadCount, afterAuthRefresh, 'reopening within the same auth generation must not reload the dashboard');
 
+  dashboardBootstrap = 'session-refresh-code';
+  const beforeSessionRefresh = win.loadCount;
+  await manager.open('', { forceReload: true });
+  assert.equal(win.loadCount, beforeSessionRefresh + 1, 'session reauthentication must consume a fresh bootstrap even within the same service generation');
+  assert.equal(new URL(win.webContents.url).searchParams.get('bootstrap'), 'session-refresh-code');
+  assert.equal(win.webContents.url.endsWith('#connection'), true, 'session reauthentication must preserve the active dashboard route');
+
   assert.deepEqual(manager.getState(), {
     platform: 'win32', customTitleBar: true, controls: 'custom',
     maximized: false, minimized: false, fullScreen: false

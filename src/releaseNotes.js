@@ -143,17 +143,23 @@ function parseRelease(lines, startIndex, endIndex) {
 
 function parseChangelog(md) {
   const lines = String(md || "").split(/\r?\n/);
-  const headingIndexes = [];
+  let startIndex = -1;
+  let endIndex = lines.length;
   for (let index = 0; index < lines.length; index += 1) {
-    if (parseHeading(lines[index])) headingIndexes.push(index);
+    const heading = parseHeading(lines[index]);
+    if (!heading) continue;
+    if (startIndex < 0) {
+      if (heading.version === PKG_VERSION) startIndex = index;
+      continue;
+    }
+    endIndex = index;
+    break;
   }
-  if (!headingIndexes.length) return null;
+  if (startIndex < 0) return null;
 
-  const releases = headingIndexes
-    .map((startIndex, index) => parseRelease(lines, startIndex, headingIndexes[index + 1] ?? lines.length))
-    .filter(Boolean);
-  if (!releases.length) return null;
-  return { ...releases[0], releases };
+  const release = parseRelease(lines, startIndex, endIndex);
+  if (!release) return null;
+  return { ...release, releases: [release] };
 }
 
 function fallbackReleaseNotes() {

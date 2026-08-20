@@ -72,7 +72,9 @@ assert.match(firstPrompt, /do not change any files yet/i);
 
 for (const scenario of [
   { hasWorkspace: false, endpointReady: false, chatgptReady: false, firstRequestObserved: false, expected: ['workspace', 'connection', 'chatgpt', 'first-request'] },
+  { hasWorkspace: false, endpointReady: true, chatgptReady: true, firstRequestObserved: true, expected: ['workspace', 'connection', 'chatgpt', 'first-request'] },
   { hasWorkspace: true, endpointReady: false, chatgptReady: false, firstRequestObserved: false, expected: ['connection', 'chatgpt', 'first-request'] },
+  { hasWorkspace: true, endpointReady: false, chatgptReady: true, firstRequestObserved: true, expected: ['connection', 'chatgpt', 'first-request'] },
   { hasWorkspace: true, endpointReady: true, chatgptReady: false, firstRequestObserved: false, expected: ['chatgpt', 'first-request'] },
   { hasWorkspace: true, endpointReady: true, chatgptReady: true, firstRequestObserved: false, expected: ['first-request'] },
   { hasWorkspace: true, endpointReady: true, chatgptReady: true, firstRequestObserved: true, expected: [] }

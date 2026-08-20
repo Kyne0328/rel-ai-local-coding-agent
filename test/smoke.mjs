@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const client = startMcpClient({
   root,
   configPath: path.join(root, 'examples', 'config.example.json'),
-  timeoutMs: 3000
+  timeoutMs: 10000
 });
 const expectedToolNames = activeToolNames;
 

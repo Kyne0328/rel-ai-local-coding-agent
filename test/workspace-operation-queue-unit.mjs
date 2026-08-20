@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 
 import { getOperationDefinition } from '../src/tools/actionDefinitions.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
-import { runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
+import { runWorkspaceMutationBoundary, runWorkspaceOperation, pendingWorkspaceOperations } from "../src/workspaceOperationQueue.js";
 
-assert.equal(getOperationDefinition(OP.EDIT)?.behavior?.concurrencyScope, 'workspace', 'relai_edit mutations must use the shared workspace barrier');
-assert.equal(getOperationDefinition(OP.EXEC)?.behavior?.concurrencyScope, 'workspace', 'relai_exec mutating commands must advertise workspace-level coordination');
+assert.equal(getOperationDefinition(OP.EDIT)?.behavior?.concurrencyScope, 'mutation', 'relai_edit mutations must coordinate with other mutations without blocking reads');
+assert.equal(getOperationDefinition(OP.EXEC)?.behavior?.concurrencyScope, 'mutation', 'relai_exec mutating commands must advertise mutation-level coordination');
 
 const order = [];
 const first = runWorkspaceOperation('repo', async () => {
@@ -101,6 +101,34 @@ assert.ok(
 );
 assert.equal(pendingWorkspaceOperations(), 0);
 
+// Mutations from different tasks serialize with each other but do not block an
+// unrelated read. This is the narrow shared barrier used by edit/exec/completion.
+const mutationOrder = [];
+const mutationStarted = deferred();
+const releaseMutation = deferred();
+const mutationA = runWorkspaceOperation('mutations', async () => {
+  mutationOrder.push('mutation-a:start');
+  mutationStarted.resolve();
+  await releaseMutation.promise;
+  mutationOrder.push('mutation-a:end');
+}, { mode: 'write', scope: 'mutation', taskId: 'task-a' });
+await mutationStarted.promise;
+const mutationB = runWorkspaceOperation('mutations', async () => {
+  mutationOrder.push('mutation-b:start');
+  mutationOrder.push('mutation-b:end');
+}, { mode: 'write', scope: 'mutation', taskId: 'task-b' });
+const concurrentRead = runWorkspaceOperation('mutations', async () => {
+  mutationOrder.push('read:start');
+  mutationOrder.push('read:end');
+}, { mode: 'read', scope: 'task', taskId: 'task-c' });
+await concurrentRead;
+assert.ok(mutationOrder.includes('read:end'), 'an unrelated read must not wait for a long mutation');
+assert.equal(mutationOrder.includes('mutation-b:start'), false, 'a second mutation must wait for the active mutation');
+releaseMutation.resolve();
+await Promise.all([mutationA, mutationB]);
+assert.ok(mutationOrder.indexOf('mutation-b:start') > mutationOrder.indexOf('mutation-a:end'));
+assert.equal(pendingWorkspaceOperations(), 0);
+
 // Calls inside one logical task retain deterministic reader/writer ordering.
 const sameTask = [];
 const sameTaskWrite = runWorkspaceOperation('shared', async () => {
@@ -148,24 +176,20 @@ assert.equal(pendingWorkspaceOperations(), 0);
 // has been checked but before completion is accepted.
 {
   const finishBehavior = getOperationDefinition(OP.WORK_FINISH)?.behavior;
-  assert.equal(finishBehavior?.concurrencyScope, 'workspace', 'work.finish must use the workspace barrier');
+  assert.equal(finishBehavior?.concurrencyScope, 'mutation', 'work.finish must use the short mutation barrier');
 
   const sourceOperationStarted = deferred();
   const releaseSourceOperation = deferred();
   const sourceOperation = runWorkspaceOperation('finish-barrier', async () => {
     sourceOperationStarted.resolve();
     await releaseSourceOperation.promise;
-  }, { mode: 'write', scope: 'task', taskId: 'task-b' });
+  }, { mode: 'write', scope: 'mutation', taskId: 'task-b' });
   await sourceOperationStarted.promise;
 
   let completionEntered = false;
-  const completion = runWorkspaceOperation('finish-barrier', async () => {
+  const completion = runWorkspaceMutationBoundary('finish-barrier', async () => {
     completionEntered = true;
-  }, {
-    mode: 'write',
-    scope: finishBehavior.concurrencyScope,
-    taskId: 'task-a'
-  });
+  }, { taskId: 'task-a' });
   await nextTurn();
   assert.equal(completionEntered, false, 'work.finish must wait until concurrent source-workspace activity leaves the validation/completion boundary');
 

@@ -69,7 +69,7 @@ async function callTool(name, args = {}, context = {}) {
       throw taskError('TASK_ID_REQUIRED', `${name} requires the work_id returned by relai_work action begin.`);
     }
     if (requestedTaskId && operationName !== OP.WORK_BEGIN) {
-      knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal);
+      knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal, effectiveArgs);
       if (taskAware && !String(effectiveArgs?.workspace || '').trim()) effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
     }
     workspaceResolution = resolveConfiguredWorkspaceArgument(config, effectiveArgs?.workspace);
@@ -105,7 +105,7 @@ async function callTool(name, args = {}, context = {}) {
       publicLabel: resolved.action ? `${name} action '${resolved.action}'` : name
     });
     const duplicateTerminalCancellation = operationName === OP.WORK_CANCEL && knownTask?.status === 'cancelled';
-    const terminalTaskReference = isTerminalTaskReference(knownTask, operationName);
+    const terminalTaskReference = isTerminalTaskReference(knownTask, operationName, effectiveArgs);
     finishActivity = beginConnectorToolCall({
       tool: name,
       internalOperation: operationName,

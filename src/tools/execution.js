@@ -27,9 +27,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const branchChange = isExplicitBranchChange(executionName, effectiveArgs);
       const readOnlyExec = executionName === OP.EXEC && isClearlyReadOnlyExec(effectiveArgs);
       const queueMode = definition?.annotations?.readOnlyHint === true || readOnlyExec ? 'read' : 'write';
-      const queueScope = requiresWorkspaceWriteLock(executionName, effectiveArgs, definition, branchChange, readOnlyExec)
-        ? 'workspace'
-        : 'task';
+      const queueScope = queueScopeFor(executionName, definition, branchChange, readOnlyExec);
 
       const invokeHandler = async (args) => {
         if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
@@ -83,12 +81,11 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
   return { value, sessionStart };
 }
 
-function requiresWorkspaceWriteLock(executionName, args, definition, branchChange, readOnlyExec) {
-  if (branchChange) return true;
-  if (executionName === OP.EXEC) return !readOnlyExec;
-  if (executionName === OP.EDIT) return true;
-  if (executionName === OP.VALIDATE_CHECKS && args?.complete === true) return true;
-  return definition?.behavior?.concurrencyScope === 'workspace';
+function queueScopeFor(executionName, definition, branchChange, readOnlyExec) {
+  if (branchChange) return 'workspace';
+  if (executionName === OP.EXEC) return readOnlyExec ? 'task' : 'mutation';
+  const scope = String(definition?.behavior?.concurrencyScope || 'task');
+  return scope === 'workspace' || scope === 'mutation' ? scope : 'task';
 }
 
 function isClearlyReadOnlyExec(args = {}) {

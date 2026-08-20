@@ -1,9 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { resolveGitExecutable } from '../gitExecutable.js';
 import { appendLimited, killProcessTree } from '../process.js';
 import { makeProcessEnvironment } from '../processEnvironment.js';
-import { isSecretPath } from '../safety.js';
+import { collectOptionsFromWorkspace, collectTextFiles, isSecretPath } from '../safety.js';
 import { clampNumber } from './limits.js';
 import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
@@ -33,9 +35,10 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     const stderr = String(result.stderr || result.error || "");
     if (/not a git repository/i.test(stderr)) {
-      throw new Error(`relai_search requires the workspace to be a git repository: ${workspace.alias}`);
+      Object.assign(result, runFilesystemSearch(workspace, args, maxResults, context.signal));
+    } else {
+      throw new Error(`relai_search failed: ${stderr || `git grep exited ${result.exitCode}`}`);
     }
-    throw new Error(`relai_search failed: ${stderr || `git grep exited ${result.exitCode}`}`);
   }
 
   const baseResult = {
@@ -91,6 +94,47 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
           : "Context is included. Use relai_read only when a wider range or complete file is needed."
         : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
   };
+}
+
+function runFilesystemSearch(workspace, args, maxResults, signal) {
+  if (signal?.aborted) throw searchAbortError(signal);
+  const pattern = String(args.pattern || '');
+  const flags = args.ignoreCase === true ? 'i' : '';
+  let expression = null;
+  if (args.fixed !== true) {
+    try { expression = new RegExp(pattern, flags); }
+    catch (error) { throw new Error(`Invalid search pattern: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+  const needle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
+  const glob = String(args.glob || '').trim();
+  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries: 50_000 }));
+  const matches = [];
+  let matchCount = 0;
+  let truncated = tree.truncated === true;
+
+  outer: for (const relativePath of tree.files) {
+    if (signal?.aborted) throw searchAbortError(signal);
+    if (glob && typeof path.matchesGlob === 'function' && !path.matchesGlob(relativePath, glob)) continue;
+    let text;
+    try { text = fs.readFileSync(path.join(workspace.path, relativePath), 'utf8'); }
+    catch { continue; }
+    const lines = text.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const matched = args.fixed === true
+        ? (args.ignoreCase === true ? line.toLowerCase().includes(needle) : line.includes(needle))
+        : expression.test(line);
+      if (!matched) continue;
+      matchCount += 1;
+      if (matches.length < maxResults) {
+        matches.push({ path: relativePath, line: index + 1, text: line.slice(0, MAX_LINE_CHARS) });
+        continue;
+      }
+      truncated = true;
+      break outer;
+    }
+  }
+  return { exitCode: matches.length ? 0 : 1, matches, matchCount, truncated, filesystemFallback: true, stderr: '' };
 }
 
 function shouldUseGraphContext(searchPlan, workspace, config) {

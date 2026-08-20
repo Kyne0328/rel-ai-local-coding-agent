@@ -1,6 +1,9 @@
 import { readConnectionProfile } from "../connectionProfile.js";
 import { clampNumber } from "./limits.js";
 
+const MAX_REDIRECTS = 5;
+const TITLE_SAMPLE_BYTES = 64 * 1024;
+
 function localConnectionBaseUrl() {
   let host = "127.0.0.1";
   let port = Number(process.env.REL_AI_MCP_PORT || 3333);
@@ -32,8 +35,20 @@ async function probeHttpTarget(workspace, _config, target, args = {}, requested 
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 600000, 30000);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(target, { signal: controller.signal });
-    const text = await response.text();
+    const allowedOrigin = new URL(target).origin;
+    let current = target;
+    let response;
+    for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+      response = await fetch(current, { signal: controller.signal, redirect: 'manual' });
+      const location = response.headers.get('location');
+      if (response.status < 300 || response.status >= 400 || !location) break;
+      if (redirects === MAX_REDIRECTS) throw new Error(`HTTP probe exceeded ${MAX_REDIRECTS} redirects.`);
+      const next = new URL(location, current);
+      if (next.origin !== allowedOrigin) throw new Error('HTTP probe refused a redirect outside the configured local Rel.AI origin.');
+      current = next.toString();
+    }
+    const summary = await readResponseSummary(response);
+    const text = summary.sample;
     const title = ((text.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '');
     return {
       ok: response.ok,
@@ -41,8 +56,8 @@ async function probeHttpTarget(workspace, _config, target, args = {}, requested 
       ...requested,
       reachable: true,
       statusCode: response.status,
-      finalUrl: response.url || target,
-      responseBytes: Buffer.byteLength(text, 'utf8'),
+      finalUrl: response.url || current,
+      responseBytes: summary.bytes,
       title
     };
   } catch (error) {
@@ -56,6 +71,25 @@ async function probeHttpTarget(workspace, _config, target, args = {}, requested 
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function readResponseSummary(response) {
+  if (!response.body) return { bytes: 0, sample: '' };
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  let sampledBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    bytes += chunk.length;
+    if (sampledBytes >= TITLE_SAMPLE_BYTES) continue;
+    const retained = chunk.subarray(0, TITLE_SAMPLE_BYTES - sampledBytes);
+    chunks.push(retained);
+    sampledBytes += retained.length;
+  }
+  return { bytes, sample: Buffer.concat(chunks, sampledBytes).toString('utf8') };
 }
 
 async function relaiHttpProbe(workspace, config, args = {}) {

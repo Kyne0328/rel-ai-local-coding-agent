@@ -126,7 +126,8 @@ function compactForConnector(name, value, args = {}) {
         environmentKeys: value.environmentKeys?.length ? value.environmentKeys : undefined,
         changedFiles: value.changedFiles?.length ? value.changedFiles : undefined,
         changedFilesTruncated: value.changedFilesTruncated === true ? true : undefined,
-        mutationTracking: value.changedFiles?.length ? value.mutationTracking : undefined
+        mutationTracking: value.mutationTracking || undefined,
+        mutationUnknown: value.mutationUnknown === true ? true : undefined
       });
     case OP.PROCESS_LIST:
       return {

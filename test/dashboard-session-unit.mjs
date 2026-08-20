@@ -68,4 +68,39 @@ try {
   clearDashboardSessions();
 }
 
+const originalFetch = globalThis.fetch;
+const originalWindow = globalThis.window;
+const originalLocation = globalThis.location;
+let resolveReload;
+const reloadCalls = [];
+try {
+  globalThis.location = { hash: '#activity' };
+  globalThis.window = {
+    localStorage: { getItem: () => null },
+    relaiDesktop: {
+      reloadDashboard(routeHash) {
+        reloadCalls.push(routeHash);
+        return new Promise(resolve => { resolveReload = resolve; });
+      }
+    }
+  };
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 401,
+    text: async () => JSON.stringify({ ok: false })
+  });
+  const api = await import(`../src/ui/api.js?dashboard-session-recovery=${Date.now()}`);
+  const firstExpired = await api.fetchJson('/api/logs?limit=500', { cache: 'no-store' });
+  const secondExpired = await api.fetchJson('/api/tools', { cache: 'no-store' });
+  assert.equal(firstExpired.status, 401);
+  assert.equal(secondExpired.status, 401);
+  assert.deepEqual(reloadCalls, ['#activity'], 'simultaneous dashboard 401 responses must trigger one desktop reauthentication reload');
+  resolveReload?.({ ok: true });
+  await Promise.resolve();
+} finally {
+  if (originalFetch === undefined) delete globalThis.fetch; else globalThis.fetch = originalFetch;
+  if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;
+  if (originalLocation === undefined) delete globalThis.location; else globalThis.location = originalLocation;
+}
+
 console.log('Dashboard bootstrap, renewal, invalidation, and reauthentication tests passed.');

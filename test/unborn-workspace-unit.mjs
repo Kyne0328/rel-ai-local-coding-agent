@@ -105,3 +105,6 @@ try {
 }
 
 console.log('Guarded work sessions and edits support repositories with no commits.');
+// Nested raw tool calls can leave Windows piped stdio referenced after app resources close.
+// Teardown above is complete, so exit explicitly to keep this isolated integration test deterministic.
+process.exit(0);

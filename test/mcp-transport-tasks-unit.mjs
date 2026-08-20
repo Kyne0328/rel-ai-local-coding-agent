@@ -91,6 +91,18 @@ try {
     arguments: { work_id: 'work-session', path: 'README.md', oldText: 'before', newText: 'after' }
   }, tasksCapabilities);
   assert.equal(isTransportTaskRequestCandidate(config, editTaskCandidate), false, 'relai_edit must remain an ordinary tools/call operation instead of host-managed native Tasks');
+  const editChecksTaskCandidate = request(98, 'tools/call', {
+    name: 'relai_edit',
+    arguments: { work_id: 'work-session', path: 'README.md', oldText: 'before', newText: 'after', runChecks: true }
+  }, tasksCapabilities);
+  assert.equal(isTransportTaskRequestCandidate(config, editChecksTaskCandidate), true, 'relai_edit with post-checks must use recoverable long-call execution');
+  for (const candidate of [
+    request(97, 'tools/call', { name: 'relai_search', arguments: { action: 'semantic', work_id: 'work-session', query: 'target' } }, tasksCapabilities),
+    request(96, 'tools/call', { name: 'relai_inspect', arguments: { action: 'architecture', work_id: 'work-session' } }, tasksCapabilities),
+    request(95, 'tools/call', { name: 'relai_validate', arguments: { action: 'http', work_id: 'work-session', route: '/health' } }, tasksCapabilities)
+  ]) {
+    assert.equal(isTransportTaskRequestCandidate(config, candidate), true, `${candidate.params.name} long operation must reach capability negotiation`);
+  }
   const timeout = await runBoundedExecution(
     signal => signal.aborted
       ? Promise.resolve({ stopped: true })

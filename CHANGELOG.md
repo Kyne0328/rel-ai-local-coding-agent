@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.26.6] — 2026-08-20
+
+### Reliability, recovery, and tool execution
+- **Keep long validation responsive by serializing only conflicting mutations and revalidating once when relevant files change during atomic completion.**
+- **Improve tool reliability across non-Git workspaces, Windows shell chaining, terminal-task cleanup, bounded connector reads, process stdin writes, and local HTTP probes.**
+- **Recover expired desktop dashboard authorization automatically while preserving the active route, and tighten onboarding step prerequisites.**
+- **Show only the current release in the in-app changelog instead of rendering the complete release history.**
+- **Expand recoverable long-call handling and update the public tool surface metadata to version 50.**
+
+Bump root/electron/status UI/lockfiles to 0.26.6.
+
 ## [0.26.5] — 2026-08-19
 
 ### Desktop continuity and task completion recovery

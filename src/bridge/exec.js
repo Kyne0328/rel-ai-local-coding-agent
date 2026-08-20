@@ -9,11 +9,12 @@ import { getCurrentTaskAbortSignal } from '../toolActivity.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { runSpan } from '../telemetry.js';
 import { isReusableDependencyPath } from '../reusableDependencies.js';
-import { isPathInside } from '../safety.js';
+import { createCollectionPathFilter, isPathInside } from '../safety.js';
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } from '../repo/gitStatus.js';
 import { clampNumber } from './limits.js';
 const WHERE_EXE = String.raw`C:\Windows\System32\where.exe`;
 const MAX_CHANGED_FILES = 200;
+const MAX_FILESYSTEM_MUTATION_FILES = 50_000;
 const MAX_DIRECT_ARGV_ITEMS = 100;
 const MAX_DIRECT_ARG_LENGTH = 20000;
 const MAX_DIRECT_INPUT_LENGTH = 1024 * 1024;
@@ -108,6 +109,10 @@ function normalizeExecutionInvocation(args = {}, operationName = 'relai_exec') {
 
 function resolveShellProcess(command) {
   const shell = resolveShell();
+  if (process.platform === 'win32' && shell.label === 'Windows PowerShell' && /&&|\|\|/.test(command)) {
+    const executable = process.env.ComSpec || 'cmd.exe';
+    return { executable, argv: ['/d', '/s', '/c', command], label: 'Command Prompt' };
+  }
   return { executable: shell.executable, argv: shell.args(command), label: shell.label };
 }
 
@@ -243,6 +248,52 @@ function pathMetadataFingerprint(root, relativePath) {
     return `missing:${String(code || '')}`;
   }
 }
+
+function readFilesystemStatusMap(workspace) {
+  const root = path.resolve(workspace.path);
+  // Mutation accounting is an integrity boundary, not a read-context boundary.
+  // Cover the whole workspace even when normal repository context is narrowed.
+  const shouldCollect = createCollectionPathFilter(root);
+  const snapshot = new Map();
+  const pending = [{ absolutePath: root, relativePath: '' }];
+  let complete = true;
+  let fileCount = 0;
+
+  while (pending.length) {
+    const current = pending.pop();
+    if (!current) break;
+    let entries;
+    try {
+      entries = fs.readdirSync(current.absolutePath, { withFileTypes: true });
+    } catch {
+      complete = false;
+      continue;
+    }
+    for (const entry of entries) {
+      const relativePath = current.relativePath
+        ? `${current.relativePath}/${entry.name}`
+        : entry.name;
+      if (!shouldCollect(relativePath)) continue;
+      if (entry.isSymbolicLink()) {
+        complete = false;
+        continue;
+      }
+      const absolutePath = path.join(current.absolutePath, entry.name);
+      if (entry.isDirectory()) {
+        pending.push({ absolutePath, relativePath });
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      fileCount += 1;
+      if (fileCount > MAX_FILESYSTEM_MUTATION_FILES) {
+        return { snapshot, complete: false };
+      }
+      snapshot.set(relativePath, pathMetadataFingerprint(root, relativePath));
+    }
+  }
+  return { snapshot, complete };
+}
+
 function changedStatusFiles(before, after) {
   if (!before || !after) return { files: [], truncated: false };
   const all = new Set([...before.keys(), ...after.keys()]);
@@ -275,6 +326,7 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, 2 * 1024 * 1024);
   const trackMutation = context.mutationTrackingRequired !== false;
   const statusBefore = trackMutation ? await readGitStatusMap(workspace, config) : null;
+  const filesystemBefore = trackMutation && !statusBefore ? readFilesystemStatusMap(workspace) : null;
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
@@ -304,14 +356,25 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     throw processExecutionError('PROCESS_SPAWN_FAILED', `Could not start ${host}: ${result.error || 'unknown spawn error'}`);
   }
   let mutationTracking = 'unavailable';
+  let mutationUnknown = false;
   let changed;
   if (!trackMutation) {
     changed = { files: [], truncated: false };
     mutationTracking = 'declared-read-only';
   } else {
     const statusAfter = await readGitStatusMap(workspace, config);
-    changed = changedStatusFiles(statusBefore, statusAfter);
-    if (statusBefore && statusAfter) mutationTracking = 'git';
+    if (statusBefore && statusAfter) {
+      changed = changedStatusFiles(statusBefore, statusAfter);
+      mutationTracking = 'git';
+    } else if (!statusBefore && filesystemBefore) {
+      const filesystemAfter = readFilesystemStatusMap(workspace);
+      changed = changedStatusFiles(filesystemBefore.snapshot, filesystemAfter.snapshot);
+      mutationTracking = 'filesystem';
+      mutationUnknown = filesystemBefore.complete !== true || filesystemAfter.complete !== true;
+    } else {
+      changed = { files: [], truncated: false };
+      mutationUnknown = true;
+    }
   }
   const commandSucceeded = result.exitCode === 0 && result.timedOut !== true && result.cancelled !== true;
   return {
@@ -338,7 +401,8 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     ...(Object.keys(env).length ? { environmentKeys: Object.keys(env).sort((left, right) => left.localeCompare(right)) } : {}),
     changedFiles: changed.files,
     changedFilesTruncated: changed.truncated,
-    mutationTracking
+    mutationTracking,
+    ...(mutationUnknown ? { mutationUnknown: true } : {})
   };
 }
 

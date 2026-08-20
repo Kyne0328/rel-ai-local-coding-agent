@@ -9,6 +9,9 @@ const stateDir = path.join(tmp, 'state');
 const configPath = path.join(tmp, 'config.json');
 fs.mkdirSync(wsRoot, { recursive: true });
 fs.writeFileSync(path.join(wsRoot, 'big.txt'), 'x'.repeat(400000));
+for (const name of ['multi-a.txt', 'multi-b.txt', 'multi-c.txt']) {
+  fs.writeFileSync(path.join(wsRoot, name), name[6].repeat(700000));
+}
 const largeLines = Array.from({ length: 9000 }, (_, index) => `line-${String(index + 1).padStart(5, '0')}-${'x'.repeat(72)}`);
 const largeText = largeLines.join('\n');
 fs.writeFileSync(path.join(wsRoot, 'large-lines.txt'), largeText);
@@ -82,6 +85,23 @@ try {
   assert.equal(sessionCache.cacheStats().metadataEntries, metadataEntriesAfterFirstRange, 'later bounded ranges should reuse the existing metadata cache entry');
   assert.equal(cachedRange.items[0].sha256, rangedItem.sha256);
   assert.deepEqual(cachedRange.items[0].lineRange, { startLine: 7000, endLine: 7001, totalLines: largeLines.length });
+
+  const aggregate = await callTool('relai_read', {
+    work_id: task.work_id,
+    paths: ['multi-a.txt', 'multi-b.txt', 'multi-c.txt'],
+    maxBytes: 1024 * 1024,
+    guidanceMode: 'none'
+  }, { publicHttpOnly: true, requestId: 5, transportType: 'test' });
+  const aggregateBytes = aggregate.items.reduce((sum, current) => sum + current.returnedBytes, 0);
+  assert.ok(aggregateBytes <= 1024 * 1024, `connector multi-file reads must honor one aggregate budget, got ${aggregateBytes}`);
+  assert.equal(aggregate.truncated, true);
+
+  const { relaiReadAsync } = await import('../src/localRepoBridge.js');
+  const skippedOnly = await relaiReadAsync({ alias: 'repo', path: wsRoot }, {}, {
+    paths: ['does-not-exist.txt'], guidanceMode: 'none'
+  }, { connector: true });
+  assert.equal(skippedOnly.ok, false, 'all-skipped reads must not claim success');
+  assert.match(skippedOnly.error, /none of the requested paths could be read/i);
 
   console.log('Connector read result limit and streamed range unit tests passed.');
 } finally {

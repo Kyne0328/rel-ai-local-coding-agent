@@ -211,6 +211,9 @@ assert.match(bootSource, /relai:dashboard-refresh', event =>/, 'dashboard refres
 assert.match(bootSource, /event\.detail\?\.structural === true/, 'structural refreshes must be opt-in');
 assert.doesNotMatch(bootSource, /visibilitychange[\s\S]*doRefresh/, 'visibility changes must rely on SSE revision catch-up instead of rebuilding the dashboard');
 assert.match(functionSource(dashboard, 'liveCatchUpRequired'), /remoteRevisions/, 'SSE reconnects must compare typed server revisions before refreshing');
+const liveStateSource = functionSource(dashboard, 'liveStateChange');
+assert.match(liveStateSource, /detail\.state === 'reconnecting'[\s\S]*_liveState !== 'reconnecting'/, 'a desktop SSE reconnect episode must be detected once instead of looping recovery on every backoff attempt');
+assert.match(liveStateSource, /sse-reconnect-probe[\s\S]*quietFailure:\s*true[\s\S]*render:\s*false/, 'desktop SSE reconnect must quietly probe dashboard authorization without remounting the active route');
 assert.match(functionSource(dashboard, 'lazySection'), /context\.isCurrent/, 'lazy route modules must verify the current router generation before mounting');
 assert.match(dashboard, /data-route-retry/, 'lazy route failures must render a visible retry action');
 assert.doesNotMatch(dashboard, /\.then\(module => module\.mount[^\n]*\.catch\(debugError\)/, 'lazy route failures must not be swallowed by debug-only handlers');

@@ -24,6 +24,8 @@ import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWrit
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
+const DEFAULT_MAX_TOTAL_READ_BYTES = 16 * 1024 * 1024;
+const DEFAULT_CONNECTOR_TOTAL_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 3000;
 const LARGE_RANGE_STREAM_THRESHOLD = 512 * 1024;
 const RANGE_READ_CHUNK_BYTES = 64 * 1024;
@@ -128,10 +130,12 @@ function prepareReadRequest(workspace, config, args, context) {
   const sessionActive = policy?.sessionActive === true;
   const baseReadBytes = context.connector ? DEFAULT_CONNECTOR_READ_BYTES : DEFAULT_MAX_READ_BYTES;
   const defaultMaxBytes = resolveBudget(baseReadBytes, policy, config || {});
+  const requestedMaxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
+  const totalBudget = context.connector ? DEFAULT_CONNECTOR_TOTAL_READ_BYTES : DEFAULT_MAX_TOTAL_READ_BYTES;
   return {
     paths,
     sessionActive,
-    maxBytes: clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes),
+    maxBytes: Math.min(requestedMaxBytes, Math.max(1000, Math.floor(totalBudget / paths.length))),
     lineRange: normalizeReadLineRange(args),
     rangesByPath: normalizedRanges.byPath,
     orderedRanges: explicitPaths ? null : normalizedRanges.entries.map(entry => entry.range),
@@ -153,7 +157,15 @@ function collectReadResults(workspace, results) {
     if (result.item) items.push(result.item);
     if (result.skipped) skipped.push(result.skipped);
   }
-  return { ok: true, workspace: workspace.alias, items, skipped };
+  const ok = items.length > 0;
+  return {
+    ok,
+    workspace: workspace.alias,
+    items,
+    skipped,
+    ...(items.some(item => item?.truncated === true) ? { truncated: true } : {}),
+    ...(!ok ? { error: `None of the requested paths could be read. ${skipped.length} path(s) were skipped.` } : {})
+  };
 }
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -284,12 +296,13 @@ function readTextContent(workspace, safe, stat, sessionActive) {
 async function readTextContentAsync(workspace, safe, stat, sessionActive, options = {}, maxBytes = DEFAULT_MAX_READ_BYTES) {
   const cached = cachedReadContent(workspace, safe, stat, sessionActive);
   if (cached) return cached;
-  if (options.lineRange && options.guidanceMode !== 'full' && stat.size >= LARGE_RANGE_STREAM_THRESHOLD) {
+  if (options.guidanceMode !== 'full' && stat.size >= LARGE_RANGE_STREAM_THRESHOLD) {
     const cachedMetadata = sessionCache.getCachedFileMetadata(workspace.alias, safe.absolutePath, stat.mtimeMs, stat.size);
-    const ranged = await readLargeTextRangeAsync(safe.absolutePath, stat, options.lineRange, maxBytes, cachedMetadata);
+    const ranged = await readLargeTextRangeAsync(safe.absolutePath, stat, options.lineRange || { startLine: 1 }, maxBytes, cachedMetadata);
     if (ranged.metadata) {
       sessionCache.setCachedFileMetadata(workspace.alias, safe.absolutePath, stat.mtimeMs, ranged.metadata);
     }
+    if (!options.lineRange && ranged.selection) ranged.selection.lineRange = null;
     return ranged;
   }
   const data = await fs.promises.readFile(safe.absolutePath);

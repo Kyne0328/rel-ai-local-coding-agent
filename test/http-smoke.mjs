@@ -210,8 +210,8 @@ try {
   const validateActions = new Map(surfaceByName.get('relai_validate').actions.map(item => [item.action, item]));
   assert.equal(validateActions.get('checks').taskSupport, 'optional');
   assert.equal(validateActions.get('diagnostics').taskSupport, 'optional');
-  assert.equal(validateActions.get('http').taskSupport, 'forbidden');
-  assert.equal(validateActions.get('http').executionClass, 'bounded_synchronous');
+  assert.equal(validateActions.get('http').taskSupport, 'optional');
+  assert.equal(validateActions.get('http').executionClass, 'native_task_eligible');
   assert.equal(manifest.cache.cacheScope, 'private');
   assert.ok(manifest.cache.revision);
 

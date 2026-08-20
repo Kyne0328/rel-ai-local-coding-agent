@@ -7,7 +7,7 @@ import { isTerminalTaskStatus } from '../taskState.js';
 import { classifyTaskIntent } from '../workflow/intent.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
-const TERMINAL_REFERENCE_OPERATIONS = new Set([OP.PROCESS_LIST, OP.PROCESS_READ, OP.WORK_STATUS]);
+const TERMINAL_REFERENCE_OPERATIONS = new Set([OP.PROCESS_LIST, OP.PROCESS_READ, OP.PROCESS_STOP, OP.WORK_STATUS]);
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
@@ -55,7 +55,7 @@ function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
   };
 }
 
-function assertKnownTask(config, taskId, workspace, toolName, principal) {
+function assertKnownTask(config, taskId, workspace, toolName, principal, args = {}) {
   const activeTaskIds = new Set(getToolActivity().tasks.map(task => String(task.id || task.taskId || '')).filter(Boolean));
   const session = readTaskHistorySessionRecord(config, taskId, {
     reconcileInactive: true,
@@ -69,13 +69,13 @@ function assertKnownTask(config, taskId, workspace, toolName, principal) {
   if (!expectedPrincipal || !safeEqual(expectedPrincipal, actualPrincipal)) {
     throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_work action "begin".');
   }
+  assertTaskWorkspaceOwnership(session, workspace);
   if (session.status === 'cancelled' && toolName === OP.WORK_CANCEL) return session;
   if (session.status === 'completed' && toolName === OP.WORK_FINISH) return session;
-  if (isTerminalTaskReference(session, toolName)) return session;
+  if (isTerminalTaskReference(session, toolName, args)) return session;
   if (isTerminalTaskStatus(session.status)) {
     throw taskError('INVALID_TASK_STATE', `This work session is already ${session.status}. Start a new work session instead of reusing its work_id.`);
   }
-  assertTaskWorkspaceOwnership(session, workspace);
   return session;
 }
 
@@ -87,8 +87,11 @@ function assertTaskWorkspaceOwnership(session, workspace) {
   }
 }
 
-function isTerminalTaskReference(session, toolName) {
-  return isTerminalTaskStatus(session?.status) && TERMINAL_REFERENCE_OPERATIONS.has(String(toolName || ''));
+function isTerminalTaskReference(session, toolName, args = {}) {
+  if (!isTerminalTaskStatus(session?.status)) return false;
+  const operation = String(toolName || '');
+  if (TERMINAL_REFERENCE_OPERATIONS.has(operation)) return true;
+  return operation === OP.UI && String(args?.action || '').trim().toLowerCase() === 'stop';
 }
 
 function safeEqual(left, right) {

@@ -133,8 +133,11 @@ try {
     concurrentEditCompleted = true;
     return result;
   });
-  await new Promise(resolve => setTimeout(resolve, 25));
-  assert.equal(concurrentEditCompleted, false, 'a mutating edit must wait while atomic validation and completion hold the workspace barrier');
+  await Promise.race([
+    concurrentEdit,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('concurrent edit stayed blocked behind validation')), 3000))
+  ]);
+  assert.equal(concurrentEditCompleted, true, 'a workspace mutation must not wait for the entire validation command');
   fs.writeFileSync(validationReleasePath, 'release\\n');
 
   const completion = await completionPromise;
@@ -142,8 +145,7 @@ try {
   assert.equal(completion.completionKnown, true);
   assert.equal(completion.work_id, validatingTask);
   assert.equal(completion.completionSource, 'relai_validate:checks');
-  await concurrentEdit;
-  assert.equal(concurrentEditCompleted, true, 'the queued edit must run after validation releases the workspace barrier');
+  assert.equal(concurrentEditCompleted, true, 'the overlapping edit completed before validation was released');
 
   fs.rmSync(validationStartedPath, { force: true });
   fs.rmSync(validationReleasePath, { force: true });
@@ -176,15 +178,17 @@ try {
     unrelatedEditCompleted = true;
     return result;
   });
-  await new Promise(resolve => setTimeout(resolve, 25));
-  assert.equal(unrelatedEditCompleted, false, 'all visible workspace mutations must wait for atomic validation completion');
+  await Promise.race([
+    unrelatedEdit,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('unrelated edit stayed blocked behind validation')), 3000))
+  ]);
+  assert.equal(unrelatedEditCompleted, true, 'unrelated workspace mutations must remain usable while another task validates');
   fs.writeFileSync(validationReleasePath, 'release\\n');
 
   const scopedCompletion = await scopedCompletionPromise;
-  assert.equal(scopedCompletion.ok, true, 'task-scoped validation must complete before later unrelated mutations enter');
+  assert.equal(scopedCompletion.ok, true, 'task-scoped validation must remain current despite an unrelated concurrent mutation');
   assert.equal(scopedCompletion.completionKnown, true);
   assert.equal(scopedCompletion.work_id, scopedTask);
-  await unrelatedEdit;
   assert.equal(unrelatedEditCompleted, true);
 
   await callTool('relai_work', {

@@ -29,6 +29,7 @@ import {
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}, context = {}) {
+  const completionRetryCount = Math.max(0, Number(context.completionRetryCount || 0));
   const currentTaskId = String(getCurrentToolActivityContext()?.taskId || context.taskId || args.work_id || '').trim();
   const logicalWorkspaceAlias = String(workspace.alias || '').trim();
   const suppliedChangedFiles = Array.isArray(args.changedFiles)
@@ -235,6 +236,12 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const cancelled = signal?.aborted === true || results.some(item => item.cancelled === true);
   const finalFingerprint = await createValidationFingerprint(workspace, config, { paths: fingerprintScope });
   const scopeChanged = finalFingerprint.fingerprint !== currentFingerprint.fingerprint;
+  if (scopeChanged && complete && !cancelled && completionRetryCount < 1) {
+    return relaiVerify(workspace, config, args, {
+      ...context,
+      completionRetryCount: completionRetryCount + 1
+    });
+  }
   const ok = !cancelled && !scopeChanged && results.length === checks.length && results.every(item => item.ok);
   const failedCheck = results.find(item => !item.ok)?.command || '';
   const validationStatus = cancelled ? 'cancelled' : scopeChanged ? 'stale' : ok ? 'passed' : 'failed';

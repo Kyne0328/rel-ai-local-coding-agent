@@ -128,7 +128,7 @@ try {
     error => error?.code === 'PROCESS_SESSION_MISMATCH',
     'another logical task from the same principal must not read this process'
   );
-  assert.throws(
+  await assert.rejects(
     () => writeManagedProcess(config, { processId: started.processId, input: 'cross-task\n' }, otherSession),
     error => error?.code === 'PROCESS_SESSION_MISMATCH',
     'another logical task from the same principal must not write to this process'
@@ -139,7 +139,7 @@ try {
     'another logical task from the same principal must not stop this process'
   );
 
-  const written = writeManagedProcess(config, {
+  const written = await writeManagedProcess(config, {
     processId: started.processId,
     input: 'hello\n'
   }, ownerLater);
@@ -149,7 +149,7 @@ try {
   });
   assert.match(echoed.stdout.text, /ECHO:hello/);
 
-  writeManagedProcess(config, {
+  await writeManagedProcess(config, {
     processId: started.processId,
     input: 'NOISE:120000\n'
   }, ownerLater);
@@ -164,7 +164,7 @@ try {
   );
 
   const cursor = noisy.stdout.totalBytes;
-  writeManagedProcess(config, {
+  await writeManagedProcess(config, {
     processId: started.processId,
     input: 'after-noise\n'
   }, ownerLater);

@@ -17,6 +17,7 @@ const locks = new Map();
 const READ = 'read';
 const WRITE = 'write';
 const TASK_SCOPE = 'task';
+const MUTATION_SCOPE = 'mutation';
 const WORKSPACE_SCOPE = 'workspace';
 
 function lockStateFor(key) {
@@ -117,6 +118,10 @@ function taskKey(workspace, taskId) {
   return `workspace:${workspace}:task:${taskId}`;
 }
 
+function mutationKey(workspace) {
+  return `workspace:${workspace}:mutation`;
+}
+
 function notifyWait(options, waitMs, details) {
   if (typeof options.onWait !== 'function') return;
   try {
@@ -159,7 +164,14 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
 
   const mode = options.mode === READ ? READ : WRITE;
   const taskId = String(options.taskId || '').trim();
-  const scope = options.scope === WORKSPACE_SCOPE || !taskId ? WORKSPACE_SCOPE : TASK_SCOPE;
+  const requestedScope = String(options.scope || '');
+  const scope = !taskId
+    ? WORKSPACE_SCOPE
+    : requestedScope === WORKSPACE_SCOPE
+      ? WORKSPACE_SCOPE
+      : requestedScope === MUTATION_SCOPE
+        ? MUTATION_SCOPE
+        : TASK_SCOPE;
   const outerKey = workspaceKey(workspace);
 
   if (scope === WORKSPACE_SCOPE) {
@@ -172,6 +184,25 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
         queued: state.queue.length
       });
       return operation();
+    }, options.signal);
+  }
+
+  if (scope === MUTATION_SCOPE) {
+    return withLock(outerKey, READ, async (workspaceWaitMs, workspaceState) => {
+      const laneKey = taskKey(workspace, taskId);
+      return withLock(laneKey, mode, async (taskWaitMs, taskState) => {
+        return withLock(mutationKey(workspace), WRITE, async (mutationWaitMs, mutationState) => {
+          const waitMs = workspaceWaitMs + taskWaitMs + mutationWaitMs;
+          notifyWait(options, waitMs, {
+            workspace,
+            taskId,
+            scope,
+            mode,
+            queued: workspaceState.queue.length + taskState.queue.length + mutationState.queue.length
+          });
+          return operation();
+        }, options.signal);
+      }, options.signal);
     }, options.signal);
   }
 
@@ -191,8 +222,26 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
   }, options.signal);
 }
 
+function runWorkspaceMutationBoundary(workspaceAlias, operation, options = {}) {
+  const workspace = String(workspaceAlias || '').trim();
+  if (!workspace) {
+    throwIfAborted(options.signal);
+    return operation();
+  }
+  return withLock(mutationKey(workspace), WRITE, async (waitMs, state) => {
+    notifyWait(options, waitMs, {
+      workspace,
+      taskId: String(options.taskId || '').trim(),
+      scope: MUTATION_SCOPE,
+      mode: WRITE,
+      queued: state.queue.length
+    });
+    return operation();
+  }, options.signal);
+}
+
 function pendingWorkspaceOperations() {
   return locks.size;
 }
 
-export { runWorkspaceOperation, pendingWorkspaceOperations };
+export { runWorkspaceMutationBoundary, runWorkspaceOperation, pendingWorkspaceOperations };

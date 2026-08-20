@@ -552,18 +552,26 @@ async function relaiGitCommit(workspace, config, args = {}) {
 }
 
 async function workspaceDirtyPaths(workspace, config, paths = []) {
-  await ensureGitRepo(workspace, config);
   const normalized = [...new Set((Array.isArray(paths) ? paths : [])
     .map(item => normalizeGitPath(item))
     .filter(Boolean))];
   if (!normalized.length) return [];
+  const workTree = await runProcess("git", ["rev-parse", "--is-inside-work-tree"], {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: DEFAULT_MAX_GIT_OUTPUT_BYTES
+  }, config);
+  if (workTree.exitCode !== 0 || !String(workTree.stdout || "").trim().startsWith("true")) {
+    return normalized;
+  }
   const dirty = new Set();
   for (let index = 0; index < normalized.length; index += 100) {
     const chunk = normalized.slice(index, index + 100);
     const status = await runProcess("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...chunk], {
       cwd: workspace.path,
       timeout: 60000,
-      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES,
+      preserveOutputWhitespace: true
     }, config);
     if (status.exitCode !== 0 || status.stdoutTruncated) {
       throw new Error(`Could not inspect task-owned residual workspace state: ${status.stderr || status.stdout || status.exitCode}`);
@@ -637,7 +645,7 @@ async function relaiGitPush(workspace, config, args = {}) {
   const pushArgs = ["push", ...(dryRun ? ["--dry-run"] : []), ...(setUpstream ? ["--set-upstream"] : []), remote, branch];
   const push = await runProcess("git", pushArgs, {
     cwd: workspace.path,
-    timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000),
+    timeout: clampNumber(args.timeoutMs, 1000, 240000, 120000),
     inheritCredentials: true
   }, config);
   return { ok: push.exitCode === 0, workspace: workspace.alias, remote, branch, dryRun, setUpstream, push: summarizeCommand(push) };

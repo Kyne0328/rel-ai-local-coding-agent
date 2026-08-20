@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
+import { isTerminalTaskReference } from '../src/tools/task.js';
 import { createToolActivityTracker } from '../src/toolActivity.js';
 
 let now = 1000;
@@ -49,6 +51,9 @@ const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
+assert.equal(isTerminalTaskReference({ status: 'cancelled' }, OP.PROCESS_STOP), true);
+assert.equal(isTerminalTaskReference({ status: 'completed' }, OP.UI, { action: 'stop' }), true);
+assert.equal(isTerminalTaskReference({ status: 'cancelled' }, OP.UI, { action: 'snapshot' }), false);
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ name: 'cancel-fixture' }));
 fs.writeFileSync(configPath, JSON.stringify({
@@ -69,6 +74,17 @@ try {
   const context = { publicHttpOnly: true, requestId: 'cancel-test' };
   const started = await callTool('relai_work', { action: 'begin', workspace: 'app', title: 'Cancelable task' }, context);
   assert.equal(started.status, 'planning');
+  const managed = await callTool('relai_process', {
+    action: 'start',
+    workspace: 'app',
+    work_id: started.work_id,
+    executable: process.execPath,
+    argv: ['-e', 'setInterval(() => {}, 1000)'],
+    kind: 'service',
+    purpose: 'Verify terminal task cleanup.',
+    startupWaitMs: 20
+  }, context);
+  assert.equal(managed.status, 'running');
   const result = await callTool('relai_work', { action: 'cancel',
     workspace: 'app',
     work_id: started.work_id,
@@ -80,6 +96,14 @@ try {
   assert.equal(result.duplicate, false);
   assert.equal(result.endReason, 'explicit_cancellation');
   assert.ok(result.endedAt);
+  const stopped = await callTool('relai_process', {
+    action: 'stop',
+    workspace: 'app',
+    work_id: started.work_id,
+    processId: managed.processId,
+    graceMs: 0
+  }, context);
+  assert.equal(stopped.status, 'stopped', 'terminal task identity must remain usable for owned resource cleanup');
 
   const persisted = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.work_id);
   assert.equal(persisted.status, 'cancelled');

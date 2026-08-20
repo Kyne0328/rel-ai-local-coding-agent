@@ -47,6 +47,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","references","related","impact","trace","diagnostics","architecture"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
     handlerName: 'codeInspect',
     groups: ["audit"],
+    behavior: {"longRunning":true},
   },
   {
     name: OP.EXEC,
@@ -54,7 +55,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Run a one-shot development command directly in the configured visible workspace. Mutating or uncertain commands are serialized against other workspace writes; provably read-only direct commands can overlap safely. Use command for shell syntax, or executable + argv (+ optional input) for shell-free execution that preserves quotes, backticks, dollar signs, and multiline script text exactly. Returns exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_validate checks validation.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"executable":{"type":"string","minLength":1,"maxLength":1000},"argv":{"type":"array","items":{"type":"string","maxLength":20000},"maxItems":100},"input":{"type":"string","maxLength":1048576},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace"],"oneOf":[{"required":["command"],"not":{"anyOf":[{"required":["executable"]},{"required":["argv"]},{"required":["input"]}]}},{"required":["executable"],"not":{"required":["command"]}}],"additionalProperties":false},
     handlerName: 'exec',
-    behavior: {"audit":"exec","cache":"workspace","longRunning":true,"concurrencyScope":"workspace"},
+    behavior: {"audit":"exec","cache":"workspace","longRunning":true,"concurrencyScope":"mutation"},
   },
   {
     name: OP.PROCESS_START,
@@ -108,6 +109,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Rank local source files with persistent Tree-sitter structure, code-graph, Zoekt when available, FTS5 lexical, path, and symbol signals. Pass query for one search or queries for up to four independent searches that Rel.AI fans out inside one tool call. No neural model is used and no source text leaves the machine.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"queries":{"type":"array","items":{"type":"string","minLength":1,"maxLength":2000},"minItems":1,"maxItems":4},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"maxBytes":{"type":"number","minimum":1000,"maximum":393216},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace"],"oneOf":[{"required":["query"],"not":{"required":["queries"]}},{"required":["queries"],"not":{"required":["query"]}}],"additionalProperties":false},
     handlerName: 'semanticSearch',
+    behavior: {"longRunning":true},
   },
   {
     name: OP.VALIDATE_DIAGNOSTICS,
@@ -148,6 +150,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Check one configured local Rel.AI route such as /health or /dashboard and return reachability, HTTP status, final URL, response byte count, title, and bounded diagnostics. The route must be a local path.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"route":{"type":"string","minLength":1},"timeoutMs":{"type":"number","minimum":1000,"maximum":600000}},"required":["workspace","route"],"additionalProperties":false},
     handlerName: 'httpProbe',
+    behavior: {"longRunning":true},
   },
   {
     name: OP.CHANGES_DIFF,
@@ -198,7 +201,7 @@ const OPERATION_DEFINITION_VALUES = [
     name: OP.PUBLISH_PUSH,
     title: "Publish Branch",
     description: "Publish a branch to a remote, with optional dry-run and set-upstream behavior.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string","minLength":1,"maxLength":200},"branch":{"type":"string","minLength":1,"maxLength":500},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string","minLength":1,"maxLength":200},"branch":{"type":"string","minLength":1,"maxLength":500},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":240000}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'gitPush',
     groups: ["git"],
     behavior: {"concurrencyScope":"workspace"},
@@ -217,7 +220,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: `The one tool for changing files directly in the configured visible workspace. Rel.AI serializes edit mutations against other workspace writes so successful changes are immediately visible to every task. Use oldText/newText with optional occurrence or replacements:[...] for localized edits, content for complete-file replacement, updateText for patch-shaped changes, or edits:[...] for an atomic batch of up to ${MAX_BATCH_EDITS} files. Rel.AI automatically stages large complete-file writes internally. Keep repository-wide patch-shaped changes together as one updateText request when the client transport can carry it; explicit stage start/append/commit remains available only as a transport fallback. expectedSha256 is supported for direct, staged, and batch file edits.`,
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"path":{"type":"string","minLength":1,"maxLength":1000},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"},"updateText":{"type":"string"},"envAction":{"type":"string","enum":["list","set","remove","compare"]},"key":{"type":"string","minLength":1,"maxLength":256},"value":{"type":"string","maxLength":65536},"templatePath":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":MAX_BATCH_EDITS},"runChecks":{"type":"boolean"},"level":{"type":"string","enum":["quick","standard","release"]},"returnDiff":{"type":"boolean"},"dryRun":{"type":"boolean"},"stage":{"type":"string","enum":["start","append","commit","abort"]},"writeId":{"type":"string","minLength":1,"maxLength":200}},"required":["workspace"],"oneOf":[{"required":["path","oldText","newText"],"not":{"anyOf":[{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["path","replacements"],"not":{"anyOf":[{"required":["oldText"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["path","content"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["updateText"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["edits"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["envAction"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["stage"]}]}},{"required":["stage"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["edits"]},{"required":["envAction"]}]}}],"additionalProperties":false},
     handlerName: 'edit',
-    behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit","concurrencyScope":"workspace"},
+    behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit","longRunning":true,"concurrencyScope":"mutation"},
   },
   {
     name: OP.WORK_CANCEL,
@@ -234,7 +237,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Explicitly close the task identified by work_id after read-only work, or after validation already passed without complete:true and no repository content changed afterward. For work that changed repository content, prefer the final relai_validate action 'checks' call with complete:true and summary so validation and completion happen atomically. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace","summary"],"additionalProperties":false},
     handlerName: 'completeTask',
-    behavior: {"audit":"completion","summary":"completion","concurrencyScope":"workspace"},
+    behavior: {"audit":"completion","summary":"completion","concurrencyScope":"mutation"},
     dashboard: {"category":"Workflow"}
   },
 ];

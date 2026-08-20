@@ -108,13 +108,16 @@ try {
   // Empty pattern refused.
   await assert.rejects(() => relaiSearch(workspace, config, { pattern: '   ' }), /non-empty pattern/);
 
-  // Non-git workspace gets a clear error.
+  // Non-git workspaces use the safe filesystem fallback instead of losing search.
   const plainDir = path.join(tmp, 'plain');
   fs.mkdirSync(plainDir, { recursive: true });
-  await assert.rejects(
-    () => relaiSearch({ alias: 'plain', path: plainDir }, config, { pattern: 'x' }),
-    /git repository/
-  );
+  fs.writeFileSync(path.join(plainDir, 'plain.txt'), 'plain search marker\n');
+  const plainSearch = await relaiSearch({ alias: 'plain', path: plainDir }, config, {
+    pattern: 'search marker', fixed: true, mode: 'compact'
+  });
+  assert.equal(plainSearch.ok, true);
+  assert.equal(plainSearch.matchCount, 1);
+  assert.equal(plainSearch.matches[0].path, 'plain.txt');
 
   // CRLF-terminated lines must not have trailing \r in matched text (Windows autocrlf regression).
   // Fixture has match on line 1 (not the last line) so whole-blob trim doesn't strip the CRLF before split logic runs.

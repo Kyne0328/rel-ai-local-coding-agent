@@ -80,6 +80,7 @@ function enrichExecAudit(extra, value) {
   assignDefined(extra, 'stderrTruncated', value?.stderrTruncated === true);
   assignDefined(extra, 'timedOut', value?.timedOut === true);
   assignTruthy(extra, 'mutationTracking', value?.mutationTracking);
+  assignDefined(extra, 'mutationUnknown', value?.mutationUnknown === true);
   if (Array.isArray(value?.environmentKeys) && value.environmentKeys.length) {
     extra.environmentKeys = value.environmentKeys.slice(0, 100);
   }

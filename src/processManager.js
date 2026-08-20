@@ -423,16 +423,22 @@ function readManagedProcess(config, args = {}, context = {}) {
   return { ...processSnapshot(record), ...output };
 }
 
-function writeManagedProcess(config, args = {}, context = {}) {
+async function writeManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
   assertProcessAccess(config, record, args, context);
-  if (!record.child || !record.child.stdin || record.child.stdin.destroyed || !['starting', 'running'].includes(record.status)) {
+  const stream = record.child?.stdin;
+  if (!stream || stream.destroyed || !['starting', 'running'].includes(record.status)) {
     throw new Error(`Process ${record.processId} does not have writable stdin.`);
   }
   const input = String(args.input ?? '');
   const bytes = Buffer.byteLength(input, 'utf8');
   if (bytes > 1024 * 1024) throw new Error('Process input exceeds 1 MiB.');
-  record.child.stdin.write(input);
+  await new Promise((resolve, reject) => {
+    stream.write(input, error => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
   return { ok: true, processId: record.processId, acceptedBytes: bytes, status: record.status };
 }
 

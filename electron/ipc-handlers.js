@@ -144,7 +144,7 @@ function registerDashboardWindowIpc({ ipcMain, dashboardOnly, getCurrentStatus, 
   ipcMain.handle('desktop:window:toggle-maximize', event => dashboardOnly(event, toggleDashboardMaximize));
   ipcMain.handle('desktop:window:close', event => dashboardOnly(event, requestDashboardClose));
   ipcMain.handle('desktop:open-settings', event => dashboardOnly(event, openSettingsWindow));
-  ipcMain.handle('desktop:reload-dashboard', (event, routeHash = '') => dashboardOnly(event, () => openDashboardWindow(routeHash)));
+  ipcMain.handle('desktop:reload-dashboard', (event, routeHash = '') => dashboardOnly(event, () => openDashboardWindow(routeHash, { forceReload: true })));
 }
 
 function registerSharedUtilityIpc({ ipcMain, BrowserWindow, clipboard, allowedWindows, isSenderWindow, getWizardWindow, getFallbackWindow, getDashboardWindow, fitWindowToContent }) {

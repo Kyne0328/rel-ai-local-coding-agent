@@ -17,12 +17,16 @@ const callTool = (name, args, context = {}) => rawCallTool(name, args, { princip
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-completion-'));
 const workspace = path.join(temp, 'workspace');
+const plainWorkspace = path.join(temp, 'plain-workspace');
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
 
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
+fs.mkdirSync(path.join(plainWorkspace, 'src'), { recursive: true });
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("ready");\n', 'utf8');
+fs.writeFileSync(path.join(plainWorkspace, 'src', 'index.js'), 'console.log("plain");\n', 'utf8');
+fs.writeFileSync(path.join(plainWorkspace, 'package.json'), JSON.stringify({ scripts: { check: 'node --check src/index.js' } }, null, 2), 'utf8');
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({
   scripts: { check: 'node --check src/index.js' }
 }, null, 2), 'utf8');
@@ -39,6 +43,9 @@ fs.writeFileSync(configPath, JSON.stringify({
       path: workspace,
       commands: {},
       testCommands: { check: 'npm run check' }
+    },
+    plain: {
+      path: plainWorkspace
     }
   }
 }, null, 2), 'utf8');
@@ -61,6 +68,35 @@ try {
     assert.ok(result.work_id, 'task start must return an opaque work_id');
     return result.work_id;
   }
+
+  resetToolActivity();
+  const plainReadTask = await callTool('relai_work', {
+    action: 'begin', workspace: 'plain', bootstrap: 'none'
+  }, { publicHttpOnly: true });
+  const plainReadCompletion = await callTool('relai_work', {
+    action: 'finish', workspace: 'plain', work_id: plainReadTask.work_id,
+    summary: 'Read-only non-Git task completed.'
+  }, { publicHttpOnly: true });
+  assert.equal(plainReadCompletion.completionKnown, true, 'read-only work in a non-Git project must finish normally');
+  assert.equal(plainReadCompletion.residualState, 'clean');
+
+  resetToolActivity();
+  const plainEditTask = await callTool('relai_work', {
+    action: 'begin', workspace: 'plain', bootstrap: 'none'
+  }, { publicHttpOnly: true });
+  await callTool('relai_edit', {
+    workspace: 'plain', work_id: plainEditTask.work_id, path: 'src/index.js',
+    content: 'console.log("plain updated");\n'
+  }, { publicHttpOnly: true });
+  const plainEditCompletion = await callTool('relai_validate', {
+    action: 'checks', workspace: 'plain', work_id: plainEditTask.work_id,
+    check: 'node --check src/index.js', complete: true,
+    summary: 'Validated non-Git task completed.'
+  }, { publicHttpOnly: true });
+  assert.equal(plainEditCompletion.completionKnown, true, 'validated edits in a non-Git project must finish normally');
+  assert.equal(plainEditCompletion.residualState, 'preserved_uncommitted');
+  assert.deepEqual(plainEditCompletion.residualChangedFiles, ['src/index.js'], 'non-Git task-owned edits must be preserved conservatively');
+  assert.equal(getToolActivity().lastTask?.status, 'completed');
 
   resetToolActivity();
   const unvalidatedTask = await startTask('completion-without-validation');

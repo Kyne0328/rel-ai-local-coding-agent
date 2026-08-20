@@ -36,9 +36,13 @@ const OPEN_WORLD_TOOLS = new Set([
 // can continue under work_id after the tool response returns; no legacy operation names are retained.
 /** @type {Set<string>} */
 const NATIVE_TASK_ELIGIBLE_TOOLS = new Set([
+  OP.SEARCH_SEMANTIC,
+  OP.INSPECT,
+  OP.EDIT,
   OP.EXEC,
   OP.VALIDATE_DIAGNOSTICS,
-  OP.VALIDATE_CHECKS
+  OP.VALIDATE_CHECKS,
+  OP.VALIDATE_HTTP
 ]);
 /** @type {Set<string>} */
 const PERSISTENT_PROCESS_TOOLS = new Set([

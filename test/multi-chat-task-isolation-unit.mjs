@@ -79,6 +79,25 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
   tracker.reset();
 }
 
+// Long-running validation may be observed through work.status while it is still active.
+// That read-only control-plane call must not prevent the validation call from accepting completion.
+{
+  const tracker = createToolActivityTracker({ idleMs: 60_000 });
+  const start = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.begin', workspace: 'repo', scopeId: 'shared', createTask: true });
+  const taskId = start.taskId;
+  start();
+  const validation = tracker.beginConnectorToolCall({ tool: 'relai_validate', internalOperation: 'validate.checks', workspace: 'repo', scopeId: 'shared', taskId });
+  const status = tracker.beginConnectorToolCall({ tool: 'relai_work', internalOperation: 'work.status', workspace: 'repo', scopeId: 'shared', taskId });
+  const accepted = runWithToolActivity(validation, () => validation.requestCompletion({ summary: 'Validated while status was polling.' }));
+  assert.equal(accepted.duplicate, false);
+  validation({ ok: true });
+  assert.equal(tracker.getToolActivity().tasks.some(task => task.taskId === taskId), true, 'completion waits for the overlapping status call to finish');
+  status({ ok: true });
+  assert.equal(tracker.getToolActivity().lastTask?.status, 'completed');
+  assert.equal(tracker.getToolActivity().lastTask?.summary, 'Validated while status was polling.');
+  tracker.reset();
+}
+
 // Concurrent completion retries for the same task must collapse into one idempotent transition.
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });

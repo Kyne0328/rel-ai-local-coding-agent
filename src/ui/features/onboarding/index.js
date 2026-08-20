@@ -32,7 +32,7 @@ function desktopSetupSteps({
       description: 'In OpenAI Platform, copy your Secure MCP Tunnel ID and create its runtime API key, then save them here.',
       href: routeMetadata('connection').href,
       action: 'Set up connection',
-      complete: endpointReady,
+      complete: hasWorkspace && endpointReady,
       locked: !hasWorkspace
     },
     {
@@ -41,7 +41,7 @@ function desktopSetupSteps({
       description: 'Save the Rel.AI icon, open the ChatGPT Plugins + connector form, then use Tunnel + No authentication and scan the Rel.AI tools.',
       href: routeMetadata('connection').href,
       action: 'Finish ChatGPT setup',
-      complete: chatgptReady,
+      complete: hasWorkspace && endpointReady && chatgptReady,
       locked: !hasWorkspace || !endpointReady
     },
     {

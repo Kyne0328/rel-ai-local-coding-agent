@@ -88,7 +88,7 @@ interface ToolBehavior {
   summary: SummaryKind;
   longRunning: boolean;
   taskScope: 'required' | 'optional' | 'none';
-  concurrencyScope: 'task' | 'workspace';
+  concurrencyScope: 'task' | 'mutation' | 'workspace';
   executionClass: ToolExecutionClass;
 }
 
@@ -205,6 +205,7 @@ export interface ToolResult extends Record<string, unknown> {
   stderrTruncated?: boolean;
   timedOut?: boolean;
   mutationTracking?: string;
+  mutationUnknown?: boolean;
   environmentKeys?: string[];
   matches?: Array<{ path: string; line: number; text: string }>;
   files?: Array<Record<string, unknown>>;

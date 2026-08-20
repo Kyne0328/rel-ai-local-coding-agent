@@ -509,6 +509,7 @@ async function updateLiveView(data) {
 
 function liveStateChange(detail) {
   const catchUpRequired = detail.state === 'live' && liveCatchUpRequired(getStore().live, detail);
+  const reconnectStarted = surface === 'desktop' && detail.state === 'reconnecting' && _liveState !== 'reconnecting';
   _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
   const projected = withConnectionState(getStore(), _liveState);
@@ -516,6 +517,7 @@ function liveStateChange(detail) {
   const data = getStore();
   renderConnectionStatus();
   if (_routerReady && ['system', 'connection'].includes(currentRoutePath())) void syncLiveView(data);
+  if (reconnectStarted) void doRefresh({ source: 'sse-reconnect-probe', quietFailure: true, render: false });
   if (catchUpRequired) void doRefresh({ source: 'sse-catch-up' });
 }
 
