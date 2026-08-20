@@ -121,6 +121,7 @@ app.whenReady().then(async () => {
 
   await win.webContents.executeJavaScript(`localStorage.setItem('relai_debug', '1')`);
   const navigationInteractions = await exerciseNavigationControls(win, failures);
+  const modalInteractions = await exerciseModalInteractions(win);
 
   const parsedTarget = new URL(targetUrl);
   const passiveMcpSession = await createHttpMcpSession(parsedTarget.origin, {
@@ -340,6 +341,7 @@ app.whenReady().then(async () => {
     initial,
     liveToolUpdate,
     navigationInteractions,
+    modalInteractions,
     passiveRouteStability,
     taskInteraction,
     activityInteraction,
@@ -357,6 +359,91 @@ app.whenReady().then(async () => {
   fs.writeFileSync(outputPath, JSON.stringify({ error: error?.stack || String(error) }, null, 2));
   app.exit(1);
 });
+
+async function exerciseModalInteractions(win) {
+  await win.webContents.setZoomFactor(1);
+  win.setSize(1180, 760);
+  await win.webContents.executeJavaScript(`location.hash = '#workspaces'`);
+  await waitFor(win, `document.querySelector('.workspace-grid [data-edit-workspace]')`);
+
+  await win.webContents.executeJavaScript(`document.querySelector('.workspace-grid [data-edit-workspace]')?.click()`);
+  await waitFor(win, `document.querySelector('.modal-title')?.textContent === 'Edit project'`);
+  const editedAlias = await win.webContents.executeJavaScript(`(() => {
+    const input = document.querySelector('.modal-panel input[name="alias"]');
+    if (!input) return '';
+    input.value = input.value + '-unsaved';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return input.value;
+  })()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-panel [data-delete-project]')?.click()`);
+  await waitFor(win, `document.querySelector('.modal-inline-confirm-layer')`);
+  const editDeleteOpen = await win.webContents.executeJavaScript(`(() => ({
+    title: document.querySelector('.modal-title')?.textContent || '',
+    alias: document.querySelector('.modal-panel input[name="alias"]')?.value || '',
+    inlineConfirm: Boolean(document.querySelector('.modal-inline-confirm-layer'))
+  }))()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-inline-confirm-card .modal-actions .secondary')?.click()`);
+  await waitFor(win, `!document.querySelector('.modal-inline-confirm-layer')`);
+  const editAfterDeleteCancel = await win.webContents.executeJavaScript(`(() => ({
+    title: document.querySelector('.modal-title')?.textContent || '',
+    alias: document.querySelector('.modal-panel input[name="alias"]')?.value || ''
+  }))()`);
+
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-close')?.click()`);
+  await waitFor(win, `document.querySelector('.modal-inline-confirm-title')?.textContent === 'Discard changes?'`);
+  const dirtyClosePrompted = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.modal-inline-confirm-card'))`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-inline-confirm-card .modal-actions .secondary')?.click()`);
+  await waitFor(win, `!document.querySelector('.modal-inline-confirm-layer')`);
+  const editAfterDiscardCancel = await win.webContents.executeJavaScript(`(() => ({
+    title: document.querySelector('.modal-title')?.textContent || '',
+    alias: document.querySelector('.modal-panel input[name="alias"]')?.value || ''
+  }))()`);
+
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-close')?.click()`);
+  await waitFor(win, `document.querySelector('.modal-inline-confirm-card button.danger')`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-inline-confirm-card button.danger')?.click()`);
+  await waitFor(win, `!document.querySelector('#__relai-modal-backdrop')`);
+
+  await win.webContents.executeJavaScript(`document.querySelector('.workspace-grid [data-repository-details]')?.click()`);
+  await waitFor(win, `/^Project details/.test(document.querySelector('.modal-title')?.textContent || '')`);
+  const sharedCloseVisible = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.modal-panel .modal-close'))`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-panel [data-clear-workspace]')?.click()`);
+  await waitFor(win, `document.querySelector('.modal-inline-confirm-layer')`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-inline-confirm-card .modal-actions .secondary')?.click()`);
+  await waitFor(win, `!document.querySelector('.modal-inline-confirm-layer')`);
+  const detailsAfterDeleteCancel = await win.webContents.executeJavaScript(`document.querySelector('.modal-title')?.textContent || ''`);
+  await win.webContents.executeJavaScript(`document.querySelector('.modal-close')?.click()`);
+  await waitFor(win, `!document.querySelector('#__relai-modal-backdrop')`);
+
+  await win.webContents.executeJavaScript(`(() => {
+    document.getElementById('routeRoot').dataset.unsavedChanges = 'true';
+    location.hash = '#tasks';
+  })()`);
+  await waitFor(win, `document.querySelector('.modal-title')?.textContent === 'Discard changes?'`);
+  await win.webContents.executeJavaScript(`document.querySelector('.confirm-dialog .modal-actions .secondary')?.click()`);
+  await waitFor(win, `!document.querySelector('#__relai-modal-backdrop')`);
+  const routeChangeCancelPreserved = await win.webContents.executeJavaScript(`location.hash === '#workspaces'`);
+  await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
+  await waitFor(win, `document.querySelector('.modal-title')?.textContent === 'Discard changes?'`);
+  await win.webContents.executeJavaScript(`document.querySelector('.confirm-dialog .modal-actions button.danger')?.click()`);
+  await waitFor(win, `location.hash === '#tasks' && document.querySelectorAll('.task-row').length >= 9`);
+  const routeChangeConfirmNavigated = await win.webContents.executeJavaScript(`location.hash === '#tasks'`);
+
+  return {
+    editDeleteCancelPreserved: editDeleteOpen.inlineConfirm
+      && editDeleteOpen.title === 'Edit project'
+      && editDeleteOpen.alias === editedAlias
+      && editAfterDeleteCancel.title === 'Edit project'
+      && editAfterDeleteCancel.alias === editedAlias,
+    dirtyClosePrompted,
+    dirtyCancelPreserved: editAfterDiscardCancel.title === 'Edit project' && editAfterDiscardCancel.alias === editedAlias,
+    discardClosed: !await win.webContents.executeJavaScript(`Boolean(document.querySelector('#__relai-modal-backdrop'))`),
+    detailsDeleteCancelPreserved: /^Project details/.test(detailsAfterDeleteCancel),
+    routeChangeCancelPreserved,
+    routeChangeConfirmNavigated,
+    sharedCloseVisible
+  };
+}
 
 async function measurePassiveRouteStability(win, mcpSession, navigationCounts, route) {
   await win.webContents.executeJavaScript(`(() => {

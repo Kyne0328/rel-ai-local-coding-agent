@@ -405,10 +405,24 @@
 
   .modal-backdrop, #__relai-modal-backdrop { @apply fixed inset-0 z-50; background: var(--ui-overlay-modal); }
   .drawer-backdrop, #__relai-drawer-backdrop { @apply fixed inset-0 z-50; background: var(--ui-overlay-drawer); }
-  .modal-shell, .modal-panel { @apply fixed left-1/2 top-1/2 z-[51] max-h-[calc(100dvh-32px)] w-[min(720px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
-  .modal-head, .drawer-head { @apply flex min-h-14 items-center justify-between gap-3 border-b px-4; border-color: var(--ui-border-default); }
-  .drawer-head { @apply shrink-0; background: var(--ui-surface-primary); }
-  .modal-body { @apply p-4; }
+  .modal-shell, .modal-panel { @apply fixed left-1/2 top-1/2 z-[51] max-h-[calc(100dvh-32px)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl; width: min(600px, calc(100vw - 32px)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
+  .modal-panel { @apply flex flex-col; }
+  .modal-panel.modal-compact { width: min(500px, calc(100vw - 32px)); }
+  .modal-panel.modal-wide { width: min(680px, calc(100vw - 32px)); }
+  .modal-head { @apply flex min-h-14 shrink-0 items-center justify-between gap-3 px-5; }
+  .drawer-head { @apply flex min-h-14 shrink-0 items-center justify-between gap-3 border-b px-4; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
+  .modal-title, .drawer-title { @apply text-[16px] font-bold; }
+  .modal-close { @apply grid size-9 min-h-9 shrink-0 place-items-center rounded-lg p-0 text-xl leading-none; background: transparent; border-color: transparent; color: var(--ui-text-secondary); }
+  .modal-close:hover:not(:disabled) { background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); color: var(--ui-text-primary); }
+  .modal-body { @apply min-h-0 overflow-y-auto px-5 pb-5; overscroll-behavior: contain; }
+  .modal-footer { @apply mt-2 flex items-end justify-between gap-4 border-t pt-4; border-color: var(--ui-border-subtle); }
+  .modal-actions { @apply flex shrink-0 flex-wrap justify-end gap-2; }
+  .modal-danger-zone { @apply grid gap-1; }
+  .modal-danger-zone > span { @apply max-w-64 text-[10px] leading-4; color: var(--ui-text-tertiary); }
+  .modal-inline-confirm-layer { @apply absolute inset-0 z-[2] flex items-center justify-center p-5; background: var(--ui-overlay-modal); }
+  .modal-inline-confirm-card { @apply grid w-full max-w-[460px] gap-3 rounded-xl p-4; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
+  .modal-inline-confirm-title { @apply text-[15px] font-bold; }
+  .modal-step-list { @apply grid gap-1 pl-5 text-[11px] leading-5; list-style: decimal; color: var(--ui-text-secondary); }
   .drawer-body { @apply min-h-0 flex-1 overflow-y-auto p-5; overscroll-behavior: contain; }
   .drawer-panel { @apply fixed bottom-4 right-4 top-4 z-[51] flex w-[min(760px,calc(100vw-48px))] flex-col overflow-hidden rounded-xl; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
   .session-detail-drawer { width: min(820px, calc(100vw - 48px)); }
@@ -507,9 +521,6 @@
   .empty-state-action { @apply mt-2; }
 
   .overlay-backdrop { @apply fixed inset-0 overflow-auto; overscroll-behavior: contain; }
-  .modal-panel { @apply p-5; }
-  .modal-title, .drawer-title { @apply text-[16px] font-bold; }
-  .modal-title { @apply mb-4; }
   .drawer-panel { @apply flex flex-col; }
   .toast-region { @apply fixed right-4 top-4 z-[80] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2; }
   .toast-info { border-color: var(--ui-status-info-border); }
@@ -604,7 +615,12 @@
   .section-head-actions { @apply w-full justify-between; }
   .password-field { grid-template-columns: minmax(0,1fr); }
   .password-toggle { @apply w-full; }
-  .modal-shell, .modal-panel { @apply max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)]; }
+  .modal-shell, .modal-panel, .modal-panel.modal-compact, .modal-panel.modal-wide { @apply max-h-[calc(100dvh-16px)]; width: calc(100vw - 16px); }
+  .modal-footer { @apply flex-col items-stretch; }
+  .modal-danger-zone > span { @apply max-w-none; }
+  .modal-actions { @apply w-full; }
+  .modal-actions > button, .modal-actions > .buttonlike { @apply flex-1; }
+  .modal-inline-confirm-layer { @apply p-3; }
   .drawer-panel { @apply bottom-2 left-2 right-2 top-2 w-auto; }
   .drawer-body { @apply p-3; }
 }

@@ -112,6 +112,7 @@ function initUpdateAvailableModal(options = {}) {
       openModal({
         title: view.title,
         content: policyContent,
+        size: 'compact',
         escDisabled: view.blocking,
         onClose: () => {
           activePolicyKey = '';
@@ -135,8 +136,9 @@ function initUpdateAvailableModal(options = {}) {
       ? 'You can still use the dashboard and update controls, but Rel.AI cannot work with ChatGPT until a supported version is installed.'
       : 'You can update now or continue for this launch. This notice will appear again on a future launch while this version is nearing the end of support.';
     const actions = document.createElement('div');
-    actions.className = 'connection-actions';
+    actions.className = 'modal-actions';
     const action = supportUpdateAction(status);
+    let primaryAction;
     if (action.kind === 'link') {
       const link = document.createElement('a');
       link.className = 'buttonlike primary';
@@ -144,19 +146,20 @@ function initUpdateAvailableModal(options = {}) {
       link.target = '_blank';
       link.rel = 'noreferrer';
       link.textContent = action.label;
-      actions.appendChild(link);
+      primaryAction = link;
     } else {
       const primary = actionButton(action.label, 'primary');
       primary.disabled = action.disabled;
       if (action.busy) primary.setAttribute('aria-busy', 'true');
       primary.addEventListener('click', () => runSupportUpdateAction(primary, action.method));
-      actions.appendChild(primary);
+      primaryAction = primary;
     }
     if (view.allowLater) {
       const later = actionButton('Later', 'secondary');
       later.addEventListener('click', closeModal);
       actions.appendChild(later);
     }
+    actions.appendChild(primaryAction);
     content.append(description, detail, actions);
   }
 

@@ -62,7 +62,7 @@ function trapOverlayFocus(event, panel, onEscape) {
 function focusableElements(panel) {
   return Array.from(panel.querySelectorAll(FOCUSABLE_SELECTOR)).filter(element => {
     if (!(element instanceof HTMLElement) || element.hidden) return false;
-    if (element.getAttribute('aria-hidden') === 'true') return false;
+    if (element.getAttribute('aria-hidden') === 'true' || element.closest('[inert]')) return false;
     return element.getClientRects().length > 0;
   });
 }

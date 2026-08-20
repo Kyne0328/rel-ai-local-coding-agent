@@ -1,5 +1,6 @@
 // Hash-based section router with persistent workspace scope.
-import { confirmRouteChange, initInteractionSafety } from './interaction-safety.js';
+import { clearUnsavedChanges, hasUnsavedChanges, initInteractionSafety } from './interaction-safety.js';
+import { confirmAction } from './components/confirm-dialog.js';
 import { normalizeRouteKey } from './route-policy.js';
 import { desktopNavigationOwner, routeMetadata } from './navigation-catalog.js';
 
@@ -100,14 +101,25 @@ function replaceRouteState(routeKey) {
   try { localStorage.setItem('relai_dashboard_route', routeKey); } catch {}
 }
 
-function _route() {
+async function _route() {
   const rawKey = rawRouteKey();
   const routeKey = normalizeRouteKey(rawKey);
   if (routeKey !== rawKey) replaceRouteState(routeKey);
   if (routeKey === _currentRouteKey) return;
-  if (_currentRouteKey && !confirmRouteChange()) {
-    replaceRouteState(_currentRouteKey);
-    return;
+  if (_currentRouteKey && hasUnsavedChanges()) {
+    const previousRouteKey = _currentRouteKey;
+    replaceRouteState(previousRouteKey);
+    const confirmed = await confirmAction({
+      title: 'Discard changes?',
+      message: 'Discard unsaved changes and leave this page?',
+      detail: 'Your changes will not be saved.',
+      confirmLabel: 'Discard changes',
+      danger: true
+    });
+    if (!confirmed) return;
+    clearUnsavedChanges();
+    replaceRouteState(routeKey);
+    return _route();
   }
   const id = routeKey.split(/[/?]/)[0] || 'home';
   const shouldFocusHeading = _currentRouteKey !== null;

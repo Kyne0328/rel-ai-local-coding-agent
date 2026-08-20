@@ -41,42 +41,76 @@ function renderPathStatus(element, info) {
   }
 }
 
-export async function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = {}) {
+export async function openWorkspaceForm({ mode = 'add', workspace = null, onSaved, onRemove } = {}) {
   const ws = workspace || {};
   const isEdit = mode === 'edit';
   const originalAlias = String(ws.alias || '').trim();
   const configured = await loadConfiguredWorkspaces();
   const form = document.createElement('form');
-  form.className = 'ws-form';
+  form.className = 'ws-form ws-project-form';
+  const isDesktop = document.documentElement.dataset.surface === 'desktop';
   form.innerHTML = `
-    <div class="ws-form-intro">
-      <strong>${isEdit ? 'Project settings' : 'Choose a project folder'}</strong>
-      <span>${isEdit ? 'Rename the project or change its folder. Name and folder changes are saved together.' : 'Rel.AI uses this folder only when a ChatGPT request names this project.'}</span>
-    </div>
+    <section class="ws-project-name-section">
+      <label class="ws-form-label" for="workspaceAliasInput">Project name</label>
+      <div class="ws-project-name-field">
+        <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+        <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="Project name" autocomplete="off">
+      </div>
+      <div class="ws-form-help">This is the project name ChatGPT uses when selecting a folder.</div>
+      <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
+    </section>
 
-    <label for="workspacePathInput">Project folder</label>
-    <div class="ws-form-row">
-      <input class="ws-form-path" id="workspacePathInput" name="path" type="text" value="${esc(ws.path || '')}" placeholder="Absolute path to the project" autocomplete="off">
-      <button type="button" class="secondary" data-browse>Browse…</button>
-    </div>
-    <div class="ws-form-status" data-path-status aria-live="polite"></div>
+    <section class="ws-source-section" aria-labelledby="wsSourceFolderHeading">
+      <h3 class="ws-source-heading" id="wsSourceFolderHeading">Source folder</h3>
+      <div class="ws-source-folder-box">
+        <div data-source-picker-wrap ${isDesktop ? '' : 'hidden'}>
+          <ul class="ws-source-folder-list">
+            <li class="ws-source-folder-row" data-source-folder ${ws.path ? '' : 'hidden'}>
+              <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+              <span class="ws-source-folder-copy">
+                <strong data-source-folder-name>${esc(folderDisplayName(ws.path || ''))}</strong>
+                <small data-source-folder-path>${esc(ws.path || '')}</small>
+              </span>
+              <button type="button" class="ws-source-folder-change" data-browse>${isEdit ? 'Change' : 'Choose'}</button>
+            </li>
+          </ul>
+          <button type="button" class="ws-source-folder-empty" data-source-empty data-browse ${ws.path ? 'hidden' : ''}>
+            <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+            <span>Choose a source folder Rel.AI can read and edit</span>
+          </button>
+        </div>
+        <div class="ws-source-manual ws-source-manual-only" ${isDesktop ? 'hidden' : ''} data-manual-path-wrap>
+          <label for="workspacePathInput">Folder path</label>
+          <input class="ws-form-path" id="workspacePathInput" name="path" type="text" value="${esc(ws.path || '')}" placeholder="Absolute path to the project" autocomplete="off">
+          <span class="ws-form-help">Enter the absolute path to the source folder Rel.AI can read and edit.</span>
+        </div>
+      </div>
+      <div class="ws-form-status" data-path-status aria-live="polite"></div>
+    </section>
 
-    <label for="workspaceAliasInput">Project name</label>
-    <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="for example employee-api" autocomplete="off">
-    <div class="ws-form-help">Use 1–80 letters, numbers, dots, underscores, or dashes. This is the name used in ChatGPT prompts.</div>
-    <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
-
-    <div class="ws-form-actions">
-      <button type="button" class="secondary" data-cancel>Cancel</button>
-      <button type="submit" class="primary">${isEdit ? 'Save project' : 'Add project'}</button>
-    </div>
+    <footer class="modal-footer">
+      ${isEdit ? `<div class="modal-danger-zone">
+        <button type="button" class="secondary danger" data-delete-project>Delete project from Rel.AI</button>
+        <span>Removes Rel.AI access only. Files stay on your computer.</span>
+      </div>` : '<span></span>'}
+      <div class="modal-actions">
+        <button type="button" class="secondary" data-cancel>Cancel</button>
+        <button type="submit" class="primary">${isEdit ? 'Save' : 'Create project'}</button>
+      </div>
+    </footer>
   `;
 
   const pathInput = form.querySelector('input[name="path"]');
   const aliasInput = form.querySelector('input[name="alias"]');
   const statusEl = form.querySelector('[data-path-status]');
   const conflictEl = form.querySelector('[data-conflict]');
-  const browseBtn = form.querySelector('[data-browse]');
+  const browseBtns = [...form.querySelectorAll('[data-browse]')];
+  const sourcePickerWrap = form.querySelector('[data-source-picker-wrap]');
+  const sourceFolder = form.querySelector('[data-source-folder]');
+  const sourceEmpty = form.querySelector('[data-source-empty]');
+  const sourceFolderName = form.querySelector('[data-source-folder-name]');
+  const sourceFolderPath = form.querySelector('[data-source-folder-path]');
+  const manualPathWrap = form.querySelector('[data-manual-path-wrap]');
   const submitBtn = form.querySelector('button[type="submit"]');
   const initialState = formSnapshot(form);
   const syncDirty = () => markUnsaved(form, formSnapshot(form) !== initialState);
@@ -84,6 +118,13 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   let aliasEdited = Boolean(isEdit || aliasInput.value.trim());
   let pathValidationGeneration = 0;
 
+  const syncSourceFolder = () => {
+    const value = pathInput.value.trim();
+    if (sourceFolder) sourceFolder.hidden = !value;
+    if (sourceEmpty) sourceEmpty.hidden = Boolean(value);
+    if (sourceFolderName) sourceFolderName.textContent = folderDisplayName(value);
+    if (sourceFolderPath) sourceFolderPath.textContent = value;
+  };
   const suggestAlias = () => {
     if (aliasEdited) return;
     aliasInput.value = deriveWorkspaceAlias(pathInput.value);
@@ -112,6 +153,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   pathInput.addEventListener('input', () => {
     const value = pathInput.value.trim();
     const generation = ++pathValidationGeneration;
+    syncSourceFolder();
     suggestAlias();
     syncConflicts();
     if (!value) renderPathStatus(statusEl, null);
@@ -129,21 +171,33 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   }
   syncConflicts();
 
-  browseBtn.addEventListener('click', async () => {
-    const res = await runButtonAction(browseBtn, {
-      idleText: 'Browse…',
-      loadingText: 'Opening folder picker…',
-      successText: 'Folder selected',
-      errorText: 'Browse failed'
-    }, () => postJson('/api/pick-folder', {}, { timeout: 0 }));
+  const browseForFolder = async trigger => {
+    const idleMarkup = trigger.innerHTML;
+    trigger.disabled = true;
+    trigger.dataset.state = 'loading';
+    trigger.setAttribute('aria-busy', 'true');
+    let res;
+    try {
+      res = await postJson('/api/pick-folder', {}, { timeout: 0 });
+    } catch (error) {
+      res = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      trigger.innerHTML = idleMarkup;
+      trigger.disabled = false;
+      delete trigger.dataset.state;
+      trigger.removeAttribute('aria-busy');
+    }
     if (res?.unsupported) {
-      browseBtn.hidden = true;
-      toast('Folder browsing is available in the installed Rel.AI desktop app — type the path here instead.', { variant: 'info' });
+      if (sourcePickerWrap) sourcePickerWrap.hidden = true;
+      manualPathWrap.hidden = false;
+      toast('Folder browsing is unavailable here — enter the folder path instead.', { variant: 'info' });
+      pathInput.focus();
       return;
     }
     if (res?.canceled) return;
     if (res?.ok && res.path) {
       pathInput.value = res.path;
+      syncSourceFolder();
       suggestAlias();
       syncDirty();
       syncConflicts();
@@ -152,21 +206,35 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     } else if (res?.error) {
       toast('Could not open folder picker: ' + res.error, { variant: 'error' });
     }
-  });
+  };
+  for (const browseBtn of browseBtns) browseBtn.addEventListener('click', () => void browseForFolder(browseBtn));
 
-  form.querySelector('[data-cancel]').addEventListener('click', () => modal?.dismiss());
+  form.querySelector('[data-cancel]').addEventListener('click', () => { void modal?.dismiss(); });
+  const deleteBtn = form.querySelector('[data-delete-project]');
+  if (deleteBtn) deleteBtn.addEventListener('click', async () => {
+    if (typeof onRemove !== 'function') return;
+    const removed = await onRemove();
+    if (!removed) return;
+    markUnsaved(form, false);
+    closeModal();
+  });
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const alias = String(aliasInput.value || '').trim();
     const wsPath = pathInput.value.trim();
-    if (!wsPath) { toast('Choose a project folder.', { variant: 'error' }); pathInput.focus(); return; }
+    if (!wsPath) {
+      toast('Choose a source folder.', { variant: 'error' });
+      const target = manualPathWrap.hidden ? sourceEmpty : pathInput;
+      target?.focus();
+      return;
+    }
     if (!alias) { toast('Enter a project name.', { variant: 'error' }); aliasInput.focus(); return; }
     if (!isValidWorkspaceAlias(alias)) { toast('Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.', { variant: 'error' }); aliasInput.focus(); return; }
     if (syncConflicts()) { conflictEl.focus?.(); return; }
 
     const result = await runButtonAction(submitBtn, {
-      idleText: isEdit ? 'Save project' : 'Add project',
+      idleText: isEdit ? 'Save' : 'Create project',
       loadingText: 'Saving project…',
       successText: isEdit ? 'Project updated' : 'Project added',
       errorText: 'Save failed'
@@ -197,15 +265,28 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     }
   });
 
-  modal = openModal({ title: isEdit ? `Project settings · ${ws.alias || ''}` : 'Add project', content: form });
+  modal = openModal({ title: isEdit ? 'Edit project' : 'Create project', content: form, size: 'standard' });
+  syncSourceFolder();
   setTimeout(() => {
     try {
-      (isEdit ? aliasInput : pathInput).focus();
+      const initialFocus = isEdit ? aliasInput : (pathInput.value.trim() ? aliasInput : sourceEmpty);
+      initialFocus?.focus();
       if (isEdit) aliasInput.select();
     } catch (error) {
       if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
     }
   }, 0);
+}
+
+function folderDisplayName(value) {
+  const normalized = String(value || '').trim().replace(/[\\/]+$/, '');
+  if (!normalized) return '';
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) || normalized;
+}
+
+function folderIconSvg() {
+  return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 6.75A1.75 1.75 0 0 1 5.5 5h4l2 2h7A1.75 1.75 0 0 1 20.25 8.75v8A2.25 2.25 0 0 1 18 19H6a2.25 2.25 0 0 1-2.25-2.25z"/></svg>';
 }
 
 async function loadConfiguredWorkspaces() {

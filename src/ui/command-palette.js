@@ -43,6 +43,8 @@ function openCommandPalette() {
   const modal = openModal({
     title: 'Quick navigation',
     content,
+    size: 'wide',
+    showClose: false,
     onClose: () => trigger?.setAttribute('aria-expanded', 'false')
   });
   closePalette = modal.close;

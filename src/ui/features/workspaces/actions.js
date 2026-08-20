@@ -14,7 +14,7 @@ const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-repair-workspace],[data-finding-repair]', handler: repairWorkspaceFromTrigger },
   { selector: '[data-open-recent-workspace]', handler: openRecentWorkspace },
   { selector: '[data-finding-remove]', handler: trigger => removeWorkspaceFlow(trigger.dataset.findingRemove || '') },
-  { selector: '[data-clear-workspace]', handler: trigger => removeWorkspaceFlow(trigger.dataset.clearWorkspace || '') },
+  { selector: '[data-clear-workspace]', handler: removeWorkspaceFromTrigger },
   { selector: '[data-run-validation]', handler: runValidationFromTrigger },
   { selector: '[data-repository-details]', handler: openRepositoryDetails },
   { selector: '[data-open-folder]', handler: openFolderFromTrigger }
@@ -39,7 +39,11 @@ async function handleWorkspaceClick(event) {
 async function editWorkspaceFromTrigger(trigger) {
   const alias = trigger.dataset.editWorkspace || '';
   const workspace = await loadWorkspace(alias);
-  if (workspace) await openWorkspaceForm({ mode: 'edit', workspace });
+  if (workspace) await openWorkspaceForm({
+    mode: 'edit',
+    workspace,
+    onRemove: () => removeWorkspaceFlow(alias)
+  });
 }
 
 async function repairWorkspaceFromTrigger(trigger) {
@@ -81,7 +85,7 @@ function openRepositoryDetails(trigger) {
   if (!source) return;
   const content = source.cloneNode(true);
   for (const link of content.querySelectorAll('a[href^="#"]')) link.addEventListener('click', closeModal);
-  openModal({ title: alias ? `Project details · ${alias}` : 'Project details', content });
+  openModal({ title: alias ? `Project details · ${alias}` : 'Project details', content, size: 'standard' });
 }
 
 async function openFolderFromTrigger(trigger) {
@@ -96,24 +100,30 @@ async function openFolderFromTrigger(trigger) {
   if (result?.ok === false) toast(result.error || 'Folder opening is only available in the desktop app.', { variant: 'warn' });
 }
 
+async function removeWorkspaceFromTrigger(trigger) {
+  const removed = await removeWorkspaceFlow(trigger.dataset.clearWorkspace || '');
+  if (removed && trigger.closest('.modal-panel')) closeModal();
+}
+
 async function removeWorkspaceFlow(alias) {
   const confirmed = await confirmAction({
-    title: 'Remove project',
-    message: `Remove '${alias}' from Rel.AI?`,
-    detail: 'The project folder and all files on your computer will stay unchanged.',
-    confirmLabel: 'Remove project',
+    title: 'Delete project from Rel.AI?',
+    message: `'${alias}' will be removed from Rel.AI.`,
+    detail: 'Its source folder and every file inside it will stay on your computer. Rel.AI will no longer access that folder through this project.',
+    confirmLabel: 'Delete from Rel.AI',
     danger: true
   });
-  if (!confirmed) return;
-  const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
+  if (!confirmed) return false;
+  const result = await postJson('/api/workspaces', { action: 'delete', alias, confirmDelete: true });
   if (result?.ok) {
     removeRecentWorkspace(alias);
-    toast(`Project removed: ${alias}`, { variant: 'success' });
+    toast(`Project deleted from Rel.AI: ${alias}`, { variant: 'success' });
     if (getWorkspaceFilter() === alias) setWorkspaceFilter('');
     else requestDashboardRefresh({ structural: true });
-  } else {
-    toast(`Could not remove project: ${result?.error || 'unknown error'}`, { variant: 'error' });
+    return true;
   }
+  toast(`Could not delete project from Rel.AI: ${result?.error || 'unknown error'}`, { variant: 'error' });
+  return false;
 }
 
 async function loadWorkspace(alias) {

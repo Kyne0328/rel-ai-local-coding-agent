@@ -72,19 +72,21 @@ function initConnectorRefreshModal(options = {}) {
     steps.className = 'confirm-dialog-copy';
     const heading = document.createElement('strong');
     heading.textContent = 'In ChatGPT:';
-    steps.appendChild(heading);
-    view.steps.forEach((step, index) => {
-      const line = document.createElement('span');
-      line.textContent = `${index + 1}. ${step}`;
-      steps.appendChild(line);
+    const list = document.createElement('ol');
+    list.className = 'modal-step-list';
+    view.steps.forEach(step => {
+      const item = document.createElement('li');
+      item.textContent = step;
+      list.appendChild(item);
     });
+    steps.append(heading, list);
 
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'You only need to acknowledge this notice once for this Rel.AI update.';
 
     const actions = document.createElement('div');
-    actions.className = 'connection-actions';
+    actions.className = 'modal-actions';
     const dismiss = document.createElement('button');
     dismiss.type = 'button';
     dismiss.className = 'primary';
@@ -93,6 +95,8 @@ function initConnectorRefreshModal(options = {}) {
     content.append(description, steps, note, actions);
 
     const unlockAt = now() + view.dismissDelayMs;
+    let unlocked = false;
+    let modal = null;
     const updateCountdown = () => {
       const remainingMs = Math.max(0, unlockAt - now());
       if (remainingMs > 0) {
@@ -100,19 +104,23 @@ function initConnectorRefreshModal(options = {}) {
         dismiss.textContent = `I understand (${Math.ceil(remainingMs / 1000)}s)`;
         return;
       }
+      unlocked = true;
       dismiss.disabled = false;
       dismiss.textContent = 'I understand';
+      modal?.setDismissEnabled(true);
       if (countdownTimer) clearIntervalFn(countdownTimer);
       countdownTimer = null;
     };
 
-    const modal = openModal({
+    modal = openModal({
       title: view.title,
       content,
+      size: 'compact',
       escDisabled: true,
       onClose: () => {
         if (countdownTimer) clearIntervalFn(countdownTimer);
         countdownTimer = null;
+        if (unlocked) acknowledgeConnectorRefreshNotice(view, storage);
       }
     });
     dismiss.addEventListener('click', () => {

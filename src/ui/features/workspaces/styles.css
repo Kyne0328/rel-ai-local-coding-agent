@@ -49,18 +49,39 @@
 .workspace-empty-mark { @apply grid size-12 place-items-center rounded-xl text-2xl; background: var(--ui-surface-raised); color: var(--ui-action-primary); }
 .workspace-card-focused { outline: 2px solid var(--ui-action-primary); outline-offset: 3px; }
 
-.ws-form-intro { @apply grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
-.ws-form-intro span { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
-.ws-form label { @apply mt-3 block text-[11px] font-bold uppercase tracking-[.05em]; color: var(--ui-text-tertiary); }
-.ws-form-help { @apply mt-1 text-[12px] leading-5; color: var(--ui-text-secondary); }
-.ws-form-path { @apply min-w-0; }
-.ws-form-status { @apply mt-1 min-h-4 text-[12px]; }
+.ws-project-form { @apply gap-3; }
+.ws-project-name-section, .ws-source-section { @apply grid gap-2; }
+.ws-form-label, .ws-source-heading { @apply block text-[12px] font-semibold; color: var(--ui-text-primary); }
+.ws-project-name-field { @apply flex min-h-10 items-center overflow-hidden rounded-xl; border: 1px solid var(--ui-border-control); background: var(--ui-surface-primary); }
+.ws-project-name-field:focus-within { border-color: var(--ui-action-primary); box-shadow: 0 0 0 1px var(--ui-action-primary); }
+.ws-project-name-field input { @apply min-w-0 flex-1 border-0 bg-transparent px-2.5; min-height: 38px; outline: none; }
+.ws-folder-icon { @apply grid shrink-0 place-items-center; color: var(--ui-text-tertiary); }
+.ws-project-name-field > .ws-folder-icon { @apply ml-3; }
+.ws-form-help { @apply text-[11px] leading-5; color: var(--ui-text-tertiary); }
+.ws-source-heading { @apply mt-1; }
+.ws-source-folder-box { @apply overflow-hidden rounded-xl; border: 1px solid var(--ui-border-default); background: var(--ui-surface-primary); }
+.ws-source-folder-list { @apply m-0 p-0; list-style: none; }
+.ws-source-folder-row { @apply grid min-h-12 items-center gap-3 px-3 py-2; grid-template-columns: auto minmax(0,1fr) auto; }
+.ws-source-folder-copy { @apply grid min-w-0; }
+.ws-source-folder-copy strong { @apply truncate text-[12px] font-medium; }
+.ws-source-folder-copy small { @apply truncate text-[10px]; color: var(--ui-text-tertiary); }
+.ws-source-folder-change { @apply min-h-8 rounded-lg px-2.5 text-[11px] font-medium; color: var(--ui-text-secondary); }
+.ws-source-folder-change:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
+.ws-source-folder-empty { @apply flex min-h-24 w-full flex-col items-center justify-center gap-2 p-4 text-[12px]; color: var(--ui-text-secondary); }
+.ws-source-folder-empty:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
+.ws-source-manual { @apply border-t p-3; border-color: var(--ui-border-subtle); }
+.ws-source-manual-only { @apply border-t-0; }
+.ws-source-manual label { @apply mb-1.5 block text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.ws-source-manual .ws-form-help { @apply mt-1 block; }
+.ws-form-path { @apply min-w-0 w-full; }
+.ws-form-status { @apply min-h-4 text-[11px]; }
 .ws-form-status.success { color: var(--ui-status-success-foreground); }
 .ws-form-status.warn { color: var(--ui-status-warning-foreground); }
 .ws-form-status.error { color: var(--ui-status-danger-foreground); }
-.ws-form-conflict { @apply mt-2 rounded-lg px-3 py-2 text-[12px] leading-5; background: var(--ui-status-danger-background); border: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 38%, transparent); color: var(--ui-status-danger-foreground); }
-.ws-form-actions { @apply mt-4 flex justify-end gap-2; }
-.workspace-repair-identity { @apply mt-3 grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
+.ws-form-conflict { @apply rounded-lg px-3 py-2 text-[12px] leading-5; background: var(--ui-status-danger-background); border: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 38%, transparent); color: var(--ui-status-danger-foreground); }
+.workspace-details-footer { @apply mt-0; }
+.workspace-repair-copy { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
+.workspace-repair-identity { @apply grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
 .workspace-repair-identity span { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
 .workspace-repair-identity small { @apply truncate text-[11px]; color: var(--ui-text-secondary); }
 }

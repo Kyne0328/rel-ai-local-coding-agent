@@ -99,6 +99,14 @@ try {
     assert.equal(interaction.hitTarget.ownsControl, true, `${interaction.selector} is covered by another element`);
     assert.equal(interaction.opened, true, `${interaction.selector} did not open ${interaction.hash}`);
   }
+  assert.equal(result.modalInteractions.editDeleteCancelPreserved, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.dirtyClosePrompted, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.dirtyCancelPreserved, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.discardClosed, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.detailsDeleteCancelPreserved, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.routeChangeCancelPreserved, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.routeChangeConfirmNavigated, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.sharedCloseVisible, true, JSON.stringify(result.modalInteractions));
   assert.deepEqual(result.passiveRouteStability.map(item => item.route), ['settings', 'diagnostics', 'workspaces', 'tools']);
   for (const route of result.passiveRouteStability) {
     assert.equal(route.sameRouteNode, true, `MCP activity remounted #${route.route}: ${JSON.stringify(route)}`);

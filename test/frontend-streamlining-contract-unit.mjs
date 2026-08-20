@@ -206,7 +206,27 @@ for (const source of [workspaceFormSource, workspaceRepairSource]) {
   assert.doesNotMatch(source, />Workspace settings<|>Workspace name<|>Add workspace<|>Save workspace<|>Repair workspace path</, 'Project dialogs must not expose internal workspace terminology in primary controls');
 }
 assert.match(workspaceFormSource, />Project name</, 'project naming must use the same product vocabulary as the Projects page');
-assert.match(workspaceRepairSource, />Repair project folder</, 'project repair must describe the user goal rather than the internal workspace path');
+assert.match(workspaceFormSource, /title: isEdit \? 'Edit project' : 'Create project'/, 'project dialogs must use concise create/edit titles');
+assert.match(workspaceFormSource, />Source folder</, 'project dialogs must present the configured project root as a source folder');
+assert.match(workspaceFormSource, />Delete project from Rel\.AI</, 'project settings must make the destructive configuration-only action explicit');
+assert.match(workspaceActions, /action: 'delete'.*confirmDelete: true/s, 'project deletion must use the explicit delete action and confirmation field');
+assert.match(workspaceActions, /source folder and every file inside it will stay on your computer/i, 'project deletion must state that local source files remain untouched');
+assert.match(workspaceRepairSource, /title: 'Repair project'/, 'project repair must use a concise product-facing modal title');
+assert.match(workspaceRepairSource, />Replacement source folder</, 'project repair must describe the source-folder change rather than an internal workspace path');
+const modalSource = read('src/ui/components/modal.js');
+const confirmDialogSource = read('src/ui/components/confirm-dialog.js');
+const interactionSafetySource = read('src/ui/interaction-safety.js');
+assert.match(modalSource, /modal-close/, 'shared modals must own the visible close affordance');
+assert.match(modalSource, /showModalConfirmation/, 'shared modals must preserve parent content while confirmations are open');
+assert.match(confirmDialogSource, /hasOpenModal\(\).*showModalConfirmation/s, 'confirmations opened from a modal must stay inside the parent modal');
+assert.doesNotMatch(interactionSafetySource, /window\.confirm/, 'Rel.AI interaction safety must not fall back to native browser confirmation dialogs');
+assert.match(read('src/ui/command-palette.js'), /showClose: false/, 'Quick navigation remains the intentional close-button exception');
+const connectorRefreshModalSource = read('src/ui/connector-refresh-modal.js');
+assert.match(connectorRefreshModalSource, /createElement\('ol'\)/, 'connector refresh instructions must use an ordered list');
+assert.match(connectorRefreshModalSource, /setDismissEnabled\(true\)/, 'connector refresh notices must unlock normal modal dismissal after the reading delay');
+assert.match(read('src/ui/update-available-modal.js'), /actions\.appendChild\(later\)[\s\S]*actions\.appendChild\(primaryAction\)/, 'update dialogs must place Later before the primary update action');
+assert.match(workspaceFormSource, /data-source-picker-wrap[\s\S]*isDesktop/, 'project forms must gate the native source-folder picker to the desktop surface');
+assert.match(workspaceFormSource, /ws-source-manual-only/, 'browser project forms must keep the manual source-folder path as the single fallback control');
 const connectorSource = read('src/ui/features/settings/connector.js');
 const desktopConnectionSource = read('src/ui/features/settings/desktop-connection.js');
 const settingsSharedSource = read('src/ui/features/settings/shared.js');

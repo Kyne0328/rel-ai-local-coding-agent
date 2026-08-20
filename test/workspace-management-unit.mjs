@@ -94,6 +94,18 @@ try {
   } catch (error) {
     if (!['EPERM', 'EACCES', 'UNKNOWN'].includes(error?.code)) throw error;
   }
+
+  const sourceFile = path.join(second, 'keep-me.txt');
+  fs.writeFileSync(sourceFile, 'local project data');
+  assert.throws(
+    () => updateWorkspace(saved, { action: 'delete', alias: 'beta' }),
+    /requires confirmDelete=true/,
+    'project deletion must require explicit confirmation'
+  );
+  const deleted = updateWorkspace(saved, { action: 'delete', alias: 'beta', confirmDelete: true });
+  assert.equal(deleted.ok, true);
+  assert.equal(deleted.config.workspaces.some(item => item.alias === 'beta'), false, 'deletion removes only the Rel.AI project entry');
+  assert.equal(fs.readFileSync(sourceFile, 'utf8'), 'local project data', 'deleting a project from Rel.AI must never delete source files');
 } finally {
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;

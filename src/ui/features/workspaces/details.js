@@ -6,11 +6,16 @@ function workspaceDetailsHtml(view) {
   return `<div class="workspace-details" hidden>
     <div class="workspace-details-body">
       ${workspaceOperationalHtml(view)}
-      <div class="workspace-secondary-actions">
-        <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">View tasks</a>
-        <a class="buttonlike secondary" href="${routeHref('activity', { workspace: view.alias })}">View activity</a>
-        <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Remove project</button>
-      </div>
+      <footer class="workspace-details-footer modal-footer">
+        <div class="modal-danger-zone">
+          <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Delete from Rel.AI</button>
+          <span>Removes Rel.AI access only. Files stay on your computer.</span>
+        </div>
+        <div class="modal-actions">
+          <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">View tasks</a>
+          <a class="buttonlike secondary" href="${routeHref('activity', { workspace: view.alias })}">View activity</a>
+        </div>
+      </footer>
     </div>
   </div>`;
 }

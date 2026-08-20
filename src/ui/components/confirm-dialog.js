@@ -1,4 +1,4 @@
-import { openModal, closeModal } from './modal.js';
+import { hasOpenModal, openModal, showModalConfirmation } from './modal.js';
 
 export function confirmAction({
   title = 'Confirm action',
@@ -8,6 +8,9 @@ export function confirmAction({
   cancelLabel = 'Cancel',
   danger = false
 } = {}) {
+  const options = { title, message, detail, confirmLabel, cancelLabel, danger };
+  if (hasOpenModal()) return showModalConfirmation(options);
+
   return new Promise(resolve => {
     let settled = false;
     const content = document.createElement('div');
@@ -23,7 +26,7 @@ export function confirmAction({
       copy.appendChild(detailElement);
     }
     const actions = document.createElement('div');
-    actions.className = 'ws-form-actions';
+    actions.className = 'modal-actions';
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'secondary';
@@ -38,12 +41,13 @@ export function confirmAction({
     const settle = value => {
       if (settled) return;
       settled = true;
-      closeModal();
+      modal.close();
       resolve(value);
     };
     const modal = openModal({
       title,
       content,
+      size: 'compact',
       onClose: () => {
         if (!settled) {
           settled = true;
@@ -51,7 +55,7 @@ export function confirmAction({
         }
       }
     });
-    cancel.onclick = () => modal.dismiss();
+    cancel.onclick = () => { void modal.dismiss(); };
     confirm.onclick = () => settle(true);
     window.setTimeout(() => (danger ? cancel : confirm).focus(), 0);
   });

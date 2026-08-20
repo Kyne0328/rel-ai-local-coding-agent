@@ -507,9 +507,9 @@ function openFullResetDialog(container) {
     </div>
     <label for="diagnosticResetConfirmation">Type RESET to continue</label>
     <input id="diagnosticResetConfirmation" name="confirmation" autocomplete="off" spellcheck="false" placeholder="RESET">
-    <div class="ws-form-actions">
+    <div class="modal-actions">
       <button type="button" class="secondary" data-cancel>Cancel</button>
-      <button type="submit" class="danger" disabled>Clear all diagnostic data</button>
+      <button type="submit" class="danger" disabled>Clear all troubleshooting data</button>
     </div>`;
   const input = form.querySelector('input[name="confirmation"]');
   const submit = form.querySelector('button[type="submit"]');
@@ -518,7 +518,7 @@ function openFullResetDialog(container) {
   form.onsubmit = async event => {
     event.preventDefault();
     const result = await runButtonAction(submit, {
-      idleText: 'Clear all diagnostic data', loadingText: 'Clearing all data…', successText: 'All data cleared', errorText: 'Reset failed'
+      idleText: 'Clear all troubleshooting data', loadingText: 'Clearing all data…', successText: 'All data cleared', errorText: 'Reset failed'
     }, () => postJson('/api/diagnostics/reset', { target: 'all', confirm: true, confirmation: input.value.trim() }));
     if (!result?.ok) {
       toast(result?.error || 'Could not clear all diagnostic data.', { variant: 'error' });
@@ -529,7 +529,7 @@ function openFullResetDialog(container) {
     requestDashboardRefresh();
     await loadDiagnostics(container);
   };
-  openModal({ title: 'Full diagnostic reset', content: form });
+  openModal({ title: 'Clear all troubleshooting data', content: form, size: 'compact' });
   setTimeout(() => input.focus(), 0);
 }
 
