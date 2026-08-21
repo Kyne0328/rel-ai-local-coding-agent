@@ -44,6 +44,7 @@ function copyFixture() {
     'scripts/prepare-release-assets.mjs',
     'scripts/verify-updater-artifacts.mjs',
     'scripts/verify-fuses.mjs',
+    'scripts/verify-macos-release.mjs',
     'scripts/current-unpacked.mjs',
     'scripts/active-controller-guard.mjs',
     '.github/workflows/release.yml'
@@ -154,6 +155,10 @@ function verifyPackageContracts() {
   assert.doesNotMatch(wrapper, /quitAndInstall|Setup.*\.exe|uninstall/i, 'build orchestration must not execute installer lifecycle behavior');
   assert.match(wrapper, /ensureTunnelClient\(platform, targetArch\)/, 'packaging must provision its pinned tunnel-client dependency');
   assert.match(wrapper, /ensureZoekt\(platform, targetArch\)/, 'packaging must provision its pinned Zoekt dependency');
+  assert.match(wrapper, /codesign'[\s\S]*'--force'[\s\S]*'--deep'[\s\S]*'--sign'[\s\S]*'-'/,
+    'macOS release packaging must apply an explicit ad-hoc signature before DMG creation');
+  assert.match(wrapper, /codesign'[\s\S]*'--verify'[\s\S]*'--deep'[\s\S]*'--strict'[\s\S]*'--verbose=2'/,
+    'macOS release packaging must structurally verify the ad-hoc signed app');
 }
 
 function verifyWorkflowContracts() {
@@ -220,6 +225,8 @@ function verifyWorkflowContracts() {
     /dist\/\*\.deb/,
     /dist\/\*\.dmg/,
     /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/,
+    /verify-macos-release\.mjs --unpacked/,
+    /System Settings → Privacy & Security → Open Anyway/,
     /verify-tunnel-client\.mjs/,
     /npm run benchmark:observability/,
     /npm run test:observability-browser/,
@@ -227,6 +234,17 @@ function verifyWorkflowContracts() {
   ]) assert.match(workflow, pattern);
 
   assert.doesNotMatch(workflow, /test:installed|REL_AI_SMOKE_INSTALLER|release-evidence-check|uninstall/i);
+  const macVerifier = fs.readFileSync(path.join(tmp, 'scripts', 'verify-macos-release.mjs'), 'utf8');
+  for (const pattern of [
+    /hdiutil'[\s\S]*'verify'/,
+    /hdiutil'[\s\S]*'attach'/,
+    /codesign'[\s\S]*'--verify'[\s\S]*'--deep'[\s\S]*'--strict'[\s\S]*'--verbose=2'/,
+    /Signature=adhoc/,
+    /compareFrameworkSymlinks/,
+    /packaged-connector-acceptance\.mjs/,
+    /verify-packaged-wrapper\.mjs/,
+    /verify-fuses\.mjs/
+  ]) assert.match(macVerifier, pattern);
   assert.match(workflow, /publish:[\s\S]*needs:[\s\S]*- windows-install-upgrade[\s\S]*- linux-install-upgrade/,
     'publishing must wait for installed release lifecycle validation');
   assert.match(

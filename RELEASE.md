@@ -96,7 +96,7 @@ Release publication requires canonical filenames, matching versions, updater SHA
 
 The release workflow runs installer lifecycle validation only on disposable GitHub-hosted runners after packaging and before publication. Windows installs the immediately previous stable NSIS release, verifies the downloaded asset size and GitHub SHA-256 digest when available, verifies the installed version, writes a user-state sentinel, installs the candidate over the same application identity, confirms state preservation, and runs packaged connector acceptance from the installed application. Linux performs the corresponding DEB install/upgrade check using the stable package identity, verifies the previous asset before execution, validates the installed package version and Chromium sandbox permissions, preserves the user-state sentinel, and runs the same packaged connector acceptance. A first-ever release falls back to fresh-install validation; if a previous stable release exists but its expected upgrade artifact is missing, publication fails rather than silently testing an older release.
 
-These jobs intentionally remain outside `npm test` and normal CI because they execute real installers. macOS currently remains package-level validation only: DMGs, unpacked layout, connector acceptance, and Electron fuses are checked, but a production install/update lifecycle is not automated while the application is unsigned.
+These jobs intentionally remain outside `npm test` and normal CI because they execute real installers. macOS remains package-level validation only because there is no Developer ID/notarization identity. The release builder disables certificate auto-discovery, ad-hoc signs the completed `.app`, verifies it with `codesign --verify --deep --strict --verbose=2`, checks nested application/framework executables and framework symlinks, runs `hdiutil verify`, mounts the final DMG, re-verifies the app from the mounted image, compares framework symlink layout, and runs packaged layout, MCP acceptance, and Electron fuse checks against the mounted copy.
 
 ## 9. Manual and external release checks
 
@@ -107,7 +107,7 @@ Use a disposable release machine for checks that require external credentials or
 - real Tunnel ID/runtime API key connection and reconnect after restart;
 - real ChatGPT Tunnel integration and one read-only workspace request;
 - tool-schema refresh/review after a deliberate schema change;
-- macOS signing/notarization once signing credentials and policy are introduced; and
+- macOS Developer ID signing/notarization once signing credentials and policy are introduced; and
 - light/dark, narrow-layout, and accessibility review when release-facing UI changed.
 
 Do not run installer lifecycle tests on the developer machine hosting the active Rel.AI connector.
@@ -116,7 +116,7 @@ Do not run installer lifecycle tests on the developer machine hosting the active
 
 Pushing the version commit to `main` triggers `.github/workflows/release.yml`. Preflight first rejects inconsistent release metadata before any platform package is built. The workflow then builds and verifies platform release artifacts. Windows and Linux must additionally pass the disposable fresh-install/upgrade jobs before the combined release can be prepared, attested, and published. If a prior publication attempt created the version tag but not the GitHub release, a rerun may recover only when that tag resolves to the exact current release commit; a tag pointing elsewhere fails closed.
 
-Rel.AI-owned Windows artifacts currently disable certificate auto-discovery and are covered by SHA-256 plus GitHub attestations. The packaged OpenAI tunnel-client bytes must match the reviewed provenance manifest.
+Rel.AI-owned Windows artifacts currently disable certificate auto-discovery and are covered by SHA-256 plus GitHub attestations. macOS artifacts also disable certificate auto-discovery; they are ad-hoc signed only, are not notarized, and are explicitly labeled that way in GitHub release notes. Users should copy the app to Applications, attempt to open it once, then use System Settings → Privacy & Security → Open Anyway when Gatekeeper blocks the unnotarized app. The packaged OpenAI tunnel-client bytes must match the reviewed provenance manifest.
 
 Scan the installer, portable executable, unpacked Rel.AI executable, and extracted tunnel client as separate samples before broad distribution. A malware/Trojan classification blocks publication pending investigation. See `docs/ANTIVIRUS_FALSE_POSITIVES.md` for component-level handling.
 

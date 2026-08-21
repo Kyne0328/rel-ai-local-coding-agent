@@ -348,24 +348,20 @@ jobs:
           test -n "$package_directory"
           test -d "$package_directory"
           echo "path=$package_directory" >> "$GITHUB_OUTPUT"
-      - name: Verify hardened Electron fuses
-        env:
-          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
-        run: npm run verify:fuses -- --platform darwin
-      - name: Verify packaged application layout
-        env:
-          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
-        run: npm run verify:packaged -- --platform darwin --dir '${{ steps.unpacked.outputs.path }}'
-      - name: Verify packaged bearer-authenticated MCP flow
-        env:
-          REL_AI_TARGET_PLATFORM: darwin
-          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
-        run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
       - name: Resolve macOS release artifact path
         id: release-artifacts
         env:
           REL_AI_TARGET_ARCH: ${{ matrix.arch }}
         run: node scripts/release-artifacts.mjs --platform darwin --arch '${{ matrix.arch }}' --github-output paths
+      - name: Verify final macOS DMG contents
+        env:
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg_path="$(printf '%s\n' '${{ steps.release-artifacts.outputs.paths }}' | sed '/^[[:space:]]*$/d' | head -n 1)"
+          test -n "$dmg_path"
+          node scripts/verify-macos-release.mjs --unpacked '${{ steps.unpacked.outputs.path }}' --dmg "$dmg_path"
       - name: Upload macOS release bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -495,11 +491,13 @@ jobs:
           const match = changelog.match(pattern);
           if (match?.[1]?.trim()) fs.writeFileSync('release-notes.md', `${match[1].trim()}\n`);
           NODE
+          mac_notice='> **macOS:** These builds are ad-hoc signed for bundle integrity, but are not Apple Developer ID signed or notarized. Gatekeeper approval is expected. After copying Rel.AI MCP to Applications and attempting to open it once, use System Settings → Privacy & Security → Open Anyway if macOS blocks it.'
           if [ -s release-notes.md ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
+            printf '\n%s\n' "$mac_notice" >> release-notes.md
           else
-            echo "found=false" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$mac_notice" > release-notes.md
           fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
       - name: Attest release artifact provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:

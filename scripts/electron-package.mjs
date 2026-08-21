@@ -221,9 +221,9 @@ async function packageMacRelease(electronBuilder, builderArgs, spec) {
   const stagingOutputArg = `--config.directories.output=${stagingRoot}`;
   const prepackaged = path.join(stagingRoot, spec.unpackedDirectory);
   const artifactOutput = path.join(stagingRoot, '.artifact-targets', 'mac-output');
-  // macOS releases are intentionally unsigned until Rel.AI has Apple Developer Program
-  // Developer ID and notarization credentials. Keep electron/package.json mac.identity=null
-  // and disable auto-discovery here so unsigned packaging is explicit, not accidental drift.
+  // macOS releases intentionally avoid Developer ID discovery and notarization credentials.
+  // electron/package.json keeps mac.identity=null; this wrapper applies a deterministic ad-hoc
+  // signature to the completed .app before DMG creation so bundle integrity can be verified.
   const environment = {
     ...process.env,
     REL_AI_TARGET_PLATFORM: spec.platform,
@@ -243,7 +243,10 @@ async function packageMacRelease(electronBuilder, builderArgs, spec) {
       ...builderArgs
     ], { cwd: electronRoot, env: environment });
     assertPrepackagedApp(prepackaged, spec);
-    console.log(`[electron-package] Shared macOS ${targetArch} unpacked application prepared in ${formatDuration(Date.now() - stagingStartedAt)}.`);
+    const appBundle = path.join(prepackaged, spec.executableName.split('/Contents/MacOS/')[0]);
+    runExecutable('macOS ad-hoc application signing', '/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appBundle]);
+    runExecutable('macOS ad-hoc application verification', '/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appBundle]);
+    console.log(`[electron-package] Shared macOS ${targetArch} unpacked application prepared and ad-hoc signed in ${formatDuration(Date.now() - stagingStartedAt)}.`);
 
     const artifactStartedAt = Date.now();
     runNode('DMG artifact packaging', electronBuilder, [
