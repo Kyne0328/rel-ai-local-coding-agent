@@ -121,6 +121,7 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
       available: false,
       status: 'repository_unavailable',
       compatible: true,
+      metadataMatches: null,
       restartRequired: false,
       schemaSensitiveOperationsBlocked: false,
       advisoryOnly: true,
@@ -144,6 +145,7 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
       available: true,
       status: 'compatible',
       compatible: true,
+      metadataMatches: true,
       restartRequired: false,
       schemaSensitiveOperationsBlocked: false,
       advisoryOnly: true,
@@ -162,7 +164,11 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
   return {
     available: true,
     status,
-    compatible: false,
+    // `compatible` describes whether callers may safely keep using this runtime.
+    // The exact release comparison is reported separately so an advisory version
+    // skew cannot be mistaken for a tool-call boundary by connector clients.
+    compatible: true,
+    metadataMatches: false,
     restartRequired,
     schemaSensitiveOperationsBlocked: false,
     advisoryOnly: true,
@@ -171,11 +177,11 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
     differences,
     message: restartRequired
       ? activeTaskCount > 0
-        ? 'The repository contains a newer runtime or tool surface. Tools remain available; finish active work before restarting when convenient.'
-        : 'The repository contains a newer runtime or tool surface. Tools remain available; restart or reconnect when convenient to load the new surface.'
+        ? 'The runtime remains operationally compatible. The repository contains a newer runtime or tool surface; finish active work before restarting when convenient.'
+        : 'The runtime remains operationally compatible. The repository contains a newer runtime or tool surface; restart or reconnect when convenient to load the new surface.'
       : runtimeAhead
-        ? 'The connected runtime is newer than the repository metadata. Tools remain available; reconnect to a matching repository or runtime when convenient.'
-        : 'The runtime and repository metadata disagree. Tools remain available; reconnect to a matching build when convenient.'
+        ? 'The runtime remains operationally compatible. The connected runtime is newer than the repository metadata; reconnect to a matching repository or runtime when convenient.'
+        : 'The runtime remains operationally compatible. The runtime and repository metadata disagree; reconnect to a matching build when convenient.'
   };
 }
 

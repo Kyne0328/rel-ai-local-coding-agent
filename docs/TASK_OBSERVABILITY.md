@@ -217,7 +217,7 @@ When repository metadata is available, Rel.AI compares:
 
 A repository-ahead mismatch reports `restart_required`. A runtime-ahead or other incompatible mismatch reports the precise direction and differences. The dashboard shows both versions and tool surfaces, preserves task history, and explains whether active tasks prevent a safe restart.
 
-Known incompatibility is advisory and never blocks tool calls. This is essential when Rel.AI edits its own checkout: changing release or tool-surface metadata must not revoke the editing tools needed to finish or repair that work. The dashboard still reports the mismatch and offers restart/reconnect guidance, while active work can continue normally. Repository metadata being unavailable is reported explicitly and does not fabricate a match.
+Known release-metadata skew is advisory and never blocks tool calls. `compatible` reports operational compatibility and therefore remains true while tools are available; `metadataMatches` separately reports whether the runtime and repository release metadata match exactly. This prevents connector clients from mistaking an advisory `restart_required` status for an editing boundary. This is essential when Rel.AI edits its own checkout: changing release or tool-surface metadata must not revoke the editing tools needed to finish or repair that work. The dashboard still reports the mismatch and offers restart/reconnect guidance, while active work can continue normally. Repository metadata being unavailable is reported explicitly with `metadataMatches: null` and does not fabricate a match.
 
 ## Frontend clock and accessibility
 

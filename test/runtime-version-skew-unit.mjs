@@ -28,6 +28,7 @@ assert.equal(configured.manifestHash, current.manifestHash, 'configuration field
 const equal = assessRuntimeCompatibility(current, { ...current, source: 'repository' });
 assert.equal(equal.status, 'compatible');
 assert.equal(equal.compatible, true);
+assert.equal(equal.metadataMatches, true);
 assert.equal(equal.restartRequired, false);
 
 const repositoryAhead = assessRuntimeCompatibility(
@@ -36,17 +37,21 @@ const repositoryAhead = assessRuntimeCompatibility(
   { activeTaskCount: 2 }
 );
 assert.equal(repositoryAhead.status, 'restart_required');
+assert.equal(repositoryAhead.compatible, true);
+assert.equal(repositoryAhead.metadataMatches, false);
 assert.equal(repositoryAhead.restartRequired, true);
 assert.equal(repositoryAhead.schemaSensitiveOperationsBlocked, false);
 assert.equal(repositoryAhead.advisoryOnly, true);
 assert.equal(repositoryAhead.activeTasksPreventRestart, true);
-assert.match(repositoryAhead.message, /tools remain available/i);
+assert.match(repositoryAhead.message, /operationally compatible/i);
 
 const runtimeAhead = assessRuntimeCompatibility(
   { ...current, applicationVersion: '999.0.0', packageVersion: '999.0.0' },
   { ...current, source: 'repository' }
 );
 assert.equal(runtimeAhead.status, 'runtime_newer');
+assert.equal(runtimeAhead.compatible, true);
+assert.equal(runtimeAhead.metadataMatches, false);
 assert.equal(runtimeAhead.restartRequired, false);
 assert.equal(runtimeAhead.schemaSensitiveOperationsBlocked, false);
 assert.equal(runtimeAhead.advisoryOnly, true);
@@ -56,11 +61,14 @@ const surfaceMismatch = assessRuntimeCompatibility(
   { ...current, source: 'repository', toolSurfaceVersion: current.toolSurfaceVersion + 1, manifestHash: 'changed' }
 );
 assert.equal(surfaceMismatch.status, 'restart_required');
+assert.equal(surfaceMismatch.compatible, true);
+assert.equal(surfaceMismatch.metadataMatches, false);
 assert.ok(surfaceMismatch.differences.some(item => item.field === 'toolSurfaceVersion'));
 
 const unavailable = assessRuntimeCompatibility(current, null);
 assert.equal(unavailable.status, 'repository_unavailable');
 assert.equal(unavailable.compatible, true);
+assert.equal(unavailable.metadataMatches, null);
 assert.equal(unavailable.schemaSensitiveOperationsBlocked, false);
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-runtime-skew-'));
