@@ -1,5 +1,6 @@
 import { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, logIpcFailure } from './ipc-security.js';
 import { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerUpdaterIpc } from './ipc-handlers-dashboard.js';
+import { registerCodeWorkspaceIpc } from './ipc-handlers-code.js';
 
 const OPENAI_SETUP_URLS = Object.freeze({
   tunnels: 'https://platform.openai.com/settings/organization/tunnels',
@@ -80,6 +81,16 @@ function registerIpcHandlers(deps) {
     dashboardOnly,
     exportDiagnosticState: deps.exportDiagnosticState,
     openDiagnosticsFolder: deps.openDiagnosticsFolder
+  });
+  registerCodeWorkspaceIpc({
+    ipcMain: deps.ipcMain,
+    dashboardOnly,
+    getTaskCodeWorkspace: deps.getTaskCodeWorkspace,
+    readTaskCodeFile: deps.readTaskCodeFile,
+    writeTaskCodeFile: deps.writeTaskCodeFile,
+    readTaskCodeDiff: deps.readTaskCodeDiff,
+    listCodeEditors: deps.listCodeEditors,
+    openTaskCodeIde: deps.openTaskCodeIde
   });
   registerSharedUtilityIpc({
     ipcMain: deps.ipcMain,

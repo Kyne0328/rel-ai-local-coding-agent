@@ -37,6 +37,8 @@ const files = [
   'task-state-unit.mjs',
   'task-history-storage-unit.mjs',
   'task-integrity-unit.mjs',
+  'task-code-workspace-unit.mjs',
+  'task-code-ide-unit.mjs',
   'task-completion-unit.mjs',
   'task-reconciliation-unit.mjs',
   'atomic-validation-race-unit.mjs',

@@ -1,6 +1,7 @@
 const ICONS = Object.freeze({
   home: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />',
   tasks: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />',
+  code: '<path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14" />',
   workspaces: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />',
   activity: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />',
   preferences: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M8 14v6" />',
@@ -22,6 +23,7 @@ function route(id, label, path, description, group) {
 export const WORK_NAV_ITEMS = Object.freeze([
   route('home', 'Overview', 'home', 'Connection status, projects, and recent tasks.', 'Work'),
   route('tasks', 'Tasks', 'tasks', 'See what Rel.AI is working on and what it finished.', 'Work'),
+  route('code', 'Code', 'code', 'Review and edit project files for a Rel.AI task.', 'Work'),
   route('workspaces', 'Projects', 'workspaces', 'Choose which project folders Rel.AI can use.', 'Work'),
   route('activity', 'Activity', 'activity', 'See what Rel.AI did and whether it worked.', 'Work')
 ]);

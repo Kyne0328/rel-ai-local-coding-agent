@@ -40,6 +40,12 @@ const inventory = {
   'desktop:update:install': spec('handle', ['dashboard'], 'reject'),
   'desktop:diagnostics:export': spec('handle', ['dashboard'], 'reject'),
   'desktop:diagnostics:open-folder': spec('handle', ['dashboard'], 'reject'),
+  'desktop:code:get': spec('handle', ['dashboard'], 'reject'),
+  'desktop:code:read': spec('handle', ['dashboard'], 'reject'),
+  'desktop:code:write': spec('handle', ['dashboard'], 'reject'),
+  'desktop:code:diff': spec('handle', ['dashboard'], 'reject'),
+  'desktop:code:editors': spec('handle', ['dashboard'], 'reject'),
+  'desktop:code:open-ide': spec('handle', ['dashboard'], 'reject'),
   'url:copy': spec('handle', ['wizard', 'fallback', 'dashboard'], 'reject'),
   'desktop:stop-service': spec('on', ['dashboard'], 'ignore'),
   'window:fit-content': spec('on', ['wizard', 'fallback'], 'ignore')
@@ -96,6 +102,12 @@ registerIpcHandlers({
   installUpdate: () => ({ ok: true }),
   exportDiagnosticState: value => ({ ok: true, value }),
   openDiagnosticsFolder: () => ({ ok: true }),
+  getTaskCodeWorkspace: value => ({ ok: true, value }),
+  readTaskCodeFile: value => ({ ok: true, value }),
+  writeTaskCodeFile: value => ({ ok: true, value }),
+  readTaskCodeDiff: value => ({ ok: true, value }),
+  listCodeEditors: () => ({ ok: true, editors: [{ id: 'system', label: 'File Explorer' }] }),
+  openTaskCodeIde: value => ({ ok: true, value }),
   fitWindowToContent: (window, value) => calls.push(['fit', window.id, value])
 });
 
@@ -140,6 +152,11 @@ function argsFor(channel) {
     case 'desktop:notification-preferences:set':
     case 'notifications:set-enabled': return [true];
     case 'desktop:diagnostics:export': return [{ status: 'ready' }];
+    case 'desktop:code:get': return [{ taskId: 'task-1' }];
+    case 'desktop:code:read':
+    case 'desktop:code:diff': return [{ taskId: 'task-1', path: 'src/index.js' }];
+    case 'desktop:code:write': return [{ taskId: 'task-1', path: 'src/index.js', content: 'export const ok = true;\n' }];
+    case 'desktop:code:open-ide': return [{ taskId: 'task-1', editorId: 'system' }];
     case 'window:fit-content': return [{ width: 500, height: 600 }];
     default: return [];
   }

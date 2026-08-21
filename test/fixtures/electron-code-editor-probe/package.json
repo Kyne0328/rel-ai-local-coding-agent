@@ -1,0 +1,6 @@
+{
+  "name": "relai-electron-code-editor-probe",
+  "private": true,
+  "type": "commonjs",
+  "main": "main.js"
+}

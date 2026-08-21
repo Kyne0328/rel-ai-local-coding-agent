@@ -64,6 +64,8 @@ function handleStaticAsset(ctx) {
     filePath = resolvePackagePath('src', 'ui', safePath.slice(4));
   } else if (safePath.startsWith("/public/ui/")) {
     filePath = resolvePackagePath('src', 'ui', safePath.slice(11));
+  } else if (safePath.startsWith("/vendor/monaco/")) {
+    filePath = resolvePackagePath('node_modules', 'monaco-editor', 'min', 'vs', safePath.slice('/vendor/monaco/'.length));
   } else {
     filePath = resolvePackagePath('public', safePath.slice(8));
   }
@@ -79,8 +81,8 @@ function handleStaticAsset(ctx) {
 function handleDashboard(ctx) {
   const nonce = crypto.randomBytes(18).toString("base64");
   const csp = [
-    "default-src 'self'", `script-src 'self' 'nonce-${nonce}'`, "style-src 'self'",
-    "img-src 'self' data:", "connect-src 'self'", "object-src 'none'",
+    "default-src 'self'", `script-src 'self' 'nonce-${nonce}'`, "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:", "font-src 'self' data:", "connect-src 'self'", "worker-src 'self' blob:", "object-src 'none'",
     "base-uri 'none'", "frame-ancestors 'none'", "form-action 'self'"
   ].join("; ");
   sendHtml(ctx.res, 200, renderDashboardHtml(ctx.options, nonce), {

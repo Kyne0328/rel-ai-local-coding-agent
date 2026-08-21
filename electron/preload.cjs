@@ -37,6 +37,14 @@ if (surface === 'dashboard') {
     setNotificationPreferences: patch => ipcRenderer.invoke('desktop:notification-preferences:set', patch),
     exportDiagnosticState: report => ipcRenderer.invoke('desktop:diagnostics:export', report),
     openDiagnosticsFolder: () => ipcRenderer.invoke('desktop:diagnostics:open-folder'),
+    codeWorkspace: {
+      get: taskId => ipcRenderer.invoke('desktop:code:get', { taskId }),
+      read: (taskId, path) => ipcRenderer.invoke('desktop:code:read', { taskId, path }),
+      write: (taskId, path, content, expectedSha256) => ipcRenderer.invoke('desktop:code:write', { taskId, path, content, expectedSha256 }),
+      diff: (taskId, path) => ipcRenderer.invoke('desktop:code:diff', { taskId, path }),
+      editors: () => ipcRenderer.invoke('desktop:code:editors'),
+      openIde: (taskId, editorId) => ipcRenderer.invoke('desktop:code:open-ide', { taskId, editorId })
+    },
     restartConnection: () => ipcRenderer.invoke('desktop:restart-connection'),
     reloadDashboard: routeHash => ipcRenderer.invoke('desktop:reload-dashboard', routeHash),
     relaunchApp: () => ipcRenderer.invoke('desktop:relaunch'),

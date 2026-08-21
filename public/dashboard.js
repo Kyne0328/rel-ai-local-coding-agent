@@ -157,6 +157,7 @@ function getSections() {
   _sectionsCache = {
     home: routeSection(element => mountHome(element, getStore())),
     tasks: lazySection(() => import('./ui/features/sessions/index.js'), (module, element) => module.mountTasks(element, getStore())),
+    code: lazySection(() => import('./ui/features/code/index.js'), (module, element) => module.mountCode(element, getStore())),
     workspaces: lazySection(() => import('./ui/features/workspaces/index.js'), (module, element) => module.mountWorkspaces(element, getStore())),
     activity: lazySection(() => import('./ui/features/activity/index.js'), (module, element) => module.mountActivity(element, getStore())),
     settings: lazySection(() => import('./ui/features/settings/index.js'), (module, element) => module.mountSettings(element, settingsSubPage())),
@@ -490,6 +491,10 @@ async function updateLiveView(data) {
       const module = await import('./ui/features/sessions/index.js');
       return module.updateTaskSessions(root, data);
     }
+    case 'code': {
+      const module = await import('./ui/features/code/index.js');
+      return module.updateCodeLiveState(root, data);
+    }
     case 'workspaces': {
       const module = await import('./ui/features/workspaces/index.js');
       return module.updateWorkspacesLiveState(root, data);
@@ -618,7 +623,8 @@ function viewRevisionKey(data = {}) {
   const process = Number(revisions.process || 0);
   switch (currentSection()) {
     case 'activity':
-    case 'tasks': return `${route}|t:${task}`;
+    case 'tasks':
+    case 'code': return `${route}|t:${task}`;
     case 'workspaces': return `${route}|t:${task}|w:${workspace}`;
     case 'processes': return `${route}|p:${process}`;
     case 'connection': return `${route}|c:${connection}`;

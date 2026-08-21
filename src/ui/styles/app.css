@@ -6,6 +6,7 @@
 @import "../features/settings/styles.css";
 @import "../features/system/styles.css";
 @import "../features/sessions/styles.css";
+@import "../features/code/styles.css";
 @import "../features/activity/styles.css";
 @import "../features/workspaces/styles.css";
 @import "../features/tools/styles.css";
@@ -592,7 +593,7 @@
   :root { --sidebar-width: 0px; }
   .sidebar { @apply hidden; }
   .main { padding: 12px 12px calc(74px + env(safe-area-inset-bottom)); }
-  .mobile-nav { @apply fixed bottom-0 left-0 right-0 z-40 grid overflow-x-auto p-2; grid-template-columns: repeat(6,minmax(52px,1fr)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); scrollbar-width: none; }
+  .mobile-nav { @apply fixed bottom-0 left-0 right-0 z-40 grid overflow-x-auto p-2; grid-template-columns: repeat(7,minmax(52px,1fr)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); scrollbar-width: none; }
   .mobile-nav::-webkit-scrollbar { display: none; }
   .mobile-nav a { @apply min-h-11 flex-col justify-center gap-1 px-1 py-1 text-xs; line-height: 1.1; text-align: center; }
   .mobile-nav .nav-icon { @apply size-4; }

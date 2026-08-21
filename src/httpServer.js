@@ -237,7 +237,7 @@ async function tryExactGet(ctx) {
 
 async function tryPrefixGet(ctx) {
   const p = ctx.p;
-  if (p.startsWith("/ui/") || p.startsWith("/public/")) { handleStaticAsset(ctx); return true; }
+  if (p.startsWith("/ui/") || p.startsWith("/public/") || p.startsWith("/vendor/monaco/")) { handleStaticAsset(ctx); return true; }
   return false;
 }
 

@@ -29,6 +29,7 @@
         ]
       },
       "ignoreDependencies": [
+        "monaco-editor",
         "tree-sitter-wasms"
       ]
     },

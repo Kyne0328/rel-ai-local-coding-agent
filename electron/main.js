@@ -10,6 +10,7 @@ import { createSetupWindowManager } from './setup-window.js';
 import { fitWindowToContent, WINDOW_SIZE_LIMITS } from './window-size.js';
 import { installLocalProtocol, localRendererUrl, registerLocalScheme } from './local-protocol.js';
 import { registerIpcHandlers } from './ipc-handlers.js';
+import { createTaskCodeIdeLauncher } from './task-code-ide.js';
 import { createTaskActivityRuntime, taskActivityBlockReason } from './tool-sleep-blocker.js';
 import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
@@ -48,7 +49,8 @@ const [
   processModule,
   localAnalytics,
   telemetry,
-  processEnvironment
+  processEnvironment,
+  taskCodeWorkspace
 ] = await Promise.all([
   importResourceModule('src/connectionProfile.js'),
   importResourceModule('src/config.js'),
@@ -56,7 +58,8 @@ const [
   importResourceModule('src/process.js'),
   importResourceModule('src/localAnalytics.js'),
   importResourceModule('src/telemetry.js'),
-  importResourceModule('src/processEnvironment.js')
+  importResourceModule('src/processEnvironment.js'),
+  importResourceModule('src/taskCodeWorkspace.js')
 ]);
 const { ERROR_CODES } = desktopUxContracts;
 const { terminateProcessTree } = processModule;
@@ -72,6 +75,7 @@ const desktopNotifications = createDesktopNotifications({
   onLog: (message, options) => runtimeLogs.append(message, options)
 });
 const tunnelCredentials = createTunnelCredentialStore({ safeStorage });
+const taskCodeIde = createTaskCodeIdeLauncher({ shell });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
   iconPath: APP_ICON_PATH,
@@ -591,6 +595,15 @@ registerIpcHandlers({
   getNotificationPreferences: desktopNotifications.getPreferences,
   updateNotificationPreferences: desktopNotifications.updatePreferences,
   exportDiagnosticState: diagnosticFiles.exportReport, openDiagnosticsFolder: diagnosticFiles.openFolder,
+  getTaskCodeWorkspace: payload => taskCodeWorkspace.describeTaskCodeWorkspace(configModule.readConfig(), payload),
+  readTaskCodeFile: payload => taskCodeWorkspace.readTaskCodeFile(configModule.readConfig(), payload),
+  writeTaskCodeFile: payload => taskCodeWorkspace.writeTaskCodeFile(configModule.readConfig(), payload),
+  readTaskCodeDiff: payload => taskCodeWorkspace.readTaskCodeDiff(configModule.readConfig(), payload),
+  listCodeEditors: () => ({ ok: true, editors: taskCodeIde.listEditors() }),
+  openTaskCodeIde: async payload => taskCodeIde.open(
+    taskCodeWorkspace.resolveTaskCodeWorkspacePath(configModule.readConfig(), payload.taskId),
+    payload.editorId
+  ),
   fitWindowToContent
 });
 

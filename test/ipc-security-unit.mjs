@@ -44,6 +44,12 @@ const deps = {
   getNotificationsEnabled: () => true, setNotificationsEnabled: enabled => enabled,
   getNotificationPreferences: () => ({}), updateNotificationPreferences: patch => patch,
   exportDiagnosticState: report => ({ ok: true, report }), openDiagnosticsFolder: () => ({ ok: true }),
+  getTaskCodeWorkspace: payload => ({ ok: true, payload }),
+  readTaskCodeFile: payload => ({ ok: true, payload }),
+  writeTaskCodeFile: payload => ({ ok: true, payload }),
+  readTaskCodeDiff: payload => ({ ok: true, payload }),
+  listCodeEditors: () => ({ ok: true, editors: [] }),
+  openTaskCodeIde: payload => ({ ok: true, payload }),
   fitWindowToContent: (window, options) => calls.push(['fit', window.id, options]),
   saveLauncherConfig: config => calls.push(['save', config]),
   setTunnelApiKey: key => calls.push(['tunnelKey', key])
@@ -58,6 +64,10 @@ assert.throws(() => guards.windowOnly(eventFor(other), () => dashboard, 'Dashboa
 assert.equal([...handles.keys()].some(channel => channel.startsWith('desktop:cloud:')), false);
 assert.equal([...handles.keys()].some(channel => /ngrok|gateway|approval/i.test(channel)), false);
 assert.throws(() => handles.get('desktop:settings:get')(eventFor(other)), /not available/);
+assert.throws(() => handles.get('desktop:code:get')(eventFor(other), { taskId: 'task-1' }), /not available/);
+assert.deepEqual(handles.get('desktop:code:get')(eventFor(dashboard), { taskId: 'task-1' }), { ok: true, payload: { taskId: 'task-1' } });
+assert.throws(() => handles.get('desktop:code:write')(eventFor(dashboard), { taskId: 'task-1', path: 'a.js', content: 'x'.repeat((2 * 1024 * 1024) + 1) }), /2 MiB/);
+assert.throws(() => handles.get('desktop:code:open-ide')(eventFor(dashboard), { taskId: 'task-1', editorId: 'x'.repeat(41) }), /editorId is too long/);
 assert.throws(() => handles.get('url:copy')(eventFor(dashboard), 'x'.repeat(MAX_CLIPBOARD_TEXT_BYTES + 1)));
 assert.deepEqual(handles.get('url:copy')(eventFor(wizard), 'safe\u0000text'), { ok: true });
 assert.equal(clipboardText, 'safetext');
