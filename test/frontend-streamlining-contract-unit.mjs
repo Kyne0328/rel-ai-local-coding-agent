@@ -207,10 +207,12 @@ for (const source of [workspaceFormSource, workspaceRepairSource]) {
 }
 assert.match(workspaceFormSource, />Project name</, 'project naming must use the same product vocabulary as the Projects page');
 assert.match(workspaceFormSource, /title: isEdit \? 'Edit project' : 'Create project'/, 'project dialogs must use concise create/edit titles');
-assert.match(workspaceFormSource, />Source folder</, 'project dialogs must present the configured project root as a source folder');
+assert.match(workspaceFormSource, />Source folders</, 'project dialogs must present attached project roots as source folders');
+assert.match(workspaceFormSource, /data-add-source/, 'project dialogs must let users attach more than one source folder');
+assert.match(workspaceFormSource, /sourcePaths,\s*enforceUniquePath: true/s, 'project dialogs must persist the complete source-folder list');
 assert.match(workspaceFormSource, />Delete project from Rel\.AI</, 'project settings must make the destructive configuration-only action explicit');
 assert.match(workspaceActions, /action: 'delete'.*confirmDelete: true/s, 'project deletion must use the explicit delete action and confirmation field');
-assert.match(workspaceActions, /source folder and every file inside it will stay on your computer/i, 'project deletion must state that local source files remain untouched');
+assert.match(workspaceActions, /source folders and every file inside them will stay on your computer/i, 'project deletion must state that local source files remain untouched');
 assert.match(workspaceRepairSource, /title: 'Repair project'/, 'project repair must use a concise product-facing modal title');
 assert.match(workspaceRepairSource, />Replacement source folder</, 'project repair must describe the source-folder change rather than an internal workspace path');
 const modalSource = read('src/ui/components/modal.js');

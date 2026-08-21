@@ -14,8 +14,10 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 try {
   const first = path.join(tmp, 'first');
   const second = path.join(tmp, 'second');
+  const third = path.join(tmp, 'third');
   fs.mkdirSync(first, { recursive: true });
   fs.mkdirSync(second, { recursive: true });
+  fs.mkdirSync(third, { recursive: true });
   const current = {
     stateDir: tmp,
     workspaces: {
@@ -33,6 +35,7 @@ try {
     originalAlias: 'alpha',
     alias: 'beta',
     path: second,
+    sourcePaths: [second, third],
     enforceUniquePath: true
   });
   assert.equal(renamed.ok, true);
@@ -40,11 +43,13 @@ try {
   assert.equal(renamed.config.workspaces.some(item => item.alias === 'alpha'), false);
   const beta = renamed.config.workspaces.find(item => item.alias === 'beta');
   assert.equal(beta.path, second);
+  assert.deepEqual(beta.sourcePaths, [second, third]);
   assert.equal(beta.context.snapshotMaxFiles, 321);
 
   const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   assert.equal(saved.workspaces.alpha, undefined);
   assert.equal(saved.workspaces.beta.path, second);
+  assert.deepEqual(saved.workspaces.beta.sourcePaths, [second, third]);
 
   assert.throws(() => updateWorkspace(saved, {
     action: 'upsert',
@@ -61,6 +66,14 @@ try {
     path: second,
     enforceUniquePath: true
   }), /already configured as workspace 'beta'/);
+  assert.throws(() => updateWorkspace(saved, {
+    action: 'upsert',
+    mode: 'create',
+    alias: 'duplicate-secondary-path',
+    path: first,
+    sourcePaths: [first, third],
+    enforceUniquePath: true
+  }), /already configured as workspace 'beta'/);
 
   for (const staleAction of ['remove', 'rename', 'prune-tests', 'prune-stale-tests']) {
     assert.throws(
@@ -74,6 +87,7 @@ try {
   assert.deepEqual(unchanged, saved, 'failed duplicate operations must not partially rename or rewrite configuration');
 
   const resolvedByAlias = resolveWorkspace(saved, 'beta');
+  assert.deepEqual(resolvedByAlias.sourcePaths, [second, third]);
   const resolvedByPath = resolveWorkspace(saved, second + path.sep);
   assert.equal(resolvedByPath.alias, 'beta');
   assert.equal(resolvedByPath.path, resolvedByAlias.path);

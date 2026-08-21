@@ -229,12 +229,27 @@ function normalizeWorkspaces(config) {
 }
 
 function normalizeWorkspace(workspace) {
+  const sourcePaths = normalizeWorkspaceSourcePaths(workspace);
   return {
-    path: workspace.path,
+    path: sourcePaths[0] || workspace.path,
+    sourcePaths,
     repoSlug: workspace.repoSlug || "",
     context: normalizeContextConfig(workspace.context),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
+}
+
+function normalizeWorkspaceSourcePaths(workspace) {
+  const values = [workspace?.path, ...normalizeStringList(workspace?.sourcePaths)]
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+  const seen = new Set();
+  return values.filter(value => {
+    const key = normalizeWorkspacePathForComparison(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeContextConfig(value) {
@@ -399,6 +414,7 @@ function resolveWorkspace(config, alias) {
   return {
     alias: resolvedAlias,
     path: realRoot,
+    sourcePaths: normalizeWorkspaceSourcePaths(entry),
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
@@ -451,6 +467,7 @@ function publicConfigSummary(config) {
       return {
         alias,
         path: entry.path,
+        sourcePaths: normalizeWorkspaceSourcePaths(entry),
         repoSlug: entry.repoSlug || "",
         context: normalizeContextConfig(entry.context),
         discoveredCommands: discovered,

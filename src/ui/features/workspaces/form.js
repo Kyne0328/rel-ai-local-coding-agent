@@ -1,4 +1,4 @@
-// Shared add/edit workspace form. Rename and path changes are saved atomically.
+// Shared add/edit workspace form. Rename and source-folder changes are saved atomically.
 import { openModal, closeModal } from '../../components/modal.js';
 import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOARD_DATA_URL } from '../../api.js';
 import { toast } from '../../components/toast.js';
@@ -41,11 +41,30 @@ function renderPathStatus(element, info) {
   }
 }
 
+function renderPathsStatus(element, paths, infos) {
+  if (paths.length <= 1) {
+    renderPathStatus(element, infos[0] || null);
+    return;
+  }
+  element.className = 'ws-form-status';
+  const gitCount = infos.filter(info => info?.isGit).length;
+  const directoryCount = infos.filter(info => info?.exists && info?.isDirectory).length;
+  const unavailableCount = paths.length - directoryCount;
+  const nonGitCount = Math.max(0, directoryCount - gitCount);
+  const parts = [`${paths.length} source folders selected`];
+  if (gitCount) parts.push(`${gitCount} Git ${gitCount === 1 ? 'project' : 'projects'}`);
+  if (nonGitCount) parts.push(`${nonGitCount} non-Git ${nonGitCount === 1 ? 'folder' : 'folders'}`);
+  if (unavailableCount) parts.push(`${unavailableCount} not available yet`);
+  element.textContent = parts.join(' · ');
+  element.classList.add(unavailableCount || nonGitCount ? 'warn' : 'success');
+}
+
 export async function openWorkspaceForm({ mode = 'add', workspace = null, onSaved, onRemove } = {}) {
   const ws = workspace || {};
   const isEdit = mode === 'edit';
   const originalAlias = String(ws.alias || '').trim();
   const configured = await loadConfiguredWorkspaces();
+  const initialPaths = sourcePathsFromWorkspace(ws);
   const form = document.createElement('form');
   form.className = 'ws-form ws-project-form';
   const isDesktop = document.documentElement.dataset.surface === 'desktop';
@@ -61,30 +80,23 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     </section>
 
     <section class="ws-source-section" aria-labelledby="wsSourceFolderHeading">
-      <h3 class="ws-source-heading" id="wsSourceFolderHeading">Source folder</h3>
+      <h3 class="ws-source-heading" id="wsSourceFolderHeading">Source folders</h3>
       <div class="ws-source-folder-box">
         <div data-source-picker-wrap ${isDesktop ? '' : 'hidden'}>
-          <ul class="ws-source-folder-list">
-            <li class="ws-source-folder-row" data-source-folder ${ws.path ? '' : 'hidden'}>
-              <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
-              <span class="ws-source-folder-copy">
-                <strong data-source-folder-name>${esc(folderDisplayName(ws.path || ''))}</strong>
-                <small data-source-folder-path>${esc(ws.path || '')}</small>
-              </span>
-              <button type="button" class="ws-source-folder-change" data-browse>${isEdit ? 'Change' : 'Choose'}</button>
-            </li>
-          </ul>
-          <button type="button" class="ws-source-folder-empty" data-source-empty data-browse ${ws.path ? 'hidden' : ''}>
+          <ul class="ws-source-folder-list" data-source-folder-list>${renderSourceFolderRows(initialPaths)}</ul>
+          <button type="button" class="ws-source-folder-empty" data-source-empty data-add-source ${initialPaths.length ? 'hidden' : ''}>
             <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
-            <span>Choose a source folder Rel.AI can read and edit</span>
+            <span>Choose a source folder</span>
           </button>
+          <button type="button" class="ws-source-folder-add" data-source-add data-add-source ${initialPaths.length ? '' : 'hidden'}>+ Add source folder</button>
         </div>
         <div class="ws-source-manual ws-source-manual-only" ${isDesktop ? 'hidden' : ''} data-manual-path-wrap>
-          <label for="workspacePathInput">Folder path</label>
-          <input class="ws-form-path" id="workspacePathInput" name="path" type="text" value="${esc(ws.path || '')}" placeholder="Absolute path to the project" autocomplete="off">
-          <span class="ws-form-help">Enter the absolute path to the source folder Rel.AI can read and edit.</span>
+          <label for="workspacePathsInput">Folder paths</label>
+          <textarea class="ws-form-path" id="workspacePathsInput" name="paths" rows="4" placeholder="One absolute folder path per line" autocomplete="off">${esc(initialPaths.join('\n'))}</textarea>
+          <span class="ws-form-help">Enter one absolute source-folder path per line.</span>
         </div>
       </div>
+      <div class="ws-form-help">The first folder is the primary repository used for project-level Git and command actions.</div>
       <div class="ws-form-status" data-path-status aria-live="polite"></div>
     </section>
 
@@ -100,16 +112,14 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     </footer>
   `;
 
-  const pathInput = form.querySelector('input[name="path"]');
+  const pathsInput = form.querySelector('textarea[name="paths"]');
   const aliasInput = form.querySelector('input[name="alias"]');
   const statusEl = form.querySelector('[data-path-status]');
   const conflictEl = form.querySelector('[data-conflict]');
-  const browseBtns = [...form.querySelectorAll('[data-browse]')];
   const sourcePickerWrap = form.querySelector('[data-source-picker-wrap]');
-  const sourceFolder = form.querySelector('[data-source-folder]');
+  const sourceFolderList = form.querySelector('[data-source-folder-list]');
   const sourceEmpty = form.querySelector('[data-source-empty]');
-  const sourceFolderName = form.querySelector('[data-source-folder-name]');
-  const sourceFolderPath = form.querySelector('[data-source-folder-path]');
+  const sourceAdd = form.querySelector('[data-source-add]');
   const manualPathWrap = form.querySelector('[data-manual-path-wrap]');
   const submitBtn = form.querySelector('button[type="submit"]');
   const initialState = formSnapshot(form);
@@ -118,21 +128,22 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   let aliasEdited = Boolean(isEdit || aliasInput.value.trim());
   let pathValidationGeneration = 0;
 
-  const syncSourceFolder = () => {
-    const value = pathInput.value.trim();
-    if (sourceFolder) sourceFolder.hidden = !value;
-    if (sourceEmpty) sourceEmpty.hidden = Boolean(value);
-    if (sourceFolderName) sourceFolderName.textContent = folderDisplayName(value);
-    if (sourceFolderPath) sourceFolderPath.textContent = value;
-  };
+  const getSourcePaths = () => parseSourcePaths(pathsInput.value);
+  const setSourcePaths = paths => { pathsInput.value = normalizeSourcePaths(paths).join('\n'); };
   const suggestAlias = () => {
     if (aliasEdited) return;
-    aliasInput.value = deriveWorkspaceAlias(pathInput.value);
+    aliasInput.value = deriveWorkspaceAlias(getSourcePaths()[0] || '');
+  };
+  const syncSourceFolders = () => {
+    const paths = getSourcePaths();
+    sourceFolderList.innerHTML = renderSourceFolderRows(paths);
+    sourceEmpty.hidden = Boolean(paths.length);
+    sourceAdd.hidden = !paths.length;
   };
   const syncConflicts = () => {
     const message = workspaceConflict(configured, {
       alias: aliasInput.value,
-      path: pathInput.value,
+      paths: getSourcePaths(),
       originalAlias
     });
     conflictEl.hidden = !message;
@@ -140,38 +151,38 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     submitBtn.disabled = Boolean(message);
     return message;
   };
-  const validateCurrentPath = async (value, generation) => {
-    const info = await validatePath(value);
-    if (generation !== pathValidationGeneration || pathInput.value.trim() !== value) return null;
-    renderPathStatus(statusEl, info);
-    return info;
+  const validateCurrentPaths = async (paths, generation) => {
+    const infos = await Promise.all(paths.map(value => validatePath(value).catch(() => null)));
+    if (generation !== pathValidationGeneration) return null;
+    const currentPaths = getSourcePaths();
+    if (currentPaths.length !== paths.length || currentPaths.some((value, index) => value !== paths[index])) return null;
+    renderPathsStatus(statusEl, paths, infos);
+    return infos;
   };
-  const runValidate = debounce((value, generation) => {
-    void validateCurrentPath(value, generation);
+  const runValidate = debounce((paths, generation) => {
+    void validateCurrentPaths(paths, generation);
   }, 350);
-
-  pathInput.addEventListener('input', () => {
-    const value = pathInput.value.trim();
+  const syncPathState = ({ validate = true } = {}) => {
+    const paths = getSourcePaths();
     const generation = ++pathValidationGeneration;
-    syncSourceFolder();
+    syncSourceFolders();
     suggestAlias();
     syncConflicts();
-    if (!value) renderPathStatus(statusEl, null);
-    else runValidate(value, generation);
-  });
+    if (!paths.length) renderPathStatus(statusEl, null);
+    else if (validate) runValidate(paths, generation);
+  };
+
+  pathsInput.addEventListener('input', () => syncPathState());
   aliasInput.addEventListener('input', () => {
     aliasEdited = Boolean(aliasInput.value.trim());
     syncConflicts();
   });
   form.addEventListener('input', syncDirty);
   form.addEventListener('change', syncDirty);
-  if (pathInput.value.trim()) {
-    const value = pathInput.value.trim();
-    runValidate(value, ++pathValidationGeneration);
-  }
+  if (initialPaths.length) runValidate(initialPaths, ++pathValidationGeneration);
   syncConflicts();
 
-  const browseForFolder = async trigger => {
+  const browseForFolder = async (trigger, replaceIndex = null) => {
     const idleMarkup = trigger.innerHTML;
     trigger.disabled = true;
     trigger.dataset.state = 'loading';
@@ -190,24 +201,51 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     if (res?.unsupported) {
       if (sourcePickerWrap) sourcePickerWrap.hidden = true;
       manualPathWrap.hidden = false;
-      toast('Folder browsing is unavailable here — enter the folder path instead.', { variant: 'info' });
-      pathInput.focus();
+      toast('Folder browsing is unavailable here — enter one folder path per line instead.', { variant: 'info' });
+      pathsInput.focus();
       return;
     }
     if (res?.canceled) return;
     if (res?.ok && res.path) {
-      pathInput.value = res.path;
-      syncSourceFolder();
-      suggestAlias();
+      const paths = getSourcePaths();
+      const candidate = String(res.path).trim();
+      const candidateKey = normalizeWorkspacePath(candidate);
+      const duplicateIndex = paths.findIndex((value, index) => index !== replaceIndex && normalizeWorkspacePath(value) === candidateKey);
+      if (duplicateIndex !== -1) {
+        toast('That source folder is already attached to this project.', { variant: 'info' });
+        return;
+      }
+      if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < paths.length) paths[replaceIndex] = candidate;
+      else paths.push(candidate);
+      setSourcePaths(paths);
+      syncPathState({ validate: false });
       syncDirty();
-      syncConflicts();
-      const value = pathInput.value.trim();
-      await validateCurrentPath(value, ++pathValidationGeneration);
+      await validateCurrentPaths(getSourcePaths(), ++pathValidationGeneration);
     } else if (res?.error) {
       toast('Could not open folder picker: ' + res.error, { variant: 'error' });
     }
   };
-  for (const browseBtn of browseBtns) browseBtn.addEventListener('click', () => void browseForFolder(browseBtn));
+
+  for (const addButton of form.querySelectorAll('[data-add-source]')) {
+    addButton.addEventListener('click', () => void browseForFolder(addButton));
+  }
+  sourceFolderList.addEventListener('click', event => {
+    const changeButton = event.target.closest('[data-change-source]');
+    if (changeButton) {
+      const index = Number(changeButton.closest('[data-source-index]')?.dataset.sourceIndex);
+      if (Number.isInteger(index)) void browseForFolder(changeButton, index);
+      return;
+    }
+    const removeButton = event.target.closest('[data-remove-source]');
+    if (!removeButton) return;
+    const index = Number(removeButton.closest('[data-source-index]')?.dataset.sourceIndex);
+    const paths = getSourcePaths();
+    if (!Number.isInteger(index) || index < 0 || index >= paths.length) return;
+    paths.splice(index, 1);
+    setSourcePaths(paths);
+    syncPathState();
+    syncDirty();
+  });
 
   form.querySelector('[data-cancel]').addEventListener('click', () => { void modal?.dismiss(); });
   const deleteBtn = form.querySelector('[data-delete-project]');
@@ -222,10 +260,10 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const alias = String(aliasInput.value || '').trim();
-    const wsPath = pathInput.value.trim();
-    if (!wsPath) {
-      toast('Choose a source folder.', { variant: 'error' });
-      const target = manualPathWrap.hidden ? sourceEmpty : pathInput;
+    const sourcePaths = getSourcePaths();
+    if (!sourcePaths.length) {
+      toast('Choose at least one source folder.', { variant: 'error' });
+      const target = manualPathWrap.hidden ? sourceEmpty : pathsInput;
       target?.focus();
       return;
     }
@@ -243,7 +281,8 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       mode: isEdit ? 'update' : 'create',
       originalAlias: isEdit ? originalAlias : alias,
       alias,
-      path: wsPath,
+      path: sourcePaths[0],
+      sourcePaths,
       enforceUniquePath: true
     }));
     if (result?.ok) {
@@ -266,16 +305,56 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   });
 
   modal = openModal({ title: isEdit ? 'Edit project' : 'Create project', content: form, size: 'standard' });
-  syncSourceFolder();
+  syncSourceFolders();
   setTimeout(() => {
     try {
-      const initialFocus = isEdit ? aliasInput : (pathInput.value.trim() ? aliasInput : sourceEmpty);
+      const initialFocus = isEdit
+        ? aliasInput
+        : initialPaths.length
+          ? aliasInput
+          : isDesktop ? sourceEmpty : pathsInput;
       initialFocus?.focus();
       if (isEdit) aliasInput.select();
     } catch (error) {
       if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
     }
   }, 0);
+}
+
+function renderSourceFolderRows(paths) {
+  return paths.map((value, index) => `
+    <li class="ws-source-folder-row" data-source-index="${index}">
+      <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+      <span class="ws-source-folder-copy">
+        <span class="ws-source-folder-title"><strong>${esc(folderDisplayName(value))}</strong>${index === 0 ? '<small class="ws-source-primary">Primary</small>' : ''}</span>
+        <small>${esc(value)}</small>
+      </span>
+      <span class="ws-source-folder-actions">
+        <button type="button" class="ws-source-folder-change" data-change-source>Change</button>
+        <button type="button" class="ws-source-folder-remove" data-remove-source>Remove</button>
+      </span>
+    </li>`).join('');
+}
+
+function sourcePathsFromWorkspace(workspace) {
+  return normalizeSourcePaths([
+    workspace?.path,
+    ...(Array.isArray(workspace?.sourcePaths) ? workspace.sourcePaths : [])
+  ]);
+}
+
+function parseSourcePaths(value) {
+  return String(value || '').split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+}
+
+function normalizeSourcePaths(values) {
+  const seen = new Set();
+  return values.map(value => String(value || '').trim()).filter(Boolean).filter(value => {
+    const key = normalizeWorkspacePath(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function folderDisplayName(value) {
@@ -296,14 +375,16 @@ async function loadConfiguredWorkspaces() {
 
 function workspaceConflict(workspaces, values) {
   const alias = String(values.alias || '').trim();
-  const workspacePath = normalizeWorkspacePath(values.path);
+  const sourcePaths = Array.isArray(values.paths) ? values.paths : [];
+  const normalizedPaths = sourcePaths.map(normalizeWorkspacePath).filter(Boolean);
   const originalAlias = String(values.originalAlias || '').trim();
   if (alias && !isValidWorkspaceAlias(alias)) return 'Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.';
+  if (new Set(normalizedPaths).size !== normalizedPaths.length) return 'Each source folder can be added only once.';
   const aliasConflict = workspaces.find(item => item.alias === alias && item.alias !== originalAlias);
   if (aliasConflict) return `Project name '${alias}' is already in use.`;
-  const pathConflict = workspacePath
-    ? workspaces.find(item => item.alias !== originalAlias && normalizeWorkspacePath(item.path) === workspacePath)
-    : null;
-  return pathConflict ? `This project folder is already configured as '${pathConflict.alias}'.` : '';
+  const pathConflict = workspaces.find(item => {
+    if (item.alias === originalAlias) return false;
+    return sourcePathsFromWorkspace(item).some(itemPath => normalizedPaths.includes(normalizeWorkspacePath(itemPath)));
+  });
+  return pathConflict ? `A source folder is already configured as '${pathConflict.alias}'.` : '';
 }
-

@@ -63,17 +63,22 @@
 .ws-source-folder-list { @apply m-0 p-0; list-style: none; }
 .ws-source-folder-row { @apply grid min-h-12 items-center gap-3 px-3 py-2; grid-template-columns: auto minmax(0,1fr) auto; }
 .ws-source-folder-copy { @apply grid min-w-0; }
+.ws-source-folder-title { @apply flex min-w-0 items-center gap-2; }
 .ws-source-folder-copy strong { @apply truncate text-[12px] font-medium; }
 .ws-source-folder-copy small { @apply truncate text-[10px]; color: var(--ui-text-tertiary); }
-.ws-source-folder-change { @apply min-h-8 rounded-lg px-2.5 text-[11px] font-medium; color: var(--ui-text-secondary); }
-.ws-source-folder-change:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
-.ws-source-folder-empty { @apply flex min-h-24 w-full flex-col items-center justify-center gap-2 p-4 text-[12px]; color: var(--ui-text-secondary); }
-.ws-source-folder-empty:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
+.ws-source-primary { @apply shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[.04em]; background: var(--ui-surface-secondary); color: var(--ui-text-tertiary); }
+.ws-source-folder-actions { @apply flex shrink-0 items-center gap-1; }
+.ws-source-folder-change, .ws-source-folder-remove { @apply min-h-8 rounded-lg px-2.5 text-[11px] font-medium; color: var(--ui-text-secondary); }
+.ws-source-folder-change:hover, .ws-source-folder-remove:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
+.ws-source-folder-add, .ws-source-folder-empty { @apply flex min-h-11 w-full items-center justify-center gap-2 border-t px-4 py-2.5 text-[12px] font-medium; border-color: var(--ui-border-subtle); color: var(--ui-text-secondary); }
+.ws-source-folder-empty { @apply min-h-24 flex-col border-t-0; font-weight: 400; }
+.ws-source-folder-add:hover, .ws-source-folder-empty:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
 .ws-source-manual { @apply border-t p-3; border-color: var(--ui-border-subtle); }
 .ws-source-manual-only { @apply border-t-0; }
 .ws-source-manual label { @apply mb-1.5 block text-[11px] font-semibold; color: var(--ui-text-secondary); }
 .ws-source-manual .ws-form-help { @apply mt-1 block; }
 .ws-form-path { @apply min-w-0 w-full; }
+textarea.ws-form-path { @apply min-h-24 resize-y; }
 .ws-form-status { @apply min-h-4 text-[11px]; }
 .ws-form-status.success { color: var(--ui-status-success-foreground); }
 .ws-form-status.warn { color: var(--ui-status-warning-foreground); }

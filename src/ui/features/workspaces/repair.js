@@ -175,7 +175,11 @@ async function loadConfiguredWorkspaces() {
 function duplicateWorkspaceForPath(workspaces, candidatePath, excludedAlias) {
   const target = normalizePath(candidatePath);
   if (!target) return null;
-  return workspaces.find(item => item.alias !== excludedAlias && normalizePath(item.path) === target) || null;
+  return workspaces.find(item => item.alias !== excludedAlias && workspaceSourcePaths(item).some(sourcePath => normalizePath(sourcePath) === target)) || null;
+}
+
+function workspaceSourcePaths(workspace) {
+  return [workspace?.path, ...(Array.isArray(workspace?.sourcePaths) ? workspace.sourcePaths : [])].filter(Boolean);
 }
 
 function renderPathStatus(element, info) {

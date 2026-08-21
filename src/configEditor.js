@@ -24,20 +24,27 @@ function _handleUpsertWorkspace(alias, payload, next) {
   if (originalAlias !== alias && next.workspaces[alias]) throw new Error(`Workspace '${alias}' already exists.`);
 
   const currentWorkspace = objectOrEmpty(next.workspaces[originalAlias]);
-  const workspacePath = source.path == null || source.path === "" ? currentWorkspace.path : String(source.path).trim();
-  if (!workspacePath) throw new Error("Workspace path is required.");
-  if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
-  assertSafeWorkspaceRoot(workspacePath);
+  const sourcePaths = workspaceSourcePaths(source, currentWorkspace);
+  if (!sourcePaths.length) throw new Error("At least one workspace path is required.");
+  for (const workspacePath of sourcePaths) {
+    if (!path.isAbsolute(workspacePath)) throw new Error("Workspace paths must be absolute.");
+    assertSafeWorkspaceRoot(workspacePath);
+  }
 
   if (source.enforceUniquePath === true || payload.enforceUniquePath === true || mode === "create" || mode === "update") {
-    const duplicateAlias = workspaceAliasForPath(next.workspaces, workspacePath, originalAlias);
-    if (duplicateAlias) throw new Error(`Project folder is already configured as workspace '${duplicateAlias}'.`);
+    for (const workspacePath of sourcePaths) {
+      const duplicateAlias = workspaceAliasForPath(next.workspaces, workspacePath, originalAlias);
+      if (duplicateAlias) throw new Error(`Project folder is already configured as workspace '${duplicateAlias}'.`);
+    }
   }
+
+  const workspacePath = sourcePaths[0];
 
   if (originalAlias !== alias) delete next.workspaces[originalAlias];
   next.workspaces[alias] = {
     ...currentWorkspace,
     path: workspacePath,
+    sourcePaths,
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
     context: parseContext(source.context, currentWorkspace.context)
   };
@@ -55,10 +62,28 @@ function _handleUpsertWorkspace(alias, payload, next) {
 function workspaceAliasForPath(workspaces, workspacePath, excludedAlias = "") {
   const target = normalizedWorkspacePath(workspacePath);
   for (const [candidateAlias, candidate] of Object.entries(objectOrEmpty(workspaces))) {
-    if (candidateAlias === excludedAlias || !candidate?.path) continue;
-    if (normalizedWorkspacePath(candidate.path) === target) return candidateAlias;
+    if (candidateAlias === excludedAlias) continue;
+    if (workspaceSourcePaths({}, candidate).some(candidatePath => normalizedWorkspacePath(candidatePath) === target)) return candidateAlias;
   }
   return "";
+}
+
+function workspaceSourcePaths(source, currentWorkspace = {}) {
+  const current = parseList(currentWorkspace.sourcePaths?.length ? currentWorkspace.sourcePaths : currentWorkspace.path ? [currentWorkspace.path] : []);
+  const hasExplicitList = source.sourcePaths != null || source.paths != null;
+  let values = hasExplicitList ? parseList(source.sourcePaths ?? source.paths) : [...current];
+  if (!hasExplicitList && source.path != null && source.path !== "") {
+    values = [String(source.path).trim(), ...current.slice(1)];
+  } else if (hasExplicitList && source.path != null && source.path !== "") {
+    values = [String(source.path).trim(), ...values];
+  }
+  const seen = new Set();
+  return values.filter(value => {
+    const key = normalizedWorkspacePath(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizedWorkspacePath(value) {

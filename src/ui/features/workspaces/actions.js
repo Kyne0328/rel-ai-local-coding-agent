@@ -109,7 +109,7 @@ async function removeWorkspaceFlow(alias) {
   const confirmed = await confirmAction({
     title: 'Delete project from Rel.AI?',
     message: `'${alias}' will be removed from Rel.AI.`,
-    detail: 'Its source folder and every file inside it will stay on your computer. Rel.AI will no longer access that folder through this project.',
+    detail: 'Its source folders and every file inside them will stay on your computer. Rel.AI will no longer access those folders through this project.',
     confirmLabel: 'Delete from Rel.AI',
     danger: true
   });
