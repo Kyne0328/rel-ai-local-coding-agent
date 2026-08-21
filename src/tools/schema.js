@@ -24,7 +24,7 @@ function buildPublicToolSchema(definition) {
   return {
     ...schema,
     inputSchema: compactPublicInputSchema(schema.name, schema.inputSchema, catalogToolByName.get(schema.name)),
-    outputSchema: compactPublicOutputSchema(schema.name, schema.outputSchema)
+    outputSchema: compactPublicOutputSchema(schema.name)
   };
 }
 

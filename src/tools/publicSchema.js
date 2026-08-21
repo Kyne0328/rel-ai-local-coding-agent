@@ -170,8 +170,7 @@ function fieldConstraintSignature(schema) {
   return '';
 }
 
-function compactPublicOutputSchema(name, outputSchema) {
-  const keys = Object.keys(outputSchema?.properties || {});
+function compactPublicOutputSchema(name) {
   const properties = { ok: { type: 'boolean' } };
   if (name === 'relai_search') {
     properties.neuralEmbeddings = { type: 'boolean' };
@@ -180,14 +179,9 @@ function compactPublicOutputSchema(name, outputSchema) {
   return {
     type: 'object',
     properties,
-    patternProperties: { [`^(?:${keys.map(escapeRegex).join('|')})$`]: {} },
     required: ['ok'],
-    additionalProperties: false
+    additionalProperties: true
   };
-}
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export { compactPublicInputSchema, compactPublicOutputSchema };

@@ -338,6 +338,7 @@ const FIELD_SCHEMAS = Object.freeze({
   registeredClients: NUMBER,
   aliasNormalizations: NUMBER,
   policy: OBJECT,
+  task: OBJECT,
   workflow: OBJECT
 });
 
@@ -363,7 +364,7 @@ const TOOL_FIELDS = Object.freeze({
   [OP.CHANGES_DIFF]: ['ok', 'workspace', 'work_id', 'staged', 'redactSensitive', 'path', 'reviewScope', 'reviewedScope', 'reviewHash', 'reviewedFiles', 'excludedWorkspaceFiles', 'status', 'branch', 'aheadBehind', 'statusEntries', 'sessionChangedFiles', 'baselineChangedFiles', 'untrackedSessionFiles', 'untrackedBaselineFiles', 'baselineSource', 'diff', 'sensitiveReview', 'sensitiveValuesReturned', 'exitCode', 'stderr'],
   [OP.CHANGES_RESTORE]: ['ok', 'workspace', 'work_id', 'mode', 'paths', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error'],
   [OP.CHANGES_RESET]: ['ok', 'workspace', 'work_id', 'mode', 'removeUntracked', 'reset', 'clean'],
-  [OP.WORK_STATUS]: ['ok', 'version', 'workspace', 'work_id', 'workspaceAliases', 'workspaceCount', 'toolSurface', 'tools', 'toolGroups', 'scripts', 'ci', 'runtime', 'repositoryRuntime', 'runtimeCompatibility', 'repository', 'readiness', 'state', 'backgroundOperation'],
+  [OP.WORK_STATUS]: ['ok', 'version', 'workspace', 'work_id', 'workspaceAliases', 'workspaceCount', 'toolSurface', 'tools', 'toolGroups', 'scripts', 'ci', 'runtime', 'repositoryRuntime', 'runtimeCompatibility', 'repository', 'readiness', 'state', 'task', 'backgroundOperation'],
   [OP.PUBLISH_COMMIT]: ['ok', 'workspace', 'work_id', 'dryRun', 'message', 'addAll', 'paths', 'sensitiveAuthorization', 'statusBefore', 'add', 'commit', 'statusAfter', 'secretStagedFiles', 'unauthorizedSecretPaths', 'indexRestored', 'error'],
   [OP.PUBLISH_PUSH]: ['ok', 'workspace', 'work_id', 'remote', 'branch', 'dryRun', 'setUpstream', 'push'],
   [OP.PUBLISH_DRAFT_PR]: ['ok', 'workspace', 'work_id', 'base', 'head', 'title', 'body', 'changedFiles', 'changedFileCount', 'emptyDiff', 'draftOnly', 'remoteChanged', 'warning', 'diff'],

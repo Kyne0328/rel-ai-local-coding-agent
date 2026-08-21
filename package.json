@@ -67,7 +67,7 @@
     "release:finalize": "node scripts/release-finalize.mjs",
     "release": "node scripts/release-bump.mjs",
     "test:release": "npm run release:check && node test/release-workflow-smoke.mjs",
-    "test:context": "node test/workspace-context-smoke.mjs",
+    "test:context": "node test/context/static-context-unit.mjs && node test/context/context-builder-unit.mjs && node test/context/session-compaction-unit.mjs && node test/context/tool-discovery-budget-unit.mjs && node test/workspace-context-smoke.mjs",
     "test:hard-cutover": "node test/chatgpt-local-hard-cutover-smoke.mjs",
     "test:public-workflow": "node test/workflow-smoke.mjs",
     "test:connector-wording": "node test/connector-wording-smoke.mjs",

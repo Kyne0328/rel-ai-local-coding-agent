@@ -5,6 +5,7 @@ import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { principalFingerprint } from '../mcp/principal.js';
 import { isTerminalTaskStatus } from '../taskState.js';
 import { classifyTaskIntent } from '../workflow/intent.js';
+import { buildTaskBootstrap } from '../context/context-builder.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 const TERMINAL_REFERENCE_OPERATIONS = new Set([OP.PROCESS_LIST, OP.PROCESS_READ, OP.PROCESS_STOP, OP.WORK_STATUS]);
@@ -28,31 +29,7 @@ function startTask(workspace, args = {}) {
 }
 
 function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
-  const common = {
-    mode,
-    manifests: snapshot.manifests,
-    discoveredCommands: snapshot.discoveredCommands,
-    projectInstructions: snapshot.projectInstructions,
-    truncated: snapshot.truncated,
-    hints: snapshot.hints,
-    git: snapshot.git,
-    recommendedFlow: snapshot.recommendedFlow
-  };
-  if (mode !== 'full') {
-    return {
-      ...common,
-      ...(snapshot.truncated ? {} : { fileCount: snapshot.fileCount })
-    };
-  }
-  return {
-    ...common,
-    fileCount: snapshot.fileCount,
-    files: snapshot.files,
-    manifestContents: snapshot.manifestContents,
-    skipped: snapshot.skipped,
-    writeGuidance: snapshot.writeGuidance,
-    operationJournal: snapshot.operationJournal
-  };
+  return buildTaskBootstrap(snapshot, mode);
 }
 
 function assertKnownTask(config, taskId, workspace, toolName, principal, args = {}) {

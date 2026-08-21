@@ -35,6 +35,7 @@ function getToolSurfaceManifest() {
     return {
       name: definition.name,
       state: 'active',
+      outputFields: outputFields(tool),
       executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
       taskSupport: aggregateTaskSupport(definition, actions),
       ...(actions.length ? {
@@ -50,6 +51,14 @@ function getToolSurfaceManifest() {
     tools: manifestTools,
     deprecations: []
   };
+}
+
+function outputFields(tool) {
+  const fields = new Set(Object.keys(tool?.definition?.outputSchema?.properties || {}));
+  for (const action of tool?.actions || []) {
+    for (const field of Object.keys(action?.outputSchema?.properties || {})) fields.add(field);
+  }
+  return [...fields].sort();
 }
 
 function actionMetadata(tool) {

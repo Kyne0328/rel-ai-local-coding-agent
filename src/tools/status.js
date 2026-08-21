@@ -15,6 +15,8 @@ import { runtimeCompatibility } from '../runtimeCompatibility.js';
 import { getToolActivity } from '../toolActivity.js';
 import { fallbackExecutionStatus } from '../mcp/fallbackExecutions.js';
 import { authorizedWorkspaceAliases } from '../mcp/authorizationPolicy.js';
+import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { compactSessionSummary } from '../context/session-compactor.js';
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
@@ -74,6 +76,7 @@ async function relaiStatus(config, args = {}, context = {}) {
     ...(localDiagnostics ? { scripts: sortedKeys(scripts), ci } : {}),
     workspace: selectedWorkspace,
     ...(args.work_id ? { work_id: String(args.work_id) } : {}),
+    ...(args.work_id ? { task: compactSessionSummary(readTaskHistorySessionRecord(config, args.work_id, { reconcileInactive: false }) || {}) } : {}),
     ...(backgroundOperation ? { backgroundOperation } : {}),
     workspaceCount: workspaceAliases.length,
     workspaceAliases

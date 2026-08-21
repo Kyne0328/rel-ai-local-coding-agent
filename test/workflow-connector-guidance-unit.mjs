@@ -24,7 +24,18 @@ const result = serializeConnectorResult({
   value: { ok: true, workspace: 'repo', items: [], workflow },
   workId: 'task-1'
 });
-assert.deepEqual(result.workflow, workflow);
+assert.equal(result.workflow.stage, 'verify');
+assert.equal(result.workflow.intent, 'bugfix');
+assert.deepEqual(result.workflow.boundary.changedFiles, ['front-end/src/app.js']);
+assert.deepEqual(result.workflow.boundary.affectedTests, ['front-end/test/app.test.js']);
+assert.equal(result.workflow.risk.level, 'medium');
+assert.deepEqual(result.workflow.recommendedActions[0], {
+  tool: 'relai_validate', action: 'checks', reason: 'Run focused check 0', args: { check: 'check-0' }
+});
+assert.equal(Object.hasOwn(result.workflow, 'confidence'), false, 'connector workflow must drop internal confidence metadata');
+assert.equal(Object.hasOwn(result.workflow, 'evidence'), false, 'connector workflow must drop internal evidence counters');
+assert.equal(Object.hasOwn(result.workflow.recommendedActions[0], 'id'), false, 'connector workflow must drop deterministic action IDs');
+assert.ok(Buffer.byteLength(JSON.stringify(result.workflow)) < Buffer.byteLength(JSON.stringify(workflow)), 'connector workflow must be smaller than the stored internal snapshot');
 assert.equal(result.work_id, 'task-1');
 const readSchema = outputSchemaFor(OP.READ);
 assert.ok(readSchema.properties.workflow, 'closed success schema must admit workflow');
