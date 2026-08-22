@@ -149,6 +149,8 @@
           "playwright-core/**",
           "web-tree-sitter/**",
           "tree-sitter-wasms/**",
+          "typescript-language-server/**",
+          "pyright/**",
           "monaco-editor/min/vs/**",
           "!**/*.map",
           "!@modelcontextprotocol/*/src/**",
@@ -161,6 +163,14 @@
           "!**/*.ts",
           "!**/*.cts",
           "!**/*.mts"
+        ]
+      },
+      {
+        "from": "../node_modules/typescript-lsp-runtime",
+        "to": "node_modules/typescript-lsp-runtime",
+        "filter": [
+          "package.json",
+          "lib/**"
         ]
       },
       {

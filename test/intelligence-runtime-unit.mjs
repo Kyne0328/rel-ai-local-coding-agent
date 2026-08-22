@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { relaiSemanticSearch } from '../src/bridge/semanticSearch.js';
+import { codeIntelligence } from '../src/codeIntelligence/service.js';
 import { relaiDiagnosticsRun } from '../src/bridge/diagnosticsRunner.js';
 import { relaiCodeInspect } from '../src/bridge/codeIntelligence.js';
 import { openIndexDatabase, repositoryIndexPath } from '../src/repository/intelligence/database.js';
@@ -162,7 +163,8 @@ try {
     message: 'Argument is invalid', source: 'typescript'
   });
 } finally {
-  repositoryIntelligence.shutdown();
+  await codeIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 

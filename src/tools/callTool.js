@@ -13,6 +13,7 @@ import { serializeConnectorResult } from './connector.js';
 import { enhanceToolError } from './errors.js';
 import { executeToolCall } from './execution.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
+import { codeIntelligence } from '../codeIntelligence/service.js';
 import { describeToolOperation } from './operation.js';
 import { resolveExecutableToolCall, validateExecutableOperationInput } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
@@ -415,6 +416,7 @@ function signalRepositoryIntelligenceMutation(config, operationName, args, value
     const workspace = resolveWorkspace(config, alias);
     const mutationPaths = broadMutation ? [] : (changedFiles.length ? changedFiles : restoreMutation);
     repositoryIntelligence.noteMutation(workspace, config, mutationPaths);
+    codeIntelligence.noteMutation(workspace, mutationPaths);
     invalidateRepositoryTopology(workspace.path, mutationPaths);
   } catch {}
 }

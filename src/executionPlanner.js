@@ -9,6 +9,7 @@ import { resolveSafePath } from "./safety.js";
 import { runEnvOperation } from "./envOperations.js";
 import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES, BATCH_RESULT_COMPACT_THRESHOLD } from "./editLimits.js";
 import { classifyWorkflowRisk } from "./workflow/risk.js";
+import { codeIntelligence } from './codeIntelligence/service.js';
 import { discoverRepositoryTopology, packageForPath } from "./workflow/topology.js";
 
 const STAGED_CHUNK_BYTES = 12000;
@@ -511,8 +512,27 @@ async function _handleSingleEdit(workspace, config, args) {
   return attachPost(single, await runPostActions(workspace, config, args, single.changedFiles));
 }
 
-async function planEdit(workspace, config, args) {
+async function planEdit(workspace, config, args, context = {}) {
   assertSupportedEditForm(args);
+  if (args.semantic && typeof args.semantic === 'object') {
+    const proposal = await codeIntelligence.semanticRename(workspace, args.semantic, { signal: context.signal });
+    const result = await _handleBatchEdits(workspace, config, { ...args, semantic: undefined, edits: proposal.edits });
+    return {
+      ...result,
+      plannerPath: 'semantic:rename',
+      plannerReason: `${proposal.provider} produced a semantic WorkspaceEdit; Rel.AI validated and applied it through the atomic batch editor`,
+      semantic: {
+        operation: proposal.operation,
+        provider: proposal.provider,
+        authority: proposal.authority,
+        path: proposal.path,
+        line: proposal.line,
+        column: proposal.column,
+        newName: proposal.newName,
+        fileCount: proposal.edits.length
+      }
+    };
+  }
   if (typeof args.envAction === 'string' && args.envAction.trim()) {
     const result = runEnvOperation(workspace, config, args);
     return attachPost(result, await runPostActions(workspace, config, { ...args, returnDiff: false }, result.changedFiles));
@@ -523,26 +543,27 @@ async function planEdit(workspace, config, args) {
   return _handleSingleEdit(workspace, config, args);
 }
 
-const EDIT_FORM_GUIDANCE = 'Use exactly one form: { path, content } for a complete file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
+const EDIT_FORM_GUIDANCE = 'Use exactly one form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { path, content } for a complete file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
 
 function assertSupportedEditForm(args = {}) {
   const has = (field) => Object.hasOwn(args, field);
   const hasEnv = typeof args.envAction === 'string' && args.envAction.trim().length > 0;
   const hasStage = typeof args.stage === 'string' && args.stage.trim().length > 0;
+  const hasSemantic = has('semantic');
   const hasBatch = has('edits');
   const hasPatch = has('updateText');
   const hasContent = has('content');
   const hasExact = ['oldText', 'newText', 'replacements', 'occurrence'].some(has);
 
   if (hasEnv) {
-    if (hasStage || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+    if (hasStage || hasSemantic || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
       throw new Error(`relai_edit envAction cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
     }
     return;
   }
 
   if (hasStage) {
-    if (hasBatch || hasExact || has('envAction')) {
+    if (hasSemantic || hasBatch || hasExact || has('envAction')) {
       throw new Error(`relai_edit staged operations cannot be combined with exact, batch, or environment fields. ${EDIT_FORM_GUIDANCE}`);
     }
     const stage = String(args.stage).trim().toLowerCase();
@@ -561,6 +582,15 @@ function assertSupportedEditForm(args = {}) {
 
   if (has('envAction')) {
     throw new Error(`relai_edit envAction must be a non-empty supported action. ${EDIT_FORM_GUIDANCE}`);
+  }
+  if (hasSemantic) {
+    if (hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+      throw new Error(`relai_edit semantic rename cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
+    }
+    if (!args.semantic || typeof args.semantic !== 'object' || Array.isArray(args.semantic) || args.semantic.action !== 'rename') {
+      throw new Error('relai_edit semantic currently supports only { action:"rename", path, line, column, newName }.');
+    }
+    return;
   }
   if (has('writeId')) {
     throw new Error(`relai_edit writeId is valid only with stage. ${EDIT_FORM_GUIDANCE}`);

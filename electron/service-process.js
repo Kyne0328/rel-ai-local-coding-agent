@@ -6,12 +6,13 @@ import { projectServiceActivityEvent, projectServiceActivitySnapshot } from './s
 const parentPort = process.parentPort;
 if (!parentPort) throw new Error('Rel.AI service process requires an Electron utility-process parent port.');
 
-const [httpModule, toolActivity, dashboardSessions, processManager, configModule] = await Promise.all([
+const [httpModule, toolActivity, dashboardSessions, processManager, configModule, codeIntelligenceModule] = await Promise.all([
   importResourceModule('src/httpServer.js'),
   importResourceModule('src/toolActivity.js'),
   importResourceModule('src/http/dashboardSessions.js'),
   importResourceModule('src/processManager.js'),
-  importResourceModule('src/config.js')
+  importResourceModule('src/config.js'),
+  importResourceModule('src/codeIntelligence/service.js')
 ]);
 
 let httpServer = null;
@@ -150,18 +151,22 @@ async function stopService() {
     ? processManager.stopAllManagedProcesses(runtimeConfig)
       .catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: errorMessage(error) }))
     : Promise.resolve({ attempted: 0, stopped: 0, orphaned: 1, error: errorMessage(configError) });
-  const [managedProcesses, localService] = await Promise.all([
+  const [managedProcesses, localService, codeIntelligence] = await Promise.all([
     managedProcessStop,
-    closeHttpServer(ownedServer)
+    closeHttpServer(ownedServer),
+    codeIntelligenceModule.codeIntelligence.shutdown()
+      .then(() => ({ closed: true }))
+      .catch(error => ({ closed: false, error: errorMessage(error) }))
   ]);
   dashboardSessions.clearDashboardSessions();
   publishActivitySnapshot();
   return {
-    ok: managedProcesses.orphaned === 0 && localService.closed !== false,
+    ok: managedProcesses.orphaned === 0 && localService.closed !== false && codeIntelligence.closed !== false,
     cleanup: {
-      clean: managedProcesses.orphaned === 0 && localService.closed !== false,
+      clean: managedProcesses.orphaned === 0 && localService.closed !== false && codeIntelligence.closed !== false,
       managedProcesses,
-      localService
+      localService,
+      codeIntelligence
     }
   };
 }

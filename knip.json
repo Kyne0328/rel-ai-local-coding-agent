@@ -30,7 +30,9 @@
       ],
       "ignoreDependencies": [
         "monaco-editor",
-        "tree-sitter-wasms"
+        "pyright",
+        "tree-sitter-wasms",
+        "typescript-language-server"
       ]
     },
     "electron": {

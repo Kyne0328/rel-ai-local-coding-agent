@@ -16,14 +16,24 @@ const EXECUTE = 'command:execute';
 const PROCESS = 'process:manage';
 const PUBLISH = 'git:publish';
 
+const INSPECT_LOCATION_OR_SYMBOL = Object.freeze({
+  anyOf: [
+    { required: ['symbol'] },
+    { required: ['path', 'line', 'column'] }
+  ]
+});
+
 const INSPECT_FIELDS = Object.freeze({
-  symbol: contract({ required: ['symbol'], omit: ['query', 'paths', 'maxDepth'] }),
-  references: contract({ required: ['symbol'], omit: ['query', 'paths', 'maxDepth'] }),
-  related: contract({ omit: ['paths', 'maxDepth'], extra: { anyOf: [{ required: ['query'] }, { required: ['symbol'] }] } }),
-  impact: contract({ omit: ['query'], extra: { anyOf: [{ required: ['symbol'] }, { required: ['paths'] }] } }),
-  trace: contract({ required: ['symbol'], omit: ['query', 'paths'] }),
-  diagnostics: contract({ omit: ['symbol', 'query', 'paths', 'maxResults', 'maxDepth'] }),
-  architecture: contract({ omit: ['symbol', 'query', 'paths', 'maxDepth'] })
+  symbol: contract({ required: ['symbol'], omit: ['query', 'paths', 'maxDepth', 'path', 'line', 'column'] }),
+  definition: contract({ omit: ['query', 'paths', 'maxDepth'], extra: INSPECT_LOCATION_OR_SYMBOL }),
+  references: contract({ omit: ['query', 'paths', 'maxDepth'], extra: INSPECT_LOCATION_OR_SYMBOL }),
+  hover: contract({ omit: ['query', 'paths', 'maxDepth'], extra: INSPECT_LOCATION_OR_SYMBOL }),
+  implementation: contract({ omit: ['query', 'paths', 'maxDepth'], extra: INSPECT_LOCATION_OR_SYMBOL }),
+  related: contract({ omit: ['paths', 'maxDepth', 'path', 'line', 'column'], extra: { anyOf: [{ required: ['query'] }, { required: ['symbol'] }] } }),
+  impact: contract({ omit: ['query', 'path', 'line', 'column'], extra: { anyOf: [{ required: ['symbol'] }, { required: ['paths'] }] } }),
+  trace: contract({ required: ['symbol'], omit: ['query', 'paths', 'path', 'line', 'column'] }),
+  diagnostics: contract({ omit: ['symbol', 'query', 'paths', 'maxResults', 'maxDepth', 'path', 'line', 'column'] }),
+  architecture: contract({ omit: ['symbol', 'query', 'paths', 'maxDepth', 'path', 'line', 'column'] })
 });
 
 const UI_OMIT = Object.freeze({

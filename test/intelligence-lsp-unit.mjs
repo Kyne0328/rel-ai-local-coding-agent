@@ -1,0 +1,78 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { relaiCodeInspect } from '../src/bridge/codeIntelligence.js';
+import { codeIntelligence } from '../src/codeIntelligence/service.js';
+import { planEdit } from '../src/executionPlanner.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
+
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-lsp-intelligence-'));
+const workspace = { alias: 'lsp-fixture', path: root, sourcePaths: [root], context: {} };
+const config = { stateDir: path.join(root, '.state'), workspaces: { 'lsp-fixture': workspace } };
+
+try {
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'lsp-fixture', private: true, type: 'module' }, null, 2));
+  fs.writeFileSync(path.join(root, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true },
+    include: ['src/**/*.ts']
+  }, null, 2));
+  fs.writeFileSync(path.join(root, 'src', 'math.ts'), 'export function add(left: number, right: number): number {\n  return left + right;\n}\n');
+  fs.writeFileSync(path.join(root, 'src', 'use.ts'), "import { add } from './math.js';\nexport const total = add(1, 2);\n");
+
+  const definition = await relaiCodeInspect(workspace, config, {
+    action: 'definition', path: 'src/use.ts', line: 2, column: 22, maxResults: 20
+  });
+  assert.equal(definition.ok, true);
+  assert.equal(definition.intelligence.primary, 'typescript-language-server');
+  assert.equal(definition.intelligence.authority, 'language-server');
+  assert.ok(definition.definitions.length > 0);
+
+  const hover = await relaiCodeInspect(workspace, config, {
+    action: 'hover', path: 'src/use.ts', line: 2, column: 22, maxResults: 20
+  });
+  assert.equal(hover.ok, true);
+  assert.match(hover.hover?.text || '', /add/);
+  assert.equal(hover.intelligence.primary, 'typescript-language-server');
+
+  const references = await relaiCodeInspect(workspace, config, {
+    action: 'references', path: 'src/math.ts', line: 1, column: 17, maxResults: 20
+  });
+  assert.equal(references.ok, true);
+  assert.equal(references.intelligence.primary, 'typescript-language-server');
+  assert.ok(references.items.some(item => item.path === 'src/use.ts'));
+
+  const rename = await planEdit(workspace, config, {
+    semantic: { action: 'rename', path: 'src/math.ts', line: 1, column: 17, newName: 'sum' }
+  });
+  assert.equal(rename.ok, true);
+  assert.equal(rename.plannerPath, 'semantic:rename');
+  assert.equal(rename.semantic.provider, 'typescript-language-server');
+  assert.deepEqual(rename.changedFiles.sort(), ['src/math.ts', 'src/use.ts']);
+  assert.match(fs.readFileSync(path.join(root, 'src', 'math.ts'), 'utf8'), /function sum\(/);
+  assert.match(fs.readFileSync(path.join(root, 'src', 'use.ts'), 'utf8'), /import \{ sum \}/);
+  assert.match(fs.readFileSync(path.join(root, 'src', 'use.ts'), 'utf8'), /sum\(1, 2\)/);
+
+  fs.writeFileSync(path.join(root, 'pyproject.toml'), '[project]\nname = "lsp-fixture"\nversion = "0.0.0"\n');
+  fs.writeFileSync(path.join(root, 'src', 'calc_mod.py'), 'def multiply(left: int, right: int) -> int:\n    return left * right\n');
+  fs.writeFileSync(path.join(root, 'src', 'use_calc.py'), 'from calc_mod import multiply\nvalue = multiply(2, 3)\n');
+
+  const pythonDefinition = await relaiCodeInspect(workspace, config, {
+    action: 'definition', path: 'src/use_calc.py', line: 2, column: 9, maxResults: 20
+  });
+  assert.equal(pythonDefinition.ok, true);
+  assert.equal(pythonDefinition.intelligence.primary, 'pyright');
+  assert.ok(pythonDefinition.definitions.some(item => item.path === 'src/calc_mod.py'));
+
+  const servers = new Map(codeIntelligence.status(workspace).map(item => [item.id, item]));
+  assert.equal(servers.get('typescript-language-server')?.available, true);
+  assert.equal(servers.get('pyright')?.available, true);
+
+  console.log('Hybrid LSP intelligence and Rel.AI-controlled semantic rename passed.');
+} finally {
+  await codeIntelligence.shutdown().catch(() => {});
+  await repositoryIntelligence.shutdown().catch(() => {});
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+}

@@ -99,7 +99,7 @@ const HANDLERS = Object.freeze({
   }),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
-  edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
+  edit: inWorkspace((workspace, config, args, context) => planEdit(workspace, config, args, context)),
   cancelTask,
   completeTask
 });

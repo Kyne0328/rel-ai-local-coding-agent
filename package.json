@@ -164,7 +164,10 @@
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "monaco-editor": "0.56.0",
     "playwright-core": "^1.62.1",
+    "pyright": "1.1.413",
     "tree-sitter-wasms": "^0.1.13",
+    "typescript-language-server": "6.0.0",
+    "typescript-lsp-runtime": "npm:typescript@6.0.3",
     "web-tree-sitter": "0.25.10",
     "zod": "^4.4.3"
   },
@@ -180,7 +183,10 @@
     "@opentelemetry/sdk-trace-node",
     "@opentelemetry/semantic-conventions",
     "playwright-core",
+    "pyright",
     "tree-sitter-wasms",
+    "typescript-language-server",
+    "typescript-lsp-runtime",
     "web-tree-sitter",
     "zod"
   ]
