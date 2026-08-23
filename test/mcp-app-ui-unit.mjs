@@ -118,13 +118,16 @@ try {
   assert.doesNotMatch(content.text, /class="mark"|>R<|<h1 id="title">Rel\.AI<\/h1>/, 'ChatGPT already renders the app identity before the widget');
   for (const expected of [
     'ui/notifications/tool-result', 'tools/call', 'relai_app_task',
-    'notifyIntrinsicHeight', 'ui/notifications/size-changed', 'openai:set_globals', 'safeArea', 'globals.toolOutput', 'input.arguments',
+    'notifyIntrinsicHeight', 'ui/notifications/size-changed', 'requestClose', 'openai:set_globals', 'safeArea', 'globals.toolOutput', 'input.arguments',
     "action==='begin'", 'refreshLiveStatus', 'lifecycle-hidden', 'height=cardVisible'
   ]) assert.ok(content.text.includes(expected), `status strip must implement ${expected}`);
   assert.doesNotMatch(content.text, /innerHTML|document\.write|<script[^>]+src=/i, 'status strip must not inject untrusted HTML or load external scripts');
   assert.match(content.text, /setTimeout\(function\(\)\{void refreshLiveStatus\(\)\},3000\)/, 'the begin status strip must refresh through the app-only status helper');
   assert.match(content.text, /cardVisible\?Math\.max\(1,Math\.ceil\(document\.documentElement\.scrollHeight\)\):1/, 'non-begin lifecycle widgets must request an explicit one-pixel collapsed height instead of zero, which hosts may treat as an unspecified iframe size');
   assert.match(content.text, /body\.lifecycle-hidden\{height:1px;min-height:1px;padding:0;overflow:hidden\}/, 'hidden lifecycle mounts must keep their own document layout collapsed while ChatGPT retains the tool wrapper');
+  assert.match(content.text, /if\(!cardVisible\)\{stopLiveStatus\(\);requestHostClose\(\)\}/, 'non-begin lifecycle mounts must ask ChatGPT to close their UI instead of leaving hidden iframe shells');
+  assert.match(content.text, /if\(terminalTask\(data\)\)\{cardVisible=false;document\.body\.classList\.add\('lifecycle-hidden'\);stopLiveStatus\(\);reportHeight\(\);requestHostClose\(\);return\}/, 'the live begin status strip must close itself when the task becomes terminal');
+  assert.match(content.text, /typeof api\.requestClose!==['"]function['"]/, 'host closure must be feature-detected for compatibility');
   assert.doesNotMatch(content.text, /cardVisible\?Math\.ceil\(document\.documentElement\.scrollHeight\):0/, 'hidden lifecycle mounts must never report zero intrinsic height');
 
   const directContent = appUiResourceContent();
