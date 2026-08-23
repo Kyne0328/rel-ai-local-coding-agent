@@ -154,8 +154,11 @@ for (const [key, relativePath] of [['search', zoektSearchRelativePath], ['index'
     assert.equal(help.status, 0, `Packaged Zoekt ${key} binary must execute successfully.`);
   }
 }
-const packagedTypeScript = collectFiles(path.join(resourcesRoot, 'node_modules')).filter(file => /\.(?:ts|cts|mts)$/i.test(file));
-assert.deepEqual(packagedTypeScript, [], 'Packaged runtime dependencies must exclude TypeScript sources and declarations.');
+const packagedTypeScript = collectFiles(path.join(resourcesRoot, 'node_modules')).filter(file => {
+  if (!/\.(?:ts|cts|mts)$/i.test(file)) return false;
+  return !/(?:^|\/)node_modules\/typescript-lsp-runtime\/lib\/lib(?:\.[^/]+)?\.d\.ts$/i.test(file);
+});
+assert.deepEqual(packagedTypeScript, [], 'Packaged runtime dependencies must exclude TypeScript sources and non-runtime declarations.');
 
 const forbiddenLegacyTransportPaths = [
   resourcePath('bin', 'ngrok'),

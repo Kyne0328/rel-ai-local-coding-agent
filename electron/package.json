@@ -171,7 +171,9 @@
         "to": "node_modules/typescript-lsp-runtime",
         "filter": [
           "package.json",
-          "lib/**"
+          "lib/**",
+          "!lib/typescript.d.ts",
+          "!lib/tsserverlibrary.d.ts"
         ]
       },
       {
