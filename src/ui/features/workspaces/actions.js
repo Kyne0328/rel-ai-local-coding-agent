@@ -15,7 +15,6 @@ const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-open-recent-workspace]', handler: openRecentWorkspace },
   { selector: '[data-finding-remove]', handler: trigger => removeWorkspaceFlow(trigger.dataset.findingRemove || '') },
   { selector: '[data-clear-workspace]', handler: removeWorkspaceFromTrigger },
-  { selector: '[data-run-validation]', handler: runValidationFromTrigger },
   { selector: '[data-repository-details]', handler: openRepositoryDetails },
   { selector: '[data-open-folder]', handler: openFolderFromTrigger }
 ];
@@ -57,24 +56,6 @@ function openRecentWorkspace(trigger) {
   if (!alias) return;
   recordRecentWorkspace(alias);
   navigate('workspaces', { workspace: alias, focus: '1' });
-}
-
-async function runValidationFromTrigger(trigger) {
-  const alias = trigger.dataset.runValidation || '';
-  recordRecentWorkspace(alias);
-  const result = await runButtonAction(trigger, {
-    idleText: 'Run checks',
-    loadingText: 'Running checks…',
-    successText: 'Checks complete',
-    errorText: 'Checks failed'
-  }, () => postJson('/api/workspace/checks', { workspace: alias }, { timeout: 0 }));
-
-  if (result?.ok === false) {
-    toast(`Checks failed for ${alias}: ${result.error || result.message || 'review the task details'}`, { variant: 'error' });
-  } else {
-    toast(`Checks completed for ${alias}.`, { variant: 'success' });
-  }
-  requestDashboardRefresh({ structural: true });
 }
 
 function openRepositoryDetails(trigger) {

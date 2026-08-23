@@ -98,7 +98,6 @@ function workspaceCard(view) {
 
 function workspaceCardView(workspace, health) {
   const operational = workspace.operational || {};
-  const commands = validationCommands(workspace);
   const healthWarning = health?.ok === false ? health.error || 'Project unavailable' : '';
   const available = !healthWarning && operational.exists !== false;
   const active = Boolean(operational.currentActivity || workspace.sessionPolicy?.sessionActive);
@@ -110,19 +109,10 @@ function workspaceCardView(workspace, health) {
     healthWarning,
     available,
     operational,
-    validationCommands: commands,
     sessionActive: workspace.sessionPolicy?.sessionActive === true,
     taskHint: workspace.sessionPolicy?.taskHint || '',
     cautionCount: Number.isFinite(workspace.caution?.count) ? workspace.caution.count : 0
   };
-}
-
-function validationCommands(workspace) {
-  return listValue(workspace.validationCommands).map(String).filter(Boolean);
-}
-
-function listValue(value) {
-  return Array.isArray(value) ? value : [];
 }
 
 function workspaceStatusPill(view) {
@@ -136,10 +126,6 @@ function workspaceHealthHtml(view) {
 
 function workspaceReadinessHtml(view) {
   const repository = repositorySummary(view.operational);
-  const validationReady = view.validationCommands.length > 0;
-  const validationValue = validationReady
-    ? `${view.validationCommands.length} automatic check${view.validationCommands.length === 1 ? '' : 's'}`
-    : 'No checks detected';
   const accessTitle = view.available ? 'Ready for ChatGPT' : 'Project folder unavailable';
   const accessDescription = view.available
     ? 'Rel.AI can read and update this project when ChatGPT asks it to.'
@@ -155,7 +141,6 @@ function workspaceReadinessHtml(view) {
     </div>
     <dl class="workspace-readiness-facts">
       ${readinessFact('Git', repository.label, repository.description, repository.tone)}
-      ${readinessFact('Checks', validationValue, validationReady ? 'Run these checks before reviewing changes.' : 'This project works without checks; you can add them later.', validationReady ? 'good' : 'neutral')}
     </dl>
   </section>`;
 }
@@ -188,7 +173,6 @@ function workspacePrimaryActions(view) {
     ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>`
     : '';
   return `
-    <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run checks</button>
     ${openFolder}
     <details class="workspace-action-menu">
       <summary class="buttonlike secondary">More</summary>

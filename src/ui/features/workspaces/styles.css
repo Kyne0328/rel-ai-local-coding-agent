@@ -17,7 +17,7 @@
 .workspace-identity strong { @apply block text-[15px]; }
 .workspace-path { @apply mt-1 truncate text-[11px]; color: var(--ui-text-tertiary); }
 .workspace-warning { @apply flex items-center justify-between gap-3 px-4 py-3 text-[12px]; background: var(--ui-status-danger-background); color: var(--ui-status-danger-foreground); border-bottom: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 28%, transparent); }
-.workspace-readiness { @apply grid min-w-0 gap-0; grid-template-columns: minmax(0,1.15fr) minmax(0,.85fr); border-bottom: 1px solid var(--ui-border-default); }
+.workspace-readiness { @apply grid min-w-0 gap-0; grid-template-columns: minmax(0,1.35fr) minmax(180px,.65fr); border-bottom: 1px solid var(--ui-border-default); }
 .workspace-access-summary { @apply flex items-start gap-3 p-4; }
 .workspace-readiness-icon { @apply grid size-9 shrink-0 place-items-center rounded-xl font-bold; background: var(--ui-status-success-background); color: var(--ui-status-success-foreground); border: 1px solid color-mix(in srgb, var(--ui-status-success-foreground) 28%, transparent); }
 .workspace-readiness.bad .workspace-readiness-icon { background: var(--ui-status-danger-background); color: var(--ui-status-danger-foreground); border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 28%, transparent); }
@@ -25,7 +25,7 @@
 .workspace-readiness-copy strong { @apply block text-[13px]; }
 .workspace-readiness-copy p { @apply mt-1 text-[12px] leading-5; color: var(--ui-text-secondary); }
 .workspace-readiness-kicker { @apply mb-1 block text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
-.workspace-readiness-facts { @apply grid m-0; grid-template-columns: repeat(2,minmax(0,1fr)); border-left: 1px solid var(--ui-border-default); }
+.workspace-readiness-facts { @apply grid m-0; grid-template-columns: 1fr; border-left: 1px solid var(--ui-border-default); }
 .workspace-readiness-fact { @apply m-0 p-4; border-left: 1px solid var(--ui-border-subtle); }
 .workspace-readiness-fact:first-child { border-left: 0; }
 .workspace-readiness-fact dt { @apply flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
