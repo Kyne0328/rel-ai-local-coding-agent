@@ -1,24 +1,24 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-12",
+  "capturedAt": "2026-08-23",
   "platform": "win32",
   "architecture": "x64",
   "policy": "advisory",
   "tolerancePercent": 3,
   "blockingGrowthPercent": 25,
-  "notes": "Measured Windows release baseline. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
+  "notes": "Measured Windows release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
   "metrics": {
-    "installerBytes": 135564771,
-    "portableBytes": 120884288,
-    "unpackedBytes": 478902578,
-    "resourcesBytes": 172982335,
-    "appAsarBytes": 5753169,
-    "packagedDependencyBytes": 1107187,
+    "installerBytes": 140968515,
+    "portableBytes": 120609317,
+    "unpackedBytes": 555603608,
+    "resourcesBytes": 239731327,
+    "appAsarBytes": 1719323,
+    "packagedDependencyBytes": 1107372,
     "webAutomationBytes": 11504855,
     "localesBytes": 566095,
     "tunnelClientBytes": 20798464,
     "zoektBytes": 53307392,
     "treeSitterBytes": 72352700,
-    "dashboardCssBytes": 179154
+    "dashboardCssBytes": 183562
   }
 }

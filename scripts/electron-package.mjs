@@ -252,7 +252,7 @@ async function packageMacRelease(electronBuilder, builderArgs, spec) {
     runNode('DMG artifact packaging', electronBuilder, [
       spec.builderFlag, 'dmg',
       ...architectureArgs(spec),
-      '--prepackaged', prepackaged,
+      '--prepackaged', appBundle,
       `--config.directories.output=${artifactOutput}`,
       '--publish', 'never',
       ...builderArgs

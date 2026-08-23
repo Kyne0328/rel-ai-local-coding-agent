@@ -159,6 +159,8 @@ function verifyPackageContracts() {
     'macOS release packaging must apply an explicit ad-hoc signature before DMG creation');
   assert.match(wrapper, /codesign'[\s\S]*'--verify'[\s\S]*'--deep'[\s\S]*'--strict'[\s\S]*'--verbose=2'/,
     'macOS release packaging must structurally verify the ad-hoc signed app');
+  assert.match(wrapper, /'--prepackaged',\s*appBundle/,
+    'macOS DMG packaging must pass electron-builder the .app bundle itself, not its parent output directory');
 }
 
 function verifyWorkflowContracts() {

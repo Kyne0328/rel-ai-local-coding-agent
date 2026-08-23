@@ -1,25 +1,25 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-12",
+  "capturedAt": "2026-08-23",
   "platform": "linux",
   "architecture": "x64",
   "policy": "advisory",
   "tolerancePercent": 5,
   "blockingGrowthPercent": 25,
   "provisional": false,
-  "notes": "Measured Linux release baseline. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
+  "notes": "Measured Linux release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
   "metrics": {
-    "appImageBytes": 149760812,
-    "debBytes": 115924244,
-    "unpackedBytes": 437312989,
-    "resourcesBytes": 170313073,
-    "appAsarBytes": 1713653,
+    "appImageBytes": 167228358,
+    "debBytes": 128878952,
+    "unpackedBytes": 514831188,
+    "resourcesBytes": 236326417,
+    "appAsarBytes": 1548812,
     "packagedDependencyBytes": 1107372,
     "webAutomationBytes": 11504855,
     "localesBytes": 556772,
     "tunnelClientBytes": 20246690,
     "zoektBytes": 51319080,
     "treeSitterBytes": 72352700,
-    "dashboardCssBytes": 179154
+    "dashboardCssBytes": 183542
   }
 }
