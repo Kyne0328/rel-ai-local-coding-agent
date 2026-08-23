@@ -16,7 +16,7 @@ function readDesktopSettings(runtimeState = {}) {
     config = readGuiConfig();
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] read gui config:', error);
-    config = { port: 3333, token: '', tunnelId: '' };
+    config = { port: 3333, token: '', tunnelId: '', connectorName: '' };
   }
   const tunnelErrorCode = TUNNEL_SETTING_ERROR_CODES.has(String(runtimeState.tunnelErrorCode || ''))
     ? String(runtimeState.tunnelErrorCode)
@@ -25,6 +25,7 @@ function readDesktopSettings(runtimeState = {}) {
     ok: true,
     port: Number(config.port || 3333),
     tunnelId: String(config.tunnelId || ''),
+    connectorName: String(config.connectorName || ''),
     tunnelApiKey: '',
     tunnelApiKeyConfigured: runtimeState.tunnelApiKeyConfigured === true,
     notificationsEnabled: runtimeState.notificationsEnabled !== false,
@@ -52,6 +53,7 @@ async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
   const next = normalizeWizardConfig({
     port: settings.port ?? current.port,
     tunnelId: settings.tunnelId ?? current.tunnelId,
+    connectorName: settings.connectorName ?? current.connectorName ?? 'Rel.AI MCP',
     token: current.token
   });
   const replacementApiKey = String(settings.tunnelApiKey || '').trim();

@@ -438,8 +438,12 @@ try {
     arguments: { work_id: 'work-session', command: 'echo invalid', defer: true }
   });
   stdioWire.receive(invalidEligibleCall);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(delegatedInvalid, invalidEligibleCall, 'invalid eligible-tool arguments must delegate to SDK validation without closing stdio');
+  const invalidEligibleResponse = await waitForSent(stdioWire, 3);
+  assert.equal(delegatedInvalid, null, 'invalid long-running tool arguments must stay inside the task-aware tool-result boundary');
+  assert.equal(invalidEligibleResponse.id, 81);
+  assert.equal(invalidEligibleResponse.result?.isError, true);
+  assert.equal(invalidEligibleResponse.result?.structuredContent?.errorCode, 'INVALID_TOOL_ARGUMENTS');
+  assert.match(invalidEligibleResponse.result?.structuredContent?.error || '', /invalid arguments|defer/i);
 
   const otherWire = new FakeTransport();
   const otherStdio = createTaskAwareStdioTransport({ config, principal: localOtherOwner, transport: otherWire });

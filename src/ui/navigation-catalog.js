@@ -23,7 +23,7 @@ function route(id, label, path, description, group) {
 export const WORK_NAV_ITEMS = Object.freeze([
   route('home', 'Overview', 'home', 'Connection status, projects, and recent tasks.', 'Work'),
   route('tasks', 'Tasks', 'tasks', 'See what Rel.AI is working on and what it finished.', 'Work'),
-  route('code', 'Code', 'code', 'Review and edit project files for a Rel.AI task.', 'Work'),
+  route('code', 'Changes', 'code', 'Review current and committed file changes for a Rel.AI task.', 'Work'),
   route('workspaces', 'Projects', 'workspaces', 'Choose which project folders Rel.AI can use.', 'Work'),
   route('activity', 'Activity', 'activity', 'See what Rel.AI did and whether it worked.', 'Work')
 ]);

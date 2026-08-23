@@ -7,7 +7,7 @@ const MAX_TOOL_RESULT_BYTES = Number(
 );
 const MAX_TOOL_TEXT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_TEXT_BYTES || DEFAULT_MAX_TOOL_TEXT_BYTES);
 
-function toolResult(payload, isError) {
+function toolResult(payload, isError, meta) {
   const imageContent = toolImageContent(payload);
   const structuredPayload = imageContent ? withoutImageData(payload) : payload;
   const serialized = JSON.stringify(structuredPayload);
@@ -26,7 +26,8 @@ function toolResult(payload, isError) {
       ...(imageContent ? [imageContent] : [])
     ],
     structuredContent,
-    isError: Boolean(isError)
+    isError: Boolean(isError),
+    ...(meta && typeof meta === 'object' ? { _meta: meta } : {})
   };
 }
 
@@ -52,7 +53,14 @@ function conciseToolResultText(payload, options = {}) {
     return boundedText(String(payload ?? ''), MAX_TOOL_TEXT_BYTES) || 'Rel.AI returned no structured result.';
   }
   const success = payload.ok !== false && options.isError !== true;
-  const lines = [success ? 'Rel.AI operation succeeded.' : 'Rel.AI operation failed.'];
+  if (success) {
+    const lines = ['Rel.AI operation succeeded.'];
+    if (options.structuredTruncated) {
+      lines.push(`Structured result compacted from ${Number(options.originalBytes || 0)} bytes. Re-call with narrower limits for complete bounded data.`);
+    }
+    return lines.join('\n');
+  }
+  const lines = ['Rel.AI operation failed.'];
   appendField(lines, 'Workspace', scalarText(payload.workspace));
   appendField(lines, 'Work session', scalarText(payload.work_id));
   appendField(lines, 'Process', scalarText(payload.processId));

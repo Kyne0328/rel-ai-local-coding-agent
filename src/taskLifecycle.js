@@ -11,7 +11,7 @@ import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const MAX_SESSION_EVENTS = 200;
 const DURABLE_FIELDS = Object.freeze([
-  'changedFiles', 'changedFileCount', 'validation', 'committed', 'pushed', 'prDrafted',
+  'changedFiles', 'changedFileCount', 'validation', 'committed', 'commitHead', 'commitHeads', 'pushed', 'prDrafted',
   'workflow', 'workflowEvidence', 'principalFingerprint', 'repairable'
 ]);
 
@@ -100,6 +100,11 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
     : event.tool === OP.VALIDATE_CHECKS
       ? validationState(event)
       : current.validation || 'not_run';
+  const eventCommitHead = String(event.commitHead || event.metadata?.commitHead || '').trim();
+  const commitHeads = unique([
+    ...(Array.isArray(current.commitHeads) ? current.commitHeads : []),
+    ...(eventCommitHead ? [eventCommitHead] : [])
+  ]);
   return canonicalTaskSnapshot({
     ...current,
     id: current.id || event.taskId,
@@ -130,6 +135,8 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
     changedFileCount: changedFiles.length,
     validation,
     committed: Boolean(current.committed || (event.tool === OP.PUBLISH_COMMIT && event.ok !== false)),
+    commitHead: eventCommitHead || current.commitHead || '',
+    commitHeads,
     pushed: Boolean(current.pushed || (event.tool === OP.PUBLISH_PUSH && event.ok !== false)),
     prDrafted: Boolean(current.prDrafted || (event.tool === OP.PUBLISH_DRAFT_PR && event.ok !== false)),
     lastTool: event.tool || current.lastTool || '',
@@ -200,7 +207,7 @@ function compactLifecycleEvent(event) {
     'operation', 'workspace', 'target', 'result', 'metadata', 'progress', 'ok', 'ms', 'changedFiles',
     'taskOwnedChangedFiles', 'externalChangedFiles', 'validationStatus', 'validationFingerprint',
     'taskMutationGeneration', 'taskValidatedMutationGeneration', 'taskWorkspaceGeneration',
-    'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'message', 'error', 'path'
+    'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'commitHead', 'message', 'error', 'path'
   ];
   const compact = Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));
   for (const key of ['taskSummary', 'message', 'error']) {

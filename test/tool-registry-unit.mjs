@@ -8,7 +8,7 @@ import { getOperationDefinitions, resolveToolOperation } from '../src/tools/acti
 import { OPERATION_IDS as OP, OPERATION_ID_VALUES } from '../src/tools/operationIds.js';
 import { validateExecutableOperationInput } from '../src/tools/runtimeRegistry.js';
 import {
-  TOOL_NAMES, getPublicToolSchemas,
+  TOOL_NAMES, getMcpToolSchemas, getPublicToolSchemas,
   getToolDefinitions as getDefinitionMetadata, getToolGroups, getToolMetadata,
   getToolSchemas, getToolSurfaceManifest
 } from '../src/tools/schema.js';
@@ -33,6 +33,10 @@ assert.equal(getToolDefinitions(config).length, TOOL_NAMES.length);
 
 const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
+const mcpSchemas = getMcpToolSchemas(config);
+assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact model-facing tool surface');
+assert.equal(mcpSchemas.length, 13, 'one app-only status helper may be listed without becoming a model tool');
+assert.deepEqual(mcpSchemas.filter(item => item.name.startsWith('relai_app_')).map(item => item._meta?.ui?.visibility), [['app']]);
 const schemaBytes = bytes(publicSchemas);
 assert.ok(schemaBytes > 0, 'unified discovery schema must serialize to a non-empty payload');
 assert.deepEqual(
@@ -45,6 +49,7 @@ assert.match(connectorInstructions(config), /task-ownership/i, 'global instructi
 assert.match(connectorInstructions(config), /approval/i, 'global instructions retain approval safety as a universal invariant');
 assert.match(connectorInstructions(config), /authoritative evidence/i, 'global instructions retain truthful evidence semantics');
 assert.match(connectorInstructions(config), /explicit task-completion contract/i, 'global instructions retain explicit completion semantics');
+assert.match(connectorInstructions(config), /Do not poll relai_work status merely to refresh UI/i, 'global instructions must avoid redundant UI-only status polling');
 assert.doesNotMatch(connectorInstructions(config), /Inspect relevant files|Validate after changes|recovery guidance/i, 'discretionary workflow tactics belong to the workflow runtime/skills, not global MCP instructions');
 
 const manifest = getToolSurfaceManifest(config);
@@ -65,7 +70,7 @@ for (const schema of schemas) {
   const publicSchema = publicSchemas.find(item => item.name === schema.name);
   assert.ok(publicSchema?.outputSchema, `${schema.name} must advertise outputSchema`);
   assert.equal(publicSchema.outputSchema.type, 'object');
-  assert.equal(publicSchema.outputSchema.additionalProperties, false);
+  assert.equal(publicSchema.outputSchema.additionalProperties, false, 'public structured output must advertise the stable returned result fields');
   assert.deepEqual(publicSchema.outputSchema.required, ['ok']);
 }
 const importUnsafeRootKeywords = ['oneOf', 'anyOf', 'allOf', 'if', 'then', 'else', 'not', 'propertyNames'];
@@ -74,6 +79,8 @@ for (const schema of publicSchemas) {
     assert.equal(schema.inputSchema[keyword], undefined, `${schema.name} discovery must not use root ${keyword}`);
   }
   assert.equal(schema.inputSchema.additionalProperties, false, `${schema.name} discovery must reject unknown fields`);
+  assert.deepEqual(schema.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, `${schema.name} must use local developer-mode read-only presentation hints`);
+  assert.deepEqual(schema._meta?.securitySchemes, [{ type: 'noauth' }], `${schema.name} must advertise local noauth through ChatGPT compatibility metadata`);
   assert.match(schema.description || '', /\bUse\b/i, `${schema.name} must state when to use the tool`);
   assert.match(schema.description || '', /\bDo not\b/i, `${schema.name} must state when not to use the tool`);
 }
@@ -130,7 +137,9 @@ assert.match(processSchema.inputSchema.properties.executable.description, /shell
 assert.match(processSchema.inputSchema.properties.argv.description, /without shell parsing/i);
 assert.match(processSchema.inputSchema.properties.input.description, /without closing the persistent stdin stream/i);
 const editSchema = schemaByName.get('relai_edit');
-assert.equal(editSchema.inputSchema.oneOf?.length, 7, 'relai_edit executable schema must retain all canonical edit-form variants');
+assert.equal(editSchema.inputSchema.oneOf?.length, 9, 'relai_edit executable schema must retain all canonical edit-form variants');
+assert.match(editSchema.description, /symbolEdit/i);
+assert.deepEqual(editSchema.inputSchema.properties.symbolEdit.properties.action.enum, ['replace', 'insert_before', 'insert_after']);
 assert.match(editSchema.description, /oldText\/newText/i);
 assert.match(editSchema.description, /content for complete-file replacement/i);
 assert.match(editSchema.description, /automatically handles large complete-file writes/i);
@@ -165,12 +174,18 @@ await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'nee
 await valid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
+await valid('relai_validate', { action: 'checks', work_id: 'work', level: 'standard', check: 'node -v' });
+await valid('relai_validate', { action: 'checks', work_id: 'work', level: 'standard', checks: ['node -v', 'npm -v'] });
+await valid('relai_validate', { action: 'diagnostics', work_id: 'work', level: 'quick', command: 'npm run lint' });
 await valid('relai_exec', { work_id: 'work', command: 'node -v' });
 await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-v'] });
 await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-'], input: 'process.stdout.write("ok")' });
 await invalid('relai_exec', { work_id: 'work' });
 await invalid('relai_exec', { work_id: 'work', command: 'node -v', executable: 'node' });
 await invalid('relai_exec', { work_id: 'work', command: 'node -v', argv: ['-v'] });
+await valid('relai_edit', { work_id: 'work', semantic: { action: 'rename', path: 'src/index.js', line: 1, column: 1, newName: 'renamed' } });
+await valid('relai_edit', { work_id: 'work', symbolEdit: { action: 'replace', symbol: 'renderApp', content: 'function renderApp() {}' } });
+await invalid('relai_edit', { work_id: 'work', symbolEdit: { action: 'replace', symbol: 'renderApp', content: 'function renderApp() {}' }, path: 'src/index.js', content: 'conflict' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', oldText: 'before', newText: 'after' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', replacements: [{ oldText: 'before', newText: 'after' }] });
@@ -203,6 +218,7 @@ await publicValid('relai_changes', { action: 'restore', work_id: 'work' });
 await publicValid('relai_publish', { action: 'commit', work_id: 'work' });
 await publicValid('relai_exec', { work_id: 'work' });
 await publicValid('relai_exec', { work_id: 'work', command: 'node -v', executable: 'node' });
+await publicValid('relai_edit', { work_id: 'work', symbolEdit: { action: 'insert_before', symbol: 'renderApp', content: '// before' } });
 await publicValid('relai_edit', { work_id: 'work', path: 'README.md' });
 await publicValid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', oldText: 'before', newText: 'after' });
 

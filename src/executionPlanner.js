@@ -10,6 +10,7 @@ import { runEnvOperation } from "./envOperations.js";
 import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES, BATCH_RESULT_COMPACT_THRESHOLD } from "./editLimits.js";
 import { classifyWorkflowRisk } from "./workflow/risk.js";
 import { codeIntelligence } from './codeIntelligence/service.js';
+import { resolveSymbolEdit } from './semanticEdit.js';
 import { discoverRepositoryTopology, packageForPath } from "./workflow/topology.js";
 
 const STAGED_CHUNK_BYTES = 12000;
@@ -485,6 +486,26 @@ async function _handleUpdateTextEdit(workspace, config, args) {
   return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
 }
 
+async function _handleSymbolEdit(workspace, config, args) {
+  const semantic = await resolveSymbolEdit(workspace, config, args.symbolEdit, { expectedSha256: args.expectedSha256 });
+  const result = workspaceReplace(workspace, config, {
+    path: semantic.path,
+    oldText: semantic.oldText,
+    newText: semantic.newText,
+    occurrence: semantic.occurrence,
+    expectedSha256: semantic.sourceSha256,
+    dryRun: args.dryRun
+  });
+  const out = {
+    ...result,
+    path: semantic.path,
+    plannerPath: 'symbol',
+    plannerReason: `${semantic.target.action} resolved structurally to ${semantic.target.qualifiedName || semantic.target.name} in ${semantic.path}`,
+    semanticTarget: semantic.target
+  };
+  return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
+}
+
 async function _handleSingleEdit(workspace, config, args) {
   const hasOldText = typeof args.oldText === 'string' && args.oldText.length > 0;
   const hasReplacements = Array.isArray(args.replacements) && args.replacements.length > 0;
@@ -539,31 +560,33 @@ async function planEdit(workspace, config, args, context = {}) {
   }
   if (typeof args.stage === 'string' && args.stage.trim()) return handleStagedEdit(workspace, config, args);
   if (Array.isArray(args.edits) && args.edits.length > 0) return _handleBatchEdits(workspace, config, args);
+  if (args.symbolEdit && typeof args.symbolEdit === 'object') return _handleSymbolEdit(workspace, config, args);
   if (typeof args.updateText === 'string' && args.updateText.length > 0) return _handleUpdateTextEdit(workspace, config, args);
   return _handleSingleEdit(workspace, config, args);
 }
 
-const EDIT_FORM_GUIDANCE = 'Use exactly one form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { path, content } for a complete file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
+const EDIT_FORM_GUIDANCE = 'Use exactly one form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { symbolEdit:{ action, symbol, content, path? } } for an indexed structural symbol edit, { path, content } for a complete file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
 
 function assertSupportedEditForm(args = {}) {
   const has = (field) => Object.hasOwn(args, field);
   const hasEnv = typeof args.envAction === 'string' && args.envAction.trim().length > 0;
   const hasStage = typeof args.stage === 'string' && args.stage.trim().length > 0;
   const hasSemantic = has('semantic');
+  const hasSymbol = has('symbolEdit');
   const hasBatch = has('edits');
   const hasPatch = has('updateText');
   const hasContent = has('content');
   const hasExact = ['oldText', 'newText', 'replacements', 'occurrence'].some(has);
 
   if (hasEnv) {
-    if (hasStage || hasSemantic || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+    if (hasStage || hasSemantic || hasSymbol || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
       throw new Error(`relai_edit envAction cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
     }
     return;
   }
 
   if (hasStage) {
-    if (hasSemantic || hasBatch || hasExact || has('envAction')) {
+    if (hasSemantic || hasSymbol || hasBatch || hasExact || has('envAction')) {
       throw new Error(`relai_edit staged operations cannot be combined with exact, batch, or environment fields. ${EDIT_FORM_GUIDANCE}`);
     }
     const stage = String(args.stage).trim().toLowerCase();
@@ -584,11 +607,20 @@ function assertSupportedEditForm(args = {}) {
     throw new Error(`relai_edit envAction must be a non-empty supported action. ${EDIT_FORM_GUIDANCE}`);
   }
   if (hasSemantic) {
-    if (hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+    if (hasSymbol || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
       throw new Error(`relai_edit semantic rename cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
     }
     if (!args.semantic || typeof args.semantic !== 'object' || Array.isArray(args.semantic) || args.semantic.action !== 'rename') {
       throw new Error('relai_edit semantic currently supports only { action:"rename", path, line, column, newName }.');
+    }
+    return;
+  }
+  if (hasSymbol) {
+    if (hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+      throw new Error(`relai_edit symbolEdit cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
+    }
+    if (!args.symbolEdit || typeof args.symbolEdit !== 'object' || Array.isArray(args.symbolEdit)) {
+      throw new Error('relai_edit symbolEdit must be an object.');
     }
     return;
   }

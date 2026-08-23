@@ -8,7 +8,7 @@ import { getOperationDefinitions } from '../src/tools/actionCatalog.js';
 import { OPERATION_ID_VALUES } from '../src/tools/operationIds.js';
 import { getToolSurfaceManifest } from '../src/tools/schema.js';
 import { startMcpClient, structuredContentOf, MCP_VERSION } from './helpers/mcp-client.mjs';
-import { activeToolCount } from './helpers/tool-surface.mjs';
+import { activeMcpToolCount } from './helpers/tool-surface.mjs';
 
 const removedTools = [
   'relai_begin_work', 'relai_repo_snapshot', 'relai_code_inspect',
@@ -46,7 +46,8 @@ try {
 
   client.send(2, 'tools/list');
   const listed = await client.waitFor(2);
-  assert.equal(listed.result?.tools?.length, activeToolCount);
+  assert.equal(listed.result?.tools?.length, activeMcpToolCount);
+  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool._meta?.ui?.visibility), [['app']]);
   assert.ok(listed.result.tools.every(tool => tool.outputSchema));
   assert.ok(removedTools.every(name => listed.result.tools.every(tool => tool.name !== name)));
 

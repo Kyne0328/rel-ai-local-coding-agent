@@ -526,6 +526,8 @@ function emptySession(id) {
     changedFileCount: 0,
     validation: 'not_run',
     committed: false,
+    commitHead: '',
+    commitHeads: [],
     pushed: false,
     prDrafted: false,
     lastTool: '',

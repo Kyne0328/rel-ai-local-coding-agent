@@ -18,10 +18,34 @@
         <p>Set up an OpenAI Secure MCP Tunnel so ChatGPT can use Rel.AI with your local projects.</p>
       </div>
 
+      <div class="wizard-cloud-card" id="supportProjectCard">
+        <div class="wizard-cloud-status">
+          <strong>Support Rel.AI on GitHub</strong>
+          <span>Rel.AI is free and open source. If it is useful to you, you can support the project on GitHub. This is optional and does not affect setup.</span>
+        </div>
+        <button class="secondary wizard-open-button wizard-standalone-button" type="button" data-open-openai="supportProject">Support project on GitHub</button>
+      </div>
+
       <div class="wizard-cloud-card wizard-security-card">
-        <section class="wizard-value-step" aria-labelledby="tunnelStepTitle">
+        <section class="wizard-value-step" aria-labelledby="connectorNameStepTitle">
           <div class="wizard-value-step-head">
             <span class="wizard-step-number" aria-hidden="true">1</span>
+            <div>
+              <strong id="connectorNameStepTitle">Name this computer's ChatGPT connector</strong>
+              <p>Use a different name on each computer so you can choose the correct Rel.AI connection in ChatGPT.</p>
+            </div>
+          </div>
+          <div class="wizard-field-group">
+            <label for="connectorNameInput"><span>ChatGPT connector name</span></label>
+            <input id="connectorNameInput" type="text" maxlength="80" autocomplete="off" spellcheck="false" aria-describedby="connectorNameHelp connectorNameError" aria-invalid="false" required />
+            <p class="wizard-field-help" id="connectorNameHelp">Recommended format: <code>Rel.AI MCP - Computer name</code>. Use this exact name when you create the connector in ChatGPT.</p>
+            <p class="wizard-field-error" id="connectorNameError" role="alert" hidden></p>
+          </div>
+        </section>
+
+        <section class="wizard-value-step" aria-labelledby="tunnelStepTitle">
+          <div class="wizard-value-step-head">
+            <span class="wizard-step-number" aria-hidden="true">2</span>
             <div>
               <strong id="tunnelStepTitle">Create your Secure MCP Tunnel</strong>
               <p>Complete the tunnel details carefully so OpenAI connects Rel.AI to the right organization and ChatGPT workspace.</p>
@@ -48,7 +72,7 @@
 
         <section class="wizard-value-step" aria-labelledby="runtimeKeyStepTitle">
           <div class="wizard-value-step-head">
-            <span class="wizard-step-number" aria-hidden="true">2</span>
+            <span class="wizard-step-number" aria-hidden="true">3</span>
             <div>
               <strong id="runtimeKeyStepTitle">Create a runtime API key</strong>
               <p>Create it in the same OpenAI organization as your tunnel, then copy it while OpenAI still shows it.</p>

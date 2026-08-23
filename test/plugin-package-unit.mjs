@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { validatePlugin } from '../scripts/validate-plugin.mjs';
-import { getPublicToolSchemas } from '../src/tools/schema.js';
+import { getMcpToolSchemas } from '../src/tools/schema.js';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
 
@@ -24,20 +24,8 @@ try {
   assert.equal(sourceValidation.ok, true);
   assert.deepEqual(sourceValidation.skills, expectedSkills);
 
-  const npmArgs = ['pack', '--json', '--pack-destination', packDir];
-  const npmCli = resolveNpmCli();
-  const packed = npmCli
-    ? spawnSync(process.execPath, [npmCli, ...npmArgs], {
-        cwd: root, encoding: 'utf8', timeout: 120_000, shell: false
-      })
-    : process.platform === 'win32'
-      ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', `npm pack --json --pack-destination "${packDir}"`], {
-          cwd: root, encoding: 'utf8', timeout: 120_000, shell: false
-        })
-      : spawnSync('npm', npmArgs, {
-          cwd: root, encoding: 'utf8', timeout: 120_000, shell: false
-        });
-  assert.equal(packed.status, 0, packed.stderr || packed.stdout);
+  const packed = runNpmPack(root, packDir, temp);
+  assert.equal(packed.status, 0, packed.error?.message || packed.stderr || packed.stdout);
   const parsedMetadata = JSON.parse(packed.stdout);
   const metadata = Array.isArray(parsedMetadata) ? parsedMetadata[0] : Object.values(parsedMetadata)[0];
   assert.ok(metadata?.filename, `npm pack returned no artifact metadata: ${packed.stdout}`);
@@ -56,6 +44,7 @@ try {
     '.codex-plugin/plugin.json', '.mcp.json', 'skills/PROVENANCE.md',
     ...expectedSkills.flatMap(skill => [`skills/${skill}/SKILL.md`, `skills/${skill}/agents/openai.yaml`]),
     'skills/rel-ai-workflow/references/workflows.md', 'skills/rel-ai-workflow/references/safety.md',
+    'src/mcp/appUi.js', 'src/mcp/localDeveloperMode.js', 'src/mcp/ui/workflow-card.html',
     'bin/rel-ai-mcp.js', 'package.json'
   ];
   const packedFiles = new Set(metadata.files.map(item => item.path.replaceAll('\\', '/')));
@@ -96,7 +85,7 @@ try {
 
     client.send(2, 'tools/list');
     const listed = await client.waitFor(2);
-    assert.deepEqual(listed.result.tools, getPublicToolSchemas(config), 'source and extracted tools/list must match');
+    assert.deepEqual(listed.result.tools, getMcpToolSchemas(config), 'source and extracted MCP tools/list must match, including the app-only status helper');
 
     client.call(3, 'relai_work', { action: 'begin', workspace: root, bootstrap: 'none' });
     const started = structuredContentOf(await client.waitFor(3));
@@ -138,6 +127,32 @@ try {
   console.log(`Plugin artifact ${path.basename(artifact)} validated, installed, exercised, and removed.`);
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
+}
+
+function runNpmPack(cwd, destination, tempRoot) {
+  const npmArgs = ['pack', '--json', '--pack-destination', destination];
+  const stdoutPath = path.join(tempRoot, 'npm-pack.stdout.json');
+  const stderrPath = path.join(tempRoot, 'npm-pack.stderr.log');
+  const stdoutFd = fs.openSync(stdoutPath, 'w');
+  const stderrFd = fs.openSync(stderrPath, 'w');
+  let result;
+  try {
+    const npmCli = resolveNpmCli();
+    const options = { cwd, timeout: 120_000, shell: false, stdio: ['ignore', stdoutFd, stderrFd] };
+    result = npmCli
+      ? spawnSync(process.execPath, [npmCli, ...npmArgs], options)
+      : process.platform === 'win32'
+        ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', `npm pack --json --pack-destination "${destination}"`], options)
+        : spawnSync('npm', npmArgs, options);
+  } finally {
+    fs.closeSync(stdoutFd);
+    fs.closeSync(stderrFd);
+  }
+  return {
+    ...result,
+    stdout: fs.readFileSync(stdoutPath, 'utf8'),
+    stderr: fs.readFileSync(stderrPath, 'utf8')
+  };
 }
 
 function resolveNpmCli() {

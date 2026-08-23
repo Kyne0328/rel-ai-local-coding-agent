@@ -4,6 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { relaiCodeInspect, isTestPath } from "../src/bridge/codeIntelligence.js";
+import { codeIntelligence } from '../src/codeIntelligence/service.js';
+import { planEdit } from '../src/executionPlanner.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-code-intel-'));
 const workspace = {
@@ -33,6 +36,7 @@ try {
   write('test/math.test.js', "const { add } = require('../src/math');\nif (add(1, 2) !== 3) process.exit(1);\n");
   write('test/check.mjs', "import { add } from '../src/math.js';\nif (add(2, 3) !== 5) process.exit(1);\n");
   write('src/unrelated.js', 'export const label = \'unrelated\';\n');
+  write('src/structural.js', "export function greet(name) {\n  return `hello ${name}`;\n}\n");
 
   assert.equal(isTestPath('test/math.test.js'), true);
   assert.equal(isTestPath('test/check.mjs'), true);
@@ -40,16 +44,34 @@ try {
 
   const symbol = await relaiCodeInspect(workspace, {}, { action: 'symbol', symbol: 'add' });
   assert.equal(symbol.ok, true);
-  assert.equal(symbol.index.mode, 'live-fingerprint-cache');
+  assert.equal(symbol.index.mode, 'persistent-tree-sitter-sqlite');
   assert.equal(symbol.index.freshness, 'current');
   assert.equal(symbol.index.cacheHit, false);
   assert.equal(symbol.definitionCount, 1);
   assert.equal(symbol.definitions[0].path, 'src/math.js');
   assert.ok(symbol.referenceCount >= 2);
   assert.ok(symbol.callCount >= 2);
+  assert.match(symbol.definitions[0].sourceSha256 || '', /^[a-f0-9]{64}$/);
+
+  const structuralSymbol = await relaiCodeInspect(workspace, {}, { action: 'symbol', symbol: 'greet' });
+  assert.equal(structuralSymbol.definitionCount, 1);
+  assert.equal(structuralSymbol.definitions[0].provider, 'tree-sitter');
+  const structuralEdit = await planEdit(workspace, {}, {
+    symbolEdit: {
+      action: 'replace',
+      symbol: 'greet',
+      path: 'src/structural.js',
+      content: "function greet(name) {\n  return `hi ${name}`;\n}"
+    }
+  });
+  assert.equal(structuralEdit.ok, true);
+  assert.equal(structuralEdit.plannerPath, 'symbol');
+  assert.equal(structuralEdit.semanticTarget.action, 'replace');
+  assert.equal(structuralEdit.semanticTarget.path, 'src/structural.js');
+  assert.match(fs.readFileSync(path.join(root, 'src', 'structural.js'), 'utf8'), /return `hi \$\{name\}`/);
 
   const references = await relaiCodeInspect(workspace, {}, { action: 'references', symbol: 'add' });
-  assert.equal(references.index.cacheHit, true);
+  assert.equal(references.index.cacheHit, false, 'structural edits must invalidate the repository index before the next query');
   assert.ok(references.items.some(item => item.path === 'src/service.js' && item.classification === 'call'));
   assert.ok(references.items.some(item => item.path === 'test/math.test.js' && item.test === true));
   assert.ok(references.items.some(item => item.path === 'test/check.mjs' && item.test === true));
@@ -68,7 +90,7 @@ try {
   assert.equal(Object.hasOwn(pathImpact, 'symbol'), false);
 
   const related = await relaiCodeInspect(workspace, {}, { action: 'related', query: 'math add' });
-  assert.equal(related.strategy, 'lexical-structural');
+  assert.equal(related.strategy, 'zoekt-fts5-tree-sitter-graph');
   assert.equal(related.semanticEmbeddings, false);
   assert.equal(related.files[0].path, 'src/math.js');
 
@@ -89,5 +111,7 @@ try {
 
   console.log('Code intelligence symbol, relationship, diagnostics, and freshness tests passed.');
 } finally {
-  fs.rmSync(root, { recursive: true, force: true });
+  await codeIntelligence.shutdown().catch(() => {});
+  await repositoryIntelligence.shutdown().catch(() => {});
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

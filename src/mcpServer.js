@@ -12,7 +12,10 @@ import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from './mcp/serverInstructions.js';
 import { validateToolOutput } from './tools/outputValidation.js';
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { listResources, readResource, resourceCacheHint } from './resources.js';
-import { getPublicToolSchemas, getToolSurfaceManifest } from './tools/schema.js';
+import { getMcpToolSchemas, getPublicToolSchemas, getToolSurfaceManifest } from './tools/schema.js';
+import { invokeAppUiTool } from './mcp/appUi.js';
+import { LOCAL_DEVELOPER_MODE } from './mcp/localDeveloperMode.js';
+import { serializeToolError } from './tools/errors.js';
 
 const MCP_SERVER_INFO = Object.freeze({
   name: pkg.name,
@@ -20,11 +23,13 @@ const MCP_SERVER_INFO = Object.freeze({
   toolSurfaceVersion: getToolSurfaceManifest().toolSurfaceVersion
 });
 const PUBLIC_TOOL_SCHEMAS = getPublicToolSchemas();
-const TOOL_REGISTRATIONS = new Map(PUBLIC_TOOL_SCHEMAS.map(definition => [definition.name, toolRegistration(definition)]));
+const MCP_TOOL_SCHEMAS = getMcpToolSchemas();
+const PUBLIC_TOOL_NAMES = new Set(PUBLIC_TOOL_SCHEMAS.map(definition => definition.name));
+const TOOL_REGISTRATIONS = new Map(MCP_TOOL_SCHEMAS.map(definition => [definition.name, toolRegistration(definition)]));
 
 function createRelaiMcpServer(options = {}) {
   const config = readConfig();
-  const definitions = PUBLIC_TOOL_SCHEMAS;
+  const definitions = MCP_TOOL_SCHEMAS;
   const surface = getToolSurfaceManifest(config);
   const legacyCompatibility = options.legacyCompatibility === true;
   const requestStateCodec = createRelaiRequestStateCodec(config, options.principal);
@@ -42,7 +47,9 @@ function createRelaiMcpServer(options = {}) {
           : [MCP_PROTOCOL_VERSION],
         compatibilityMode: legacyCompatibility ? 'legacy_http' : 'modern',
         toolSurfaceVersion: surface.toolSurfaceVersion,
-        toolCount: definitions.length,
+        toolCount: PUBLIC_TOOL_SCHEMAS.length,
+        appToolCount: definitions.length - PUBLIC_TOOL_SCHEMAS.length,
+        deploymentMode: LOCAL_DEVELOPER_MODE,
         taskIdentityVersion: 2,
         statelessRequestModel: true,
         manifestResource: 'relai://server/tool-surface'
@@ -70,7 +77,8 @@ function createRelaiMcpServer(options = {}) {
   });
 
   for (const definition of definitions) {
-    registerTool(server, config, definition, requestStateCodec, options);
+    if (PUBLIC_TOOL_NAMES.has(definition.name)) registerTool(server, config, definition, requestStateCodec, options);
+    else registerAppUiTool(server, definition, options);
   }
   for (const resource of listResources(config).resources) {
     server.registerResource(resource.name, resource.uri, {
@@ -97,13 +105,25 @@ function registerTool(server, config, definition, requestStateCodec, options) {
   });
 }
 
+function registerAppUiTool(server, definition, options) {
+  server.registerTool(definition.name, TOOL_REGISTRATIONS.get(definition.name), async (args, context) => {
+    try {
+      const output = await invokeAppUiTool(definition.name, args || {}, toolContext(context, options));
+      return toolResult(output, output?.ok === false);
+    } catch (error) {
+      return toolResult(serializeToolError(definition.name, error), true);
+    }
+  });
+}
+
 function toolRegistration(definition) {
   return {
     title: definition.title,
     description: definition.description,
     inputSchema: fromJsonSchema(definition.inputSchema),
     outputSchema: fromJsonSchema(definition.outputSchema),
-    annotations: definition.annotations
+    annotations: definition.annotations,
+    ...(definition._meta ? { _meta: definition._meta } : {})
   };
 }
 

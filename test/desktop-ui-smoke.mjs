@@ -55,6 +55,8 @@ assert.match(wizardHtml, /<small>\/ MCP<\/small>/, 'setup wizard branding should
 
 assert.match(wizardHtml, /OpenAI Secure MCP Tunnel/);
 assert.match(wizardHtml, /id="tunnelIdInput"/);
+assert.match(wizardHtml, /id="connectorNameInput"/);
+assert.match(wizardHtml, /Support project on GitHub/i);
 assert.match(wizardHtml, /id="tunnelApiKeyInput"/);
 assert.match(wizardHtml, /id="portInput"/);
 assert.match(wizardHtml, /id="connectBtn"/);
@@ -65,7 +67,7 @@ assert.match(wizardHtml, /restricted API key/i);
 assert.match(wizardHtml, /encrypted by your operating system/i);
 assert.doesNotMatch(wizardHtml, /ngrok|Cloudflare|Rel\.AI Cloud|approval token|pairing code|Direct connection/i);
 assert.match(wizardJs, /validTunnelId/);
-assert.match(wizardJs, /wizardDone\(\{ tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
+assert.match(wizardJs, /wizardDone\(\{ connectorName, tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
 assert.match(wizardJs, /getRecoveryConfig/);
 assert.match(wizardJs, /openOpenAISetup\(destination\)/);
 assert.doesNotMatch(wizardJs, /ngrok|gateway|approvalToken|connectionMode/i);

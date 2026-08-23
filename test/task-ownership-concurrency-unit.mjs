@@ -12,6 +12,7 @@ import { gitStatusArgs } from '../src/repo/gitStatus.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { flushTaskHistoryPersistence } from '../src/taskHistoryStore.js';
 import { resetTaskHistoryCaches } from '../src/taskHistoryStorage.js';
+import { taskCommitOwnership } from '../src/taskIntegrity.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
 
@@ -94,10 +95,14 @@ try {
   assert.match(String(foreignPublish.error || ''), /outside current task ownership/i);
 
   const addAllPublish = await callTool('relai_publish', {
-    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'must not add all workspace changes', addAll: true
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'aggregate reviewed workspace changes', addAll: true
   });
-  assert.equal(addAllPublish.ok, false, 'addAll must not bypass logical-task ownership');
-  assert.match(String(addAllPublish.error || ''), /cannot widen to addAll/i);
+  assert.equal(addAllPublish.ok, true, 'explicit addAll must aggregate the visible workspace even from a logical task');
+  assert.equal(addAllPublish.addAll, true);
+  assert.deepEqual(new Set(addAllPublish.paths), new Set(['src/shared.js', 'src/task-a.js', 'src/task-b.js']));
+  assert.equal(git('status', '--porcelain=v1').trim(), '', 'workspace aggregation must leave the committed repository clean');
+  assert.deepEqual(taskCommitOwnership(readConfig(), taskA.work_id, 'app').ownedFiles, [], 'workspace aggregation must reconcile task A ownership');
+  assert.deepEqual(taskCommitOwnership(readConfig(), taskB.work_id, 'app').ownedFiles, [], 'workspace aggregation must reconcile task B ownership');
 
   await Promise.all([
     callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: taskA.work_id, reason: 'Ownership concurrency coverage complete.' }),
@@ -107,7 +112,7 @@ try {
   assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-a.js')), true, 'cancellation must preserve already-visible task A changes');
   assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-b.js')), true, 'cancellation must preserve already-visible task B changes');
 
-  console.log('Independent concurrent task ownership remains narrow and directly visible.');
+  console.log('Independent concurrent task ownership stays narrow by default and supports explicit workspace aggregation.');
 } finally {
   await flushAuditWrites();
   await flushTaskHistoryPersistence();

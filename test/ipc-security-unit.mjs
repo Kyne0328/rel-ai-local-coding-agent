@@ -45,8 +45,6 @@ const deps = {
   getNotificationPreferences: () => ({}), updateNotificationPreferences: patch => patch,
   exportDiagnosticState: report => ({ ok: true, report }), openDiagnosticsFolder: () => ({ ok: true }),
   getTaskCodeWorkspace: payload => ({ ok: true, payload }),
-  readTaskCodeFile: payload => ({ ok: true, payload }),
-  writeTaskCodeFile: payload => ({ ok: true, payload }),
   readTaskCodeDiff: payload => ({ ok: true, payload }),
   listCodeEditors: () => ({ ok: true, editors: [] }),
   openTaskCodeIde: payload => ({ ok: true, payload }),
@@ -66,7 +64,8 @@ assert.equal([...handles.keys()].some(channel => /ngrok|gateway|approval/i.test(
 assert.throws(() => handles.get('desktop:settings:get')(eventFor(other)), /not available/);
 assert.throws(() => handles.get('desktop:code:get')(eventFor(other), { taskId: 'task-1' }), /not available/);
 assert.deepEqual(handles.get('desktop:code:get')(eventFor(dashboard), { taskId: 'task-1' }), { ok: true, payload: { taskId: 'task-1' } });
-assert.throws(() => handles.get('desktop:code:write')(eventFor(dashboard), { taskId: 'task-1', path: 'a.js', content: 'x'.repeat((2 * 1024 * 1024) + 1) }), /2 MiB/);
+assert.equal(handles.has('desktop:code:write'), false, 'the Changes surface must not expose a renderer file-write channel');
+assert.equal(handles.has('desktop:code:read'), false, 'the Changes surface must use diff-only file access');
 assert.throws(() => handles.get('desktop:code:open-ide')(eventFor(dashboard), { taskId: 'task-1', editorId: 'x'.repeat(41) }), /editorId is too long/);
 assert.throws(() => handles.get('url:copy')(eventFor(dashboard), 'x'.repeat(MAX_CLIPBOARD_TEXT_BYTES + 1)));
 assert.deepEqual(handles.get('url:copy')(eventFor(wizard), 'safe\u0000text'), { ok: true });

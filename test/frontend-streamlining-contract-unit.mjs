@@ -15,6 +15,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'code', 'workspaces', 'activity']);
+assert.equal(WORK_NAV_ITEMS.find(item => item.id === 'code')?.label, 'Changes', 'the task file surface must be presented as a read-only changes viewer');
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['connection', 'processes', 'diagnostics', 'tools', 'usage']);
 assert.equal(SYSTEM_NAV_ITEMS.find(item => item.id === 'usage')?.label, 'Analytics', 'the dedicated analytics page must use the same name as Overview links');
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
@@ -36,7 +37,7 @@ assert.equal(normalizeRouteKey('usage?workspace=app&range=7d'), 'usage?workspace
 assert.equal(normalizeRouteKey('usage?range=custom&start=2026-08-01&end=2026-08-16'), 'usage?range=custom&start=2026-08-01&end=2026-08-16');
 assert.equal(normalizeRouteKey('usage?range=invalid&start=nope'), 'usage');
 
-const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456' }).join(' ');
+const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456', connectorName: 'Rel.AI MCP - Test PC' }).join(' ');
 assert.match(createSteps, /tunnel/i);
 assert.match(createSteps, /API key/i);
 assert.match(createSteps, /Name, Description, Organizations, and ChatGPT workspaces/i);
@@ -49,7 +50,7 @@ assert.match(createSteps, /Manage/i);
 assert.match(createSteps, /relai-mcp\.png/i);
 assert.match(createSteps, /tunnel_example123456/i);
 assert.match(createSteps, /ChatGPT/i);
-assert.match(createSteps, /Rel\.AI MCP/i);
+assert.match(createSteps, /Rel\.AI MCP - Test PC/i);
 assert.equal(CHATGPT_CONNECTOR_CREATE_URL, 'https://chatgpt.com/plugins#settings/Connectors?create-connector=true');
 assert.equal(RELAI_CONNECTOR_ICON_URL, '/assets/favicon.png');
 assert.equal(RELAI_CONNECTOR_ICON_FILENAME, 'relai-mcp.png');
@@ -59,8 +60,8 @@ assert.equal(hasObservedMcpConnection({ activityStatus: 'no_requests' }), false,
 assert.equal(hasObservedMcpConnection({ lastRequestAt: '2026-08-16T12:00:00.000Z', activityStatus: 'recent' }), true, 'tool scanning or another MCP request proves the ChatGPT connector exists');
 assert.equal(hasObservedMcpToolCall({ lastRequestMethod: 'tools/list' }), false, 'scanning tools must not count as the first Rel.AI tool request');
 assert.equal(hasObservedMcpToolCall({ recentEvents: [{ method: 'tools/call' }] }), true, 'a tools/call request completes the first-request onboarding step');
-const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456' }).join(' ');
-assert.match(reconnectSteps, /existing Rel\.AI MCP connector/i);
+const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456', connectorName: 'Rel.AI MCP - Test PC' }).join(' ');
+assert.match(reconnectSteps, /existing .*Rel\.AI MCP - Test PC.* connector/i);
 assert.match(reconnectSteps, /(?:do not delete or recreate the app|instead of creating a duplicate)/i);
 assert.match(reconnectSteps, /Connection set to Tunnel/i);
 assert.match(reconnectSteps, /Authentication to No authentication/i);
@@ -162,6 +163,11 @@ assert.match(diagnosticsSource, /previous\.follow/, 'diagnostic logs should auto
 assert.match(diagnosticsSource, /findingSeverityLabel/, 'diagnostic findings should translate internal severities into user-facing labels');
 assert.doesNotMatch(diagnosticsSource, /class="diagnostic-code"/, 'diagnostic finding codes must stay inside Technical details');
 assert.match(diagnosticsSource, /Pause live updates|Start live updates/, 'troubleshooting live updates should remain explicitly labeled for assistive technology');
+const changesSource = read('src/ui/features/code/index.js');
+assert.match(changesSource, /Read-only diff/, 'the Changes surface must clearly identify its read-only diff mode');
+assert.match(changesSource, /readOnly:\s*true/, 'Monaco must be configured as read-only');
+assert.doesNotMatch(changesSource, /data-code-save|saveCurrentFile|markUnsaved|confirmDiscard/, 'the Changes surface must not retain embedded editing or save flows');
+assert.doesNotMatch(read('electron/preload.cjs'), /desktop:code:write|desktop:code:read/, 'the desktop preload must not expose renderer file editing for Changes');
 const toolsSource = read('src/ui/features/tools/index.js');
 assert.match(toolsSource, /Tool catalog unavailable/);
 assert.match(toolsSource, /cta: 'Retry'/);

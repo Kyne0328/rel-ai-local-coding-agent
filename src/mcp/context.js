@@ -16,9 +16,15 @@ import { MCP_PROTOCOL_VERSION } from './protocol.js';
 import { principalIdentity } from './principal.js';
 
 const SERVER_INSTANCE_ID = crypto.randomUUID();
+const OPENAI_SESSION_META_KEY = 'openai/session';
+
+function openAiConversationId(envelope) {
+  return String(objectValue(envelope)[OPENAI_SESSION_META_KEY] || '');
+}
 
 function toolContext(context, options = {}) {
   const envelope = context?.mcpReq?.envelope || {};
+  const requestMeta = context?.mcpReq?._meta || {};
   const client = objectValue(envelope[CLIENT_INFO_META_KEY]);
   const capabilities = objectValue(envelope[CLIENT_CAPABILITIES_META_KEY]);
   const requestHeaders = httpHeaders(context?.http?.req);
@@ -34,6 +40,7 @@ function toolContext(context, options = {}) {
     clientName: String(client.name || ''),
     clientVersion: String(client.version || ''),
     clientCapabilities: capabilities,
+    conversationId: openAiConversationId(requestMeta) || openAiConversationId(envelope),
     requestHeaders,
     principal: options.principal || context?.http?.authInfo || principalIdentity(options.principal || context?.http?.authInfo),
     signal: options.signal || context?.http?.req?.signal,
@@ -83,4 +90,4 @@ function objectValue(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-export { SERVER_INSTANCE_ID,  createRelaiRequestStateCodec, requestStateKey, toolContext };
+export { SERVER_INSTANCE_ID, createRelaiRequestStateCodec, openAiConversationId, requestStateKey, toolContext };

@@ -27,6 +27,7 @@ function describeToolOperation(name, args = {}) {
     case OP.SEARCH_SEMANTIC: return `Semantically searching for ${String(args.query || '').slice(0, 60) || 'a concept'}${suffix}`;
     case OP.VALIDATE_DIAGNOSTICS: return `Running structured diagnostics${suffix}`;
     case OP.EDIT: {
+      if (args.symbolEdit?.symbol) return `Editing symbol ${String(args.symbolEdit.symbol).slice(0, 80)}${suffix}`;
       if (path) return `Editing ${path}${suffix}`;
       if (Array.isArray(args.edits)) return `Applying ${args.edits.length} file edits${suffix}`;
       if (args.updateText) return `Applying a workspace patch${suffix}`;

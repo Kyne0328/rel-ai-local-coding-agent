@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMcpClient, MCP_VERSION } from './helpers/mcp-client.mjs';
-import { activeToolNames } from './helpers/tool-surface.mjs';
+import { activeMcpToolNames } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const client = startMcpClient({
@@ -9,7 +9,7 @@ const client = startMcpClient({
   configPath: path.join(root, 'examples', 'config.example.json'),
   timeoutMs: 10000
 });
-const expectedToolNames = activeToolNames;
+const expectedToolNames = activeMcpToolNames;
 
 try {
   client.initialize(1);

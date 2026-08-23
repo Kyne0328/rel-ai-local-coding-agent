@@ -369,33 +369,34 @@ async function relaiGitCommit(workspace, config, args = {}) {
   const dryRun = Boolean(args.dryRun);
   const authorization = normalizeSensitiveAuthorization(workspace, args);
   const hasTaskOwnedScope = Array.isArray(args._taskOwnedPaths);
+  const workspaceAddAll = args.addAll === true;
   const explicitPaths = Array.isArray(args.paths) && args.paths.length > 0;
   const taskOwnedPaths = hasTaskOwnedScope
     ? [...new Set(args._taskOwnedPaths.map(item => normalizeGitPath(item)).filter(Boolean))]
     : [];
-  const requestedPaths = explicitPaths ? args.paths : hasTaskOwnedScope ? taskOwnedPaths : [];
+  const requestedPaths = explicitPaths ? args.paths : hasTaskOwnedScope && !workspaceAddAll ? taskOwnedPaths : [];
   let paths = [...new Set(requestedPaths.map((item) => resolveSafePath(workspace.path, item, {
     operation: "commit",
     allowSensitive: authorization.authorizedPaths.has(normalizeGitPath(item))
   }).relativePath))];
-  const addAll = !hasTaskOwnedScope && (args.addAll === true || (paths.length === 0 && args.addAll !== false));
+  const addAll = workspaceAddAll || (!hasTaskOwnedScope && paths.length === 0 && args.addAll !== false);
   const statusRead = workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
   statusRead.catch(() => {});
   await repoProbe;
   const statusBefore = await statusRead;
 
-  if (hasTaskOwnedScope && args.addAll === true) {
+  if (addAll && explicitPaths) {
     return {
       ok: false,
       workspace: workspace.alias,
       message,
-      addAll: false,
+      addAll,
       paths: [],
       statusBefore,
-      error: 'Logical task commits cannot widen to addAll. Omit addAll to commit all currently task-owned paths.'
+      error: 'relai_publish commit cannot combine addAll:true with explicit paths. Use addAll:true for the whole visible workspace or omit addAll for a scoped commit.'
     };
   }
-  if (hasTaskOwnedScope && explicitPaths) {
+  if (hasTaskOwnedScope && !addAll && explicitPaths) {
     const taskOwnedSet = new Set(taskOwnedPaths);
     const outsideTaskScope = paths.filter(file => !taskOwnedSet.has(file));
     if (outsideTaskScope.length) {
@@ -411,7 +412,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
       };
     }
   }
-  if (hasTaskOwnedScope) {
+  if (hasTaskOwnedScope && !addAll) {
     const dirtySet = new Set(statusBefore.changedFiles || []);
     paths = paths.filter(file => dirtySet.has(file));
     const conflictSet = new Set((Array.isArray(args._taskConflictingPaths) ? args._taskConflictingPaths : [])
@@ -431,6 +432,9 @@ async function relaiGitCommit(workspace, config, args = {}) {
       };
     }
   }
+  const resultPaths = addAll
+    ? [...new Set((statusBefore.changedFiles || []).map(item => normalizeGitPath(item)).filter(Boolean))]
+    : paths;
   if (dryRun) {
     return {
       ok: true,
@@ -438,7 +442,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
       dryRun: true,
       message,
       addAll,
-      paths,
+      paths: resultPaths,
       ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
       statusBefore
     };
@@ -498,6 +502,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
         throw new Error('Commit succeeded but committed task-owned paths still differ in the visible Git index. Refusing to report a clean task commit.');
       }
     }
+    const head = commit.exitCode === 0 ? await resolveCommitHead(workspace, config) : '';
     const statusAfter = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
     return {
       ok: commit.exitCode === 0,
@@ -507,6 +512,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
       paths,
       ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
       commit: summarizeCommand(commit),
+      ...(head ? { head } : {}),
       statusBefore,
       statusAfter
     };
@@ -537,18 +543,34 @@ async function relaiGitCommit(workspace, config, args = {}) {
     };
   }
   const commit = await runProcess("git", ["commit", "-m", message], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  let indexRestored;
+  if (commit.exitCode !== 0) indexRestored = (await restoreIndex())?.exitCode === 0;
+  const head = commit.exitCode === 0 ? await resolveCommitHead(workspace, config) : '';
   const statusAfter = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
   return {
     ok: commit.exitCode === 0,
     workspace: workspace.alias,
     message,
     addAll,
-    paths,
+    paths: resultPaths,
     ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
     commit: summarizeCommand(commit),
+    ...(head ? { head } : {}),
+    ...(indexRestored == null ? {} : { indexRestored }),
     statusBefore,
     statusAfter
   };
+}
+
+async function resolveCommitHead(workspace, config) {
+  const result = await runProcess('git', ['rev-parse', '--verify', 'HEAD'], {
+    cwd: workspace.path,
+    timeout: 60000,
+    maxOutputBytes: 4096
+  }, config).catch(() => null);
+  if (!result || result.exitCode !== 0 || result.stdoutTruncated) return '';
+  const head = String(result.stdout || '').trim();
+  return /^[a-f0-9]{40,64}$/i.test(head) ? head : '';
 }
 
 async function workspaceDirtyPaths(workspace, config, paths = []) {

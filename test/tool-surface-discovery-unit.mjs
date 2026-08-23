@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
-import { activeToolCount, activeToolNames } from './helpers/tool-surface.mjs';
+import { activeMcpToolNames, activeToolCount, activeToolNames } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const variants = [
@@ -32,7 +32,9 @@ for (const variant of variants) {
     const response = await client.waitFor(2);
     const tools = response.result?.tools || [];
     const names = tools.map(tool => tool.name);
-    assert.deepEqual(names, activeToolNames);
+    assert.deepEqual(names, activeMcpToolNames);
+    assert.deepEqual(tools.filter(tool => !tool.name.startsWith('relai_app_')).map(tool => tool.name), activeToolNames);
+    assert.deepEqual(tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool._meta?.ui?.visibility), [['app']]);
 
     const byName = new Map(tools.map(tool => [tool.name, tool]));
     const readSchema = byName.get('relai_read')?.inputSchema;

@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.26.6",
+  "version": "0.27.0",
   "description": "Use ChatGPT web like a coding agent with local repository tools for search, edit, run, inspect, validate, review, and Git.",
   "private": true,
   "type": "module",
@@ -52,7 +52,8 @@
     "audit:packaging": "node scripts/audit-packaging.mjs",
     "validate:plugin": "node scripts/validate-plugin.mjs",
     "test:plugin": "node test/plugin-package-unit.mjs",
-    "test:skills": "node test/skill-package-behavior-unit.mjs",
+    "test:skills": "node test/skill-package-behavior-unit.mjs && node test/plugin-metadata-unit.mjs",
+    "test:tool-routing": "node test/tool-behavior-evaluator-unit.mjs",
     "audit:test-rigidity": "node scripts/audit-test-rigidity.mjs",
     "measure:tool-surface": "node scripts/measure-tool-surface.mjs",
     "typecheck": "tsc -p tsconfig.boundaries.json",

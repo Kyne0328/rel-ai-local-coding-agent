@@ -47,6 +47,7 @@ function enrichCommonAudit(extra, name, value, args) {
   assignTruthy(extra, "validationStatus", value?.validationStatus);
   if (!dryRun && name === OP.PUBLISH_COMMIT && value?.ok !== false) {
     extra.commitCreated = true;
+    assignTruthy(extra, 'commitHead', value?.head);
     if (Array.isArray(value?.paths) && value.paths.length) extra.committedFiles = value.paths.slice(0, 200);
   }
   if (!dryRun && name === OP.PUBLISH_PUSH && value?.ok !== false) extra.pushPublished = true;

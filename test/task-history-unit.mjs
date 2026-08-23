@@ -39,9 +39,11 @@ assert.equal(task.validation, 'passed', 'later validation replaces the recoverab
 assert.equal(task.status, 'planning');
 
 task = reduceTaskLifecycleAuditEvent(task, event('task-1', {
-  operationId: 'commit-1', ts: '2026-07-11T06:00:05.000Z', tool: 'publish.commit', changedFiles: ['src/a.js', 'test/a.test.js']
+  operationId: 'commit-1', ts: '2026-07-11T06:00:05.000Z', tool: 'publish.commit', changedFiles: ['src/a.js', 'test/a.test.js'], commitHead: '0123456789abcdef0123456789abcdef01234567'
 }));
 assert.equal(task.committed, true);
+assert.equal(task.commitHead, '0123456789abcdef0123456789abcdef01234567');
+assert.deepEqual(task.commitHeads, ['0123456789abcdef0123456789abcdef01234567']);
 assert.deepEqual(task.changedFiles, ['src/a.js', 'test/a.test.js']);
 
 task = reduceTaskLifecycleAuditEvent(task, event('task-1', {
@@ -64,7 +66,7 @@ assert.equal(cancelled.completedAt, null);
 const persisted = canonicalTaskSnapshot({
   id: 'merge-task', taskId: 'merge-task', status: 'planning', workspace: 'repo',
   calls: 3, changedFiles: ['src/a.js'], changedFileCount: 1, validation: 'passed', committed: true,
-  updatedAt: '2026-07-11T08:00:00.000Z'
+  commitHead: 'fedcba9876543210fedcba9876543210fedcba98', commitHeads: ['fedcba9876543210fedcba9876543210fedcba98'], updatedAt: '2026-07-11T08:00:00.000Z'
 });
 const live = canonicalTaskSnapshot({
   id: 'merge-task', taskId: 'merge-task', status: 'running', workspace: 'repo', activeCalls: 1,
@@ -76,6 +78,8 @@ assert.equal(merged.operation, 'Reading src/b.js');
 assert.deepEqual(merged.changedFiles, ['src/a.js']);
 assert.equal(merged.validation, 'passed');
 assert.equal(merged.committed, true);
+assert.equal(merged.commitHead, 'fedcba9876543210fedcba9876543210fedcba98');
+assert.deepEqual(merged.commitHeads, ['fedcba9876543210fedcba9876543210fedcba98']);
 
 const changed = lifecycleChangedFields(persisted, merged);
 assert.ok(changed.includes('calls'));

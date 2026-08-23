@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMcpClient } from './helpers/mcp-client.mjs';
-import { activeToolCount } from './helpers/tool-surface.mjs';
+import { activeMcpToolCount } from './helpers/tool-surface.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-mcp-multichat-'));
@@ -76,7 +76,7 @@ try {
 
   client.send(++requestId, 'tools/list', {});
   const listedTools = await client.waitFor(requestId);
-  assert.equal(listedTools.result.tools.length, activeToolCount);
+  assert.equal(listedTools.result.tools.length, activeMcpToolCount);
   const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_work');
   assert.match(listedStartTask.inputSchema.properties.workspace.description || '', /Action usage: begin \(required\); status; finish; cancel/, 'unified discovery must explain workspace action ownership without enumerating configured aliases');
 

@@ -417,6 +417,7 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
 .wizard-value-step-head p { margin: 3px 0 0; color: var(--ui-text-secondary); font-size: var(--font-12); line-height: 1.55; }
 .wizard-step-number { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--ui-action-primary); border-radius: 50%; background: var(--ui-selection-background); color: var(--ui-action-primary); font-size: var(--font-11); font-weight: var(--weight-bold); }
 .wizard-open-button { width: fit-content; min-height: 44px; margin-left: 36px; }
+.wizard-standalone-button { margin-left: 0; }
 .wizard-field-group { display: grid; gap: 7px; margin-left: 36px; }
 .wizard-help-details { margin-left: 36px; border-top: 1px solid var(--ui-border-subtle); }
 .wizard-help-details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: var(--font-11); font-weight: var(--weight-bold); }

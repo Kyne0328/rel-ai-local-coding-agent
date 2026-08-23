@@ -4,6 +4,7 @@ import { enhanceToolError } from './tools/errors.js';
 import { getExecutableToolDefinition, getExecutableToolDefinitions } from './tools/runtimeRegistry.js';
 import {
   TOOL_NAMES,
+  getMcpToolSchemas,
   getPublicToolSchemas,
   getToolGroups,
   getToolMetadata,
@@ -20,6 +21,7 @@ export {
   callTool,
   compactForConnector,
   enhanceToolError,
+  getMcpToolSchemas,
   getPublicToolSchemas,
   getToolDefinition,
   getToolDefinitions,

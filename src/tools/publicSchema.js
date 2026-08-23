@@ -170,18 +170,4 @@ function fieldConstraintSignature(schema) {
   return '';
 }
 
-function compactPublicOutputSchema(name) {
-  const properties = { ok: { type: 'boolean' } };
-  if (name === 'relai_search') {
-    properties.neuralEmbeddings = { type: 'boolean' };
-    properties.originalBytes = { type: 'number' };
-  }
-  return {
-    type: 'object',
-    properties,
-    required: ['ok'],
-    additionalProperties: true
-  };
-}
-
-export { compactPublicInputSchema, compactPublicOutputSchema };
+export { compactPublicInputSchema };

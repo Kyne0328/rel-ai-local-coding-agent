@@ -143,7 +143,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_edit', title: 'Edit Repository',
-    description: 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Prefer oldText/newText for localized changes, content for complete-file replacement, edits for an atomic structured batch, or updateText for patch-shaped changes. Keep a repository-wide patch-shaped change in one logical updateText patch when the transport permits it. Rel.AI automatically handles large complete-file writes; use explicit staged mode only when a client transport cannot carry the intended payload in one request.',
+    description: 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Use semantic for language-server-authoritative rename, symbolEdit for indexed structural symbol replacement/insertion, oldText/newText for localized changes, content for complete-file replacement, edits for an atomic structured batch, or updateText for patch-shaped changes. Keep a repository-wide patch-shaped change in one logical updateText patch when the transport permits it. Rel.AI automatically handles large complete-file writes; use explicit staged mode only when a client transport cannot carry the intended payload in one request.',
     dashboard: { capabilities: ['edit'] }
   },
   {
@@ -176,7 +176,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_publish', title: 'Publish Repository Work',
-    description: 'Use to commit, push, or draft PR text after task changes are reviewed and ready. Do not use before the publish boundary is satisfied.',
+    description: 'Use to commit, push, or draft PR text after changes are reviewed and ready. Commits stay task-scoped by default; use addAll:true only when the user explicitly wants one commit containing all current visible workspace changes, including changes from other or earlier tasks. Do not use before the publish boundary is satisfied.',
     annotations: annotations(false, false, false, true), dashboard: { capabilities: ['git'] }, groups: ['git']
   }
 ];

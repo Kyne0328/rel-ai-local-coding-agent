@@ -17,6 +17,8 @@ import { electronPlatformSpec, normalizeElectronArch, normalizeElectronPlatform 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseManifest = JSON.parse(fs.readFileSync(path.join(root, 'release-manifest.json'), 'utf8'));
 const { applicationVersion, protocolVersion: mcpProtocolVersion, toolSurfaceVersion, toolCount } = releaseManifest;
+const appToolCount = 1;
+const mcpToolCount = toolCount + appToolCount;
 const platform = normalizeElectronPlatform(process.env.REL_AI_TARGET_PLATFORM || process.platform);
 const targetArch = normalizeElectronArch(process.env.REL_AI_TARGET_ARCH || process.arch);
 const platformSpec = electronPlatformSpec(platform, targetArch);
@@ -104,14 +106,21 @@ try {
   assert.ok(discovered.result?.capabilities?.tools);
   assert.ok(discovered.result?.capabilities?.resources);
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, toolSurfaceVersion);
+  assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolCount, toolCount);
+  assert.equal(discovered.result?.capabilities?.experimental?.relai?.appToolCount, appToolCount);
+  assert.equal(discovered.result?.capabilities?.experimental?.relai?.deploymentMode, 'local_developer');
 
   const tools = await mcp(primarySession, 11, 'tools/list', {});
-  assert.equal(tools.result?.tools?.length, toolCount);
+  assert.equal(tools.result?.tools?.length, mcpToolCount);
   const toolNames = new Set(tools.result.tools.map(tool => tool.name));
   for (const requiredTool of ['relai_work', 'relai_read', 'relai_validate']) {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
   }
   assert.equal(toolNames.has('relai_native_tasks_probe'), false);
+  assert.deepEqual(tools.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool._meta?.ui?.visibility), [['app']]);
+  for (const tool of tools.result.tools.filter(tool => !tool.name.startsWith('relai_app_'))) {
+    assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+  }
   const toolByName = new Map(tools.result.tools.map(tool => [tool.name, tool]));
   assert.equal(toolByName.get('relai_validate')?.execution, undefined);
   assert.equal(toolByName.get('relai_exec')?.execution, undefined);
@@ -256,7 +265,7 @@ try {
   });
   const chatGptTools = await readMcpResponse(chatGptToolsResponse);
   assert.equal(chatGptToolsResponse.status, 200, JSON.stringify(chatGptTools));
-  assert.equal(chatGptTools.result?.tools?.length, toolCount);
+  assert.equal(chatGptTools.result?.tools?.length, mcpToolCount);
 
   const chatGptStatusResponse = await freshFetch(`${base}/mcp`, {
     method: 'POST',

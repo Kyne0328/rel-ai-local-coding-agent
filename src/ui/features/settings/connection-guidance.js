@@ -9,15 +9,16 @@ export function chatGptFirstPrompt(workspaceAlias = 'myapp') {
   return `Use Rel.AI MCP with project "${alias.replaceAll('"', '\\"')}". Look through its files and folders and summarize the project structure. Do not change any files yet.`;
 }
 
-export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
+export function chatGptGuideSteps({ mode = 'create', tunnelId = '', connectorName = 'Rel.AI MCP' } = {}) {
   const tunnel = String(tunnelId || '').trim();
+  const name = String(connectorName || 'Rel.AI MCP').trim() || 'Rel.AI MCP';
   if (mode === 'reconnect') {
     return [
       'Keep Rel.AI running and confirm OpenAI Secure MCP Tunnel shows Connected on the Connection page.',
-      'In ChatGPT, open the existing Rel.AI MCP connector instead of creating a duplicate.',
+      `In ChatGPT, open the existing “${name}” connector instead of creating a duplicate.`,
       tunnel ? `Reconnect it with Connection set to Tunnel and select ${tunnel}.` : 'Reconnect it with Connection set to Tunnel and select this computer’s Secure MCP Tunnel.',
       'Set Authentication to No authentication. Do not choose OAuth for the Rel.AI tunnel connection.',
-      'Return to the chat, enable Rel.AI MCP, and retry the request.'
+      `Return to the chat, enable “${name}”, and retry the request.`
     ];
   }
   return [
@@ -25,33 +26,34 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
     'Under Organization settings → API Keys, create an API key for the tunnel with Tunnel Read and Use permissions.',
     'Save the Tunnel ID and API key in Rel.AI Connection settings, then keep Rel.AI running until the connection shows Connected.',
     'Save the Rel.AI icon below before opening ChatGPT connector creation.',
-    tunnel ? `In ChatGPT, use Name “Rel.AI MCP”, Connection “Tunnel”, select ${tunnel}, and set Authentication to “No authentication”.` : 'In ChatGPT, use Name “Rel.AI MCP”, Connection “Tunnel”, select this computer’s tunnel, and set Authentication to “No authentication”.',
+    tunnel ? `In ChatGPT, use Name “${name}”, Connection “Tunnel”, select ${tunnel}, and set Authentication to “No authentication”.` : `In ChatGPT, use Name “${name}”, Connection “Tunnel”, select this computer’s tunnel, and set Authentication to “No authentication”.`,
     'Click Scan Tools, confirm the Rel.AI tools appear, then click Create.',
-    `After creation, open Manage and upload ${RELAI_CONNECTOR_ICON_FILENAME} as the connector logo, then enable Rel.AI MCP in the chat.`
+    `After creation, open Manage and upload ${RELAI_CONNECTOR_ICON_FILENAME} as the connector logo, then enable “${name}” in the chat.`
   ];
 }
 
 export function createChatGptSetupGuide(options = {}) {
   const mode = options.mode === 'reconnect' ? 'reconnect' : 'create';
   const tunnelId = String(options.tunnelId || '').trim();
+  const connectorName = String(options.connectorName || 'Rel.AI MCP').trim() || 'Rel.AI MCP';
   const guide = document.createElement(options.compact ? 'div' : 'section');
   guide.className = `chatgpt-setup-guide ${options.compact ? 'compact' : ''}`.trim();
   const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Connect ChatGPT';
-  const steps = chatGptGuideSteps({ mode, tunnelId });
+  const steps = chatGptGuideSteps({ mode, tunnelId, connectorName });
   guide.innerHTML = `
     <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI keeps the local connection private.</span></div>
-    ${mode === 'create' ? connectorHandoffHtml(tunnelId) : ''}
+    ${mode === 'create' ? connectorHandoffHtml(tunnelId, connectorName) : ''}
     <ol>${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
     <div class="chatgpt-first-prompt"><span>First test request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
   if (mode === 'create') bindConnectorHandoff(guide);
   return guide;
 }
 
-function connectorHandoffHtml(tunnelId) {
+function connectorHandoffHtml(tunnelId, connectorName) {
   return `
     <section class="chatgpt-connector-handoff" aria-label="ChatGPT connector setup">
       <dl class="chatgpt-connector-values">
-        <dt>Name</dt><dd>Rel.AI MCP</dd>
+        <dt>Name</dt><dd>${escapeHtml(connectorName)}</dd>
         <dt>Connection</dt><dd>Tunnel</dd>
         <dt>Tunnel</dt><dd class="mono">${escapeHtml(tunnelId || 'Select this computer’s tunnel')}</dd>
         <dt>Authentication</dt><dd>No authentication</dd>

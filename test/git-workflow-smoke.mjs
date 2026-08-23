@@ -85,6 +85,7 @@ git(['add', 'unrelated-staged.txt'], { cwd: workspace.path });
 const commit = await relaiGitCommit(workspace, config, { message: 'add notes', paths: ['notes.txt'] });
 assert.equal(commit.ok, true);
 assert.ok(/add notes/.test(JSON.stringify(commit.commit)));
+assert.equal(commit.head, git(['rev-parse', 'HEAD'], { cwd: workspace.path }).toString('utf8').trim(), 'successful commits must report the exact created HEAD');
 const committedPaths = git(['show', '--name-only', '--format=', 'HEAD'], { cwd: workspace.path }).toString('utf8').split(/\r?\n/).filter(Boolean);
 assert.ok(committedPaths.includes('notes.txt'), 'selected path must be included in the commit');
 assert.ok(!committedPaths.includes('unrelated-staged.txt'), 'path-scoped commit must exclude unrelated staged files');
@@ -124,6 +125,28 @@ assert.match(emptyTaskScope.error, /will not fall back/i);
 assert.equal(git(['status', '--porcelain=v1', '--', 'must-not-auto-commit.txt'], { cwd: workspace.path }).toString('utf8').trim().startsWith('??'), true);
 fs.rmSync(path.join(workspace.path, 'must-not-auto-commit.txt'), { force: true });
 
+fs.writeFileSync(path.join(workspace.path, 'aggregate-task.txt'), 'task\n');
+fs.writeFileSync(path.join(workspace.path, 'aggregate-ambient.txt'), 'ambient\n');
+const aggregateDryRun = await relaiGitCommit(workspace, config, {
+  message: 'aggregate workspace dry run',
+  _taskOwnedPaths: ['aggregate-task.txt'],
+  addAll: true,
+  dryRun: true
+});
+assert.equal(aggregateDryRun.ok, true);
+assert.equal(aggregateDryRun.addAll, true);
+assert.deepEqual(new Set(aggregateDryRun.paths), new Set(['aggregate-ambient.txt', 'aggregate-task.txt']));
+const ambiguousAggregate = await relaiGitCommit(workspace, config, {
+  message: 'ambiguous workspace selection',
+  _taskOwnedPaths: ['aggregate-task.txt'],
+  paths: ['aggregate-task.txt'],
+  addAll: true
+});
+assert.equal(ambiguousAggregate.ok, false, 'addAll and explicit paths must not be combined');
+assert.match(ambiguousAggregate.error, /cannot combine addAll:true with explicit paths/i);
+fs.rmSync(path.join(workspace.path, 'aggregate-task.txt'), { force: true });
+fs.rmSync(path.join(workspace.path, 'aggregate-ambient.txt'), { force: true });
+
 const pushDryRun = await relaiGitPush(workspace, config, { remote: 'origin', branch: 'main', dryRun: true });
 assert.equal(pushDryRun.ok, true);
 
@@ -144,7 +167,7 @@ await assert.rejects(
 // addAll commits must refuse secret-looking staged files (e.g. .env picked up by
 // `git add -A`) unless every sensitive path has commit-scoped authorization.
 fs.writeFileSync(path.join(workspace.path, '.env'), 'API_KEY=super-secret\n');
-const secretCommit = await relaiGitCommit(workspace, config, { message: 'oops secrets' });
+const secretCommit = await relaiGitCommit(workspace, config, { message: 'oops secrets', _taskOwnedPaths: [], addAll: true });
 assert.equal(secretCommit.ok, false, 'commit with staged .env should be refused');
 assert.ok(Array.isArray(secretCommit.secretStagedFiles) && secretCommit.secretStagedFiles.includes('.env'));
 assert.equal(secretCommit.indexRestored, true, 'secret refusal must restore the pre-operation index');
@@ -153,6 +176,8 @@ assert.equal(git(['diff', '--cached', '--name-only'], { cwd: workspace.path }).t
 
 const secretCommitAllowed = await relaiGitCommit(workspace, config, {
   message: 'intentional env commit',
+  _taskOwnedPaths: [],
+  addAll: true,
   sensitiveAuthorization: {
     operation: 'commit',
     paths: ['.env'],

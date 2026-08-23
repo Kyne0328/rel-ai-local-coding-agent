@@ -139,48 +139,116 @@ function validateRelativePath(root, value, field, errors, directory) {
 function parseOpenAiAgentMetadata(source, errors, label) {
   if (!source) return null;
   const root = {};
-  let section = null;
   const seenRoot = new Set();
-  const seenSection = new Set();
+  const seenInterface = new Set();
+  const seenDependencyKeys = new Set();
+  let section = null;
+  let dependencyTool = null;
   for (const [index, rawLine] of source.split('\n').entries()) {
     if (!rawLine.trim() || rawLine.trimStart().startsWith('#')) continue;
+    const lineLabel = `${label} line ${index + 1}`;
     if (rawLine.includes('\t')) {
-      errors.push(`${label} line ${index + 1} must use spaces, not tabs.`);
+      errors.push(`${lineLabel} must use spaces, not tabs.`);
       continue;
     }
     const indent = rawLine.length - rawLine.trimStart().length;
-    const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(rawLine.trim());
-    if (!match) {
-      errors.push(`${label} line ${index + 1} is not a supported YAML mapping entry.`);
-      continue;
-    }
-    const [, key, rawValue = ''] = match;
+    const trimmed = rawLine.trim();
     if (indent === 0) {
-      if (seenRoot.has(key)) errors.push(`${label} has duplicate root key '${key}'.`);
-      seenRoot.add(key);
-      if (rawValue.trim()) {
-        errors.push(`${label} root key '${key}' must contain a nested mapping.`);
-        section = null;
+      const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(trimmed);
+      if (!match) {
+        errors.push(`${lineLabel} is not a supported YAML root mapping.`);
         continue;
       }
-      root[key] = {};
+      const [, key, rawValue = ''] = match;
+      if (seenRoot.has(key)) errors.push(`${label} has duplicate root key '${key}'.`);
+      seenRoot.add(key);
+      if (rawValue.trim()) errors.push(`${label} root key '${key}' must contain a nested mapping.`);
       section = key;
-      seenSection.clear();
+      dependencyTool = null;
+      if (key === 'interface') root.interface = {};
+      else if (key === 'dependencies') root.dependencies = { tools: [] };
+      else errors.push(`${label} has unsupported root mapping '${key}'.`);
       continue;
     }
-    if (indent !== 2 || !section) {
-      errors.push(`${label} line ${index + 1} must be a two-space child of a root mapping.`);
+
+    if (section === 'interface') {
+      if (indent !== 2) {
+        errors.push(`${lineLabel} must be a two-space child of interface.`);
+        continue;
+      }
+      const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(trimmed);
+      if (!match) {
+        errors.push(`${lineLabel} is not a supported interface mapping entry.`);
+        continue;
+      }
+      const [, key, rawValue = ''] = match;
+      if (seenInterface.has(key)) errors.push(`${label} interface has duplicate key '${key}'.`);
+      seenInterface.add(key);
+      root.interface[key] = parseYamlScalar(rawValue, errors, lineLabel);
       continue;
     }
-    if (seenSection.has(key)) errors.push(`${label} section '${section}' has duplicate key '${key}'.`);
-    seenSection.add(key);
-    root[section][key] = parseYamlScalar(rawValue, errors, `${label} line ${index + 1}`);
+
+    if (section === 'dependencies') {
+      if (indent === 2) {
+        const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(trimmed);
+        if (!match) {
+          errors.push(`${lineLabel} is not a supported dependencies mapping entry.`);
+          continue;
+        }
+        const [, key, rawValue = ''] = match;
+        if (key !== 'tools') errors.push(`${label} dependencies has unsupported field '${key}'.`);
+        if (seenDependencyKeys.has(key)) errors.push(`${label} dependencies has duplicate key '${key}'.`);
+        seenDependencyKeys.add(key);
+        if (rawValue.trim()) errors.push(`${lineLabel} tools must contain a YAML list.`);
+        dependencyTool = null;
+        continue;
+      }
+      if (indent === 4 && trimmed.startsWith('- ')) {
+        const match = /^-\s+([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(trimmed);
+        if (!match) {
+          errors.push(`${lineLabel} must begin a dependency tool mapping.`);
+          continue;
+        }
+        dependencyTool = {};
+        root.dependencies.tools.push(dependencyTool);
+        const [, key, rawValue = ''] = match;
+        dependencyTool[key] = parseYamlScalar(rawValue, errors, lineLabel);
+        continue;
+      }
+      if (indent === 6 && dependencyTool) {
+        const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(trimmed);
+        if (!match) {
+          errors.push(`${lineLabel} is not a supported dependency tool mapping entry.`);
+          continue;
+        }
+        const [, key, rawValue = ''] = match;
+        if (Object.hasOwn(dependencyTool, key)) errors.push(`${lineLabel} duplicates dependency field '${key}'.`);
+        dependencyTool[key] = parseYamlScalar(rawValue, errors, lineLabel);
+        continue;
+      }
+      errors.push(`${lineLabel} has unsupported dependencies indentation or list syntax.`);
+      continue;
+    }
+
+    errors.push(`${lineLabel} is not inside a supported root mapping.`);
   }
-  const rootKeys = Object.keys(root);
-  if (rootKeys.length !== 1 || rootKeys[0] !== 'interface') errors.push(`${label} must contain exactly one root mapping named interface.`);
+  if (!root.interface) errors.push(`${label} must contain an interface root mapping.`);
   const interfaceKeys = Object.keys(root.interface || {});
   const allowedInterface = new Set(['display_name', 'short_description', 'default_prompt']);
   for (const key of interfaceKeys) if (!allowedInterface.has(key)) errors.push(`${label} has unsupported interface field '${key}'.`);
+
+  const allowedDependencyFields = new Set(['type', 'value', 'description', 'transport', 'url']);
+  for (const [index, dependency] of (root.dependencies?.tools || []).entries()) {
+    const prefix = `${label} dependencies.tools[${index}]`;
+    for (const key of Object.keys(dependency)) if (!allowedDependencyFields.has(key)) errors.push(`${prefix} has unsupported field '${key}'.`);
+    if (dependency.type !== 'mcp') errors.push(`${prefix}.type must be 'mcp'.`);
+    if (typeof dependency.value !== 'string' || !dependency.value.trim()) errors.push(`${prefix}.value must be a non-empty MCP tool/server identifier.`);
+    for (const optional of ['description', 'transport', 'url']) {
+      if (Object.hasOwn(dependency, optional) && (typeof dependency[optional] !== 'string' || !dependency[optional].trim())) {
+        errors.push(`${prefix}.${optional} must be a non-empty string when present.`);
+      }
+    }
+  }
   return root;
 }
 
@@ -226,4 +294,4 @@ if (invoked) {
   console.log(JSON.stringify(validatePlugin(root), null, 2));
 }
 
-export { validatePlugin };
+export { parseOpenAiAgentMetadata, validatePlugin };

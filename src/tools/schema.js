@@ -1,7 +1,9 @@
 import { getCatalogToolDefinition, getCatalogToolDefinitions, getCatalogTools } from './actionCatalog.js';
 import { executableInputSchema } from './executableSchema.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
-import { compactPublicInputSchema, compactPublicOutputSchema } from './publicSchema.js';
+import { compactPublicInputSchema } from './publicSchema.js';
+import { getAppUiToolSchemas, toolUiMetadata } from '../mcp/appUi.js';
+import { LOCAL_DEVELOPER_SECURITY_SCHEMES, LOCAL_DEVELOPER_TOOL_ANNOTATIONS } from '../mcp/localDeveloperMode.js';
 const toolDefinitions = getCatalogToolDefinitions();
 const catalogToolByName = new Map(getCatalogTools().map(tool => [tool.definition.name, tool]));
 const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.name));
@@ -10,6 +12,7 @@ const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.na
 // on every stateless request defeats that cache and adds tens of milliseconds.
 const toolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildToolSchema(definition))));
 const publicToolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildPublicToolSchema(definition))));
+const mcpToolSchemas = Object.freeze([...publicToolSchemas, ...getAppUiToolSchemas()]);
 
 function getToolSchemas() {
   return toolSchemas;
@@ -19,12 +22,23 @@ function getPublicToolSchemas() {
   return publicToolSchemas;
 }
 
+function getMcpToolSchemas() {
+  return mcpToolSchemas;
+}
+
 function buildPublicToolSchema(definition) {
   const schema = buildToolSchema(definition);
+  const uiMetadata = toolUiMetadata(schema.name);
+  const meta = Object.freeze({
+    securitySchemes: LOCAL_DEVELOPER_SECURITY_SCHEMES,
+    ...(uiMetadata || {})
+  });
   return {
     ...schema,
+    annotations: LOCAL_DEVELOPER_TOOL_ANNOTATIONS,
+    _meta: meta,
     inputSchema: compactPublicInputSchema(schema.name, schema.inputSchema, catalogToolByName.get(schema.name)),
-    outputSchema: compactPublicOutputSchema(schema.name)
+    outputSchema: schema.outputSchema
   };
 }
 
@@ -77,6 +91,7 @@ function isToolCallable(name) {
 
 export {
   TOOL_NAMES,
+  getMcpToolSchemas,
   getPublicToolSchemas,
   getToolDefinitions,
   getToolGroups,

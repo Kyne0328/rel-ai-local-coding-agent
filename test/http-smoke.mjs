@@ -5,8 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
+import { readTaskHistorySessionRecord } from '../src/taskHistoryStore.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
-import { activeToolCount, activeToolNames, activeToolSurface } from './helpers/tool-surface.mjs';
+import { activeMcpToolCount, activeToolCount, activeToolNames, activeToolSurface } from './helpers/tool-surface.mjs';
 import { localHttpFetch as fetch, startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -59,6 +60,8 @@ try {
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, activeToolSurface.toolSurfaceVersion);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, activeToolCount);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.appToolCount, 1);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.deploymentMode, 'local_developer');
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
     discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'],
@@ -71,6 +74,7 @@ try {
   assert.match(serverInstructions, /approval/i);
   assert.match(serverInstructions, /authoritative evidence/i);
   assert.match(serverInstructions, /explicit task-completion contract/i);
+  assert.match(serverInstructions, /Do not poll relai_work status merely to refresh UI/i);
   assert.doesNotMatch(serverInstructions, /Start each objective|Inspect relevant files|Validate after changes|recovery guidance/i, 'global MCP instructions must contain universal invariants rather than specialist workflow tactics');
   assert.equal(discovery.body.result?.cacheScope, 'private');
   assert.ok(Number.isFinite(discovery.body.result?.ttlMs) && discovery.body.result.ttlMs > 0, 'discovery cache TTL must remain finite and positive');
@@ -88,12 +92,24 @@ try {
   assert.equal(Object.hasOwn(liveDashboard.mcpConnection, 'activeSessions'), false);
 
   const listed = await client.request('tools/list');
-  assert.equal(listed.body.result?.tools?.length, activeToolCount);
+  assert.equal(listed.body.result?.tools?.length, activeMcpToolCount);
   const listedToolBytes = Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools }));
   assert.ok(listedToolBytes > 0, 'HTTP tools/list must serialize to a non-empty response');
   const names = listed.body.result.tools.map(tool => tool.name);
-  assert.deepEqual(names, activeToolNames, 'HTTP discovery must expose the canonical public tool surface');
-  for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish']) {
+  const publicNames = listed.body.result.tools.filter(tool => !tool.name.startsWith('relai_app_')).map(tool => tool.name);
+  assert.deepEqual(publicNames, activeToolNames, 'HTTP discovery must retain the canonical 12-tool model surface');
+  const listedByName = new Map(listed.body.result.tools.map(tool => [tool.name, tool]));
+  for (const name of activeToolNames) {
+    assert.deepEqual(listedByName.get(name)?.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, `${name} must present as read-only in local developer mode`);
+    assert.deepEqual(listedByName.get(name)?._meta?.securitySchemes, [{ type: 'noauth' }], `${name} must advertise noauth through ChatGPT compatibility metadata`);
+  }
+  assert.deepEqual(listedByName.get('relai_app_task')?._meta?.ui?.visibility, ['app']);
+  assert.deepEqual(listedByName.get('relai_app_task')?._meta?.securitySchemes, [{ type: 'noauth' }]);
+  assert.equal(listedByName.has('relai_app_open'), false);
+  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/status-strip/v2.html');
+  assert.equal(listedByName.get('relai_validate')?._meta?.ui?.resourceUri, undefined, 'validation stays data-only to avoid repeated card mounts');
+  assert.equal(listedByName.get('relai_edit')?._meta?.ui?.resourceUri, undefined, 'frequent data/mutation tools must not remount the workflow card');
+  for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish', 'relai_app_task']) {
     assert.ok(names.includes(expected), `${expected} missing`);
   }
   for (const legacy of ['relai_begin_work', 'relai_process_start', 'relai_run_checks', 'relai_git_push']) {
@@ -120,6 +136,7 @@ try {
   assert.equal(status.response.status, 200, JSON.stringify(status.body));
   assert.equal(status.body.result?.isError, false, JSON.stringify(status.body));
   assert.equal(status.body.result?.structuredContent?.ok, true);
+  assert.equal(status.body.result?._meta?.relai?.surface, 'status-strip', 'workflow tool results must carry component-only hydration metadata');
 
   const missingWorkspace = await client.request('tools/call', {
     name: 'relai_work',
@@ -131,19 +148,70 @@ try {
 
   const started = await client.request('tools/call', {
     name: 'relai_work',
-    arguments: { action: 'begin', workspace: root, bootstrap: 'none' }
+    arguments: { action: 'begin', workspace: root, bootstrap: 'none' },
+    _meta: { 'openai/session': 'chat-session-regression' }
   });
   assert.equal(started.response.status, 200, JSON.stringify(started.body));
   assert.equal(started.body.result?.isError, false, JSON.stringify(started.body));
+  assert.equal(started.body.result?._meta?.relai?.surface, 'status-strip');
   const workId = started.body.result?.structuredContent?.work_id;
   assert.match(workId || '', /^[0-9a-f-]{36}$/i, 'HTTP Apps transport must start work from a configured workspace path');
+  const persistedTask = readTaskHistorySessionRecord(config, workId, { reconcileInactive: false });
+  assert.equal(persistedTask?.correlation?.conversationId, 'chat-session-regression', 'ChatGPT session metadata must persist as internal task correlation without leaking into compact model-visible status');
+  const validationWithExplicitLevel = await client.request('tools/call', {
+    name: 'relai_validate',
+    arguments: {
+      action: 'checks',
+      work_id: workId,
+      level: 'standard',
+      check: `${JSON.stringify(globalThis.process.execPath)} -e "process.stdout.write('schema-parity-ok')"`,
+      timeoutMs: 5_000,
+      fullOutput: true
+    }
+  });
+  assert.equal(validationWithExplicitLevel.response.status, 200, JSON.stringify(validationWithExplicitLevel.body));
+  assert.equal(validationWithExplicitLevel.body.error, undefined, 'publicly valid level + explicit check must not fail transport preflight');
+  assert.equal(validationWithExplicitLevel.body.result?.isError, false, JSON.stringify(validationWithExplicitLevel.body));
+  assert.equal(validationWithExplicitLevel.body.result?.structuredContent?.validationStatus, 'passed');
   const missingExecMode = await client.request('tools/call', {
     name: 'relai_exec',
     arguments: { work_id: workId }
   });
   assert.equal(missingExecMode.response.status, 200, JSON.stringify(missingExecMode.body));
-  assert.equal(missingExecMode.body.error?.code, -32602, JSON.stringify(missingExecMode.body));
-  assert.match(missingExecMode.body.error?.message || '', /command|executable/i, 'task-aware preflight validation must reject a missing relai_exec mode before runtime dispatch');
+  assert.equal(missingExecMode.body.error, undefined, 'tool-level argument failures must stay inside a normal tools/call result instead of becoming connector-level JSON-RPC errors');
+  assert.equal(missingExecMode.body.result?.isError, true, JSON.stringify(missingExecMode.body));
+  assert.equal(missingExecMode.body.result?.structuredContent?.errorCode, 'INVALID_TOOL_ARGUMENTS');
+  assert.match(missingExecMode.body.result?.structuredContent?.error || '', /command|executable/i, 'task-aware preflight validation must explain the rejected input without escaping the tool-result boundary');
+
+  const invalidValidationArguments = await client.request('tools/call', {
+    name: 'relai_validate',
+    arguments: {
+      action: 'checks',
+      work_id: workId,
+      level: 'standard',
+      check: 42
+    }
+  });
+  assert.equal(invalidValidationArguments.response.status, 200, JSON.stringify(invalidValidationArguments.body));
+  assert.equal(invalidValidationArguments.body.error, undefined, 'invalid validator arguments must not surface as a connector-level protocol failure');
+  assert.equal(invalidValidationArguments.body.result?.isError, true, JSON.stringify(invalidValidationArguments.body));
+  assert.equal(invalidValidationArguments.body.result?.structuredContent?.errorCode, 'INVALID_TOOL_ARGUMENTS');
+  assert.match(invalidValidationArguments.body.result?.structuredContent?.error || '', /invalid arguments|check/i);
+
+  const unknownValidationField = await client.request('tools/call', {
+    name: 'relai_validate',
+    arguments: {
+      action: 'checks',
+      work_id: workId,
+      check: 'node -v',
+      unexpected: true
+    }
+  });
+  assert.equal(unknownValidationField.response.status, 200, JSON.stringify(unknownValidationField.body));
+  assert.equal(unknownValidationField.body.error, undefined, 'malformed long-running tool calls must not fall back to SDK -32602 validation');
+  assert.equal(unknownValidationField.body.result?.isError, true, JSON.stringify(unknownValidationField.body));
+  assert.equal(unknownValidationField.body.result?.structuredContent?.errorCode, 'INVALID_TOOL_ARGUMENTS');
+  assert.match(unknownValidationField.body.result?.structuredContent?.error || '', /unexpected|invalid arguments/i);
 
   const concurrentCalls = await Promise.all(Array.from({ length: 12 }, () => client.request('tools/call', {
     name: 'relai_exec',
@@ -186,14 +254,20 @@ try {
   assert.equal(Object.hasOwn(changedDashboard.mcpConnection.metrics, 'capabilityMismatches'), false);
 
   const synchronizedTools = await client.request('tools/list');
-  assert.equal(synchronizedTools.body.result?.tools?.length, activeToolCount);
+  assert.equal(synchronizedTools.body.result?.tools?.length, activeMcpToolCount);
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.equal(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));
+  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/status-strip/v2.html'));
   assert.equal(resources.body.result._meta?.['io.modelcontextprotocol/cache']?.cacheScope || resources.body.result.cacheScope || 'private', 'private');
+
+  const appUi = await client.request('resources/read', { uri: 'ui://relai/status-strip/v2.html' });
+  assert.equal(appUi.body.result?.contents?.[0]?.mimeType, 'text/html;profile=mcp-app');
+  assert.equal(appUi.body.result?.contents?.[0]?._meta?.ui?.prefersBorder, false);
+  assert.match(appUi.body.result?.contents?.[0]?.text || '', /ui\/notifications\/tool-result/);
 
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));

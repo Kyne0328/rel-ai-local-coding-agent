@@ -1,6 +1,6 @@
 import { openModal } from './components/modal.js';
 
-const CONNECTOR_REFRESH_VERSIONS = new Set(['0.26.0']);
+const CONNECTOR_REFRESH_VERSIONS = new Set(['0.26.0', '0.27.0']);
 const DISMISS_DELAY_MS = 5000;
 const STORAGE_PREFIX = 'relai_connector_refresh';
 const REFRESH_STEPS = Object.freeze([

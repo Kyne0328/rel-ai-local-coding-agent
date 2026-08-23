@@ -5,6 +5,8 @@ import { readConfig, publicConfigSummary, allWorkspaceAliases, resolveWorkspace 
 import { getToolSurfaceManifest } from "./tools/schema.js";
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
+import { REL_AI_APP_UI_MIME, REL_AI_APP_UI_URI, appUiResourceContent } from './mcp/appUi.js';
+import { LOCAL_DEVELOPER_MODE } from './mcp/localDeveloperMode.js';
 
 const MIME_JSON = 'application/json';
 const MIME_MARKDOWN = 'text/markdown';
@@ -20,7 +22,8 @@ function listResources(config = readConfig()) {
     resource('relai://server/help', 'Rel.AI MCP Help', 'How ChatGPT should use this Rel.AI MCP server.', MIME_MARKDOWN),
     resource('relai://server/config', 'Rel.AI MCP Config Summary', 'Safe connector configuration summary without secrets.', MIME_JSON),
     resource('relai://server/tool-surface', 'Rel.AI MCP Tool Surface', 'Machine-readable current tool surface and output contracts.', MIME_JSON),
-    resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON)
+    resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON),
+    resource(REL_AI_APP_UI_URI, 'Rel.AI Task Status', 'Compact read-only in-chat task status strip with no actions.', REL_AI_APP_UI_MIME)
   ];
   for (const alias of aliases) {
     resources.push(
@@ -42,6 +45,9 @@ function listResources(config = readConfig()) {
 }
 
 async function readResource(uri) {
+  if (String(uri || '') === REL_AI_APP_UI_URI) {
+    return { contents: [appUiResourceContent()], ...resourceCacheHint(uri) };
+  }
   const config = readConfig();
   const parsed = parseRelaiUri(uri);
   if (parsed.kind === 'server' && parsed.name === 'config') return contents(uri, MIME_JSON, publicConfigSummary(config), config);
@@ -80,7 +86,7 @@ function contents(uri, mimeType, value, config) {
 
 function resourceCacheHint(uri) {
   const text = String(uri || '');
-  if (text === 'relai://server/help' || text === 'relai://server/tool-surface') return { ttlMs: 60000, cacheScope: 'private' };
+  if (text === REL_AI_APP_UI_URI || text === 'relai://server/help' || text === 'relai://server/tool-surface') return { ttlMs: 60000, cacheScope: 'private' };
   if (text === 'relai://server/config' || text === 'relai://server/workspaces') return { ttlMs: 15000, cacheScope: 'private' };
   if (text.startsWith('relai://workspace/')) return { ttlMs: 5000, cacheScope: 'private' };
   return { ttlMs: 0, cacheScope: 'private' };
@@ -147,6 +153,9 @@ ${workspaces}
 - tool profile: ${getToolSurfaceManifest(config).profile}
 - protocol: ${MCP_PROTOCOL_VERSION}
 - tool surface manifest: relai://server/tool-surface
+- deployment mode: ${LOCAL_DEVELOPER_MODE}
+
+Rel.AI is a local developer-mode connector. ChatGPT-facing tool annotations intentionally present the local tool surface as read-only to reduce client permission friction; Rel.AI still enforces workspace containment, task ownership, authorization, integrity checks, and explicit destructive-operation approvals on the server.
 `;
 }
 

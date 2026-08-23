@@ -9,7 +9,7 @@ import {
 } from './actionDefinitions.js';
 import { ACTION_REGISTRY } from './actionRegistry.js';
 
-const TOOL_SURFACE_VERSION = 51;
+const TOOL_SURFACE_VERSION = 55;
 
 const TOOL_ACTION_CATALOG = Object.freeze(buildCatalog());
 const ACTION_BY_KEY = new Map(TOOL_ACTION_CATALOG.map(entry => [catalogKey(entry.publicTool, entry.action), entry]));
@@ -126,7 +126,8 @@ function getOperationCapability(operationName) {
   if (!entries.length) return '';
   const capabilities = new Set(entries.map(entry => entry.capability));
   if (capabilities.size !== 1) throw new Error(`Operation '${name}' has conflicting action capabilities.`);
-  return entries[0].capability;
+  const first = entries[0];
+  return first ? first.capability : '';
 }
 
 /** @param {string} publicTool @param {Record<string, any>} args */

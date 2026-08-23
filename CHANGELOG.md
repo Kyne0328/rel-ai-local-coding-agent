@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.27.0] — 2026-08-23
+
+### Repository editing and code intelligence
+- **Add a project code editor and multi-source project workspaces.** Projects can expose more than one source folder through the same configured project, while task code-workspace views keep task-owned changes synchronized and exclude Git links, directories, and other non-file entries that cannot be edited safely as source files.
+- **Add hybrid language-server code intelligence without giving language servers mutation authority.** TypeScript/JavaScript and Python definition, reference, hover, implementation, and rename flows can use installed language servers, while Rel.AI remains responsible for workspace containment, stale-write protection, atomic application, rollback, auditing, and validation.
+- **Add indexed structural symbol edits.** `relai_edit` now supports `symbolEdit` replace, insert-before, and insert-after operations resolved from reliable Tree-sitter symbol ranges, with source-hash freshness checks and ambiguity handling; the existing language-server-authoritative semantic rename form remains available separately.
+- **Strengthen persistent Repository Intelligence and its public contracts.** Symbol results now carry indexed source hashes for safe structural edits, current Zoekt/FTS5/Tree-sitter graph behavior is reflected in regression coverage, and hybrid-intelligence result fields are included in the closed structured-output schema.
+- **Add context building and session compaction for repository work.** Repository context can be assembled and compacted with bounded evidence so longer coding sessions retain useful project information without carrying unnecessary payload indefinitely.
+- **Improve runtime compatibility matching.** Runtime assessment uses richer metadata matching to distinguish compatible, mismatched, and degraded environments more accurately.
+
+### ChatGPT MCP integration and tool behavior
+- **Add a compact read-only MCP Apps task-status strip.** `relai_work` can hydrate an in-chat status surface, while one app-only `relai_app_task` helper refreshes task state without becoming a model-selectable repository tool or adding mutation controls to the component.
+- **Make the local developer-mode connector presentation explicit.** ChatGPT-facing tools advertise local no-auth/read-only presentation hints and concise invocation labels to reduce permission friction, while Rel.AI's server-side task ownership, authorization, workspace containment, integrity checks, and destructive-operation approvals remain authoritative.
+- **Allow explicit workspace-wide commits without weakening task isolation.** `relai_publish commit` remains task-owned by default, while `addAll:true` now intentionally aggregates every current visible workspace change—including earlier, parallel-task, and ambient work—behind the existing publish approval and sensitive-file checks, then reconciles ownership after a successful commit.
+- **Keep malformed long-running tool calls inside the tool-result boundary.** Invalid task-aware arguments return structured tool errors instead of escaping as connector-level JSON-RPC `-32602` failures, reducing false transport-failure reports while preserving strict runtime validation.
+- **Correlate ChatGPT sessions with Rel.AI tasks without exposing the correlation in compact status.** OpenAI session metadata is retained internally for task history and concurrent-chat isolation.
+- **Tighten public tool and output contracts.** The edit surface now advertises semantic rename and structural symbol-edit forms, edit results expose semantic metadata, inspection results expose hybrid-intelligence metadata, and the public tool surface advances to version 55 while retaining 12 model-facing tools.
+
+### Desktop setup and project experience
+- **Give each computer a distinct ChatGPT connector name.** Setup, recovery, Connection guidance, persisted desktop settings, and ChatGPT handoff copy carry a configurable connector name so multi-computer users can reconnect the intended Rel.AI instance instead of creating ambiguous duplicates.
+- **Improve first-run setup and recovery guidance.** The wizard validates connector names, keeps Tunnel + No authentication instructions aligned with the configured machine, and adds an optional GitHub project-support link without making it part of recovery flow.
+- **Improve project and modal UX.** Project management, source-folder handling, and modal interactions are tightened around the current direct-workspace model and the integrated code editor.
+
+### Plugin, validation, and release maintenance
+- **Validate current OpenAI agent metadata and tool-routing behavior.** Plugin validation now understands supported `dependencies.tools` metadata, packaged plugin coverage includes the MCP Apps assets, and a provider-agnostic evaluator checks direct, indirect, negative, forbidden-tool, app-only, and rendered-tool boundaries.
+- **Harden macOS release packaging.** Packaging and release verification receive the post-0.26.6 macOS reliability changes already merged to `main`.
+- **Remove the obsolete scheduled GitHub Pages deployment trigger.** Pages publication no longer runs from the removed schedule path.
+- **Refresh regression coverage for the current architecture.** Tests now cover structural symbol editing and index invalidation, current persistent intelligence strategy, app-only MCP UI behavior, connector naming, plugin metadata, tool-result argument failures, non-file code-workspace entries, and synchronized tool/output schemas.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.27.0.
+
 ## [0.26.6] — 2026-08-20
 
 ### Reliability, recovery, and tool execution

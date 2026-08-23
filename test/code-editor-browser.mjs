@@ -52,7 +52,9 @@ try {
   const result = JSON.parse(probeOutput);
   assert.equal(result.error, undefined, result.error);
   assert.equal(result.editorPresent, true, 'Monaco editor must render');
-  assert.equal(result.inlineDiffEditor, true, 'editor mode must highlight changed lines with Monaco inline diff rendering');
+  assert.equal(result.inlineDiffEditor, true, 'the Changes surface must render task changes with Monaco diff rendering');
+  assert.equal(result.readOnly, true, 'the rendered task diff must be read-only');
+  assert.equal(result.saveButtonPresent, false, 'the Changes surface must not expose a Save control');
   assert.deepEqual(result.changedFileRows, ['src/example.js', 'src/new.js'], 'the file explorer must show only changed files and hide untouched files');
   assert.deepEqual(result.statusBadges.map(item => item.code), ['M', 'U'], 'changed-file markers must expose real Git states instead of hardcoding M');
   assert.match(result.statusBadges[0]?.title || '', /^Modified:/);
@@ -71,7 +73,7 @@ try {
   }
   assert.ok(result.geometry?.monaco?.height > 100, `Monaco viewport must have usable height: ${JSON.stringify(result)}`);
   assert.deepEqual(result.cspErrors, [], `Monaco must render without CSP style violations: ${JSON.stringify(result.cspErrors)}`);
-  console.log('Rendered Monaco editor keeps syntax colors, separate line geometry, and stable live-update state.');
+  console.log('Rendered read-only Changes diff keeps syntax colors, file states, geometry, and stable live-update state.');
 } finally {
   if (child && child.exitCode == null) child.kill('SIGKILL');
   await stopHttpTestServer(server);

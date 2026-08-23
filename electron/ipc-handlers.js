@@ -4,7 +4,8 @@ import { registerCodeWorkspaceIpc } from './ipc-handlers-code.js';
 
 const OPENAI_SETUP_URLS = Object.freeze({
   tunnels: 'https://platform.openai.com/settings/organization/tunnels',
-  apiKeys: 'https://platform.openai.com/settings/organization/api-keys'
+  apiKeys: 'https://platform.openai.com/settings/organization/api-keys',
+  supportProject: 'https://github.com/Kyne0328/rel-ai-mcp'
 });
 
 function registerIpcHandlers(deps) {
@@ -86,8 +87,6 @@ function registerIpcHandlers(deps) {
     ipcMain: deps.ipcMain,
     dashboardOnly,
     getTaskCodeWorkspace: deps.getTaskCodeWorkspace,
-    readTaskCodeFile: deps.readTaskCodeFile,
-    writeTaskCodeFile: deps.writeTaskCodeFile,
     readTaskCodeDiff: deps.readTaskCodeDiff,
     listCodeEditors: deps.listCodeEditors,
     openTaskCodeIde: deps.openTaskCodeIde

@@ -32,14 +32,15 @@ app.whenReady().then(async () => {
       const host = document.createElement('div');
       document.body.replaceChildren(host);
       const module = await import('/public/ui/features/code/index.js');
-      const data = { tasks: [{ work_id: 'probe-task', title: 'Code editor probe', status: 'running', workspace: 'app' }] };
+      const data = { tasks: [{ work_id: 'probe-task', title: 'Changes viewer probe', status: 'running', workspace: 'app' }] };
       await module.mountCode(host, data);
       for (let attempt = 0; attempt < 50 && !document.querySelector('.monaco-editor .view-lines'); attempt += 1) await wait(50);
       await wait(300);
       const editorBefore = document.querySelector('.monaco-diff-editor');
       const editors = window.monaco?.editor?.getEditors?.() || [];
-      const liveEditor = editors.find(editor => editor.getOption?.(window.monaco.editor.EditorOption.readOnly) === false) || editors.at(-1) || null;
+      const liveEditor = editors.find(editor => editor.getModel?.()?.getValue?.()?.includes('const answer = 42;')) || editors.at(-1) || null;
       const model = liveEditor?.getModel?.() || null;
+      const readOnly = liveEditor?.getOption?.(window.monaco.editor.EditorOption.readOnly) === true;
       const modelLanguage = model?.getLanguageId?.() || '';
       const modelValue = model?.getValue?.() || '';
       const tokenized = typeof window.monaco?.editor?.tokenize === 'function'
@@ -74,6 +75,8 @@ app.whenReady().then(async () => {
       return {
         editorPresent: Boolean(editorBefore),
         inlineDiffEditor: Boolean(document.querySelector('.monaco-diff-editor')),
+        readOnly,
+        saveButtonPresent: Boolean(document.querySelector('[data-code-save]')),
         changedFileRows: [...document.querySelectorAll('[data-code-file]')].map(button => button.dataset.codeFile || ''),
         statusBadges: [...document.querySelectorAll('[data-code-file]')].map(button => {
           const marker = button.querySelector('.code-file-marker');
@@ -102,7 +105,7 @@ app.whenReady().then(async () => {
           host: rectFor('[data-code-editor]'),
           pane: rectFor('.code-editor-pane'),
           workbench: rectFor('.code-workbench'),
-          monaco: rectFor('.monaco-editor')
+          monaco: rectFor('.monaco-editor:not(.gutter)')
         }
       };
     })()`);

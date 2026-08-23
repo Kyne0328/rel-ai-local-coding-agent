@@ -114,6 +114,7 @@ function handleConnection(ctx) {
       showToken: false,
       includeTokenInUrls: false
     }),
+    connectorName: String(latestProfile.connectorName || 'Rel.AI MCP'),
     mcpConnection,
     mcpAuthentication: readMcpAuthenticationStatus(mcpConnection, {
       staticBearerConfigured: Boolean(ctx.options.token)

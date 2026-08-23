@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION, postMcp } from './helpers/http-mcp.mjs';
-import { activeToolCount } from './helpers/tool-surface.mjs';
+import { activeMcpToolCount } from './helpers/tool-surface.mjs';
 import { startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -66,7 +66,7 @@ try {
 
   const listed = await client.request('tools/list', {}, { id: 2, capabilities: {} });
   assert.equal(listed.response.status, 200, JSON.stringify(listed.body));
-  assert.equal(listed.body.result?.tools?.length, activeToolCount);
+  assert.equal(listed.body.result?.tools?.length, activeMcpToolCount);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_native_tasks_probe'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_get'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_cancel'), false);

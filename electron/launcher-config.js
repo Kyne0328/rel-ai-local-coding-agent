@@ -1,9 +1,9 @@
 // @ts-check
-/** @typedef {import('../types/boundaries.d.ts').LauncherConfigInput} LauncherConfigInput */
-/** @typedef {import('../types/boundaries.d.ts').LauncherConfig} LauncherConfig */
+/** @typedef {import('../types/boundaries.js').LauncherConfigInput} LauncherConfigInput */
+/** @typedef {import('../types/boundaries.js').LauncherConfig} LauncherConfig */
 
 import { importResourceModule } from './resource-path.js';
-import { normalizePort, normalizeTunnelId, readGuiConfig } from './launcher-utils.js';
+import { normalizeConnectorName, normalizePort, normalizeTunnelId, readGuiConfig } from './launcher-utils.js';
 
 const connection = await importResourceModule('src/connectionProfile.js');
 const configModule = await importResourceModule('src/config.js');
@@ -12,8 +12,9 @@ const configModule = await importResourceModule('src/config.js');
 function normalizeWizardConfig(config = {}) {
   const port = normalizePort(config.port || 3333);
   const tunnelId = normalizeTunnelId(config.tunnelId);
+  const connectorName = normalizeConnectorName(config.connectorName || 'Rel.AI MCP');
   const token = String(config.token || '').trim() || connection.generateToken(32);
-  return { port, tunnelId, token };
+  return { port, tunnelId, connectorName, token };
 }
 
 /** @param {LauncherConfigInput} [config] @returns {LauncherConfig} */
@@ -24,7 +25,8 @@ function saveLauncherConfig(config = {}) {
     ...config,
     port: config.port ?? current.port ?? 3333,
     token: config.token ?? current.token ?? '',
-    tunnelId: config.tunnelId ?? current.tunnelId ?? ''
+    tunnelId: config.tunnelId ?? current.tunnelId ?? '',
+    connectorName: config.connectorName ?? current.connectorName ?? 'Rel.AI MCP'
   });
   configModule.ensureConfig();
   connection.writeLaunchEnv({
@@ -35,6 +37,7 @@ function saveLauncherConfig(config = {}) {
   connection.writeConnectionProfile({
     host: '127.0.0.1',
     tunnelId: normalized.tunnelId,
+    connectorName: normalized.connectorName,
     tunnelProvider: 'openai-secure-mcp',
     configPath: configModule.getConfigPath()
   }, { replace: true });

@@ -157,7 +157,7 @@ function findDefinitions(workspace, db, symbol, maxResults, sourceCache) {
   const qualified = String(symbol);
   const rows = db.prepare(`
     SELECT s.id, s.name, s.qualified_name, s.kind, s.start_line, s.start_column, s.end_line, s.end_column,
-           s.provider, s.confidence, f.path, f.language, f.is_test
+           s.provider, s.confidence, f.path, f.language, f.is_test, f.content_hash
     FROM symbols s JOIN files f ON f.id=s.file_id
     WHERE s.name=? OR s.qualified_name=?
     ORDER BY CASE WHEN s.qualified_name=? THEN 0 ELSE 1 END, f.path, s.start_line
@@ -169,7 +169,7 @@ function findDefinitions(workspace, db, symbol, maxResults, sourceCache) {
       name: String(row.name), qualifiedName: String(row.qualified_name), kind: String(row.kind),
       line: Number(row.start_line), column: Number(row.start_column), endLine: Number(row.end_line), endColumn: Number(row.end_column),
       path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1,
-      provider: String(row.provider), confidence: Number(row.confidence),
+      provider: String(row.provider), confidence: Number(row.confidence), sourceSha256: String(row.content_hash || ''),
       text: String(lines?.[Number(row.start_line) - 1] || '').trim().slice(0, MAX_LINE_CHARS)
     };
   });

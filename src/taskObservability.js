@@ -13,7 +13,7 @@ const ALLOWED_METADATA_KEYS = new Set([
   'waitMs', 'queueMode', 'queued', 'pathCount', 'matchCount', 'returnedFileCount', 'returnedRangeCount',
   'returnedBytes', 'changedFileCount', 'changedFiles', 'validationStatus', 'validationLevel', 'validationLevelReason',
   'checkCount', 'passedCount', 'failedCount', 'skippedCount', 'exitCode', 'durationMs', 'stdoutBytes', 'stderrBytes',
-  'stdoutTruncated', 'stderrTruncated', 'timedOut', 'commit', 'branch', 'remote', 'processId', 'pid', 'status',
+  'stdoutTruncated', 'stderrTruncated', 'timedOut', 'commit', 'commitHead', 'branch', 'remote', 'processId', 'pid', 'status',
   'affectedItemCount', 'warningCount', 'retryable', 'errorCode', 'cacheHit', 'operationTaskId', 'progress',
   'currentCheck', 'currentIndex', 'resultStatus', 'failedCheck', 'cancelled', 'internalOperation', 'publicAction'
 ]);

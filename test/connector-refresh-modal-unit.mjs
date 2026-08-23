@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  CONNECTOR_REFRESH_VERSIONS,
   DISMISS_DELAY_MS,
   REFRESH_STEPS,
   acknowledgeConnectorRefreshNotice,
@@ -16,6 +17,8 @@ function memoryStorage(initial = {}) {
     values
   };
 }
+
+assert.deepEqual([...CONNECTOR_REFRESH_VERSIONS], ['0.26.0', '0.27.0']);
 
 const freshInstallStorage = memoryStorage();
 assert.equal(prepareConnectorRefreshNotice({
@@ -53,6 +56,16 @@ assert.ok(nextLaunchNotice, 'an unacknowledged refresh notice must survive a res
 
 acknowledgeConnectorRefreshNotice(nextLaunchNotice, updateStorage);
 assert.equal(prepareConnectorRefreshNotice({ currentVersion: '0.26.0' }, updateStorage), null, 'acknowledged notices must not reappear for the same release');
+const v027Storage = memoryStorage();
+const v027Notice = prepareConnectorRefreshNotice({
+  currentVersion: '0.27.0',
+  previousVersion: '0.26.6',
+  firstLaunch: false,
+  updated: true
+}, v027Storage);
+assert.ok(v027Notice, 'updating into 0.27.0 must require the one-time connector refresh notice');
+assert.equal(v027Notice.dismissDelayMs, 5000, 'v0.27.0 refresh notice must retain the five-second reading delay');
+
 assert.equal(prepareConnectorRefreshNotice({ currentVersion: '0.25.1', previousVersion: '0.25.0', updated: true }, memoryStorage()), null, 'releases without a public schema refresh must stay silent');
 
 console.log('Connector refresh modal behavior tests passed.');

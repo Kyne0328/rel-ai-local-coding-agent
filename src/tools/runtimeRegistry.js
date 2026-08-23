@@ -24,14 +24,14 @@ const OPERATION_INPUT_VALIDATORS = new Map(OPERATION_METADATA.map(metadata => [
   fromJsonSchema(metadata.inputSchema)['~standard']
 ]));
 
-function resolveExecutableToolCall(name, args = {}, config = {}) {
+function resolveExecutableToolCall(name, args = {}, _config = {}) {
   const operation = resolveToolOperation(name, args);
   if (!operation) return null;
   const executionDefinition = OPERATION_EXECUTABLES.get(operation.operationName);
   if (!executionDefinition) {
     throw new Error(`Tool '${name}' resolves to unknown internal operation '${operation.operationName}'.`);
   }
-  const publicDefinition = getPublicMetadata(name, config);
+  const publicDefinition = getPublicMetadata(name);
   if (!publicDefinition) return null;
   return {
     publicDefinition,
@@ -61,7 +61,7 @@ async function validateExecutableOperationInput(operationName, args = {}, option
 }
 
 function getExecutableToolDefinition(name, config = {}, args) {
-  const publicDefinition = getPublicMetadata(name, config);
+  const publicDefinition = getPublicMetadata(name);
   if (!publicDefinition) return null;
   if (args) {
     const resolved = resolveExecutableToolCall(name, args, config);
@@ -79,7 +79,7 @@ function getExecutableToolDefinition(name, config = {}, args) {
 }
 
 function getExecutableToolDefinitions(config = {}) {
-  return getPublicDefinitions(config).map(definition => getExecutableToolDefinition(definition.name, config));
+  return getPublicDefinitions().map(definition => getExecutableToolDefinition(definition.name, config));
 }
 
 export { getExecutableToolDefinition, getExecutableToolDefinitions, resolveExecutableToolCall, validateExecutableOperationInput };

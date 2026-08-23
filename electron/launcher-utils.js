@@ -18,6 +18,14 @@ function normalizeTunnelId(value) {
   return text;
 }
 
+function normalizeConnectorName(value) {
+  const text = String(value || '').trim();
+  if (text.length < 3 || text.length > 80 || /[\r\n\0]/.test(text)) {
+    throw new Error('ChatGPT connector name must be between 3 and 80 characters.');
+  }
+  return text;
+}
+
 function hasExistingConfig() {
   const profile = connection.readConnectionProfile();
   const env = connection.readLaunchEnv();
@@ -36,8 +44,9 @@ function readGuiConfig() {
   return {
     port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
     token: String(env.REL_AI_MCP_TOKEN || '').trim(),
-    tunnelId: normalizeTunnelId(env.REL_AI_MCP_TUNNEL_ID || profile.tunnelId || '')
+    tunnelId: normalizeTunnelId(env.REL_AI_MCP_TUNNEL_ID || profile.tunnelId || ''),
+    connectorName: profile.connectorName ? normalizeConnectorName(profile.connectorName) : ''
   };
 }
 
-export { normalizePort, normalizeTunnelId, hasExistingConfig, readGuiConfig };
+export { normalizePort, normalizeTunnelId, normalizeConnectorName, hasExistingConfig, readGuiConfig };

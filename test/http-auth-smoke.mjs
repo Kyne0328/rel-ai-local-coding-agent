@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpMcpSession, mcpBody, mcpHeaders, postMcp, readMcpResponse } from './helpers/http-mcp.mjs';
-import { activeToolCount } from './helpers/tool-surface.mjs';
+import { activeMcpToolCount } from './helpers/tool-surface.mjs';
 import { localHttpFetch as fetch, startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,7 +57,7 @@ try {
   session = await createHttpMcpSession(base, { token, clientName: 'relai-http-auth' });
   const listed = await session.request('tools/list');
   assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${getStderr()}`);
-  assert.equal(listed.body.result?.tools?.length, activeToolCount);
+  assert.equal(listed.body.result?.tools?.length, activeMcpToolCount);
 
   await new Promise(resolve => setTimeout(resolve, 300));
   fs.writeFileSync(configPath, '{ invalid json');
@@ -71,7 +71,7 @@ try {
   fs.writeFileSync(configPath, validConfig);
   const recoveredRequest = await session.request('tools/list', {}, { id: 9002 });
   assert.equal(recoveredRequest.response.status, 200, `${JSON.stringify(recoveredRequest.body)}\n${getStderr()}`);
-  assert.equal(recoveredRequest.body?.result?.tools?.length, activeToolCount, 'the same stateless MCP server must accept the next request after an internal error');
+  assert.equal(recoveredRequest.body?.result?.tools?.length, activeMcpToolCount, 'the same stateless MCP server must accept the next request after an internal error');
 
   const legacyInitializeResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -122,7 +122,7 @@ try {
   });
   const legacyTools = await readMcpResponse(legacyToolsResponse);
   assert.equal(legacyToolsResponse.status, 200, `${JSON.stringify(legacyTools)}\n${getStderr()}`);
-  assert.equal(legacyTools.result?.tools?.length, activeToolCount);
+  assert.equal(legacyTools.result?.tools?.length, activeMcpToolCount);
 
   const legacyStatusResponse = await fetch(`${base}/mcp`, {
     method: 'POST',

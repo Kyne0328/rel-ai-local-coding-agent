@@ -42,9 +42,9 @@ import {
   failNativeToolTask,
   nativeToolTaskSignal
 } from './nativeToolTasks.js';
-import { createRelaiRequestStateCodec } from './context.js';
+import { createRelaiRequestStateCodec, openAiConversationId } from './context.js';
 import { toolResult } from './results.js';
-import { catalogApprovalRequirement, resolveToolOperation } from '../tools/actionCatalog.js';
+import { catalogApprovalRequirement, getToolActionCatalog, resolveToolOperation } from '../tools/actionCatalog.js';
 import { getToolSchemas } from '../tools/schema.js';
 import { validateToolOutput } from '../tools/outputValidation.js';
 import { principalIdentity } from './principal.js';
@@ -55,6 +55,9 @@ const TRANSPORT_TOOL_VALIDATORS = new Map(getToolSchemas().map(tool => [
   tool.name,
   fromJsonSchema(tool.inputSchema)['~standard']
 ]));
+const TRANSPORT_INTERCEPTABLE_TOOL_NAMES = new Set(getToolActionCatalog()
+  .filter(entry => entry.behavior?.executionClass === 'native_task_eligible' && entry.behavior?.longRunning === true)
+  .map(entry => entry.publicTool));
 
 async function handleTransportTaskRequest(config, message, options = {}) {
   if (!isTransportTaskRequestCandidate(config, message)) return null;
@@ -70,11 +73,11 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   if (method !== 'tools/call' || message.id == null) return null;
 
   const name = String(message.params?.name || '');
-  const definition = transportToolDefinition(name, message.params?.arguments || {});
-  if (!shouldInterceptTool(definition, message.params?.arguments)) return null;
-
   const validated = await validateToolArguments(config, name, message.params?.arguments);
-  if (!validated.ok) return errorResponse(message.id, -32602, validated.error);
+  if (!validated.ok) return toolArgumentErrorResponse(message.id, validated.error);
+
+  const definition = transportToolDefinition(name, validated.value);
+  if (!shouldInterceptTool(definition, validated.value)) return null;
 
   const bounds = options.synchronousBounds || DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS;
   const execute = typeof options.executeToolResult === 'function'
@@ -154,9 +157,11 @@ function isTransportTaskRequestCandidate(config, message) {
     const definition = transportToolDefinition(name, message?.params?.arguments || {});
     return shouldInterceptTool(definition, message?.params?.arguments);
   } catch {
-    // Invalid tool arguments belong to the SDK's normal schema-validation path.
-    // Interception must never terminate the transport while probing eligibility.
-    return false;
+    // Keep malformed long-running tool calls inside Rel.AI's tools/call result
+    // boundary. Falling back to SDK argument validation would emit JSON-RPC
+    // -32602 before the tool callback runs, and some clients surface that as a
+    // transport-level failure instead of a normal tool error.
+    return TRANSPORT_INTERCEPTABLE_TOOL_NAMES.has(name);
   }
 }
 
@@ -421,6 +426,7 @@ function transportToolContext(options) {
     clientName: String(client.name || ''),
     clientVersion: String(client.version || ''),
     clientCapabilities: options.capabilities || {},
+    conversationId: openAiConversationId(meta),
     requestHeaders: options.requestHeaders || {},
     principal: options.principal || principalIdentity(options.principal),
     signal: options.signal,
@@ -485,6 +491,15 @@ function toolExecutionErrorResponse(id, error) {
     content: [{ type: 'text', text: message }],
     isError: true,
     structuredContent: { ok: false, error: message, errorCode }
+  });
+}
+
+function toolArgumentErrorResponse(id, error) {
+  const message = String(error || 'Invalid tool arguments.');
+  return successResponse(id, {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+    structuredContent: { ok: false, error: message, errorCode: 'INVALID_TOOL_ARGUMENTS' }
   });
 }
 

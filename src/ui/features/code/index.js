@@ -1,6 +1,4 @@
-import { confirmAction } from '../../components/confirm-dialog.js';
 import { toast } from '../../components/toast.js';
-import { markUnsaved } from '../../interaction-safety.js';
 import { getRouteParams, replaceRouteParams } from '../../router.js';
 import { esc } from '../../utils.js';
 
@@ -11,7 +9,6 @@ export async function mountCode(container, data = {}) {
   disposeActiveState();
   const root = document.createElement('div');
   root.className = 'section code-page';
-  root.dataset.unsavedChanges = 'false';
   container.replaceChildren(root);
 
   const bridge = window.relaiDesktop?.codeWorkspace;
@@ -35,13 +32,7 @@ export async function mountCode(container, data = {}) {
     taskId: '',
     workspace: null,
     filePath: '',
-    fileSha: '',
-    fileWritable: false,
-    savedContent: '',
-    dirty: false,
-    mode: 'edit',
     monaco: null,
-    editor: null,
     diffEditor: null,
     models: [],
     refreshGeneration: 0
@@ -63,8 +54,6 @@ export function updateCodeLiveState(container, data = {}) {
   state.tasks = nextTasks;
   syncTaskOptions(state, nextTasks);
   if (!state.taskId || !nextTasks.some(task => task.id === state.taskId)) return true;
-  // Live task updates may refresh metadata and file lists, but they must never
-  // recreate the active editor while the user is typing.
   void refreshWorkspace(state, { refreshCurrent: false, quiet: true });
   return true;
 }
@@ -73,23 +62,13 @@ function bindShell(state) {
   const taskSelect = state.root.querySelector('[data-code-task]');
   const search = state.root.querySelector('[data-code-search]');
   const refresh = state.root.querySelector('[data-code-refresh]');
-  const save = state.root.querySelector('[data-code-save]');
-  const editMode = state.root.querySelector('[data-code-mode="edit"]');
-  const diffMode = state.root.querySelector('[data-code-mode="diff"]');
   const openIde = state.root.querySelector('[data-code-open-ide]');
 
   taskSelect.addEventListener('change', async () => {
-    if (!await confirmDiscard(state)) {
-      taskSelect.value = state.taskId;
-      return;
-    }
     await switchTask(state, taskSelect.value, { updateRoute: true });
   });
   search.addEventListener('input', () => renderFiles(state));
-  refresh.addEventListener('click', () => refreshWorkspace(state, { refreshCurrent: !state.dirty }));
-  save.addEventListener('click', () => saveCurrentFile(state));
-  editMode.addEventListener('click', () => setMode(state, 'edit'));
-  diffMode.addEventListener('click', () => setMode(state, 'diff'));
+  refresh.addEventListener('click', () => refreshWorkspace(state, { refreshCurrent: true }));
   openIde.addEventListener('click', () => openInIde(state));
   window.addEventListener('pagehide', disposeActiveState, { once: true });
 }
@@ -98,11 +77,9 @@ async function switchTask(state, taskId, options = {}) {
   state.taskId = String(taskId || '').trim();
   state.workspace = null;
   state.filePath = '';
-  state.fileSha = '';
-  state.savedContent = '';
-  setDirty(state, false);
   disposeEditor(state);
-  setEditorMessage(state, 'Loading task files…');
+  renderFileHeading(state, '');
+  setViewerMessage(state, 'Loading task changes…');
   if (options.updateRoute) replaceRouteParams({ task: state.taskId });
   await refreshWorkspace(state, { refreshCurrent: false });
 }
@@ -114,23 +91,21 @@ async function refreshWorkspace(state, options = {}) {
     if (generation !== state.refreshGeneration || activeState !== state) return;
     state.workspace = workspace;
     const changedFiles = changedTextFiles(workspace);
-    if (state.filePath && !state.dirty && !changedFiles.includes(state.filePath)) {
+    if (state.filePath && !changedFiles.includes(state.filePath)) {
       state.filePath = '';
-      state.fileSha = '';
-      state.savedContent = '';
       renderFileHeading(state, '');
-      setEditorMessage(state, 'This task has no changed text file selected.');
+      setViewerMessage(state, emptyViewerMessage(workspace));
     }
     renderWorkspaceMeta(state);
     renderFiles(state);
-    if (options.refreshCurrent && state.filePath && !state.dirty) {
+    if (options.refreshCurrent && state.filePath) {
       await openFile(state, state.filePath, { preserveSelection: true, quiet: options.quiet });
       return;
     }
     if (!state.filePath) {
       const first = changedFiles[0] || '';
       if (first) await openFile(state, first, { quiet: options.quiet });
-      else setEditorMessage(state, 'This task has no changed text files to display.');
+      else setViewerMessage(state, emptyViewerMessage(workspace));
     }
   } catch (error) {
     if (!options.quiet) toast(messageFor(error), { variant: 'error' });
@@ -141,21 +116,32 @@ async function refreshWorkspace(state, options = {}) {
 function renderWorkspaceMeta(state) {
   const workspace = state.workspace || {};
   const meta = state.root.querySelector('[data-code-meta]');
-  const save = state.root.querySelector('[data-code-save]');
-  const diff = state.root.querySelector('[data-code-mode="diff"]');
+  const viewState = state.root.querySelector('[data-code-view-state]');
   if (meta) {
     const parts = [workspace.workspace || 'Project'];
-    if (workspace.workspaceMode) parts.push(workspace.workspaceMode === 'isolated' ? 'Isolated task' : 'Visible project');
-    if (workspace.integrationStatus && workspace.integrationStatus !== 'not_applicable') parts.push(`Integration: ${workspace.integrationStatus}`);
+    if (workspace.status) parts.push(humanizeStatus(workspace.status));
+    if (workspace.historyMode === 'committed') {
+      const head = shortCommit(workspace.commitHead);
+      parts.push(head ? `Committed changes · ${head}` : 'Committed changes');
+      if (workspace.commitSource === 'inferred') parts.push('Recovered from Git history');
+    } else if (workspace.historyMode === 'unavailable') {
+      parts.push('Historical diff unavailable');
+    } else {
+      parts.push('Current task changes');
+    }
     meta.textContent = parts.join(' · ');
   }
-  if (save) save.disabled = workspace.writable !== true || state.fileWritable !== true || state.mode !== 'edit' || !state.filePath;
-  if (diff) diff.disabled = !state.filePath;
+  if (viewState) {
+    viewState.textContent = workspace.historyMode === 'unavailable'
+      ? 'Recorded files only'
+      : 'Read-only diff';
+  }
 }
 
 function changedTextFiles(workspace = {}) {
-  const available = new Set(workspace.files || []);
-  return [...new Set(workspace.changedFiles || [])].filter(file => available.has(file));
+  return [...new Set((Array.isArray(workspace.changedFiles) ? workspace.changedFiles : [])
+    .map(file => String(file || '').trim())
+    .filter(Boolean))];
 }
 
 function changedFileStatus(workspace = {}, file = '') {
@@ -174,7 +160,7 @@ function renderFiles(state) {
   const query = String(state.root.querySelector('[data-code-search]')?.value || '').trim().toLowerCase();
   const files = changedTextFiles(workspace).filter(file => !query || file.toLowerCase().includes(query));
   if (!files.length) {
-    list.innerHTML = `<div class="code-file-empty">${query ? 'No matching changed files.' : 'No changed files yet.'}</div>`;
+    list.innerHTML = `<div class="code-file-empty">${query ? 'No matching changed files.' : 'No task-owned changes to review.'}</div>`;
     return;
   }
   list.innerHTML = files.map(file => {
@@ -189,7 +175,6 @@ function renderFiles(state) {
     button.addEventListener('click', async () => {
       const next = button.dataset.codeFile || '';
       if (next === state.filePath) return;
-      if (!await confirmDiscard(state)) return;
       await openFile(state, next);
     });
   });
@@ -203,25 +188,22 @@ async function openFile(state, filePath, options = {}) {
     const file = await state.bridge.diff(state.taskId, path);
     if (activeState !== state) return;
     state.filePath = path;
-    state.fileSha = file.sha256 || '';
-    state.fileWritable = file.writable === true;
-    state.savedContent = file.content || '';
-    setDirty(state, false);
     renderFiles(state);
     renderFileHeading(state, path);
-    await renderEditor(state, file, options);
+    await renderDiff(state, file, options);
   } catch (error) {
     state.filePath = previous;
+    renderFiles(state);
     if (!options.quiet) toast(messageFor(error), { variant: 'error' });
-    setEditorMessage(state, messageFor(error), 'error');
+    setViewerMessage(state, messageFor(error), 'error');
   }
 }
 
-async function renderEditor(state, file, options = {}) {
+async function renderDiff(state, file, options = {}) {
   const host = state.root.querySelector('[data-code-editor]');
   if (!host) return;
   disposeEditor(state);
-  host.classList.remove('code-editor-message');
+  host.className = 'code-editor-host';
   host.textContent = '';
   try {
     const monaco = await loadMonaco();
@@ -233,10 +215,10 @@ async function renderEditor(state, file, options = {}) {
     state.models.push(original, modified);
     state.diffEditor = monaco.editor.createDiffEditor(host, {
       theme,
-      readOnly: state.mode === 'diff' || state.workspace?.writable !== true || file.writable !== true,
+      readOnly: true,
       originalEditable: false,
       automaticLayout: true,
-      renderSideBySide: state.mode === 'diff',
+      renderSideBySide: true,
       useInlineViewWhenSpaceIsLimited: true,
       renderIndicators: true,
       minimap: { enabled: false },
@@ -245,67 +227,34 @@ async function renderEditor(state, file, options = {}) {
       fontLigatures: true
     });
     state.diffEditor.setModel({ original, modified });
-    state.editor = state.diffEditor.getModifiedEditor();
-    if (state.mode === 'edit') {
-      state.editor.onDidChangeModelContent(() => {
-        setDirty(state, state.editor.getValue() !== state.savedContent);
-      });
-      state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { void saveCurrentFile(state); });
-    }
-    if (!options.preserveSelection) state.editor.focus();
+    if (!options.preserveSelection) state.diffEditor.getModifiedEditor().focus();
   } catch (error) {
     renderTextFallback(state, file, error);
   }
-  renderWorkspaceMeta(state);
 }
 
 function renderTextFallback(state, file, error) {
   const host = state.root.querySelector('[data-code-editor]');
   host.innerHTML = '';
-  const textarea = document.createElement('textarea');
-  textarea.className = 'code-text-fallback';
-  textarea.value = file.content || '';
-  textarea.readOnly = state.mode === 'diff' || state.workspace?.writable !== true;
-  textarea.setAttribute('aria-label', state.filePath || 'Code editor');
-  textarea.addEventListener('input', () => {
-    state.editor = textarea;
-    setDirty(state, textarea.value !== state.savedContent);
-  });
-  state.editor = textarea;
-  host.appendChild(textarea);
-  toast(`Monaco could not start. A plain text editor is available. ${messageFor(error)}`, { variant: 'warn' });
+  const fallback = document.createElement('div');
+  fallback.className = 'code-diff-fallback';
+  fallback.append(
+    fallbackColumn('Before', file.baseContent || ''),
+    fallbackColumn('After', file.content || '')
+  );
+  host.appendChild(fallback);
+  toast(`Monaco could not start. Showing a read-only text diff fallback. ${messageFor(error)}`, { variant: 'warn' });
 }
 
-async function saveCurrentFile(state) {
-  if (!state.filePath || state.mode !== 'edit' || state.workspace?.writable !== true) return;
-  const content = editorValue(state);
-  const button = state.root.querySelector('[data-code-save]');
-  button.disabled = true;
-  try {
-    const result = await state.bridge.write(state.taskId, state.filePath, content, state.fileSha);
-    state.fileSha = result.sha256 || state.fileSha;
-    state.savedContent = content;
-    setDirty(state, false);
-    toast(result.changed === false ? 'File is already saved.' : 'File saved to this task.', { variant: 'success' });
-    await refreshWorkspace(state, { refreshCurrent: false, quiet: true });
-    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh', { detail: { structural: false } }));
-  } catch (error) {
-    toast(messageFor(error), { variant: 'error' });
-  } finally {
-    renderWorkspaceMeta(state);
-  }
-}
-
-async function setMode(state, mode) {
-  if (mode === state.mode) return;
-  if (mode === 'diff' && !await confirmDiscard(state)) return;
-  state.mode = mode;
-  state.root.querySelectorAll('[data-code-mode]').forEach(button => {
-    button.classList.toggle('active', button.dataset.codeMode === mode);
-    button.setAttribute('aria-pressed', button.dataset.codeMode === mode ? 'true' : 'false');
-  });
-  if (state.filePath) await openFile(state, state.filePath);
-  renderWorkspaceMeta(state);
+function fallbackColumn(label, content) {
+  const column = document.createElement('section');
+  column.className = 'code-diff-column';
+  const heading = document.createElement('strong');
+  heading.textContent = label;
+  const pre = document.createElement('pre');
+  pre.textContent = content;
+  column.append(heading, pre);
+  return column;
 }
 
 async function loadEditors(state) {
@@ -336,34 +285,12 @@ async function openInIde(state) {
   }
 }
 
-function setDirty(state, dirty) {
-  state.dirty = dirty === true;
-  markUnsaved(state.root, state.dirty);
-  const marker = state.root.querySelector('[data-code-dirty]');
-  if (marker) marker.textContent = state.dirty ? 'Unsaved changes' : 'Saved';
-  const save = state.root.querySelector('[data-code-save]');
-  if (save) save.disabled = !state.dirty || state.mode !== 'edit' || state.workspace?.writable !== true || state.fileWritable !== true;
-}
-
-async function confirmDiscard(state) {
-  if (!state.dirty) return true;
-  const confirmed = await confirmAction({
-    title: 'Discard editor changes?',
-    message: 'Discard the unsaved changes in this file?',
-    detail: 'The project will keep the last saved version.',
-    confirmLabel: 'Discard changes',
-    danger: true
-  });
-  if (confirmed) setDirty(state, false);
-  return confirmed;
-}
-
 function renderFileHeading(state, path) {
   const heading = state.root.querySelector('[data-code-file-heading]');
-  if (heading) heading.textContent = path;
+  if (heading) heading.textContent = path || 'No file selected';
 }
 
-function setEditorMessage(state, message, tone = '') {
+function setViewerMessage(state, message, tone = '') {
   const host = state.root.querySelector('[data-code-editor]');
   if (!host) return;
   disposeEditor(state);
@@ -373,10 +300,10 @@ function setEditorMessage(state, message, tone = '') {
 
 function renderWorkspaceError(state, error) {
   state.workspace = null;
-  state.root.querySelector('[data-code-files]').innerHTML = '<div class="code-file-empty">Task files are unavailable.</div>';
-  setEditorMessage(state, messageFor(error), 'error');
+  state.root.querySelector('[data-code-files]').innerHTML = '<div class="code-file-empty">Task changes are unavailable.</div>';
+  setViewerMessage(state, messageFor(error), 'error');
   const meta = state.root.querySelector('[data-code-meta]');
-  if (meta) meta.textContent = 'Task workspace unavailable';
+  if (meta) meta.textContent = 'Task changes unavailable';
 }
 
 function syncTaskOptions(state, tasks) {
@@ -387,20 +314,9 @@ function syncTaskOptions(state, tasks) {
   if (tasks.some(task => task.id === current)) select.value = current;
 }
 
-function editorValue(state) {
-  if (!state.editor) return state.savedContent;
-  if (typeof state.editor.getValue === 'function') return state.editor.getValue();
-  return String(state.editor.value || '');
-}
-
 function disposeEditor(state) {
-  if (state.diffEditor) {
-    try { state.diffEditor.dispose?.(); } catch {}
-  } else {
-    try { state.editor?.dispose?.(); } catch {}
-  }
+  try { state.diffEditor?.dispose?.(); } catch {}
   state.diffEditor = null;
-  state.editor = null;
   for (const model of state.models || []) {
     try { model.dispose?.(); } catch {}
   }
@@ -452,42 +368,52 @@ function shellHtml(tasks) {
         <button class="secondary" type="button" data-code-refresh>Refresh</button>
       </div>
     </div>
-    <div class="code-workspace-meta" data-code-meta>Loading project files…</div>
+    <div class="code-workspace-meta" data-code-meta>Loading task changes…</div>
     <div class="code-workbench">
       <aside class="code-explorer" aria-label="Changed task files">
         <div class="code-explorer-head">
           <strong>Changed files</strong>
           <input type="search" data-code-search placeholder="Filter changed files" aria-label="Filter changed task files">
         </div>
-        <div class="code-file-list" data-code-files><div class="code-file-empty">Loading files…</div></div>
+        <div class="code-file-list" data-code-files><div class="code-file-empty">Loading changes…</div></div>
       </aside>
-      <section class="code-editor-pane">
+      <section class="code-editor-pane" aria-label="Task diff viewer">
         <div class="code-editor-toolbar">
           <div class="code-file-heading mono" data-code-file-heading>No file selected</div>
-          <div class="code-editor-actions">
-            <div class="segmented" role="group" aria-label="Code view">
-              <button class="active" type="button" data-code-mode="edit" aria-pressed="true">Editor</button>
-              <button type="button" data-code-mode="diff" aria-pressed="false">Diff</button>
-            </div>
-            <span class="code-save-state" data-code-dirty>Saved</span>
-            <button class="primary" type="button" data-code-save disabled>Save</button>
-          </div>
+          <span class="code-view-state" data-code-view-state>Read-only diff</span>
         </div>
-        <div class="code-editor-host code-editor-message" data-code-editor>Choose a file to view its code.</div>
+        <div class="code-editor-host code-editor-message" data-code-editor>Choose a changed file to review its diff.</div>
       </section>
     </div>`;
 }
 
 function desktopOnlyHtml() {
-  return '<div class="dashboard-state"><div class="dashboard-state-card"><span class="status-pill warn">Desktop feature</span><h2>Open Code in the Rel.AI desktop app.</h2><p>The browser dashboard cannot access task files or local IDEs.</p></div></div>';
+  return '<div class="dashboard-state"><div class="dashboard-state-card"><span class="status-pill warn">Desktop feature</span><h2>Open Changes in the Rel.AI desktop app.</h2><p>The browser dashboard cannot access local task diffs or IDEs.</p></div></div>';
 }
 
 function emptyHtml() {
-  return '<div class="dashboard-state"><div class="dashboard-state-card"><h2>No task code is available.</h2><p>Start a Rel.AI task, then return here to review its files.</p><div class="dashboard-state-actions"><a class="buttonlike primary" href="#tasks">Open tasks</a></div></div></div>';
+  return '<div class="dashboard-state"><div class="dashboard-state-card"><h2>No task changes are available.</h2><p>Start a Rel.AI task, then return here to review what changed.</p><div class="dashboard-state-actions"><a class="buttonlike primary" href="#tasks">Open tasks</a></div></div></div>';
+}
+
+function emptyViewerMessage(workspace = {}) {
+  if (workspace.historyMode === 'unavailable') return 'This task records changed files, but its historical Git diff cannot be identified safely.';
+  const status = String(workspace.status || '').toLowerCase();
+  if (['completed', 'cancelled', 'failed'].includes(status)) return 'This task has no recorded file changes.';
+  return 'No task-owned changes to review yet.';
+}
+
+function humanizeStatus(value) {
+  const text = String(value || '').trim().replaceAll('_', ' ');
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+}
+
+function shortCommit(value) {
+  const text = String(value || '').trim();
+  return /^[a-f0-9]{7,64}$/i.test(text) ? text.slice(0, 8) : '';
 }
 
 function messageFor(error) {
-  return error instanceof Error ? error.message : String(error || 'The code workspace request failed.');
+  return error instanceof Error ? error.message : String(error || 'The changes viewer request failed.');
 }
 
 function loadMonaco() {

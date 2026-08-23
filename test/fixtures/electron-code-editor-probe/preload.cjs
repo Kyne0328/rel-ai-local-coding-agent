@@ -15,29 +15,25 @@ contextBridge.exposeInMainWorld('relaiDesktop', {
       ok: true,
       work_id: 'probe-task',
       workspace: 'app',
-      workspaceMode: 'isolated',
-      integrationStatus: 'pending',
+      workspaceMode: 'visible',
+      integrationStatus: 'not_applicable',
       status: 'running',
-      writable: true,
-      files: ['src/example.js', 'src/new.js', 'src/untouched.js'],
+      readOnly: true,
+      writable: false,
+      files: ['src/example.js', 'src/new.js'],
       changedFiles: ['src/example.js', 'src/new.js'],
       changedFileStatuses: {
         'src/example.js': { code: 'M', label: 'Modified', tone: 'warning' },
         'src/new.js': { code: 'U', label: 'Untracked', tone: 'info' }
       },
-      fileCount: 3,
+      changedFileCount: 2,
+      fileCount: 2,
+      historyMode: 'live',
+      historyAvailable: true,
+      commitHead: '',
+      commitHeads: [],
+      commitSource: '',
       truncated: false
-    }),
-    read: async () => ({
-      ok: true,
-      work_id: 'probe-task',
-      workspace: 'app',
-      path: 'src/example.js',
-      content,
-      sha256: 'a'.repeat(64),
-      bytes: Buffer.byteLength(content),
-      writable: true,
-      language: 'javascript'
     }),
     diff: async () => ({
       ok: true,
@@ -48,9 +44,11 @@ contextBridge.exposeInMainWorld('relaiDesktop', {
       baseContent: 'const answer = 0;\n',
       sha256: 'a'.repeat(64),
       language: 'javascript',
-      writable: true
+      writable: false,
+      readOnly: true,
+      historyMode: 'live',
+      commitHead: ''
     }),
-    write: async () => ({ ok: true, changed: true, sha256: 'b'.repeat(64) }),
     openIde: async () => ({ ok: true, editor: { label: 'Probe IDE' } })
   }
 });
