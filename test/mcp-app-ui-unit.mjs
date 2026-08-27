@@ -123,7 +123,9 @@ try {
   ]) assert.ok(content.text.includes(expected), `status strip must implement ${expected}`);
   assert.doesNotMatch(content.text, /innerHTML|document\.write|<script[^>]+src=/i, 'status strip must not inject untrusted HTML or load external scripts');
   assert.match(content.text, /setTimeout\(function\(\)\{void refreshLiveStatus\(\)\},3000\)/, 'the begin status strip must refresh through the app-only status helper');
-  assert.match(content.text, /cardVisible\?Math\.max\(1,Math\.ceil\(document\.documentElement\.scrollHeight\)\):1/, 'non-begin lifecycle widgets must request an explicit one-pixel collapsed height instead of zero, which hosts may treat as an unspecified iframe size');
+  assert.match(content.text, /cardVisible\?Math\.max\(1,Math\.ceil\(contentHeight\+padding\)\):1/, 'visible status strips must report their content height while non-begin lifecycle widgets collapse to one pixel');
+  assert.match(content.text, /el\.strip\?el\.strip\.getBoundingClientRect\(\)\.height:0/, 'visible height must be measured from the compact status strip instead of the host-sized iframe root');
+  assert.doesNotMatch(content.text, /document\.documentElement\.scrollHeight/, 'iframe root scrollHeight can mirror ChatGPT\'s default iframe height and must not drive intrinsic sizing');
   assert.match(content.text, /body\.lifecycle-hidden\{height:1px;min-height:1px;padding:0;overflow:hidden\}/, 'hidden lifecycle mounts must keep their own document layout collapsed while ChatGPT retains the tool wrapper');
   assert.match(content.text, /if\(!cardVisible\)\{stopLiveStatus\(\);requestHostClose\(\)\}/, 'non-begin lifecycle mounts must ask ChatGPT to close their UI instead of leaving hidden iframe shells');
   assert.match(content.text, /if\(terminalTask\(data\)\)\{cardVisible=false;document\.body\.classList\.add\('lifecycle-hidden'\);stopLiveStatus\(\);reportHeight\(\);requestHostClose\(\);return\}/, 'the live begin status strip must close itself when the task becomes terminal');
@@ -134,7 +136,7 @@ try {
   assert.equal(directContent.text, content.text, 'resource helper and MCP resource read must use one canonical component source');
 
   assert.deepEqual(appUiResultMetadata('relai_work'), {
-    relai: { surface: 'status-strip', version: 2 }
+    relai: { surface: 'status-strip', version: 3 }
   });
   assert.equal(appUiResultMetadata('relai_validate'), undefined, 'validation must remain data-only instead of mounting another status strip');
 

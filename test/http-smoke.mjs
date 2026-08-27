@@ -106,7 +106,7 @@ try {
   assert.deepEqual(listedByName.get('relai_app_task')?._meta?.ui?.visibility, ['app']);
   assert.deepEqual(listedByName.get('relai_app_task')?._meta?.securitySchemes, [{ type: 'noauth' }]);
   assert.equal(listedByName.has('relai_app_open'), false);
-  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/status-strip/v2.html');
+  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/status-strip/v3.html');
   assert.equal(listedByName.get('relai_validate')?._meta?.ui?.resourceUri, undefined, 'validation stays data-only to avoid repeated card mounts');
   assert.equal(listedByName.get('relai_edit')?._meta?.ui?.resourceUri, undefined, 'frequent data/mutation tools must not remount the workflow card');
   for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish', 'relai_app_task']) {
@@ -261,10 +261,10 @@ try {
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));
-  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/status-strip/v2.html'));
+  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/status-strip/v3.html'));
   assert.equal(resources.body.result._meta?.['io.modelcontextprotocol/cache']?.cacheScope || resources.body.result.cacheScope || 'private', 'private');
 
-  const appUi = await client.request('resources/read', { uri: 'ui://relai/status-strip/v2.html' });
+  const appUi = await client.request('resources/read', { uri: 'ui://relai/status-strip/v3.html' });
   assert.equal(appUi.body.result?.contents?.[0]?.mimeType, 'text/html;profile=mcp-app');
   assert.equal(appUi.body.result?.contents?.[0]?._meta?.ui?.prefersBorder, false);
   assert.match(appUi.body.result?.contents?.[0]?.text || '', /ui\/notifications\/tool-result/);

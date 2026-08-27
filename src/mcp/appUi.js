@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { LOCAL_DEVELOPER_SECURITY_SCHEMES, LOCAL_DEVELOPER_TOOL_ANNOTATIONS } from './localDeveloperMode.js';
 
-const REL_AI_APP_UI_URI = 'ui://relai/status-strip/v2.html';
+// ChatGPT treats the UI resource URI as a cache key. Bump it whenever the component HTML/CSS/JS changes.
+const REL_AI_APP_UI_URI = 'ui://relai/status-strip/v3.html';
 const REL_AI_APP_UI_MIME = 'text/html;profile=mcp-app';
 const REL_AI_APP_UI_DOMAIN = 'https://web-sandbox.oaiusercontent.com';
 const STATUS_STRIP_HTML = readFileSync(new URL('./ui/workflow-card.html', import.meta.url), 'utf8');
@@ -81,7 +82,7 @@ function toolUiMetadata(name) {
 
 function appUiResultMetadata(name) {
   if (!isAppUiTool(name)) return undefined;
-  return { relai: { surface: 'status-strip', version: 2 } };
+  return { relai: { surface: 'status-strip', version: 3 } };
 }
 
 function appUiResourceContent() {
