@@ -35,8 +35,8 @@ const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
 const mcpSchemas = getMcpToolSchemas(config);
 assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact model-facing tool surface');
-assert.equal(mcpSchemas.length, 13, 'one app-only status helper may be listed without becoming a model tool');
-assert.deepEqual(mcpSchemas.filter(item => item.name.startsWith('relai_app_')).map(item => item._meta?.ui?.visibility), [['app']]);
+assert.equal(mcpSchemas.length, 12, 'passive task card must not add app-only helper tools');
+assert.equal(mcpSchemas.some(item => item.name.startsWith('relai_app_')), false, 'no app-only polling helper may be registered');
 const schemaBytes = bytes(publicSchemas);
 assert.ok(schemaBytes > 0, 'unified discovery schema must serialize to a non-empty payload');
 assert.deepEqual(
