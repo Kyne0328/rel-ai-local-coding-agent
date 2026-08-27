@@ -29,6 +29,9 @@ function createHarness() {
     },
     advanceWithoutFiringTimers() {
       now += 300_000;
+    },
+    advance(milliseconds) {
+      now += milliseconds;
     }
   };
 }
@@ -119,6 +122,31 @@ function createHarness() {
   assert.equal(status.lastTask?.status, 'inactive');
   assert.equal(status.lastTask?.endReason || '', '');
   assert.ok(status.lastTask?.inactiveAt);
+}
+
+{
+  const { tracker, advance } = createHarness();
+  const start = tracker.beginConnectorToolCall({
+    tool: 'relai_work', internalOperation: 'work.begin',
+    workspace: 'repo',
+    createTask: true
+  });
+  const taskId = start.taskId;
+  start({ ok: true });
+
+  for (let poll = 0; poll < 100; poll += 1) {
+    const status = tracker.beginConnectorToolCall({
+      tool: 'relai_work', internalOperation: 'work.status',
+      workspace: 'repo', taskId, trackTask: false
+    });
+    status({ ok: true });
+    advance(3_000);
+  }
+
+  const inactive = tracker.getToolActivity();
+  assert.equal(inactive.activeTaskCount, 0, 'monitor-only status polling must not keep an abandoned task alive');
+  assert.equal(inactive.lastTask?.taskId, taskId);
+  assert.equal(inactive.lastTask?.status, 'inactive');
 }
 
 {

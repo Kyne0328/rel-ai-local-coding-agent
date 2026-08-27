@@ -22,6 +22,7 @@ import { LOCAL_DEVELOPER_SECURITY_SCHEMES, LOCAL_DEVELOPER_TOOL_ANNOTATIONS } fr
 import { toolResult } from '../src/mcp/results.js';
 import { serializeToolError } from '../src/tools/errors.js';
 import { listResources, readResource } from '../src/resources.js';
+import { getToolActivity } from '../src/toolActivity.js';
 import { callTool } from '../src/tools.js';
 import { getMcpToolSchemas, getPublicToolSchemas } from '../src/tools/schema.js';
 
@@ -123,6 +124,7 @@ try {
   ]) assert.ok(content.text.includes(expected), `status strip must implement ${expected}`);
   assert.doesNotMatch(content.text, /innerHTML|document\.write|<script[^>]+src=/i, 'status strip must not inject untrusted HTML or load external scripts');
   assert.match(content.text, /setTimeout\(function\(\)\{void refreshLiveStatus\(\)\},3000\)/, 'the begin status strip must refresh through the app-only status helper');
+  assert.match(content.text, /\['completed','cancelled','failed','inactive'\]\.includes\(status\)/, 'the status strip must stop polling when an abandoned task becomes inactive');
   assert.match(content.text, /cardVisible\?Math\.max\(1,Math\.ceil\(contentHeight\+padding\)\):1/, 'visible status strips must report their content height while non-begin lifecycle widgets collapse to one pixel');
   assert.match(content.text, /el\.strip\?el\.strip\.getBoundingClientRect\(\)\.height:0/, 'visible height must be measured from the compact status strip instead of the host-sized iframe root');
   assert.doesNotMatch(content.text, /document\.documentElement\.scrollHeight/, 'iframe root scrollHeight can mirror ChatGPT\'s default iframe height and must not drive intrinsic sizing');
@@ -142,9 +144,11 @@ try {
 
   const task = await callTool('relai_work', { action: 'begin', workspace: 'repo', bootstrap: 'none' });
   assert.ok(task.work_id);
+  assert.equal(getToolActivity().tasks.find(item => item.taskId === task.work_id)?.calls, 1);
   const liveStatus = await invokeAppUiTool('relai_app_task', { work_id: task.work_id }, {});
   assert.equal(liveStatus.ok, true);
   assert.equal(liveStatus.data.work_id, task.work_id);
+  assert.equal(getToolActivity().tasks.find(item => item.taskId === task.work_id)?.calls, 1, 'app-only status refresh must not count as task activity or extend task lifetime');
   assert.equal((await appTaskOutputValidator.validate(liveStatus)).issues, undefined, 'successful status helper output must satisfy the advertised structured-output schema');
 
   const completed = await callTool('relai_work', {

@@ -114,7 +114,10 @@ async function callTool(name, args = {}, context = {}) {
       scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
       createTask: operationName === OP.WORK_BEGIN,
-      trackTask: !duplicateTerminalCancellation && !terminalTaskReference && (operationName === OP.WORK_BEGIN || Boolean(requestedTaskId)),
+      trackTask: context?.trackTaskActivity !== false
+        && !duplicateTerminalCancellation
+        && !terminalTaskReference
+        && (operationName === OP.WORK_BEGIN || Boolean(requestedTaskId)),
       connector,
       operation: describeToolOperation(operationName, effectiveArgs || {}),
       title: effectiveArgs?.title,

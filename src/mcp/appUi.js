@@ -118,7 +118,7 @@ async function invokeAppUiTool(name, args = {}, context = {}) {
   const workspace = String(args.workspace || '').trim();
   const publicArgs = { action: 'status', work_id: workId };
   if (workspace) publicArgs.workspace = workspace;
-  const output = await callTool('relai_work', publicArgs, context);
+  const output = await callTool('relai_work', publicArgs, { ...context, trackTaskActivity: false });
   return { ok: output?.ok !== false, data: output || {} };
 }
 
