@@ -20,7 +20,7 @@ wrong.find(item => item.id === 'read-known-file').tools = ['relai_search'];
 wrong.find(item => item.id === 'one-shot-test').tools.push('relai_process');
 wrong.find(item => item.id === 'begin-task-card').renderedTools = ['relai_work', 'relai_validate'];
 wrong.find(item => item.id === 'non-repository').tools = ['relai_work'];
-wrong.find(item => item.id === 'trace-symbol-impact').tools.push('relai_app_task');
+wrong.find(item => item.id === 'trace-symbol-impact').tools.push('relai_app_probe');
 wrong.pop();
 
 const failing = evaluateToolBehavior(expectations, wrong);

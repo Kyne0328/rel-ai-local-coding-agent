@@ -61,7 +61,7 @@ try {
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, activeToolSurface.toolSurfaceVersion);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, activeToolCount);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.appToolCount, 1);
+  assert.equal(Object.hasOwn(discovery.body.result?.capabilities?.experimental?.relai || {}, 'appToolCount'), false, 'native presentation must not advertise an app-only tool count');
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.deploymentMode, 'local_developer');
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
@@ -75,6 +75,7 @@ try {
   assert.match(serverInstructions, /approval/i);
   assert.match(serverInstructions, /authoritative evidence/i);
   assert.match(serverInstructions, /explicit task-completion contract/i);
+  assert.match(serverInstructions, /brief user-visible progress preambles/i);
   assert.match(serverInstructions, /Do not poll relai_work status merely to refresh UI/i);
   assert.doesNotMatch(serverInstructions, /Start each objective|Inspect relevant files|Validate after changes|recovery guidance/i, 'global MCP instructions must contain universal invariants rather than specialist workflow tactics');
   assert.equal(discovery.body.result?.cacheScope, 'private');
@@ -104,15 +105,14 @@ try {
     assert.deepEqual(listedByName.get(name)?.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, `${name} must present as read-only in local developer mode`);
     assert.deepEqual(listedByName.get(name)?._meta?.securitySchemes, [{ type: 'noauth' }], `${name} must advertise noauth through ChatGPT compatibility metadata`);
   }
-  assert.deepEqual(listedByName.get('relai_app_task')?._meta?.ui?.visibility, ['app']);
-  assert.deepEqual(listedByName.get('relai_app_task')?._meta?.securitySchemes, [{ type: 'noauth' }]);
-  assert.equal(listedByName.has('relai_app_open'), false);
-  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/status-strip/v3.html');
-  assert.equal(listedByName.get('relai_validate')?._meta?.ui?.resourceUri, undefined, 'validation stays data-only to avoid repeated card mounts');
-  assert.equal(listedByName.get('relai_edit')?._meta?.ui?.resourceUri, undefined, 'frequent data/mutation tools must not remount the workflow card');
-  for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish', 'relai_app_task']) {
-    assert.ok(names.includes(expected), `${expected} missing`);
+  assert.equal(names.some(name => name.startsWith('relai_app_')), false, 'passive task card must not require app-only helper tools');
+  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/task-card/v5.html');
+  assert.equal(listedByName.get('relai_work')?._meta?.['openai/outputTemplate'], 'ui://relai/task-card/v5.html');
+  for (const tool of listed.body.result.tools.filter(tool => tool.name !== 'relai_work')) {
+    assert.equal(tool._meta?.ui, undefined, `${tool.name} must stay data-only`);
+    assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must not attach the task-card template`);
   }
+  for (const expected of activeToolNames) assert.ok(names.includes(expected), `${expected} missing`);
   for (const legacy of ['relai_begin_work', 'relai_process_start', 'relai_run_checks', 'relai_git_push']) {
     assert.equal(names.includes(legacy), false, `${legacy} must not be exposed by the unified surface`);
   }
@@ -137,7 +137,7 @@ try {
   assert.equal(status.response.status, 200, JSON.stringify(status.body));
   assert.equal(status.body.result?.isError, false, JSON.stringify(status.body));
   assert.equal(status.body.result?.structuredContent?.ok, true);
-  assert.equal(status.body.result?._meta?.relai?.surface, 'status-strip', 'workflow tool results must carry component-only hydration metadata');
+  assert.equal(status.body.result?._meta?.relai, undefined, 'native status results must not carry Rel.AI component hydration metadata');
 
   const missingWorkspace = await client.request('tools/call', {
     name: 'relai_work',
@@ -154,7 +154,7 @@ try {
   });
   assert.equal(started.response.status, 200, JSON.stringify(started.body));
   assert.equal(started.body.result?.isError, false, JSON.stringify(started.body));
-  assert.equal(started.body.result?._meta?.relai?.surface, 'status-strip');
+  assert.deepEqual(started.body.result?._meta?.relai, { surface: 'task-card', version: 5 }, 'begin results hydrate the passive task card once');
   const workId = started.body.result?.structuredContent?.work_id;
   assert.match(workId || '', /^[0-9a-f-]{36}$/i, 'HTTP Apps transport must start work from a configured workspace path');
   const persistedTask = readTaskHistorySessionRecord(config, workId, { reconcileInactive: false });
@@ -274,13 +274,12 @@ try {
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));
-  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/status-strip/v3.html'));
+  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/task-card/v5.html'));
   assert.equal(resources.body.result._meta?.['io.modelcontextprotocol/cache']?.cacheScope || resources.body.result.cacheScope || 'private', 'private');
 
-  const appUi = await client.request('resources/read', { uri: 'ui://relai/status-strip/v3.html' });
+  const appUi = await client.request('resources/read', { uri: 'ui://relai/task-card/v5.html' });
   assert.equal(appUi.body.result?.contents?.[0]?.mimeType, 'text/html;profile=mcp-app');
-  assert.equal(appUi.body.result?.contents?.[0]?._meta?.ui?.prefersBorder, false);
-  assert.match(appUi.body.result?.contents?.[0]?.text || '', /ui\/notifications\/tool-result/);
+  assert.match(appUi.body.result?.contents?.[0]?._meta?.['openai/widgetDescription'] || '', /never polls or calls tools/i);
 
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));

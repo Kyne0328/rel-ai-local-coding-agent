@@ -21,7 +21,7 @@ const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 const srcResource = electronPkg.build.extraResources.find(item => item.from === '../src');
 assert.ok(srcResource, 'Electron packaging must include the backend source runtime.');
 assert.deepEqual(srcResource.filter, ['**/*.js', 'mcp/ui/workflow-card.html']);
-assert.ok(fs.existsSync(path.join(root, 'src', 'mcp', 'ui', 'workflow-card.html')), 'Electron-packaged MCP app UI asset must exist at the configured resource path.');
+assert.equal(fs.existsSync(path.join(root, 'src', 'mcp', 'ui', 'workflow-card.html')), true, 'Electron packaging must include the passive Rel.AI task card.');
 
 for (const file of [
   'secure-tunnel-runtime.js',

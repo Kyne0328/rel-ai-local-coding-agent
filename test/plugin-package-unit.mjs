@@ -85,7 +85,7 @@ try {
 
     client.send(2, 'tools/list');
     const listed = await client.waitFor(2);
-    assert.deepEqual(listed.result.tools, getMcpToolSchemas(config), 'source and extracted MCP tools/list must match, including the app-only status helper');
+    assert.deepEqual(listed.result.tools, getMcpToolSchemas(config), 'source and extracted MCP tools/list must match, including passive task-card metadata');
 
     client.call(3, 'relai_work', { action: 'begin', workspace: root, bootstrap: 'none' });
     const started = structuredContentOf(await client.waitFor(3));

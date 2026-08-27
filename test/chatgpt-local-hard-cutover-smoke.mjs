@@ -17,7 +17,8 @@ const removedTools = [
   'relai_diff', 'relai_restore_paths', 'relai_reset_workspace', 'relai_status',
   'relai_git_commit', 'relai_git_push', 'relai_git_draft_pr',
   'relai_tidy_plan', 'relai_tidy_run', 'relai_cancel_work', 'relai_finish_work',
-  'relai_worktree_create', 'relai_worktree_list', 'relai_worktree_remove'
+  'relai_worktree_create', 'relai_worktree_list', 'relai_worktree_remove',
+  'relai_app_task'
 ];
 
 const manifest = getToolSurfaceManifest({ workspaces: {} });
@@ -47,7 +48,11 @@ try {
   client.send(2, 'tools/list');
   const listed = await client.waitFor(2);
   assert.equal(listed.result?.tools?.length, activeMcpToolCount);
-  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool._meta?.ui?.visibility), [['app']]);
+  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')), [], 'hard cutover must leave no app-only helper tools');
+  const listedByName = new Map(listed.result.tools.map(tool => [tool.name, tool]));
+  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/task-card/v5.html');
+  assert.ok(listed.result.tools.filter(tool => tool.name !== 'relai_work').every(tool => tool._meta?.ui === undefined && tool._meta?.['openai/outputTemplate'] === undefined),
+    'hard cutover keeps only the passive relai_work card; frequent tools remain data-only');
   assert.ok(listed.result.tools.every(tool => tool.outputSchema));
   assert.ok(removedTools.every(name => listed.result.tools.every(tool => tool.name !== name)));
 

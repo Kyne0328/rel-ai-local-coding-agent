@@ -21,9 +21,9 @@ async function invokeRelaiTool(options = {}) {
     if (output?.ok !== false && typeof options.validateOutput === 'function') {
       await options.validateOutput(output);
     }
-    return toolResult(output, output?.ok === false, appUiResultMetadata(name, options.context));
+    return toolResult(output, output?.ok === false, appUiResultMetadata(name, args));
   } catch (error) {
-    return toolResult(serializeToolError(name, error), true, appUiResultMetadata(name, options.context));
+    return toolResult(serializeToolError(name, error), true, appUiResultMetadata(name, args));
   }
 }
 

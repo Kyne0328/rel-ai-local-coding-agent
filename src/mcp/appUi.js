@@ -1,16 +1,11 @@
 import { readFileSync } from 'node:fs';
 
-import { LOCAL_DEVELOPER_SECURITY_SCHEMES, LOCAL_DEVELOPER_TOOL_ANNOTATIONS } from './localDeveloperMode.js';
-
 // ChatGPT treats the UI resource URI as a cache key. Bump it whenever the component HTML/CSS/JS changes.
-const REL_AI_APP_UI_URI = 'ui://relai/status-strip/v3.html';
+const REL_AI_APP_UI_URI = 'ui://relai/task-card/v5.html';
 const REL_AI_APP_UI_MIME = 'text/html;profile=mcp-app';
 const REL_AI_APP_UI_DOMAIN = 'https://web-sandbox.oaiusercontent.com';
-const STATUS_STRIP_HTML = readFileSync(new URL('./ui/workflow-card.html', import.meta.url), 'utf8');
-
-const APP_UI_TOOL_STATUS = Object.freeze({
-  relai_work: ['Updating Rel.AI task…', 'Rel.AI task updated']
-});
+const TASK_CARD_HTML = readFileSync(new URL('./ui/workflow-card.html', import.meta.url), 'utf8');
+const LIFECYCLE_ACTIONS = new Set(['begin', 'finish', 'cancel']);
 
 const TOOL_INVOCATION_STATUS = Object.freeze({
   relai_work: ['Updating Rel.AI task…', 'Rel.AI task updated'],
@@ -27,42 +22,8 @@ const TOOL_INVOCATION_STATUS = Object.freeze({
   relai_publish: ['Publishing changes…', 'Changes published']
 });
 
-const APP_UI_TOOL_SCHEMAS = Object.freeze([
-  Object.freeze({
-    name: 'relai_app_task',
-    title: 'Rel.AI App Task Status',
-    description: 'UI-only helper that returns current task state for the mounted read-only Rel.AI status strip.',
-    inputSchema: Object.freeze({
-      type: 'object',
-      properties: {
-        work_id: { type: 'string', minLength: 1, maxLength: 200 },
-        workspace: { type: 'string' }
-      },
-      required: ['work_id'],
-      additionalProperties: false
-    }),
-    outputSchema: Object.freeze({
-      type: 'object',
-      properties: {
-        ok: { type: 'boolean' },
-        data: { type: 'object', additionalProperties: true },
-        error: { type: 'string' },
-        errorCode: { type: 'string' },
-        errorDetails: { type: 'object', additionalProperties: true }
-      },
-      required: ['ok'],
-      additionalProperties: false
-    }),
-    annotations: LOCAL_DEVELOPER_TOOL_ANNOTATIONS,
-    _meta: Object.freeze({
-      securitySchemes: LOCAL_DEVELOPER_SECURITY_SCHEMES,
-      ui: Object.freeze({ visibility: Object.freeze(['app']) })
-    })
-  })
-]);
-
-function isAppUiTool(name) {
-  return Object.hasOwn(APP_UI_TOOL_STATUS, String(name || ''));
+function rendersTaskCard(name) {
+  return String(name || '') === 'relai_work';
 }
 
 function toolUiMetadata(name) {
@@ -73,30 +34,30 @@ function toolUiMetadata(name) {
     'openai/toolInvocation/invoking': status[0],
     'openai/toolInvocation/invoked': status[1]
   };
-  if (isAppUiTool(toolName)) {
+  if (rendersTaskCard(toolName)) {
     metadata.ui = Object.freeze({ resourceUri: REL_AI_APP_UI_URI, visibility: Object.freeze(['model', 'app']) });
     metadata['openai/outputTemplate'] = REL_AI_APP_UI_URI;
   }
   return Object.freeze(metadata);
 }
 
-function appUiResultMetadata(name) {
-  if (!isAppUiTool(name)) return undefined;
-  return { relai: { surface: 'status-strip', version: 3 } };
+function appUiResultMetadata(name, args = {}) {
+  if (!rendersTaskCard(name) || !LIFECYCLE_ACTIONS.has(String(args.action || ''))) return undefined;
+  return { relai: { surface: 'task-card', version: 5 } };
 }
 
 function appUiResourceContent() {
   return {
     uri: REL_AI_APP_UI_URI,
     mimeType: REL_AI_APP_UI_MIME,
-    text: STATUS_STRIP_HTML,
+    text: TASK_CARD_HTML,
     _meta: {
       ui: {
         prefersBorder: false,
         domain: REL_AI_APP_UI_DOMAIN,
         csp: { connectDomains: [], resourceDomains: [] }
       },
-      'openai/widgetDescription': 'Authoritative compact task status. Do not restate its status, validation, workspace, or changed-file count unless the user asks.',
+      'openai/widgetDescription': 'Passive Rel.AI task lifecycle card. It supplements the conversation and never replaces normal user-visible progress preambles or final explanations. It never polls or calls tools.',
       'openai/widgetPrefersBorder': false,
       'openai/widgetDomain': REL_AI_APP_UI_DOMAIN,
       'openai/widgetCSP': {
@@ -107,29 +68,11 @@ function appUiResourceContent() {
   };
 }
 
-function getAppUiToolSchemas() {
-  return APP_UI_TOOL_SCHEMAS;
-}
-
-async function invokeAppUiTool(name, args = {}, context = {}) {
-  if (name !== 'relai_app_task') throw new Error(`Unknown Rel.AI app-only tool '${name}'.`);
-  const { callTool } = await import('../tools/callTool.js');
-  const workId = String(args.work_id || '').trim();
-  const workspace = String(args.workspace || '').trim();
-  const publicArgs = { action: 'status', work_id: workId };
-  if (workspace) publicArgs.workspace = workspace;
-  const output = await callTool('relai_work', publicArgs, { ...context, trackTaskActivity: false });
-  return { ok: output?.ok !== false, data: output || {} };
-}
-
 export {
   REL_AI_APP_UI_DOMAIN,
   REL_AI_APP_UI_MIME,
   REL_AI_APP_UI_URI,
   appUiResourceContent,
   appUiResultMetadata,
-  getAppUiToolSchemas,
-  invokeAppUiTool,
-  isAppUiTool,
   toolUiMetadata
 };

@@ -23,7 +23,7 @@ function listResources(config = readConfig()) {
     resource('relai://server/config', 'Rel.AI MCP Config Summary', 'Safe connector configuration summary without secrets.', MIME_JSON),
     resource('relai://server/tool-surface', 'Rel.AI MCP Tool Surface', 'Machine-readable current tool surface and output contracts.', MIME_JSON),
     resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON),
-    resource(REL_AI_APP_UI_URI, 'Rel.AI Task Status', 'Compact read-only in-chat task status strip with no actions.', REL_AI_APP_UI_MIME)
+    resource(REL_AI_APP_UI_URI, 'Rel.AI Task Card', 'Passive one-shot in-chat task lifecycle card with no polling or background tool calls.', REL_AI_APP_UI_MIME)
   ];
   for (const alias of aliases) {
     resources.push(

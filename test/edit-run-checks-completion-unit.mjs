@@ -66,7 +66,7 @@ try {
   assert.equal(completion.validationStatus, 'passed');
 
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   resetToolActivity();
   await flushTaskHistoryPersistence();
   clearTaskHistory({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') });

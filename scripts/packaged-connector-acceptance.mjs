@@ -17,8 +17,7 @@ import { electronPlatformSpec, normalizeElectronArch, normalizeElectronPlatform 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseManifest = JSON.parse(fs.readFileSync(path.join(root, 'release-manifest.json'), 'utf8'));
 const { applicationVersion, protocolVersion: mcpProtocolVersion, toolSurfaceVersion, toolCount } = releaseManifest;
-const appToolCount = 1;
-const mcpToolCount = toolCount + appToolCount;
+const mcpToolCount = toolCount;
 const platform = normalizeElectronPlatform(process.env.REL_AI_TARGET_PLATFORM || process.platform);
 const targetArch = normalizeElectronArch(process.env.REL_AI_TARGET_ARCH || process.arch);
 const platformSpec = electronPlatformSpec(platform, targetArch);
@@ -107,7 +106,8 @@ try {
   assert.ok(discovered.result?.capabilities?.resources);
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolCount, toolCount);
-  assert.equal(discovered.result?.capabilities?.experimental?.relai?.appToolCount, appToolCount);
+  assert.equal(Object.hasOwn(discovered.result?.capabilities?.experimental?.relai || {}, 'appToolCount'), false,
+    'packaged passive task card must not advertise app-only helpers');
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.deploymentMode, 'local_developer');
 
   const tools = await mcp(primarySession, 11, 'tools/list', {});
@@ -117,17 +117,20 @@ try {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
   }
   assert.equal(toolNames.has('relai_native_tasks_probe'), false);
-  assert.deepEqual(tools.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool._meta?.ui?.visibility), [['app']]);
-  for (const tool of tools.result.tools.filter(tool => !tool.name.startsWith('relai_app_'))) {
+  assert.deepEqual(tools.result.tools.filter(tool => tool.name.startsWith('relai_app_')), [], 'packaged surface must contain no app-only helper tools');
+  for (const tool of tools.result.tools) {
     assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   }
   const toolByName = new Map(tools.result.tools.map(tool => [tool.name, tool]));
+  assert.equal(toolByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/task-card/v5.html');
+  for (const tool of tools.result.tools.filter(tool => tool.name !== 'relai_work')) assert.equal(tool._meta?.ui, undefined);
   assert.equal(toolByName.get('relai_validate')?.execution, undefined);
   assert.equal(toolByName.get('relai_exec')?.execution, undefined);
   assert.equal(toolByName.get('relai_process')?.execution, undefined);
   const resourcesList = await mcp(primarySession, 12, 'resources/list', {});
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
+  assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'ui://relai/task-card/v5.html'));
   const surface = await readResource(primarySession, 13, 'relai://server/tool-surface');
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);

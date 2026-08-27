@@ -2,7 +2,7 @@ import { getCatalogToolDefinition, getCatalogToolDefinitions, getCatalogTools } 
 import { executableInputSchema } from './executableSchema.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
 import { compactPublicInputSchema } from './publicSchema.js';
-import { getAppUiToolSchemas, toolUiMetadata } from '../mcp/appUi.js';
+import { toolUiMetadata } from '../mcp/appUi.js';
 import { LOCAL_DEVELOPER_SECURITY_SCHEMES, LOCAL_DEVELOPER_TOOL_ANNOTATIONS } from '../mcp/localDeveloperMode.js';
 const toolDefinitions = getCatalogToolDefinitions();
 const catalogToolByName = new Map(getCatalogTools().map(tool => [tool.definition.name, tool]));
@@ -12,7 +12,7 @@ const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.na
 // on every stateless request defeats that cache and adds tens of milliseconds.
 const toolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildToolSchema(definition))));
 const publicToolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildPublicToolSchema(definition))));
-const mcpToolSchemas = Object.freeze([...publicToolSchemas, ...getAppUiToolSchemas()]);
+const mcpToolSchemas = publicToolSchemas;
 
 function getToolSchemas() {
   return toolSchemas;

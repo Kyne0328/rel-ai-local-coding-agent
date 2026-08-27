@@ -32,6 +32,7 @@ const files = [
   'test-rigidity-audit-unit.mjs',
   'http-auth-smoke.mjs',
   'mcp-app-ui-unit.mjs',
+  'mcp-task-card-performance-unit.mjs',
   'http-smoke.mjs',
   'ipc-security-unit.mjs',
   'package-size-policy-unit.mjs',
