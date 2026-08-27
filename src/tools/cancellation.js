@@ -1,5 +1,6 @@
 'use strict';
 
+import { cancelFallbackExecution } from '../mcp/fallbackExecutions.js';
 import { requestCurrentTaskCancellation, taskError } from '../toolActivity.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
@@ -7,6 +8,9 @@ import { sanitizeDisplayText } from '../taskObservability.js';
 async function cancelTask(config, args = {}) {
   const taskId = String(args.work_id || '').trim();
   if (!taskId) throw taskError('TASK_ID_REQUIRED', 'work_id is required to cancel a work session.');
+
+  const reason = sanitizeDisplayText(args.reason || 'Work session cancelled by request.', 500);
+  cancelFallbackExecution(taskId, { config, reason });
 
   const session = readTaskHistorySession(config, taskId);
   if (session?.status === 'cancelled') {
@@ -24,7 +28,7 @@ async function cancelTask(config, args = {}) {
   }
 
   const cancellation = requestCurrentTaskCancellation({
-    reason: sanitizeDisplayText(args.reason || 'Work session cancelled by request.', 500),
+    reason,
     initiator: 'connector_client'
   });
 

@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
+import { codeIntelligence } from '../src/codeIntelligence/service.js';
+import { validateToolOutput } from '../src/tools/outputValidation.js';
 import { buildToolManifest } from '../src/mcp/toolManifest.js';
 import { TOOL_SURFACE_VERSION, getCatalogAction, getCatalogToolDefinition } from '../src/tools/actionCatalog.js';
 
@@ -80,6 +82,13 @@ try {
   const direct = await repositoryIntelligence.architecture(workspace, config, { maxResults: 10 });
   assert.equal(direct.action, 'architecture');
   assert.equal(direct.architecture.strategy, 'bounded-file-graph');
+
+  const composed = await codeIntelligence.inspect(workspace, config, { action: 'architecture', maxResults: 10 });
+  assert.equal(Object.hasOwn(composed, 'languageServers'), false, 'architecture must not inject diagnostics-only language-server state');
+  await assert.doesNotReject(() => validateToolOutput({}, 'relai_inspect', {
+    action: 'architecture', work_id: 'architecture-output-contract'
+  }, { ...composed, work_id: 'architecture-output-contract' }),
+  'the composed architecture response must satisfy the public tool output schema');
 } finally {
   await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });

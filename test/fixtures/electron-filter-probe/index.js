@@ -238,10 +238,9 @@ app.whenReady().then(async () => {
       };
       const validationPreferenceRemoved = !document.querySelector('.workspace-validation-preferences');
       const validationMetricRemoved = !document.querySelector('.summary-metrics')?.textContent.includes('Validation ready');
-      const detailsTrigger = document.querySelector('[data-repository-details]');
-      detailsTrigger?.click();
-      const detailsModal = await waitUntil(() => document.querySelector('#__relai-modal-title')?.textContent.includes('Project details'));
-      const detailsInlineVisible = Boolean(document.querySelector('.workspace-details:not([hidden])'));
+      const redundantProjectActionsRemoved = !document.querySelector('[data-repository-details], .workspace-action-menu');
+      document.querySelector('[data-edit-workspace]')?.click();
+      const editDetailsConsolidated = await waitUntil(() => Boolean(document.querySelector('.modal-panel .ws-project-details-section .workspace-operational')));
       document.getElementById('__relai-modal-backdrop')?.click();
       location.hash = '#workspaces?workspace=app';
       await waitUntil(() => Boolean(document.querySelector('.workspace-focus-chip')));
@@ -251,8 +250,8 @@ app.whenReady().then(async () => {
       return {
         validationPreferenceRemoved,
         validationMetricRemoved,
-        detailsModal,
-        detailsInlineVisible,
+        editDetailsConsolidated,
+        redundantProjectActionsRemoved,
         focusChipLabel,
         scopeName: document.querySelector('.workspace-menu-trigger')?.getAttribute('aria-label') || ''
       };

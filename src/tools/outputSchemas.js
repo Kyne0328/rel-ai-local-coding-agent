@@ -208,6 +208,9 @@ const FIELD_SCHEMAS = Object.freeze({
   mutationUnknown: BOOLEAN,
   environmentKeys: STRING_ARRAY,
   cacheHit: BOOLEAN,
+  partial: BOOLEAN,
+  requestedCount: NUMBER,
+  returnedCount: NUMBER,
   fingerprint: STRING,
   strategy: STRING,
   privacy: STRING,
@@ -349,7 +352,7 @@ const FIELD_SCHEMAS = Object.freeze({
 const TOOL_FIELDS = Object.freeze({
   [OP.WORK_BEGIN]: ['ok', 'workspace', 'work_id', 'status', 'identity', 'title', 'objective', 'intent', 'workspaceBinding', 'bootstrap', 'nextAction'],
   [OP.SNAPSHOT]: ['ok', 'workspace', 'work_id', 'root', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles', 'next'],
-  [OP.READ]: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'truncated', 'error'],
+  [OP.READ]: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'requestedCount', 'returnedCount', 'partial', 'truncated', 'error'],
   [OP.SEARCH_TEXT]: ['ok', 'workspace', 'work_id', 'pattern', 'queries', 'queryCount', 'uniqueFileCount', 'execution', 'glob', 'fixed', 'ignoreCase', 'matches', 'matchCount', 'mode', 'effectiveMode', 'autoTier', 'selectionStrategy', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'files', 'results', 'resultCount', 'returnedFileCount', 'returnedRangeCount', 'contextMatchCount', 'returnedBytes', 'maxBytes', 'omittedFiles', 'omittedRanges', 'truncated', 'contextTruncated', 'next'],
   [OP.INSPECT]: ['ok', 'workspace', 'work_id', 'action', 'index', 'query', 'strategy', 'semanticEmbeddings', 'fallbackResultKind', 'intelligence', 'files', 'matchCount', 'symbol', 'definitions', 'definitionCount', 'references', 'items', 'referenceCount', 'callCount', 'calls', 'seeds', 'maxDepth', 'impactedPaths', 'impactedPathCount', 'affectedTests', 'importEdges', 'definitionPaths', 'directCallers', 'importers', 'indirectImpact', 'relatedSymbols', 'uiSurfaces', 'registrationSurfaces', 'recommendedReadOrder', 'architecture', 'relationshipTypes', 'modules', 'entryPoints', 'hotspots', 'layers', 'cycles', 'communities', 'languages', 'diagnosticCommands', 'discoveryWarnings', 'validationCommands', 'configuredTestCommands', 'diagnosticsExecuted', 'summary', 'truncated', 'next'],
   [OP.EXEC]: ['ok', 'executed', 'commandSucceeded', 'workspace', 'work_id', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error', 'environmentKeys', 'changedFiles', 'changedFilesTruncated', 'mutationTracking', 'mutationUnknown'],

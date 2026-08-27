@@ -9,6 +9,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { combineAbortSignals } from '../abortSignals.js';
 import {
   DEFAULT_FALLBACK_GRACE_MS,
+  fallbackExecutionStatus,
   fallbackSignature,
   startFallbackExecution
 } from './fallbackExecutions.js';
@@ -193,13 +194,14 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
   let started;
   try {
     started = startFallbackExecution({
+      config,
       workId,
       tool: name,
       workspace: String(args.workspace || ''),
       signature: fallbackSignature(name, args),
-      run: () => options.execute(config, name, args, {
+      run: signal => options.execute(config, name, args, {
         ...options,
-        signal: undefined,
+        signal,
         requestId: `fallback:${workId}`,
         message
       })
@@ -212,6 +214,10 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
       errorCode: String(error?.code || 'TASK_OPERATION_IN_PROGRESS'),
       nextAction: `Call relai_work with action "status" and work_id "${workId}" before starting another long operation.`
     }, false));
+  }
+
+  if (started.reused && started.record.status !== 'running') {
+    return replayFallbackResult(message.id, workId, started.record);
   }
 
   if (!started.reused && graceMs > 0) {
@@ -227,14 +233,33 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
     }
   }
 
+  const operation = fallbackExecutionStatus(workId, { config }) || {};
   return successResponse(message.id, toolResult({
     ok: true,
     workspace: String(args.workspace || ''),
     work_id: workId,
     status: 'running',
+    operationId: operation.operationId,
+    updatedAt: operation.updatedAt,
+    revision: operation.revision,
+    pollAfterMs: operation.pollAfterMs,
     message: `${name} is still running safely after this request returns.`,
-    nextAction: `Call relai_work with action "status" and work_id "${workId}" to get the result.`
+    nextAction: `Call relai_work with action "status" and work_id "${workId}" after about ${Math.max(1, Math.round(Number(operation.pollAfterMs || 1000) / 1000))} second(s) to get the result.`
   }, false));
+}
+
+function replayFallbackResult(requestId, workId, record) {
+  if (record.result) return successResponse(requestId, record.result);
+  if (record.persistedResult && typeof record.persistedResult === 'object') {
+    return successResponse(requestId, toolResult({ ...record.persistedResult, work_id: workId }, record.isError === true));
+  }
+  return successResponse(requestId, toolResult({
+    ok: false,
+    work_id: workId,
+    status: record.status,
+    error: record.error || `Previous background operation ${record.status}.`,
+    errorCode: record.status === 'cancelled' ? 'CANCELLED' : 'TOOL_EXECUTION_FAILED'
+  }, true));
 }
 
 async function waitForFallbackGrace(execution, graceMs) {

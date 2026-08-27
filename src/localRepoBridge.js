@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { collectTextFiles, collectOptionsFromWorkspace, writeTextFileSafe, resolveSafePath, fileSha256, looksBinary } from "./safety.js";
+import { collectWorkspaceTextFiles, resolveWorkspaceSourcePath } from './workspaceSources.js';
 import { discoverCommands } from "./commandDiscovery.js";
 import { getStateDir } from './statePaths.js';
 import { appendOperation, makeOperationId, summarizeOperations } from "./journal.js";
@@ -42,7 +43,7 @@ async function repoSnapshot(workspace, config, args = {}) {
   // The git summary is a child process; start it before the synchronous tree walk and
   // manifest reads so the spawn overlaps them instead of adding to them.
   const gitSummary = snapshotGitSummary(workspace, config);
-  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
+  const tree = collectWorkspaceTextFiles(workspace, { maxEntries });
   const manifests = readManifests(workspace.path);
   const topology = discoverRepositoryTopology(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path, { topology });
@@ -158,11 +159,16 @@ function collectReadResults(workspace, results) {
     if (result.skipped) skipped.push(result.skipped);
   }
   const ok = items.length > 0;
+  const requestedCount = results.length;
+  const returnedCount = items.length;
   return {
     ok,
     workspace: workspace.alias,
     items,
     skipped,
+    requestedCount,
+    returnedCount,
+    ...(ok && skipped.length > 0 ? { partial: true } : {}),
     ...(items.some(item => item?.truncated === true) ? { truncated: true } : {}),
     ...(!ok ? { error: `None of the requested paths could be read. ${skipped.length} path(s) were skipped.` } : {})
   };
@@ -212,11 +218,11 @@ function readRangeKey(value) {
 
 function readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, options) {
   try {
-    const safe = resolveSafePath(workspace.path, requested, { operation: "read" });
+    const safe = resolveWorkspaceSourcePath(workspace, requested, { operation: "read" });
     const stat = fs.statSync(safe.absolutePath);
     if (!stat.isFile()) {
       return stat.isDirectory()
-        ? { item: readDirectory(workspace, safe.relativePath, args) }
+        ? { item: readDirectory(workspace, safe, args) }
         : { skipped: { path: String(requested), reason: "not a file or directory" } };
     }
     return readFileResult(workspace, safe, stat, sessionActive, maxBytes, options, readTextContent(workspace, safe, stat, sessionActive));
@@ -227,11 +233,11 @@ function readSingleItem(workspace, config, requested, sessionActive, maxBytes, a
 
 async function readSingleItemAsync(workspace, config, requested, sessionActive, maxBytes, args, options) {
   try {
-    const safe = resolveSafePath(workspace.path, requested, { operation: "read" });
+    const safe = resolveWorkspaceSourcePath(workspace, requested, { operation: "read" });
     const stat = await fs.promises.stat(safe.absolutePath);
     if (!stat.isFile()) {
       return stat.isDirectory()
-        ? { item: readDirectory(workspace, safe.relativePath, args) }
+        ? { item: readDirectory(workspace, safe, args) }
         : { skipped: { path: String(requested), reason: "not a file or directory" } };
     }
     const content = await readTextContentAsync(workspace, safe, stat, sessionActive, options, maxBytes);
@@ -258,7 +264,9 @@ function readFileResult(workspace, safe, stat, sessionActive, maxBytes, options,
       truncated: selection.truncated,
       ...(selection.truncated ? { hint: `Content truncated. Re-call relai_read with startLine/endLine (file has ${selection.totalLines} lines).` } : {}),
       ...(selection.lineRange ? { lineRange: selection.lineRange } : {}),
-      ...readGuidanceFields(options.guidanceMode, safe.relativePath, text),
+      ...(safe.primarySource
+        ? readGuidanceFields(options.guidanceMode, safe.relativePath, text)
+        : options.guidanceMode === 'none' ? {} : { writeHint: 'Secondary source folders are read-only context. Edit files in the primary repository only.' }),
       content: selection.content,
       ...(sessionActive ? { cacheHit } : {})
     }
@@ -978,16 +986,17 @@ function clearStagedPayload(config, workspace, writeId) {
   return existed;
 }
 
-function readDirectory(workspace, relativePath, args) {
+function readDirectory(workspace, safe, args) {
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, 1000);
-  const prefix = relativePath === "." ? "" : relativePath;
-  const result = collectTextFiles(path.join(workspace.path, prefix), collectOptionsFromWorkspace(workspace, { maxEntries, includeRoots: [] }));
+  const sourcePrefix = safe.sourceRelativePath === "." ? "" : safe.sourceRelativePath;
+  const displayPrefix = safe.relativePath === "." ? "" : safe.relativePath;
+  const result = collectTextFiles(path.join(safe.sourceRoot, sourcePrefix), collectOptionsFromWorkspace(workspace, { maxEntries, includeRoots: [] }));
   return {
     type: "directory",
-    path: relativePath,
+    path: safe.relativePath,
     fileCount: result.files.length,
-    files: result.files.map((item) => prefix ? `${prefix}/${item}` : item),
-    skipped: result.skipped,
+    files: result.files.map((item) => displayPrefix ? `${displayPrefix}/${item}` : item),
+    skipped: result.skipped.map(item => ({ ...item, path: displayPrefix ? `${displayPrefix}/${item.path}` : item.path })),
     truncated: result.truncated
   };
 }

@@ -33,7 +33,7 @@ async function relaiStatus(config, args = {}, context = {}) {
   const workspaceAliases = context?.connector === true
     ? authorizedWorkspaceAliases(context.principal, configuredWorkspaceAliases)
     : configuredWorkspaceAliases;
-  const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id) : null;
+  const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id, { config }) : null;
   let selectedWorkspace = null;
   if (args.workspace) {
     try {

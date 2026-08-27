@@ -186,6 +186,13 @@ try {
   assert.equal(failure.exitCode, 7);
   assert.match(failure.stderr, /expected failure/);
 
+  if (process.platform === 'win32') {
+    const powershellFailure = await execCall({ command: "Write-Error 'relai-shell-error'" });
+    assert.equal(powershellFailure.commandSucceeded, false, 'PowerShell non-native command errors must not be reported as successful');
+    assert.notEqual(powershellFailure.exitCode, 0);
+    assert.match(powershellFailure.stderr, /relai-shell-error/);
+  }
+
   await assert.rejects(
     () => execCall({ command: 'echo invalid', cwd: '..' }),
     /escapes the workspace/i

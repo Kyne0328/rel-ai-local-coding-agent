@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { makeProcessEnvironment } from '../processEnvironment.js';
 import { resolveSafePath } from '../safety.js';
+import { parseWorkspaceSourcePath, qualifyWorkspaceSourcePath, sourceWorkspace, workspaceSourceEntries } from '../workspaceSources.js';
 import { isTestPath } from '../repository/intelligence/languages.js';
 import { LspClient } from './lspClient.js';
 
@@ -230,10 +231,13 @@ function getSession(workspace, spec) {
 }
 
 async function inspectWithLsp(workspace, args, anchor, options = {}) {
-  const relativePath = String(anchor?.path || args.path || '').replaceAll('\\', '/');
+  const requestedPath = String(anchor?.path || args.path || '').replaceAll('\\', '/');
+  const parsed = parseWorkspaceSourcePath(workspace, requestedPath);
+  const relativePath = parsed.relativePath;
+  const scopedWorkspace = sourceWorkspace(workspace, parsed.source);
   const spec = providerForPath(relativePath);
   if (!spec) return { available: false, reason: 'no-language-server-provider' };
-  const session = getSession(workspace, spec);
+  const session = getSession(scopedWorkspace, spec);
   if (!runtimeAvailable(spec)) return { available: false, provider: spec.id, reason: 'language-server-unavailable', status: session.status() };
   const line = Number(anchor?.line || args.line || 1);
   const column = Number(anchor?.column || args.column || 1);
@@ -250,10 +254,10 @@ async function inspectWithLsp(workspace, args, anchor, options = {}) {
       available: true,
       provider: spec.id,
       authority: 'language-server',
-      path: relativePath,
+      path: qualifyWorkspaceSourcePath(parsed.source, relativePath),
       line,
       column,
-      result: normalizeLspResult(workspace, action, raw),
+      result: normalizeLspResult(scopedWorkspace, action, raw, parsed.source),
       status: session.status()
     };
   } catch (error) {
@@ -268,9 +272,12 @@ async function inspectWithLsp(workspace, args, anchor, options = {}) {
 }
 
 async function planSemanticRename(workspace, semantic, options = {}) {
-  const relativePath = String(semantic?.path || '').trim().replaceAll('\\', '/');
+  const requestedPath = String(semantic?.path || '').trim().replaceAll('\\', '/');
+  if (!requestedPath) throw new Error('Semantic rename requires semantic.path.');
+  const parsed = parseWorkspaceSourcePath(workspace, requestedPath);
+  if (!parsed.source.primary) throw new Error('Semantic rename is available only in the primary repository. Secondary source folders are read-only context.');
+  const relativePath = parsed.relativePath;
   const newName = String(semantic?.newName || '').trim();
-  if (!relativePath) throw new Error('Semantic rename requires semantic.path.');
   if (!newName || newName.length > 256) throw new Error('Semantic rename requires semantic.newName between 1 and 256 characters.');
   const spec = providerForPath(relativePath);
   if (!spec) throw new Error(`No language-server provider supports semantic rename for ${relativePath}.`);
@@ -352,10 +359,10 @@ function offsetAt(text, position = {}) {
   return Math.min(text.length, offset + targetCharacter);
 }
 
-function normalizeLspResult(workspace, action, raw) {
+function normalizeLspResult(workspace, action, raw, source = null) {
   if (action === 'hover' || action === 'symbol') return normalizeHover(raw);
   const locations = Array.isArray(raw) ? raw : raw ? [raw] : [];
-  return locations.map(item => normalizeLocation(workspace, item)).filter(Boolean);
+  return locations.map(item => normalizeLocation(workspace, item, source)).filter(Boolean);
 }
 
 function normalizeHover(raw) {
@@ -373,13 +380,13 @@ function normalizeHover(raw) {
   };
 }
 
-function normalizeLocation(workspace, item) {
+function normalizeLocation(workspace, item, source = null) {
   const uri = item?.uri || item?.targetUri;
   const range = item?.range || item?.targetSelectionRange || item?.targetRange;
   const relativePath = workspaceRelativeUri(workspace, uri);
   if (!relativePath || !range) return null;
   return {
-    path: relativePath,
+    path: source ? qualifyWorkspaceSourcePath(source, relativePath) : relativePath,
     line: Number(range.start?.line || 0) + 1,
     column: Number(range.start?.character || 0) + 1,
     endLine: Number(range.end?.line || 0) + 1,
@@ -410,16 +417,25 @@ function workspaceRelativeUri(workspace, uri) {
 }
 
 function providerStatuses(workspace) {
-  return PROVIDERS.filter(spec => sessions.has(sessionKey(workspace, spec)) || workspaceHintsProvider(workspace, spec)).map(spec => {
-    const session = sessions.get(sessionKey(workspace, spec));
-    return session?.status() || {
-      id: spec.id,
-      available: runtimeAvailable(spec),
-      active: false,
-      authority: 'language-server',
-      capabilities: []
-    };
-  });
+  const result = [];
+  for (const source of workspaceSourceEntries(workspace)) {
+    const scopedWorkspace = sourceWorkspace(workspace, source);
+    for (const spec of PROVIDERS) {
+      if (!sessions.has(sessionKey(scopedWorkspace, spec)) && !workspaceHintsProvider(scopedWorkspace, spec)) continue;
+      const session = sessions.get(sessionKey(scopedWorkspace, spec));
+      result.push({
+        ...(session?.status() || {
+          id: spec.id,
+          available: runtimeAvailable(spec),
+          active: false,
+          authority: 'language-server',
+          capabilities: []
+        }),
+        ...(source.primary ? {} : { source: source.number })
+      });
+    }
+  }
+  return result;
 }
 
 function workspaceHintsProvider(workspace, spec) {
@@ -478,6 +494,21 @@ function noteLspMutation(workspace, paths = []) {
   for (const spec of PROVIDERS) sessions.get(sessionKey(workspace, spec))?.noteDiskChanges(paths);
 }
 
+async function disposeLspWorkspace(workspace) {
+  const active = [];
+  for (const source of workspaceSourceEntries(workspace)) {
+    const scopedWorkspace = sourceWorkspace(workspace, source);
+    for (const spec of PROVIDERS) {
+      const key = sessionKey(scopedWorkspace, spec);
+      const session = sessions.get(key);
+      if (!session) continue;
+      sessions.delete(key);
+      active.push(session);
+    }
+  }
+  await Promise.allSettled(active.map(session => session.stop()));
+}
+
 async function shutdownLspSessions() {
   const active = [...sessions.values()];
   sessions.clear();
@@ -487,6 +518,7 @@ async function shutdownLspSessions() {
 export {
   IDLE_EVICT_MS,
   MAX_SEMANTIC_EDIT_FILES,
+  disposeLspWorkspace,
   inspectWithLsp,
   noteLspMutation,
   planSemanticRename,

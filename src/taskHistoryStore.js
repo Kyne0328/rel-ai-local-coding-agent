@@ -113,6 +113,33 @@ function recordWorkflowState(config, taskId, { receipt = null, workflow = null }
   return workflow || receipt;
 }
 
+function recordTaskBackgroundOperation(config, taskId, operation, options = {}) {
+  const id = cleanTaskId(taskId);
+  if (!id) return null;
+  ensureCurrentHistory(config);
+  const directory = getTaskHistoryDir(config);
+  const session = readWorkingSession(directory, id);
+  if (!session) return null;
+  const next = { ...session };
+  if (operation && typeof operation === 'object') next.backgroundOperation = operation;
+  else delete next.backgroundOperation;
+  persistSession(directory, next, options);
+  return sanitizeTaskRecord({ status: 'planning', backgroundOperation: next.backgroundOperation })?.backgroundOperation || null;
+}
+
+function readTaskBackgroundOperation(config, taskId) {
+  const id = cleanTaskId(taskId);
+  if (!id) return null;
+  try {
+    ensureCurrentHistory(config);
+    const operation = readWorkingSession(getTaskHistoryDir(config), id)?.backgroundOperation;
+    return sanitizeTaskRecord({ status: 'planning', backgroundOperation: operation })?.backgroundOperation || null;
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task background operation read:', error);
+    return null;
+  }
+}
+
 function readRecentWorkflowEvidence(config, taskId, limit = 50) {
   const id = cleanTaskId(taskId);
   if (!id) return [];
@@ -538,4 +565,4 @@ function emptySession(id) {
   };
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };

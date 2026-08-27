@@ -109,7 +109,7 @@ try {
   assert.equal(result.settings.legacyDensityIgnored, true);
   assert.equal(result.settings.secondaryNavigationRemoved, true);
   assert.equal(result.settings.labelsAssociated, true);
-  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, detailsModal: true, detailsInlineVisible: false, focusChipLabel: 'Clear selected project filter: app', scopeName: 'Project filter: All projects' });
+  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, editDetailsConsolidated: true, redundantProjectActionsRemoved: true, focusChipLabel: 'Clear selected project filter: app', scopeName: 'Project filter: All projects' });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
   assert.equal(result.connection.detailsDisclosure, true);

@@ -97,14 +97,26 @@ try {
   assert.equal(aggregate.truncated, true);
 
   const { relaiReadAsync } = await import('../src/localRepoBridge.js');
+  const partial = await relaiReadAsync({ alias: 'repo', path: wsRoot }, {}, {
+    paths: ['big.txt', 'does-not-exist.txt'], guidanceMode: 'none'
+  }, { connector: true });
+  assert.equal(partial.ok, true);
+  assert.equal(partial.partial, true, 'mixed read success must be explicit instead of hiding behind ok=true');
+  assert.equal(partial.requestedCount, 2);
+  assert.equal(partial.returnedCount, 1);
+  assert.equal(partial.skipped.length, 1);
+
   const skippedOnly = await relaiReadAsync({ alias: 'repo', path: wsRoot }, {}, {
     paths: ['does-not-exist.txt'], guidanceMode: 'none'
   }, { connector: true });
   assert.equal(skippedOnly.ok, false, 'all-skipped reads must not claim success');
+  assert.equal(skippedOnly.requestedCount, 1);
+  assert.equal(skippedOnly.returnedCount, 0);
+  assert.equal(Object.hasOwn(skippedOnly, 'partial'), false);
   assert.match(skippedOnly.error, /none of the requested paths could be read/i);
 
   console.log('Connector read result limit and streamed range unit tests passed.');
 } finally {
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

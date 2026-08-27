@@ -69,6 +69,7 @@ try {
   const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
   const { readTaskHistorySession } = await import('../src/taskHistoryStore.js');
   const { readAudit } = await import('../src/audit.js');
+  const { fallbackExecutionStatus, startFallbackExecution } = await import('../src/mcp/fallbackExecutions.js');
   const { resetToolActivity } = await import('../src/toolActivity.js');
   resetToolActivity();
   const context = { publicHttpOnly: true, requestId: 'cancel-test' };
@@ -85,6 +86,22 @@ try {
     startupWaitMs: 20
   }, context);
   assert.equal(managed.status, 'running');
+  let fallbackAbortObserved = false;
+  const fallback = startFallbackExecution({
+    config: { stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') },
+    workId: started.work_id,
+    tool: 'relai_validate',
+    workspace: 'app',
+    signature: 'task-cancellation-fallback',
+    run: signal => new Promise(resolve => {
+      const finish = () => {
+        fallbackAbortObserved = true;
+        resolve({ isError: true, structuredContent: { ok: false, cancelled: true } });
+      };
+      if (signal.aborted) finish();
+      else signal.addEventListener('abort', finish, { once: true });
+    })
+  });
   const result = await callTool('relai_work', { action: 'cancel',
     workspace: 'app',
     work_id: started.work_id,
@@ -96,6 +113,9 @@ try {
   assert.equal(result.duplicate, false);
   assert.equal(result.endReason, 'explicit_cancellation');
   assert.ok(result.endedAt);
+  await fallback.record.promise;
+  assert.equal(fallbackAbortObserved, true, 'relai_work cancel must abort detached fallback execution, not only the logical task tracker');
+  assert.equal(fallbackExecutionStatus(started.work_id).status, 'cancelled');
   const stopped = await callTool('relai_process', {
     action: 'stop',
     workspace: 'app',

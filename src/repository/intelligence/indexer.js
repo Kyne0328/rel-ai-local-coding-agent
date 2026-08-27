@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
 import { collectOptionsFromWorkspace, createCollectionPathFilter, isPathInside, realRootOf } from '../../safety.js';
+import { getStateDir } from '../../stateLayout.js';
 import { watchPathFor } from '../../watchPath.js';
 import { repositoryIndexPath } from './database.js';
 import { DEFAULT_MAX_INDEX_FILES } from './indexBuild.js';
@@ -21,7 +22,7 @@ async function ensureRepositoryIndex(workspace, config = {}, options = {}) {
   throwIfAborted(options.signal);
   const databaseFile = repositoryIndexPath(config, workspace);
   const state = runtimeState(databaseFile);
-  if (options.watch !== false) ensureWorkspaceWatcher(workspace, databaseFile, state);
+  if (options.watch !== false) ensureWorkspaceWatcher(workspace, config, state);
   const now = Date.now();
   const fallbackReconcileDue = !state.watcher && now - state.lastFullScanAt >= FALLBACK_RECONCILE_INTERVAL_MS;
   if (state.metadata && !state.dirty && !fallbackReconcileDue && options.force !== true) {
@@ -113,6 +114,25 @@ function evictIdleRepositoryWorkers(reason = 'Repository Intelligence idle worke
     }
   }
   return evicted;
+}
+
+async function disposeRepositoryIndex(workspace, config = {}, options = {}) {
+  const databaseFile = repositoryIndexPath(config, workspace);
+  await cancelAndDrain(databaseFile, 'Repository Intelligence workspace detached.');
+  const state = runtimeStates.get(databaseFile);
+  if (state) {
+    try { state.watcher?.close(); } catch {}
+    state.watcher = null;
+    runtimeStates.delete(databaseFile);
+  }
+  const client = workerClients.get(databaseFile);
+  if (client) await client.terminate(abortError('Repository Intelligence workspace detached.'));
+  workerClients.delete(databaseFile);
+  activeBuilds.delete(databaseFile);
+  if (options.removeCache === true) {
+    try { fs.rmSync(path.dirname(databaseFile), { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }); } catch {}
+  }
+  return { detached: true, cacheRemoved: options.removeCache === true };
 }
 
 function shutdownRepositoryIndexes() {
@@ -333,17 +353,17 @@ async function cancelAndDrain(databaseFile, reason) {
   try { await existing.promise; } catch {}
 }
 
-function ensureWorkspaceWatcher(workspace, databaseFile, state) {
+function ensureWorkspaceWatcher(workspace, config, state) {
   if (state.watcher) return;
-  const indexRoot = path.dirname(databaseFile);
   try {
     const root = watchPathFor(realRootOf(workspace.path));
+    const stateRoot = watchedStateRoot(workspace.path, root, getStateDir(config));
     let shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
     state.watcher = fs.watch(root, { recursive: true, persistent: false }, (eventType, filename) => {
       const normalized = normalizeWatchPath(filename);
       if (normalized === '.relaiignore') {
         shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
-      } else if (normalized && shouldIgnoreWatchPath(root, indexRoot, normalized, shouldCollect)) {
+      } else if (normalized && shouldIgnoreWatchPath(root, stateRoot, normalized, shouldCollect)) {
         return;
       }
       state.changeRevision += 1;
@@ -375,11 +395,20 @@ function ensureWorkspaceWatcher(workspace, databaseFile, state) {
   }
 }
 
-function shouldIgnoreWatchPath(root, indexRoot, filename, shouldCollect) {
+function watchedStateRoot(configuredWorkspaceRoot, watchedRoot, configuredStateRoot) {
+  const relative = path.relative(path.resolve(configuredWorkspaceRoot), path.resolve(configuredStateRoot));
+  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+    return path.resolve(watchedRoot, relative);
+  }
+  return path.resolve(configuredStateRoot);
+}
+
+function shouldIgnoreWatchPath(root, stateRoot, filename, shouldCollect) {
   const normalized = normalizeWatchPath(filename);
   if (!normalized) return false;
+  if (isPathInside(path.resolve(root, normalized), stateRoot)) return true;
   if (typeof shouldCollect === 'function' && !shouldCollect(normalized)) return true;
-  return isPathInside(path.resolve(root, normalized), indexRoot);
+  return false;
 }
 
 function runtimeState(databaseFile) {
@@ -491,6 +520,7 @@ function isoTime(value) {
 
 export {
   cancelRepositoryIndex,
+  disposeRepositoryIndex,
   evictIdleRepositoryWorkers,
   ensureRepositoryIndex,
   noteRepositoryMutation,

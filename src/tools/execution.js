@@ -22,7 +22,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       const taskId = String(finishActivity?.taskId || effectiveArgs?.work_id || '').trim();
       const backgroundStatusMode = executionName === OP.WORK_STATUS
         && Boolean(taskId)
-        && fallbackExecutionStatus(taskId)?.status === 'running';
+        && fallbackExecutionStatus(taskId, { config })?.status === 'running';
       const workspace = effectiveArgs?.workspace ? resolveWorkspace(config, effectiveArgs.workspace) : null;
       const branchChange = isExplicitBranchChange(executionName, effectiveArgs);
       const readOnlyExec = executionName === OP.EXEC && isClearlyReadOnlyExec(effectiveArgs);

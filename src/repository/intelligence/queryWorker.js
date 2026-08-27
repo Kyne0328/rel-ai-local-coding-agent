@@ -16,6 +16,14 @@ parentPort?.on('message', message => {
     }
     return;
   }
+  if (message?.type === 'warm') {
+    if (activeJob) {
+      parentPort?.postMessage({ type: 'warmed', jobId: message.jobId, ok: false, error: 'Repository Intelligence query worker is busy.' });
+      return;
+    }
+    void warmWorker(message.jobId, message.job || {});
+    return;
+  }
   if (message?.type !== 'run') return;
   if (activeJob) {
     parentPort?.postMessage({
@@ -67,6 +75,26 @@ async function runJob(jobId, job) {
         stack: typeof error?.stack === 'string' ? error.stack : ''
       }
     });
+  } finally {
+    if (activeJob?.jobId === jobId) activeJob = null;
+  }
+}
+
+async function warmWorker(jobId, job) {
+  const controller = new AbortController();
+  activeJob = { jobId, controller };
+  try {
+    const queryOptionsValue = queryOptions(job, { signal: controller.signal });
+    const expectedGeneration = Number(job.index?.generation || 0);
+    const actualGeneration = Number(currentGeneration(queryOptionsValue.database)?.id || 0);
+    if (!expectedGeneration || actualGeneration !== expectedGeneration) {
+      const error = new Error(`Repository Intelligence index changed during reader warmup (expected generation ${expectedGeneration || 'none'}, found ${actualGeneration || 'none'}).`);
+      error.code = 'QUERY_INDEX_CHANGED';
+      throw error;
+    }
+    parentPort?.postMessage({ type: 'warmed', jobId, ok: true });
+  } catch (error) {
+    parentPort?.postMessage({ type: 'warmed', jobId, ok: false, error: String(error?.message || error || 'Reader warmup failed.') });
   } finally {
     if (activeJob?.jobId === jobId) activeJob = null;
   }

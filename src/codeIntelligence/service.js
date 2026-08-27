@@ -1,10 +1,11 @@
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
-import { inspectWithLsp, noteLspMutation, planSemanticRename, providerStatuses, shutdownLspSessions } from './lspManager.js';
+import { disposeLspWorkspace, inspectWithLsp, noteLspMutation, planSemanticRename, providerStatuses, shutdownLspSessions } from './lspManager.js';
 
 const LSP_ACTIONS = new Set(['definition', 'references', 'hover', 'implementation']);
 
 function createCodeIntelligenceService() {
   return Object.freeze({
+    dispose: workspace => disposeLspWorkspace(workspace),
     inspect: async (workspace, config = {}, args = {}, options = {}) => {
       const action = String(args.action || '').toLowerCase();
       const nativeAction = ['definition', 'hover', 'implementation'].includes(action) ? 'symbol' : action;
@@ -25,7 +26,6 @@ function createCodeIntelligenceService() {
       if (action === 'architecture') {
         return {
           ...native,
-          languageServers: providerStatuses(workspace),
           intelligence: evidence('relai-native', [], false)
         };
       }

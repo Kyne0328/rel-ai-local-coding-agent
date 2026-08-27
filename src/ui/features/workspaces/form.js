@@ -4,10 +4,11 @@ import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOAR
 import { toast } from '../../components/toast.js';
 import { esc } from '../../utils.js';
 import { runButtonAction } from '../../action-state.js';
-import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../../router.js';
+import { getWorkspaceFilter, navigate, routeHref, setWorkspaceFilter } from '../../router.js';
 import { recordRecentWorkspace, renameRecentWorkspace } from './recents.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import { deriveWorkspaceAlias, isValidWorkspaceAlias, normalizeWorkspacePath } from '../../workspace-input.js';
+import { workspaceOperationalHtml } from './details.js';
 
 function debounce(fn, ms) {
   let timer = 0;
@@ -99,6 +100,17 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       <div class="ws-form-help">The first folder is the primary repository used for project-level Git and command actions.</div>
       <div class="ws-form-status" data-path-status aria-live="polite"></div>
     </section>
+
+    ${isEdit ? `<section class="ws-project-details-section" aria-labelledby="wsProjectDetailsHeading">
+      <h3 class="ws-source-heading" id="wsProjectDetailsHeading">Project details</h3>
+      <div class="ws-project-details-box">
+        ${workspaceOperationalHtml(ws)}
+        <div class="workspace-secondary-actions">
+          <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: originalAlias })}">View tasks</a>
+          <a class="buttonlike secondary" href="${routeHref('activity', { workspace: originalAlias })}">View activity</a>
+        </div>
+      </div>
+    </section>` : ''}
 
     <footer class="modal-footer">
       ${isEdit ? `<div class="modal-danger-zone">

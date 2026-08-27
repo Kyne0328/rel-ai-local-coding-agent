@@ -191,6 +191,7 @@
   :root[data-window-chrome="custom"] .main {
     height: 100%;
     min-height: 0;
+    padding-top: 0;
     overflow-y: auto;
     overscroll-behavior-y: contain;
     scrollbar-gutter: stable;

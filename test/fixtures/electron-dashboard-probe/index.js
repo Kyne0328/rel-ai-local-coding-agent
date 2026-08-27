@@ -368,6 +368,8 @@ async function exerciseModalInteractions(win) {
 
   await win.webContents.executeJavaScript(`document.querySelector('.workspace-grid [data-edit-workspace]')?.click()`);
   await waitFor(win, `document.querySelector('.modal-title')?.textContent === 'Edit project'`);
+  const editDetailsConsolidated = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.modal-panel .ws-project-details-section .workspace-operational'))`);
+  const sharedCloseVisible = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.modal-panel .modal-close'))`);
   const editedAlias = await win.webContents.executeJavaScript(`(() => {
     const input = document.querySelector('.modal-panel input[name="alias"]');
     if (!input) return '';
@@ -404,17 +406,6 @@ async function exerciseModalInteractions(win) {
   await win.webContents.executeJavaScript(`document.querySelector('.modal-inline-confirm-card button.danger')?.click()`);
   await waitFor(win, `!document.querySelector('#__relai-modal-backdrop')`);
 
-  await win.webContents.executeJavaScript(`document.querySelector('.workspace-grid [data-repository-details]')?.click()`);
-  await waitFor(win, `/^Project details/.test(document.querySelector('.modal-title')?.textContent || '')`);
-  const sharedCloseVisible = await win.webContents.executeJavaScript(`Boolean(document.querySelector('.modal-panel .modal-close'))`);
-  await win.webContents.executeJavaScript(`document.querySelector('.modal-panel [data-clear-workspace]')?.click()`);
-  await waitFor(win, `document.querySelector('.modal-inline-confirm-layer')`);
-  await win.webContents.executeJavaScript(`document.querySelector('.modal-inline-confirm-card .modal-actions .secondary')?.click()`);
-  await waitFor(win, `!document.querySelector('.modal-inline-confirm-layer')`);
-  const detailsAfterDeleteCancel = await win.webContents.executeJavaScript(`document.querySelector('.modal-title')?.textContent || ''`);
-  await win.webContents.executeJavaScript(`document.querySelector('.modal-close')?.click()`);
-  await waitFor(win, `!document.querySelector('#__relai-modal-backdrop')`);
-
   await win.webContents.executeJavaScript(`(() => {
     document.getElementById('routeRoot').dataset.unsavedChanges = 'true';
     location.hash = '#tasks';
@@ -438,7 +429,7 @@ async function exerciseModalInteractions(win) {
     dirtyClosePrompted,
     dirtyCancelPreserved: editAfterDiscardCancel.title === 'Edit project' && editAfterDiscardCancel.alias === editedAlias,
     discardClosed: !await win.webContents.executeJavaScript(`Boolean(document.querySelector('#__relai-modal-backdrop'))`),
-    detailsDeleteCancelPreserved: /^Project details/.test(detailsAfterDeleteCancel),
+    editDetailsConsolidated,
     routeChangeCancelPreserved,
     routeChangeConfirmNavigated,
     sharedCloseVisible

@@ -103,7 +103,7 @@ try {
   assert.equal(result.modalInteractions.dirtyClosePrompted, true, JSON.stringify(result.modalInteractions));
   assert.equal(result.modalInteractions.dirtyCancelPreserved, true, JSON.stringify(result.modalInteractions));
   assert.equal(result.modalInteractions.discardClosed, true, JSON.stringify(result.modalInteractions));
-  assert.equal(result.modalInteractions.detailsDeleteCancelPreserved, true, JSON.stringify(result.modalInteractions));
+  assert.equal(result.modalInteractions.editDetailsConsolidated, true, JSON.stringify(result.modalInteractions));
   assert.equal(result.modalInteractions.routeChangeCancelPreserved, true, JSON.stringify(result.modalInteractions));
   assert.equal(result.modalInteractions.routeChangeConfirmNavigated, true, JSON.stringify(result.modalInteractions));
   assert.equal(result.modalInteractions.sharedCloseVisible, true, JSON.stringify(result.modalInteractions));

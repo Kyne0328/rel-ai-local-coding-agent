@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as crypto from "node:crypto";
-import { resolveSafePath, looksBinary } from "../safety.js";
+import { looksBinary } from "../safety.js";
+import { resolveWorkspaceSourcePath } from '../workspaceSources.js';
 import { clampNumber } from "./limits.js";
 import { rankMatchGroups } from "./searchPlanner.js";
 import * as sessionCache from "../sessionCache.js";
@@ -108,7 +109,7 @@ function groupMatchesByFile(matches) {
 
 async function readContextFile(workspace, group, options, byteBudget, workflowContext = {}) {
   try {
-    const safe = resolveSafePath(workspace.path, group.path, { operation: "read" });
+    const safe = resolveWorkspaceSourcePath(workspace, group.path, { operation: "read" });
     const stat = await fs.promises.stat(safe.absolutePath);
     if (!stat.isFile()) return { skipped: { path: group.path, reason: "not a file" } };
     const cached = sessionCache.getCachedReadEntry(workspace.alias, safe.absolutePath, stat.mtimeMs);

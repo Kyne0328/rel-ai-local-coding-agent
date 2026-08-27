@@ -52,6 +52,7 @@ assert.match(workspaceCss, /\.workspace-readiness\s*\{[^}]*min-w-0/s);
 assert.match(systemCss, /\.diagnostic-log-row\s*\{[^}]*min-width:\s*0/s);
 assert.match(systemCss, /\.diagnostic-log-row code\s*\{[^}]*max-width:/s);
 assert.match(appCss, /:root\[data-window-chrome="custom"\] \.toast-region\s*\{[^}]*top:/s, 'custom window chrome must offset notifications below the titlebar');
+assert.match(appCss, /:root\[data-window-chrome="custom"\] \.main\s*\{[^}]*padding-top:\s*0/s, 'custom window chrome must not leave a second top offset above sticky section headers');
 assert.match(appCss, new RegExp(`\\.mobile-nav\\s*\\{[^}]*grid-template-columns:\\s*repeat\\(${MOBILE_NAV_ITEMS.length},`, 's'), 'mobile navigation must allocate one column per destination');
 assert.doesNotMatch(appCss, /@media \(max-width: 420px\)[\s\S]{0,500}grid-template-columns:\s*repeat\(3/, 'small mobile layouts must not restore the two-row navigation');
 assert.match(filterCss, /\.filter-chip\s*\{[^}]*min-height:\s*44px/s, 'filter chips must meet the touch-target baseline');

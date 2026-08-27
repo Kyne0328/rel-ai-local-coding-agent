@@ -158,7 +158,7 @@ function processExecutionError(code, message, retryable = false) {
 }
 
 function powershellCommand(command) {
-  return `$global:LASTEXITCODE = $null; & { ${command}\n}; if ($null -ne $global:LASTEXITCODE) { exit $global:LASTEXITCODE }; if (-not $?) { exit 1 }`;
+  return `$global:LASTEXITCODE = $null; $ErrorActionPreference = 'Stop'; try { & { ${command}\n} } catch { [Console]::Error.WriteLine($_); exit 1 }; if ($null -ne $global:LASTEXITCODE) { exit $global:LASTEXITCODE }`;
 }
 
 function resolveShell() {

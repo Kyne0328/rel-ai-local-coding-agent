@@ -26,6 +26,8 @@ import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_I
 import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
 import { listManagedProcesses, managedProcessStateRevision, onManagedProcessChange } from '../processManager.js';
 import { readCachedStaticAsset } from './dashboardAssets.js';
+import { codeIntelligence } from '../codeIntelligence/service.js';
+import { repositoryIntelligence } from '../repository/intelligence/service.js';
 
 const DASHBOARD_SHARED_MODULES = Object.freeze({
   '/public/analyticsFailureCategory.js': Object.freeze(['src', 'analyticsFailureCategory.js']),
@@ -161,7 +163,18 @@ async function handleOnboardingComplete(ctx) {
 async function handleApiWorkspaces(ctx) {
   const current = readConfig();
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const action = String(payload.action || 'upsert').toLowerCase();
+  const originalAlias = String(payload.originalAlias || payload.workspaceConfig?.originalAlias || payload.alias || payload.workspace || '').trim();
+  const previousWorkspace = current.workspaces?.[originalAlias]
+    ? { alias: originalAlias, ...current.workspaces[originalAlias] }
+    : null;
   const result = configEditor.updateWorkspace(current, payload);
+  if (previousWorkspace && ['upsert', 'delete', 'clear'].includes(action)) {
+    await Promise.allSettled([
+      codeIntelligence.dispose(previousWorkspace),
+      repositoryIntelligence.dispose(previousWorkspace, current, { removeCache: action === 'delete' || action === 'clear' })
+    ]);
+  }
   await refreshMcpManifest('workspaces_changed');
   sendJson(ctx.res, 200, result);
 }

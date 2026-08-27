@@ -544,6 +544,7 @@ function sanitizeTaskRecord(record) {
   if (Array.isArray(value.events)) value.events = value.events.map(sanitizeActivityEventRecord).filter(Boolean);
   if (Array.isArray(value.currentOperations)) value.currentOperations = value.currentOperations.map(item => sanitizeStructuredValue(item, 0)).filter(Boolean);
   if (value.correlation && typeof value.correlation === 'object') value.correlation = sanitizeStructuredValue(value.correlation, 0);
+  if (value.backgroundOperation && typeof value.backgroundOperation === 'object') value.backgroundOperation = sanitizeStructuredValue(value.backgroundOperation, 0);
   return value;
 }
 
@@ -553,6 +554,10 @@ function sanitizeTaskRecordForProjection(record) {
   const projected = { ...value };
   delete projected.workflowEvidence;
   if (projected.workflow) projected.workflow = projectWorkflowSummary(projected.workflow);
+  if (projected.backgroundOperation && typeof projected.backgroundOperation === 'object') {
+    const { signature: _signature, ...backgroundOperation } = projected.backgroundOperation;
+    projected.backgroundOperation = backgroundOperation;
+  }
   return projected;
 }
 function sanitizeStructuredValue(value, depth = 0) {

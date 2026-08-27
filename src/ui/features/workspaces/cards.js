@@ -1,7 +1,7 @@
 import { pillHtml } from '../../components/pill.js';
 import { esc, metricHtml, statusClass } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
-import { workspaceDetailsHtml, branchSummary } from './details.js';
+import { branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
 import { hydrateWorkspaceAnalytics } from './analytics.js';
 
@@ -25,7 +25,7 @@ function buildWorkspaces(data, options = {}) {
   root.className = 'section';
   root.innerHTML = `
     <div class="feature-toolbar workspace-toolbar">
-      <p>See each project’s status and common actions. Open Project details when you need more technical information.</p>
+      <p>See each project’s status and common actions.</p>
       <div class="section-head-actions">
         ${workspaceFilter ? `<a class="buttonlike secondary compact-button workspace-focus-chip" href="#workspaces" aria-label="Clear selected project filter: ${esc(workspaceFilter)}" title="Show all projects"><span>${esc(workspaceFilter)}</span><span aria-hidden="true">×</span></a>` : ''}
         <span class="feature-count">${allWorkspaces.length} project${allWorkspaces.length === 1 ? '' : 's'}</span>
@@ -92,7 +92,6 @@ function workspaceCard(view) {
       ${workspaceActivityNotice(view)}
       <section class="workspace-analytics-mini" data-workspace-analytics="${view.aliasAttr}" aria-label="${view.aliasAttr} analytics" hidden></section>
       <footer class="workspace-actions workspace-primary-actions">${workspacePrimaryActions(view)}</footer>
-      ${workspaceDetailsHtml(view)}
     </article>`;
 }
 
@@ -174,14 +173,8 @@ function workspacePrimaryActions(view) {
     : '';
   return `
     ${openFolder}
-    <details class="workspace-action-menu">
-      <summary class="buttonlike secondary">More</summary>
-      <div class="workspace-action-menu-items">
-        <button type="button" data-edit-workspace="${view.aliasAttr}">Edit project</button>
-        <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Project details</button>
-        <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>
-      </div>
-    </details>`;
+    <button type="button" data-edit-workspace="${view.aliasAttr}">Edit project</button>
+    <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>`;
 }
 
 function healthFindingsCard(findings) {

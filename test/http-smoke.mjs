@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
+import { repositoryIndexPath } from '../src/repository/intelligence/database.js';
 import { readTaskHistorySessionRecord } from '../src/taskHistoryStore.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
 import { activeMcpToolCount, activeToolCount, activeToolNames, activeToolSurface } from './helpers/tool-surface.mjs';
@@ -258,6 +259,18 @@ try {
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10`, { headers: dashboardHeaders }).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.equal(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
+
+  const secondaryIndexDirectory = path.dirname(repositoryIndexPath({ stateDir }, { alias: 'secondary', path: secondaryPath }));
+  fs.mkdirSync(secondaryIndexDirectory, { recursive: true });
+  fs.writeFileSync(path.join(secondaryIndexDirectory, 'stale-cache-marker'), 'delete me\n');
+  const workspaceDelete = await fetch(`${base}/api/workspaces`, {
+    method: 'POST',
+    headers: { ...dashboardHeaders, 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', alias: 'secondary', confirmDelete: true })
+  }).then(response => response.json());
+  assert.equal(workspaceDelete.ok, true);
+  assert.equal(fs.existsSync(secondaryIndexDirectory), false,
+    'deleting a project must remove its Repository Intelligence cache immediately');
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));

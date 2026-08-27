@@ -56,6 +56,7 @@ function queryWorkerClient(key) {
         signal?.addEventListener?.('abort', entry.onAbort, { once: true });
         queue.push(entry);
         pump();
+        warmIdleReaders(job);
       });
     },
     terminate(reason = new Error('Repository Intelligence query worker pool terminated.')) {
@@ -80,10 +81,21 @@ function queryWorkerClient(key) {
     const worker = new Worker(new URL('./queryWorker.js', import.meta.url));
     worker.unref();
     worker.on('message', message => {
-      if (slot.worker !== worker || message?.type !== 'result' || !slot.active || message.jobId !== slot.active.jobId) return;
+      if (slot.worker !== worker) return;
+      if (message?.type === 'warmed' && slot.warming && message.jobId === slot.warmJobId) {
+        slot.warming = false;
+        slot.warmJobId = '';
+        if (message.ok) slot.warmIdentity = slot.pendingWarmIdentity;
+        slot.pendingWarmIdentity = '';
+        worker.unref();
+        pump();
+        return;
+      }
+      if (message?.type !== 'result' || !slot.active || message.jobId !== slot.active.jobId) return;
       const completed = slot.active;
       slot.active = null;
       completed.slot = null;
+      slot.warmIdentity = queryJobIdentity(completed.job);
       if (message.ok) settle(completed, 'resolve', message.result);
       else settle(completed, 'reject', workerError(message.error));
       worker.unref();
@@ -107,6 +119,10 @@ function queryWorkerClient(key) {
       settle(active, 'reject', reason);
     }
     slot.worker = null;
+    slot.warming = false;
+    slot.warmJobId = '';
+    slot.warmIdentity = '';
+    slot.pendingWarmIdentity = '';
     disposeWorker(worker);
     pump();
   }
@@ -115,9 +131,9 @@ function queryWorkerClient(key) {
     if (client.closed) return;
     clearIdleTimer();
     while (queue.length) {
-      let slot = slots.find(item => !item.active && item.worker);
+      let slot = slots.find(item => !item.active && !item.warming && item.worker);
       if (!slot) {
-        slot = slots.find(item => !item.active && !item.worker);
+        slot = slots.find(item => !item.active && !item.warming && !item.worker);
         if (slot) slot.worker = createWorker(slot);
       }
       if (!slot) break;
@@ -135,7 +151,25 @@ function queryWorkerClient(key) {
         replaceWorker(slot, slot.worker, error);
       }
     }
-    if (!queue.length && slots.every(slot => !slot.active)) scheduleIdleTimer();
+    if (!queue.length && slots.every(slot => !slot.active && !slot.warming)) scheduleIdleTimer();
+  }
+
+  function warmIdleReaders(job) {
+    const identity = queryJobIdentity(job);
+    if (!identity) return;
+    for (const slot of slots) {
+      if (slot.active || slot.warming || slot.warmIdentity === identity) continue;
+      if (!slot.worker) slot.worker = createWorker(slot);
+      slot.warming = true;
+      slot.pendingWarmIdentity = identity;
+      slot.warmJobId = `warm-${nextJobId++}`;
+      slot.worker.ref();
+      try {
+        slot.worker.postMessage({ type: 'warm', jobId: slot.warmJobId, job });
+      } catch (error) {
+        replaceWorker(slot, slot.worker, error);
+      }
+    }
   }
 
   function cancelEntry(entry, reason) {
@@ -171,7 +205,7 @@ function queryWorkerClient(key) {
 
   function scheduleIdleTimer() {
     clearIdleTimer();
-    if (client.closed || queue.length || slots.some(slot => slot.active)) return;
+    if (client.closed || queue.length || slots.some(slot => slot.active || slot.warming)) return;
     for (const slot of slots) slot.worker?.unref();
     idleTimer = setTimeout(
       () => client.terminate(new Error('Repository Intelligence query worker pool idle timeout reached.')),
@@ -181,12 +215,18 @@ function queryWorkerClient(key) {
   }
 
   for (let index = 0; index < QUERY_WORKER_COUNT; index += 1) {
-    slots.push({ index, worker: null, active: null });
+    slots.push({ index, worker: null, active: null, warming: false, warmJobId: '', warmIdentity: '', pendingWarmIdentity: '' });
   }
 
   clients.set(key, client);
   scheduleIdleTimer();
   return client;
+}
+
+function queryJobIdentity(job = {}) {
+  const root = String(job.workspace?.path || '');
+  const fingerprint = String(job.index?.fingerprint || '');
+  return root && fingerprint ? `${root}\0${fingerprint}` : '';
 }
 
 function disposeWorker(worker) {
@@ -266,6 +306,14 @@ function queryAbortError(reason) {
   return error;
 }
 
+async function disposeRepositoryQueryWorker(workspace, config = {}) {
+  const key = repositoryIndexPath(config, workspace);
+  const client = clients.get(key);
+  if (!client) return false;
+  await client.terminate(new Error('Repository Intelligence workspace detached.'));
+  return true;
+}
+
 function shutdownRepositoryQueryWorkers() {
   const terminations = [...clients.values()].map(client =>
     client.terminate(new Error('Repository Intelligence is shutting down.')));
@@ -273,4 +321,4 @@ function shutdownRepositoryQueryWorkers() {
   return Promise.allSettled(terminations);
 }
 
-export { QUERY_WORKER_COUNT, QUERY_WORKER_IDLE_EVICT_MS, runRepositoryQuery, shutdownRepositoryQueryWorkers };
+export { QUERY_WORKER_COUNT, QUERY_WORKER_IDLE_EVICT_MS, disposeRepositoryQueryWorker, runRepositoryQuery, shutdownRepositoryQueryWorkers };

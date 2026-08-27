@@ -11,6 +11,7 @@ import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { compactBatchResult, enforceBatchBudgets, resolveBatchLimit, resolveQueryTerms, runQueryBatch, splitBatchLimit, summarizeBatchResults } from './queryBatch.js';
+import { qualifyWorkspaceSourcePath, sourceWorkspace, workspaceSourceEntries } from '../workspaceSources.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 25_000;
@@ -30,16 +31,7 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
   const glob = String(args.glob || "").trim();
   if (glob) gitArgs.push("--", glob);
 
-  const result = await runGitGrep(workspace, gitArgs, maxResults, context.signal);
-  // Exit 1 means "no matches" — a valid empty result. Anything else is a failure.
-  if (result.exitCode !== 0 && result.exitCode !== 1) {
-    const stderr = String(result.stderr || result.error || "");
-    if (/not a git repository/i.test(stderr)) {
-      Object.assign(result, runFilesystemSearch(workspace, args, maxResults, context.signal));
-    } else {
-      throw new Error(`relai_search failed: ${stderr || `git grep exited ${result.exitCode}`}`);
-    }
-  }
+  const result = await runWorkspaceSearch(workspace, gitArgs, args, maxResults, context.signal);
 
   const baseResult = {
     ok: true,
@@ -96,6 +88,52 @@ async function relaiSearchOne(workspace, config, args = {}, context = {}) {
   };
 }
 
+async function runWorkspaceSearch(workspace, gitArgs, args, maxResults, signal) {
+  const sources = workspaceSourceEntries(workspace);
+  const matches = [];
+  let matchCount = 0;
+  let truncated = false;
+  let timedOut = false;
+  let stderr = '';
+
+  for (const source of sources) {
+    if (signal?.aborted) throw searchAbortError(signal);
+    const scoped = sourceWorkspace(workspace, source);
+    const remaining = Math.max(1, maxResults - matches.length + 1);
+    let result = await runGitGrep(scoped, gitArgs, remaining, signal);
+    if (result.exitCode !== 0 && result.exitCode !== 1) {
+      const failure = String(result.stderr || result.error || '');
+      if (/not a git repository/i.test(failure)) {
+        result = runFilesystemSearch(scoped, args, remaining, signal);
+      } else {
+        throw new Error(`relai_search failed in source folder ${source.number}: ${failure || `git grep exited ${result.exitCode}`}`);
+      }
+    }
+
+    matchCount += Number(result.matchCount || 0);
+    truncated ||= result.truncated === true;
+    timedOut ||= result.timedOut === true;
+    if (result.stderr) stderr = appendLimited(stderr, `${stderr ? '\n' : ''}${result.stderr}`, MAX_STDERR_BYTES);
+    for (const match of result.matches || []) {
+      if (matches.length >= maxResults) {
+        truncated = true;
+        break;
+      }
+      matches.push({ ...match, path: qualifyWorkspaceSourcePath(source, match.path) });
+    }
+    if (matchCount > matches.length) truncated = true;
+  }
+
+  return {
+    exitCode: matches.length ? 0 : 1,
+    matches,
+    matchCount,
+    truncated,
+    timedOut,
+    stderr: stderr.trim()
+  };
+}
+
 function runFilesystemSearch(workspace, args, maxResults, signal) {
   if (signal?.aborted) throw searchAbortError(signal);
   const pattern = String(args.pattern || '');
@@ -138,6 +176,7 @@ function runFilesystemSearch(workspace, args, maxResults, signal) {
 }
 
 function shouldUseGraphContext(searchPlan, workspace, config) {
+  if (workspaceSourceEntries(workspace).length > 1) return false;
   if (searchPlan.requestedMode !== 'auto' || searchPlan.autoTier === 'focused') return false;
   try {
     const status = repositoryIntelligence.status(workspace, config);

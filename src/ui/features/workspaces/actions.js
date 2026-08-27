@@ -6,7 +6,7 @@ import { runButtonAction } from '../../action-state.js';
 import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../../router.js';
 import { recordRecentWorkspace, removeRecentWorkspace } from './recents.js';
 import { confirmAction } from '../../components/confirm-dialog.js';
-import { closeModal, openModal } from '../../components/modal.js';
+import { closeModal } from '../../components/modal.js';
 
 const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-add-workspace]', handler: () => openWorkspaceForm({ mode: 'add' }) },
@@ -15,7 +15,6 @@ const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-open-recent-workspace]', handler: openRecentWorkspace },
   { selector: '[data-finding-remove]', handler: trigger => removeWorkspaceFlow(trigger.dataset.findingRemove || '') },
   { selector: '[data-clear-workspace]', handler: removeWorkspaceFromTrigger },
-  { selector: '[data-repository-details]', handler: openRepositoryDetails },
   { selector: '[data-open-folder]', handler: openFolderFromTrigger }
 ];
 
@@ -56,17 +55,6 @@ function openRecentWorkspace(trigger) {
   if (!alias) return;
   recordRecentWorkspace(alias);
   navigate('workspaces', { workspace: alias, focus: '1' });
-}
-
-function openRepositoryDetails(trigger) {
-  const alias = trigger.dataset.repositoryDetails || '';
-  if (alias) recordRecentWorkspace(alias);
-  const card = trigger.closest?.('[data-workspace-card]');
-  const source = card?.querySelector?.('.workspace-details-body');
-  if (!source) return;
-  const content = source.cloneNode(true);
-  for (const link of content.querySelectorAll('a[href^="#"]')) link.addEventListener('click', closeModal);
-  openModal({ title: alias ? `Project details · ${alias}` : 'Project details', content, size: 'standard' });
 }
 
 async function openFolderFromTrigger(trigger) {

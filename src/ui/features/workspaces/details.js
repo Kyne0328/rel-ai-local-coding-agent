@@ -1,27 +1,8 @@
 import { esc, timeAgo } from '../../utils.js';
-import { routeHref } from '../../router.js';
 import { workSessionStateView } from '../../task-identity.js';
 
-function workspaceDetailsHtml(view) {
-  return `<div class="workspace-details" hidden>
-    <div class="workspace-details-body">
-      ${workspaceOperationalHtml(view)}
-      <footer class="workspace-details-footer modal-footer">
-        <div class="modal-danger-zone">
-          <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Delete from Rel.AI</button>
-          <span>Removes Rel.AI access only. Files stay on your computer.</span>
-        </div>
-        <div class="modal-actions">
-          <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">View tasks</a>
-          <a class="buttonlike secondary" href="${routeHref('activity', { workspace: view.alias })}">View activity</a>
-        </div>
-      </footer>
-    </div>
-  </div>`;
-}
-
 function workspaceOperationalHtml(view) {
-  const state = view.operational;
+  const state = view?.operational || {};
   const validation = state.lastValidation
     ? `${state.lastValidation.status} · ${timeAgo(state.lastValidation.completedAt)}`
     : 'Not run yet';
@@ -56,4 +37,4 @@ function branchSummary(operational) {
   return `${operational.branch} · ↑${Number(operational.ahead || 0)} ↓${Number(operational.behind || 0)}`;
 }
 
-export { workspaceDetailsHtml, branchSummary };
+export { workspaceOperationalHtml, branchSummary };

@@ -50,7 +50,7 @@
 .workspace-card-focused { outline: 2px solid var(--ui-action-primary); outline-offset: 3px; }
 
 .ws-project-form { @apply gap-3; }
-.ws-project-name-section, .ws-source-section { @apply grid gap-2; }
+.ws-project-name-section, .ws-source-section, .ws-project-details-section { @apply grid gap-2; }
 .ws-form-label, .ws-source-heading { @apply block text-[12px] font-semibold; color: var(--ui-text-primary); }
 .ws-project-name-field { @apply flex min-h-10 items-center overflow-hidden rounded-xl; border: 1px solid var(--ui-border-control); background: var(--ui-surface-primary); }
 .ws-project-name-field:focus-within { border-color: var(--ui-action-primary); box-shadow: 0 0 0 1px var(--ui-action-primary); }
@@ -84,7 +84,7 @@ textarea.ws-form-path { @apply min-h-24 resize-y; }
 .ws-form-status.warn { color: var(--ui-status-warning-foreground); }
 .ws-form-status.error { color: var(--ui-status-danger-foreground); }
 .ws-form-conflict { @apply rounded-lg px-3 py-2 text-[12px] leading-5; background: var(--ui-status-danger-background); border: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 38%, transparent); color: var(--ui-status-danger-foreground); }
-.workspace-details-footer { @apply mt-0; }
+.ws-project-details-box { @apply overflow-hidden rounded-xl; border: 1px solid var(--ui-border-default); background: var(--ui-surface-primary); }
 .workspace-repair-copy { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
 .workspace-repair-identity { @apply grid gap-1 rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
 .workspace-repair-identity span { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }

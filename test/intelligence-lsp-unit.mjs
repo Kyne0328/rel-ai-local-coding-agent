@@ -9,7 +9,8 @@ import { planEdit } from '../src/executionPlanner.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-lsp-intelligence-'));
-const workspace = { alias: 'lsp-fixture', path: root, sourcePaths: [root], context: {} };
+const secondary = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-lsp-secondary-'));
+const workspace = { alias: 'lsp-fixture', path: root, sourcePaths: [root, secondary], context: {} };
 const config = { stateDir: path.join(root, '.state'), workspaces: { 'lsp-fixture': workspace } };
 
 try {
@@ -66,13 +67,40 @@ try {
   assert.equal(pythonDefinition.intelligence.primary, 'pyright');
   assert.ok(pythonDefinition.definitions.some(item => item.path === 'src/calc_mod.py'));
 
-  const servers = new Map(codeIntelligence.status(workspace).map(item => [item.id, item]));
-  assert.equal(servers.get('typescript-language-server')?.available, true);
-  assert.equal(servers.get('pyright')?.available, true);
+  fs.mkdirSync(path.join(secondary, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(secondary, 'package.json'), JSON.stringify({ name: 'lsp-secondary', private: true, type: 'module' }, null, 2));
+  fs.writeFileSync(path.join(secondary, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true },
+    include: ['src/**/*.ts']
+  }, null, 2));
+  fs.writeFileSync(path.join(secondary, 'src', 'math.ts'), 'export function subtract(left: number, right: number): number {\n  return left - right;\n}\n');
+  fs.writeFileSync(path.join(secondary, 'src', 'use.ts'), "import { subtract } from './math.js';\nexport const difference = subtract(3, 1);\n");
+
+  const secondaryDefinition = await relaiCodeInspect(workspace, config, {
+    action: 'definition', path: 'source:2/src/use.ts', line: 2, column: 29, maxResults: 20
+  });
+  assert.equal(secondaryDefinition.ok, true);
+  assert.equal(secondaryDefinition.intelligence.primary, 'typescript-language-server');
+  assert.ok(secondaryDefinition.definitions.length > 0);
+  assert.ok(secondaryDefinition.definitions.every(item => item.path.startsWith('source:2/')),
+    'language-server locations from secondary roots must keep their virtual source identity');
+  await assert.rejects(
+    () => planEdit(workspace, config, {
+      semantic: { action: 'rename', path: 'source:2/src/math.ts', line: 1, column: 17, newName: 'differenceOf' }
+    }),
+    /secondary source folders are read-only context/i,
+    'semantic mutations must remain primary-repository-only'
+  );
+
+  const servers = new Map(codeIntelligence.status(workspace).map(item => [`${item.source || 1}:${item.id}`, item]));
+  assert.equal(servers.get('1:typescript-language-server')?.available, true);
+  assert.equal(servers.get('1:pyright')?.available, true);
+  assert.equal(servers.get('2:typescript-language-server')?.available, true);
 
   console.log('Hybrid LSP intelligence and Rel.AI-controlled semantic rename passed.');
 } finally {
   await codeIntelligence.shutdown().catch(() => {});
   await repositoryIntelligence.shutdown().catch(() => {});
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  fs.rmSync(secondary, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
