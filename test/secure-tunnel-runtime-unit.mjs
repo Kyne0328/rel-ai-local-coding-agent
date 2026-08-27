@@ -151,6 +151,21 @@ try {
   assert.equal(revokedRuntime.snapshot().errorCode, 'tunnel_authentication_failed');
   assert.equal(revokedStopped, true, 'a runtime key rejected after startup must stop the tunnel child instead of degrading forever');
 
+  const unavailableRuntime = createSecureTunnelRuntime({
+    spawnImpl: fakeSpawn,
+    fetchImpl: fetchTunnel,
+    stopProcess: async () => ({ exited: true, forced: false }),
+    resolveExecutable: () => '',
+    makeEnvironment: makeTunnelProcessEnvironment,
+    stateDir
+  });
+  await assert.rejects(
+    () => unavailableRuntime.start({ tunnelId: 'tunnel_example123456', port: 3333, localToken: 'local-secret', apiKey: 'sk-runtime-missing-client-123456', timeoutMs: 1000 }),
+    error => error.code === 'tunnel_runtime_unavailable'
+  );
+  assert.equal(unavailableRuntime.snapshot().state, 'failed');
+  assert.equal(unavailableRuntime.snapshot().errorCode, 'tunnel_runtime_unavailable', 'missing local tunnel runtime must be terminal instead of entering automatic reconnect');
+
   console.log('secure-tunnel-runtime-unit: ok');
 } finally {
   fs.rmSync(stateDir, { recursive: true, force: true });

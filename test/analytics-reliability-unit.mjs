@@ -123,8 +123,39 @@ try {
   for (const secret of ['spawn EINVAL', 'Operation cancelled.', 'found 2 matches']) {
     assert.equal(persisted.includes(secret), false, `reliability classification must not persist raw error text: ${secret}`);
   }
+
+  const blockedStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-reliability-blocked-'));
+  try {
+    fs.writeFileSync(path.join(blockedStateDir, 'analytics'), 'blocked');
+    const blockedConfig = { stateDir: blockedStateDir };
+    recordLocalToolOutcome(blockedConfig, {
+      tool: 'relai_read', workspace: 'repo', ok: true, durationMs: 1, at: '2026-08-15T02:45:00Z'
+    });
+    const blockedFlush = await withTimeout(
+      flushLocalAnalytics(blockedConfig),
+      2000,
+      'analytics flush did not return after a permanent persistence failure'
+    );
+    assert.deepEqual(blockedFlush, { ok: false, failed: 1, pending: 1 }, 'shutdown analytics flush must report permanent storage failure instead of retrying forever');
+  } finally {
+    fs.rmSync(blockedStateDir, { recursive: true, force: true });
+  }
 } finally {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
 console.log('Analytics reliability classification tests passed.');
+
+async function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}

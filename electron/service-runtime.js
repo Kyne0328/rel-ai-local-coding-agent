@@ -358,6 +358,7 @@ function tunnelErrorCode(error, errorCodes) {
   if (code === 'tunnel_access_denied') return errorCodes.TUNNEL_ACCESS_DENIED || code;
   if (code === 'tunnel_not_found') return errorCodes.TUNNEL_NOT_FOUND || code;
   if (code === 'tunnel_connection_interrupted') return errorCodes.TUNNEL_CONNECTION_INTERRUPTED || code;
+  if (code === 'tunnel_runtime_unavailable') return errorCodes.TUNNEL_RUNTIME_UNAVAILABLE || code;
   return errorCodes.SECURE_TUNNEL_FAILED;
 }
 
@@ -365,9 +366,11 @@ function isTerminalTunnelCode(code, errorCodes) {
   return code === errorCodes.TUNNEL_AUTHENTICATION_FAILED
     || code === errorCodes.TUNNEL_ACCESS_DENIED
     || code === errorCodes.TUNNEL_NOT_FOUND
+    || code === errorCodes.TUNNEL_RUNTIME_UNAVAILABLE
     || code === 'tunnel_authentication_failed'
     || code === 'tunnel_access_denied'
-    || code === 'tunnel_not_found';
+    || code === 'tunnel_not_found'
+    || code === 'tunnel_runtime_unavailable';
 }
 
 function deferred() {

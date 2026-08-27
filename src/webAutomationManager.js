@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
-import { taskError } from './toolActivity.js';
+import { onToolActivity, taskError } from './toolActivity.js';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
@@ -13,7 +13,15 @@ const MAX_SNAPSHOT_CHARS = 64 * 1024;
 const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const UI_SESSION_ID = /^ui_[A-Za-z0-9_-]{20,160}$/;
+const TERMINAL_TASK_PHASES = new Set(['completed', 'cancelled', 'inactive']);
 const sessions = new Map();
+const pendingSessionCloses = new Set();
+
+onToolActivity(activity => {
+  if (!TERMINAL_TASK_PHASES.has(String(activity?.phase || ''))) return;
+  const taskId = String(activity?.taskId || activity?.task?.taskId || activity?.task?.id || '').trim();
+  if (taskId) void stopUiSessionsForTask(taskId);
+});
 
 async function runUiAction(workspace, _config, args = {}, context = {}) {
   const action = String(args.action || '').trim();
@@ -244,14 +252,39 @@ async function stopUiSession(workspace, args = {}, context = {}) {
   };
 }
 
+async function stopUiSessionsForTask(taskId) {
+  const id = String(taskId || '').trim();
+  if (!id) return { stopped: 0 };
+  const records = [...sessions.values()].filter(record => record.taskId === id);
+  for (const record of records) sessions.delete(record.sessionId);
+  await trackUiRecordClose(records);
+  return { stopped: records.length };
+}
+
 async function stopAllUiSessions() {
   const records = [...sessions.values()];
   sessions.clear();
+  const closing = trackUiRecordClose(records);
+  await Promise.allSettled([closing, ...pendingSessionCloses]);
+  return { stopped: records.length };
+}
+
+async function trackUiRecordClose(records) {
+  if (!records.length) return;
+  const closing = closeUiRecords(records);
+  pendingSessionCloses.add(closing);
+  try {
+    await closing;
+  } finally {
+    pendingSessionCloses.delete(closing);
+  }
+}
+
+async function closeUiRecords(records) {
   await Promise.allSettled(records.map(async record => {
     await record.browserContext?.close().catch(() => {});
     await record.browser?.close().catch(() => {});
   }));
-  return { stopped: records.length };
 }
 
 function withSession(workspace, args, context, callback) {

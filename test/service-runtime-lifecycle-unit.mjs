@@ -80,7 +80,8 @@ try {
       CONFIGURATION_INVALID: 'configuration_invalid',
       LOCAL_PORT_IN_USE: 'local_port_in_use',
       LOCAL_SERVICE_START_FAILED: 'local_service_start_failed',
-      SECURE_TUNNEL_FAILED: 'secure_tunnel_failed'
+      SECURE_TUNNEL_FAILED: 'secure_tunnel_failed',
+      TUNNEL_RUNTIME_UNAVAILABLE: 'tunnel_runtime_unavailable'
     },
     getCurrentStatus: () => currentStatus,
     setStatus: next => { currentStatus = { ...currentStatus, ...next }; },
@@ -120,6 +121,55 @@ try {
   await racingStop;
   await racingStart;
   assert.equal(localStartCalls, 2, 'the deferred start must run after shutdown completes');
+
+  let terminalStatus = { serverRunning: false, tunnelStatus: 'stopped' };
+  let terminalListening = false;
+  const terminalRuntime = createDesktopServiceRuntime({
+    app: { getVersion: () => '0.26.0' },
+    connection: {
+      generateToken: () => 'generated-token',
+      writeLaunchEnv() {},
+      writeConnectionProfile() {}
+    },
+    configModule: {
+      ensureConfig() {},
+      getConfigPath: () => configPath
+    },
+    serviceProcessClient: {
+      isListening: () => terminalListening,
+      updateContext() {},
+      async start() { terminalListening = true; return { ok: true, port: 4777 }; },
+      async stop() { terminalListening = false; return { ok: true, cleanup: { clean: true } }; },
+      async dispose() {}
+    },
+    dashboardWindowManager: { async close() {} },
+    runtimeLogs: { snapshot: () => ({ available: true, revision: 0, count: 0, entries: [] }) },
+    fetchImpl: async url => ({ ok: url.endsWith('/health'), status: url.endsWith('/mcp') ? 405 : 200 }),
+    secureTunnelRuntime: {
+      snapshot: () => ({ state: terminalStatus.tunnelStatus || 'stopped', processOwned: false }),
+      async start() {
+        const error = new Error('Bundled tunnel-client is unavailable.');
+        error.code = 'tunnel_runtime_unavailable';
+        throw error;
+      },
+      async stop() { return { stopped: true, exited: true }; }
+    },
+    tunnelCredentials: { getApiKey: () => 'test-api-key' },
+    errorCodes: {
+      CONFIGURATION_INVALID: 'configuration_invalid',
+      LOCAL_PORT_IN_USE: 'local_port_in_use',
+      LOCAL_SERVICE_START_FAILED: 'local_service_start_failed',
+      SECURE_TUNNEL_FAILED: 'secure_tunnel_failed',
+      TUNNEL_RUNTIME_UNAVAILABLE: 'tunnel_runtime_unavailable'
+    },
+    getCurrentStatus: () => terminalStatus,
+    setStatus: next => { terminalStatus = { ...terminalStatus, ...next }; },
+    replaceCurrentStatus: next => { terminalStatus = next; },
+    pushStatus() {}
+  });
+  const terminalFailure = await terminalRuntime.startServer();
+  assert.equal(terminalFailure.tunnelStatus, 'failed');
+  assert.equal(terminalFailure.errorCode, 'tunnel_runtime_unavailable', 'permanent local tunnel runtime failures must remain terminal through the desktop service layer');
 } finally {
   if (previousState === undefined) delete process.env.REL_AI_MCP_STATE_DIR; else process.env.REL_AI_MCP_STATE_DIR = previousState;
   if (previousConfig === undefined) delete process.env.REL_AI_MCP_CONFIG; else process.env.REL_AI_MCP_CONFIG = previousConfig;

@@ -16,6 +16,7 @@ const ERROR_CODES = Object.freeze({
   LOCAL_SERVICE_STOP_FAILED: 'local_service_stop_failed',
   LOCAL_PORT_IN_USE: 'local_port_in_use',
   SECURE_TUNNEL_FAILED: 'secure_tunnel_failed',
+  TUNNEL_RUNTIME_UNAVAILABLE: 'tunnel_runtime_unavailable',
   TUNNEL_AUTHENTICATION_FAILED: 'tunnel_authentication_failed',
   TUNNEL_ACCESS_DENIED: 'tunnel_access_denied',
   TUNNEL_NOT_FOUND: 'tunnel_not_found',

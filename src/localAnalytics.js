@@ -210,15 +210,20 @@ function scheduleDocumentWrite(config, document) {
 }
 
 async function flushDocumentWrite(file, state) {
-  if (!state || state.writing || state.persistedVersion >= state.version) return state?.promise || Promise.resolve();
+  if (!state || state.persistedVersion >= state.version) return true;
+  if (state.writing) return state.promise;
   state.writing = true;
   const version = state.version;
   const document = state.document;
   let succeeded = false;
   state.promise = writeTextAtomicAsync(file, `${JSON.stringify(document)}\n`, { mode: 0o600, durable: false })
-    .then(() => { succeeded = true; })
+    .then(() => {
+      succeeded = true;
+      return true;
+    })
     .catch(error => {
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred local analytics write:', error);
+      return false;
     })
     .finally(() => {
       state.writing = false;
@@ -241,15 +246,24 @@ async function flushDocumentWrite(file, state) {
 async function flushLocalAnalytics(config = null) {
   const prefix = config ? `${statePath(config, 'analytics', 'local')}${path.sep}` : '';
   const entries = [...writeStates.entries()].filter(([file]) => !prefix || file.startsWith(prefix));
+  let failed = 0;
   for (const [file, state] of entries) {
     while (state.persistedVersion < state.version) {
       if (state.timer) {
         clearTimeout(state.timer);
         state.timer = null;
       }
-      await flushDocumentWrite(file, state);
+      const persistedBefore = state.persistedVersion;
+      const succeeded = await flushDocumentWrite(file, state);
+      if (!succeeded) {
+        failed += 1;
+        break;
+      }
+      if (state.persistedVersion <= persistedBefore) break;
     }
   }
+  const pending = entries.filter(([, state]) => state.persistedVersion < state.version).length;
+  return { ok: failed === 0 && pending === 0, failed, pending };
 }
 
 function analyticsPath(config, month) {

@@ -172,6 +172,32 @@ try {
   assert.ok(taskHistoryPersistenceSnapshot().lastError);
   clearTaskHistory(failureConfig);
   assert.equal(taskHistoryPersistenceSnapshot().healthy, true, 'clearing the failed history should clear its persistence warning');
+
+  const stormState = path.join(sandbox, 'persistence-storm');
+  const stormConfig = { stateDir: stormState, auditLogPath: path.join(stormState, 'audit.jsonl') };
+  recordTaskActivityEvent(stormConfig, {
+    taskId: 'storm-seed',
+    task: { ...baseTask, id: 'storm-seed', taskId: 'storm-seed', sessionId: 'storm-seed' }
+  });
+  const stormDirectory = path.join(stormState, 'sessions');
+  fs.rmSync(stormDirectory, { recursive: true, force: true });
+  fs.writeFileSync(stormDirectory, 'blocked');
+  for (let index = 0; index < 50; index += 1) {
+    const taskId = `storm-${index}`;
+    recordTaskActivityEvent(stormConfig, {
+      taskId,
+      task: { ...baseTask, id: taskId, taskId, sessionId: taskId, updatedAt: '2026-07-28T10:03:00.000Z' }
+    }, { defer: true });
+  }
+  assert.equal(taskHistoryPersistenceSnapshot().pending, 50);
+  assert.equal(taskHistoryPersistenceSnapshot().scheduledFlushes, 1, 'many pending sessions in one state directory must share one persistence timer');
+  const stormFlush = await flushTaskHistoryPersistence();
+  assert.equal(stormFlush.ok, false);
+  assert.equal(stormFlush.failed, 1, 'a broken shared history directory must fail once per explicit flush instead of once per pending session');
+  assert.equal(stormFlush.pending, 50);
+  assert.equal(taskHistoryPersistenceSnapshot().scheduledFlushes, 1, 'failed shared storage must retain only one backoff retry timer');
+  clearTaskHistory(stormConfig);
+  assert.equal(taskHistoryPersistenceSnapshot().scheduledFlushes, 0);
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

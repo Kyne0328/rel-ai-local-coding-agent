@@ -14,6 +14,7 @@ const TASK_HISTORY_PRUNE_DELAY_MS = 1500;
 const TASK_HISTORY_RETRY_BASE_MS = 1000;
 const TASK_HISTORY_RETRY_MAX_MS = 15_000;
 const pendingSessions = new Map();
+const pendingFlushTimers = new Map();
 const pendingPrunes = new Map();
 const volatileWorkflowEvidence = new Map();
 const MAX_VOLATILE_TASKS = 200;
@@ -262,9 +263,8 @@ function isStoredSessionNoise(session, activeIds, timestamp = Date.now()) {
 
 function discardStoredSession(directory, id) {
   const key = pendingSessionKey(directory, id);
-  const pending = pendingSessions.get(key);
-  if (pending?.timer) clearTimeout(pending.timer);
   pendingSessions.delete(key);
+  if (!pendingSessionEntriesForDirectory(directory).length) clearPendingDirectoryFlush(directory);
   removeSession(directory, id);
 }
 
@@ -370,10 +370,13 @@ function readWorkingSession(directory, id) {
   return readPendingSession(directory, id) || readSession(directory, id);
 }
 
-function pendingSessionsForDirectory(directory) {
+function pendingSessionEntriesForDirectory(directory) {
   const prefix = `${directory}\u0000`;
-  return [...pendingSessions.entries()]
-    .filter(([key]) => key.startsWith(prefix))
+  return [...pendingSessions.entries()].filter(([key]) => key.startsWith(prefix));
+}
+
+function pendingSessionsForDirectory(directory) {
+  return pendingSessionEntriesForDirectory(directory)
     .map(([, entry]) => entry.session)
     .filter(Boolean);
 }
@@ -383,13 +386,14 @@ function persistSession(directory, session, options = {}) {
   const key = pendingSessionKey(directory, session.id);
   if (options.defer !== true) {
     const pending = pendingSessions.get(key);
-    if (pending?.timer) clearTimeout(pending.timer);
     if (pending?.writing) {
       pending.session = session;
       pending.version += 1;
+      schedulePendingDirectoryFlush(directory, 0);
       return;
     }
     pendingSessions.delete(key);
+    if (!pendingSessionEntriesForDirectory(directory).length) clearPendingDirectoryFlush(directory);
     try {
       writeSession(directory, session);
       recordTaskHistoryPersistenceSuccess();
@@ -403,21 +407,42 @@ function persistSession(directory, session, options = {}) {
 
   let pending = pendingSessions.get(key);
   if (!pending) {
-    pending = { directory, session, timer: null, writing: false, version: 0, persistedVersion: 0, retryCount: 0, promise: Promise.resolve(true) };
+    pending = { directory, session, writing: false, version: 0, persistedVersion: 0, retryCount: 0, promise: Promise.resolve(true) };
     pendingSessions.set(key, pending);
   }
   pending.session = session;
   pending.version += 1;
-  schedulePendingSessionFlush(key, pending);
+  schedulePendingDirectoryFlush(directory);
 }
 
-function schedulePendingSessionFlush(key, pending, delay = TASK_HISTORY_FLUSH_MS) {
-  if (pending.timer || pending.writing) return;
-  pending.timer = setTimeout(() => {
-    pending.timer = null;
-    void flushPendingSession(key, pending);
+function schedulePendingDirectoryFlush(directory, delay = TASK_HISTORY_FLUSH_MS) {
+  if (pendingFlushTimers.has(directory)) return;
+  const timer = setTimeout(() => {
+    pendingFlushTimers.delete(directory);
+    void flushPendingDirectory(directory);
   }, delay);
-  pending.timer.unref?.();
+  timer.unref?.();
+  pendingFlushTimers.set(directory, timer);
+}
+
+function clearPendingDirectoryFlush(directory) {
+  const timer = pendingFlushTimers.get(directory);
+  if (!timer) return;
+  clearTimeout(timer);
+  pendingFlushTimers.delete(directory);
+}
+
+async function flushPendingDirectory(directory) {
+  for (const [key, pending] of pendingSessionEntriesForDirectory(directory)) {
+    const succeeded = await flushPendingSession(key, pending);
+    if (!succeeded) {
+      const retryDelay = Math.min(TASK_HISTORY_RETRY_MAX_MS, TASK_HISTORY_RETRY_BASE_MS * (2 ** Math.min(pending.retryCount - 1, 4)));
+      schedulePendingDirectoryFlush(directory, retryDelay);
+      return false;
+    }
+  }
+  if (pendingSessionEntriesForDirectory(directory).length) schedulePendingDirectoryFlush(directory, 0);
+  return true;
 }
 
 async function flushPendingSession(key, pending) {
@@ -441,16 +466,13 @@ async function flushPendingSession(key, pending) {
       if (!succeeded) {
         pending.retryCount += 1;
         recordTaskHistoryPersistenceFailure(failure, pending.retryCount);
-        const retryDelay = Math.min(TASK_HISTORY_RETRY_MAX_MS, TASK_HISTORY_RETRY_BASE_MS * (2 ** Math.min(pending.retryCount - 1, 4)));
-        schedulePendingSessionFlush(key, pending, retryDelay);
         if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred task history write:', failure);
         return;
       }
       pending.retryCount = 0;
       pending.persistedVersion = version;
       scheduleTaskHistoryPrune(pending.directory);
-      if (pending.version > version) schedulePendingSessionFlush(key, pending, 0);
-      else pendingSessions.delete(key);
+      if (pending.version <= version) pendingSessions.delete(key);
       recordTaskHistoryPersistenceSuccess();
     });
   return pending.promise;
@@ -468,18 +490,26 @@ function scheduleTaskHistoryPrune(directory) {
 }
 
 async function flushTaskHistoryPersistence() {
+  for (const directory of [...pendingFlushTimers.keys()]) clearPendingDirectoryFlush(directory);
   const failed = new Set();
+  const failedDirectories = new Set();
   while (pendingSessions.size > 0) {
-    const entries = [...pendingSessions.entries()].filter(([key]) => !failed.has(key));
+    const entries = [...pendingSessions.entries()]
+      .filter(([key, pending]) => !failed.has(key) && !failedDirectories.has(pending.directory));
     if (!entries.length) break;
     for (const [key, pending] of entries) {
-      if (pending.timer) {
-        clearTimeout(pending.timer);
-        pending.timer = null;
-      }
+      if (failedDirectories.has(pending.directory)) continue;
       const succeeded = await flushPendingSession(key, pending);
-      if (!succeeded) failed.add(key);
+      if (!succeeded) {
+        failed.add(key);
+        failedDirectories.add(pending.directory);
+      }
     }
+  }
+  for (const directory of failedDirectories) {
+    const retryCount = Math.max(1, ...pendingSessionEntriesForDirectory(directory).map(([, pending]) => Number(pending.retryCount || 0)));
+    const retryDelay = Math.min(TASK_HISTORY_RETRY_MAX_MS, TASK_HISTORY_RETRY_BASE_MS * (2 ** Math.min(retryCount - 1, 4)));
+    schedulePendingDirectoryFlush(directory, retryDelay);
   }
   return { ok: failed.size === 0, failed: failed.size, pending: pendingSessions.size };
 }
@@ -488,6 +518,7 @@ function taskHistoryPersistenceSnapshot() {
   return {
     healthy: !taskHistoryPersistenceState.lastError,
     pending: pendingSessions.size,
+    scheduledFlushes: pendingFlushTimers.size,
     retryCount: taskHistoryPersistenceState.retryCount,
     lastFailureAt: taskHistoryPersistenceState.lastFailureAt,
     lastError: taskHistoryPersistenceState.lastError
@@ -510,11 +541,11 @@ function recordTaskHistoryPersistenceSuccess() {
 function clearTaskHistory(config) {
   const directory = getTaskHistoryDir(config);
   const prefix = `${directory}\u0000`;
-  for (const [key, pending] of [...pendingSessions.entries()]) {
+  for (const [key] of [...pendingSessions.entries()]) {
     if (!key.startsWith(prefix)) continue;
-    if (pending.timer) clearTimeout(pending.timer);
     pendingSessions.delete(key);
   }
+  clearPendingDirectoryFlush(directory);
   const pruneTimer = pendingPrunes.get(directory);
   if (pruneTimer) clearTimeout(pruneTimer);
   pendingPrunes.delete(directory);

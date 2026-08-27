@@ -48,6 +48,8 @@ assert.equal(supervisor.snapshot().scheduled, false);
 const timerCountBeforeFatal = timers.length;
 supervisor.observe({ state: 'failed', errorCode: 'tunnel_authentication_failed', error: 'rejected key' });
 assert.equal(timers.length, timerCountBeforeFatal, 'authentication failures must remain terminal and must not retry');
+supervisor.observe({ state: 'failed', errorCode: 'tunnel_runtime_unavailable', error: 'bundled tunnel-client missing' });
+assert.equal(timers.length, timerCountBeforeFatal, 'permanent local tunnel runtime failures must not retry forever');
 
 supervisor.observe({ state: 'failed', errorCode: 'secure_tunnel_failed', error: 'offline again' });
 const scheduledBeforeManualRetry = timers.at(-1);
@@ -63,6 +65,27 @@ supervisor.cancel();
 assert.equal(cancelledOnStop.cancelled, true, 'shutdown must cancel a pending reconnect');
 assert.equal(supervisor.snapshot().attempt, 0);
 
+const inFlightGate = deferred();
+const inFlightTimers = [];
+const inFlightSupervisor = createTunnelRecoverySupervisor({
+  restartConnection: () => inFlightGate.promise,
+  retryDelaysMs: [10],
+  setTimer(fn, delayMs) {
+    const timer = { fn, delayMs, cancelled: false };
+    inFlightTimers.push(timer);
+    return timer;
+  },
+  clearTimer(timer) { timer.cancelled = true; }
+});
+const inFlightRetry = inFlightSupervisor.retryNow();
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(inFlightSupervisor.snapshot().inFlight, true);
+inFlightSupervisor.cancel();
+inFlightGate.resolve({ serverRunning: true, tunnelStatus: 'degraded', errorCode: 'tunnel_connection_interrupted', error: 'still offline' });
+await inFlightRetry;
+assert.equal(inFlightSupervisor.snapshot().scheduled, false, 'an in-flight retry must not resurrect recovery after cancellation');
+assert.equal(inFlightTimers.length, 0, 'a stale in-flight retry result must not schedule another timer after cancellation');
+
 console.log('Secure tunnel recovery supervisor retries transient failures and stops on terminal failures.');
 
 async function fireTimer(timer) {
@@ -70,4 +93,10 @@ async function fireTimer(timer) {
   timer.fn();
   await new Promise(resolve => setImmediate(resolve));
   await new Promise(resolve => setImmediate(resolve));
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
 }

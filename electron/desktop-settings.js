@@ -7,6 +7,7 @@ const TUNNEL_SETTING_ERROR_CODES = new Set([
   'tunnel_access_denied',
   'tunnel_not_found',
   'tunnel_connection_interrupted',
+  'tunnel_runtime_unavailable',
   'secure_tunnel_failed'
 ]);
 

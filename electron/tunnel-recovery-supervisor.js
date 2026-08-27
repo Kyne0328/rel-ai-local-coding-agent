@@ -2,7 +2,8 @@ const DEFAULT_RETRY_DELAYS_MS = Object.freeze([1000, 2000, 5000, 10000, 30000]);
 const TERMINAL_TUNNEL_CODES = new Set([
   'tunnel_authentication_failed',
   'tunnel_access_denied',
-  'tunnel_not_found'
+  'tunnel_not_found',
+  'tunnel_runtime_unavailable'
 ]);
 
 function createTunnelRecoverySupervisor({
@@ -21,17 +22,18 @@ function createTunnelRecoverySupervisor({
   let inFlight = null;
   let attempt = 0;
   let nextRetryAt = null;
+  let recoveryGeneration = 0;
 
   function observe(status = {}) {
     const tunnelStatus = String(status.state || status.tunnelStatus || '');
     const errorCode = String(status.errorCode || '');
     if (tunnelStatus === 'running') {
-      reset();
+      reset(true);
       return snapshot();
     }
     if (tunnelStatus === 'failed') {
       if (isTerminalTunnelCode(errorCode)) {
-        reset();
+        reset(true);
         return snapshot();
       }
       schedule(status.error || 'The Secure MCP Tunnel stopped unexpectedly.');
@@ -43,6 +45,7 @@ function createTunnelRecoverySupervisor({
 
   function schedule(lastError = '') {
     if (retryTimer || inFlight) return snapshot();
+    const runGeneration = recoveryGeneration;
     attempt += 1;
     const delayMs = delays[Math.min(attempt - 1, delays.length - 1)];
     nextRetryAt = now() + delayMs;
@@ -50,7 +53,8 @@ function createTunnelRecoverySupervisor({
     retryTimer = setTimer(() => {
       retryTimer = null;
       nextRetryAt = null;
-      void runAttempt();
+      if (runGeneration !== recoveryGeneration) return;
+      void runAttempt(runGeneration);
     }, delayMs);
     return snapshot();
   }
@@ -61,7 +65,7 @@ function createTunnelRecoverySupervisor({
     return runAttempt();
   }
 
-  async function runAttempt() {
+  async function runAttempt(runGeneration = recoveryGeneration) {
     if (inFlight) return inFlight;
     const pending = Promise.resolve()
       .then(restartConnection)
@@ -74,6 +78,7 @@ function createTunnelRecoverySupervisor({
     inFlight = pending;
     const status = await pending;
     if (inFlight === pending) inFlight = null;
+    if (runGeneration !== recoveryGeneration) return status;
 
     const tunnelStatus = String(status?.tunnelStatus || status?.state || '');
     const errorCode = String(status?.errorCode || '');
@@ -86,11 +91,12 @@ function createTunnelRecoverySupervisor({
   }
 
   function cancel() {
-    reset();
+    reset(true);
     return snapshot();
   }
 
-  function reset() {
+  function reset(invalidateInFlight = false) {
+    if (invalidateInFlight) recoveryGeneration += 1;
     clearScheduledRetry();
     attempt = 0;
     nextRetryAt = null;

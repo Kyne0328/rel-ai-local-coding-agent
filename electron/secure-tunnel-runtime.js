@@ -9,10 +9,12 @@ const START_POLL_MS = 200;
 const HEALTH_REQUEST_TIMEOUT_MS = 1_500;
 const MONITOR_INTERVAL_MS = 2_000;
 const DEGRADED_FAILURE_THRESHOLD = 3;
+const TUNNEL_RUNTIME_UNAVAILABLE_CODE = 'tunnel_runtime_unavailable';
 const FATAL_TUNNEL_CODES = new Set([
   'tunnel_authentication_failed',
   'tunnel_access_denied',
-  'tunnel_not_found'
+  'tunnel_not_found',
+  TUNNEL_RUNTIME_UNAVAILABLE_CODE
 ]);
 
 function createSecureTunnelRuntime({
@@ -67,8 +69,9 @@ function createSecureTunnelRuntime({
       if (!executable) throw new Error('Bundled OpenAI tunnel-client is missing. Fetch and verify vendor/tunnel-client before starting Rel.AI.');
       await ensureExecutable(executable);
     } catch (error) {
-      if (runGeneration === generation) update({ state: 'failed', tunnelId, healthUrl: '', error: messageOf(error), errorCode: 'secure_tunnel_failed' });
-      throw error;
+      const failure = tunnelFailure(TUNNEL_RUNTIME_UNAVAILABLE_CODE, messageOf(error));
+      if (runGeneration === generation) update({ state: 'failed', tunnelId, healthUrl: '', error: failure.message, errorCode: failure.code });
+      throw failure;
     }
 
     const healthUrlFile = path.join(path.resolve(stateDir), `tunnel-health-${process.pid}.url`);
@@ -130,8 +133,9 @@ function createSecureTunnelRuntime({
         windowsHide: true
       });
     } catch (error) {
-      update({ state: 'failed', tunnelId, error: messageOf(error), errorCode: 'secure_tunnel_failed' });
-      throw error;
+      const failure = tunnelFailure(TUNNEL_RUNTIME_UNAVAILABLE_CODE, messageOf(error));
+      update({ state: 'failed', tunnelId, error: failure.message, errorCode: failure.code });
+      throw failure;
     }
 
     child = ownedChild;
@@ -139,7 +143,8 @@ function createSecureTunnelRuntime({
     pipeTunnelLogs(ownedChild.stderr, acceptLogEntry, 'warning');
     ownedChild.once('error', error => {
       if (runGeneration !== generation) return;
-      update({ state: 'failed', tunnelId, error: messageOf(error), errorCode: 'secure_tunnel_failed' });
+      fatalFailure ||= tunnelFailure(TUNNEL_RUNTIME_UNAVAILABLE_CODE, messageOf(error));
+      update({ state: 'failed', tunnelId, error: fatalFailure.message, errorCode: fatalFailure.code });
     });
     ownedChild.once('exit', (code, signal) => {
       if (runGeneration !== generation || child !== ownedChild) return;

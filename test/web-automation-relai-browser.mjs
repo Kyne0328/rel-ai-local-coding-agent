@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startHttpServer } from '../src/httpServer.js';
+import { beginConnectorToolCall, requestCurrentTaskCancellation, resetToolActivity, runWithToolActivity } from '../src/toolActivity.js';
 import { runUiAction, stopAllUiSessions } from '../src/webAutomationManager.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -16,7 +17,7 @@ const previous = {
   state: process.env.REL_AI_MCP_STATE_DIR,
   isolated: process.env.REL_AI_MCP_ISOLATED
 };
-const taskId = 'work_web_automation_acceptance';
+let taskId = '';
 const dashboardToken = 'web-automation-dashboard-token';
 const workspace = { alias: 'rel-ai-mcp', path: root };
 let server;
@@ -50,7 +51,14 @@ try {
   const address = server.address();
   assert.ok(address && typeof address === 'object' && address.port > 0);
 
-  const context = { taskId };
+  resetToolActivity();
+  const beginTask = beginConnectorToolCall({
+    tool: 'relai_work', internalOperation: 'work.begin', workspace: 'rel-ai-mcp', createTask: true,
+    title: 'Web automation cleanup acceptance'
+  });
+  taskId = beginTask.taskId;
+  beginTask({ ok: true });
+  const context = { taskId, publicHttpOnly: true };
   const started = await runUiAction(workspace, {}, {
     action: 'start',
     port: address.port,
@@ -119,15 +127,23 @@ try {
   assert.ok(Array.isArray(networkResult.networkEntries));
   assert.equal(networkResult.networkEntries.some(entry => /https?:\/\/(?!127\.0\.0\.1|localhost|\[?::1\]?)/i.test(entry.url || '') && entry.type !== 'blocked'), false);
 
-  const stopped = await runUiAction(workspace, {}, {
-    action: 'stop', sessionId, work_id: taskId
-  }, context);
+  const cancelTask = beginConnectorToolCall({
+    tool: 'relai_work', internalOperation: 'work.cancel', workspace: 'rel-ai-mcp', taskId
+  });
+  const cancelled = runWithToolActivity(cancelTask, () => requestCurrentTaskCancellation({
+    reason: 'Verify task-owned UI session cleanup.', initiator: 'test'
+  }));
+  cancelTask({ ok: true });
+  assert.equal(cancelled.status, 'cancelled');
+  await assert.rejects(
+    () => runUiAction(workspace, {}, { action: 'snapshot', sessionId, work_id: taskId }, context),
+    error => error?.code === 'UI_SESSION_NOT_FOUND'
+  );
   sessionId = '';
-  assert.equal(stopped.ok, true);
-  assert.equal(stopped.status, 'stopped');
   console.log(`Rel.AI dashboard web automation passed with ${started.browserProduct}.`);
 } finally {
-  if (sessionId) await stopAllUiSessions().catch(() => {});
+  await stopAllUiSessions().catch(() => {});
+  resetToolActivity();
   if (server?.listening) {
     server.closeAllConnections?.();
     server.close();
