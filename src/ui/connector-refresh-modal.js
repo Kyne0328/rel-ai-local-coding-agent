@@ -1,6 +1,6 @@
 import { openModal } from './components/modal.js';
 
-const CONNECTOR_REFRESH_VERSIONS = new Set(['0.26.0', '0.27.0']);
+const CONNECTOR_REFRESH_VERSIONS = new Set(['0.26.0', '0.27.0', '0.27.1']);
 const DISMISS_DELAY_MS = 5000;
 const STORAGE_PREFIX = 'relai_connector_refresh';
 const REFRESH_STEPS = Object.freeze([
@@ -34,7 +34,7 @@ function prepareConnectorRefreshNotice(lifecycle = {}, storage) {
     acknowledgedKey,
     pendingKey,
     title: 'Refresh Rel.AI MCP in ChatGPT',
-    description: `Rel.AI MCP ${currentVersion} changed the tools ChatGPT uses. Refresh the connector so ChatGPT loads the new tool schema.`,
+    description: `Rel.AI MCP ${currentVersion} changed the ChatGPT connector presentation or tool metadata. Refresh the connector so ChatGPT loads the current Rel.AI contract.`,
     steps: REFRESH_STEPS,
     dismissDelayMs: DISMISS_DELAY_MS
   };

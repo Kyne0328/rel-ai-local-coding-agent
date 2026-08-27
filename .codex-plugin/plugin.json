@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.27.0",
+  "version": "0.27.1",
   "description": "Rel.AI gives ChatGPT Web controlled local developer-mode repository workflows for analysis, code modification, validation, review, and release preparation.",
   "author": {
     "name": "Kyne",

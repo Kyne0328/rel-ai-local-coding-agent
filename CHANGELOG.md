@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.27.1] — 2026-08-27
+
+### ChatGPT status and responsiveness
+- **Make the in-chat Rel.AI task card passive instead of continuously polling.** The card no longer runs a 3-second status loop, calls app-only helper tools, schedules background timers, or uses a resize-observer loop, eliminating the continuous MCP, audit, persistence, and ChatGPT layout work that could make long web chats feel sluggish.
+- **Keep the compact task card without replacing ChatGPT's native progress messages.** Rel.AI now uses the card only for task lifecycle presentation while preserving concise ChatGPT-visible preambles and native invocation labels such as searching, reading, editing, and validating progress.
+- **Keep the public MCP surface at 12 tools.** The former app-only status helper remains removed; passive card hydration is attached only to the existing relai_work lifecycle path, and ordinary status/frequent repository operations stay data-only.
+- **Require a one-time ChatGPT connector refresh for 0.27.1.** This release changes the connector's MCP Apps resource/output metadata, so existing installations show the standard refresh notice after updating to ensure ChatGPT loads the new passive card and presentation contract.
+
+### Validation
+- **Add a performance regression contract for the task card.** Automated coverage verifies zero background MCP requests, no polling timers or helper calls, no resize-observer loop, correct lifecycle hydration, HTTP discovery parity, and packaged-plugin inclusion of the passive card.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.27.1.
+
 ## [0.27.0] — 2026-08-23
 
 ### Repository editing and code intelligence
