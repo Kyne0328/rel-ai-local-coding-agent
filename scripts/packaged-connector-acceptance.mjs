@@ -107,7 +107,7 @@ try {
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolCount, toolCount);
   assert.equal(Object.hasOwn(discovered.result?.capabilities?.experimental?.relai || {}, 'appToolCount'), false,
-    'packaged passive task card must not advertise app-only helpers');
+    'packaged native status presentation must not advertise app-only helpers');
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.deploymentMode, 'local_developer');
 
   const tools = await mcp(primarySession, 11, 'tools/list', {});
@@ -122,15 +122,17 @@ try {
     assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
   }
   const toolByName = new Map(tools.result.tools.map(tool => [tool.name, tool]));
-  assert.equal(toolByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/task-card/v5.html');
-  for (const tool of tools.result.tools.filter(tool => tool.name !== 'relai_work')) assert.equal(tool._meta?.ui, undefined);
+  for (const tool of tools.result.tools) {
+    assert.equal(tool._meta?.ui, undefined, `${tool.name} must stay iframe-free in the packaged connector`);
+    assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must not attach a ChatGPT output template`);
+  }
   assert.equal(toolByName.get('relai_validate')?.execution, undefined);
   assert.equal(toolByName.get('relai_exec')?.execution, undefined);
   assert.equal(toolByName.get('relai_process')?.execution, undefined);
   const resourcesList = await mcp(primarySession, 12, 'resources/list', {});
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
-  assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'ui://relai/task-card/v5.html'));
+  assert.equal(resourcesList.result?.resources?.some(item => String(item.uri || '').startsWith('ui://relai/')), false);
   const surface = await readResource(primarySession, 13, 'relai://server/tool-surface');
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);

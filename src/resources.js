@@ -5,7 +5,6 @@ import { readConfig, publicConfigSummary, allWorkspaceAliases, resolveWorkspace 
 import { getToolSurfaceManifest } from "./tools/schema.js";
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
-import { REL_AI_APP_UI_MIME, REL_AI_APP_UI_URI, appUiResourceContent } from './mcp/appUi.js';
 import { LOCAL_DEVELOPER_MODE } from './mcp/localDeveloperMode.js';
 
 const MIME_JSON = 'application/json';
@@ -22,8 +21,7 @@ function listResources(config = readConfig()) {
     resource('relai://server/help', 'Rel.AI MCP Help', 'How ChatGPT should use this Rel.AI MCP server.', MIME_MARKDOWN),
     resource('relai://server/config', 'Rel.AI MCP Config Summary', 'Safe connector configuration summary without secrets.', MIME_JSON),
     resource('relai://server/tool-surface', 'Rel.AI MCP Tool Surface', 'Machine-readable current tool surface and output contracts.', MIME_JSON),
-    resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON),
-    resource(REL_AI_APP_UI_URI, 'Rel.AI Task Card', 'Passive one-shot in-chat task lifecycle card with no polling or background tool calls.', REL_AI_APP_UI_MIME)
+    resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON)
   ];
   for (const alias of aliases) {
     resources.push(
@@ -45,9 +43,6 @@ function listResources(config = readConfig()) {
 }
 
 async function readResource(uri) {
-  if (String(uri || '') === REL_AI_APP_UI_URI) {
-    return { contents: [appUiResourceContent()], ...resourceCacheHint(uri) };
-  }
   const config = readConfig();
   const parsed = parseRelaiUri(uri);
   if (parsed.kind === 'server' && parsed.name === 'config') return contents(uri, MIME_JSON, publicConfigSummary(config), config);
@@ -86,7 +81,7 @@ function contents(uri, mimeType, value, config) {
 
 function resourceCacheHint(uri) {
   const text = String(uri || '');
-  if (text === REL_AI_APP_UI_URI || text === 'relai://server/help' || text === 'relai://server/tool-surface') return { ttlMs: 60000, cacheScope: 'private' };
+  if (text === 'relai://server/help' || text === 'relai://server/tool-surface') return { ttlMs: 60000, cacheScope: 'private' };
   if (text === 'relai://server/config' || text === 'relai://server/workspaces') return { ttlMs: 15000, cacheScope: 'private' };
   if (text.startsWith('relai://workspace/')) return { ttlMs: 5000, cacheScope: 'private' };
   return { ttlMs: 0, cacheScope: 'private' };

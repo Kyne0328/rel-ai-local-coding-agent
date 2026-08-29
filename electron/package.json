@@ -103,8 +103,7 @@
         "from": "../src",
         "to": "src",
         "filter": [
-          "**/*.js",
-          "mcp/ui/workflow-card.html"
+          "**/*.js"
         ]
       },
       {

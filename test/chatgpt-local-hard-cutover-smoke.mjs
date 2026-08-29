@@ -49,10 +49,8 @@ try {
   const listed = await client.waitFor(2);
   assert.equal(listed.result?.tools?.length, activeMcpToolCount);
   assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')), [], 'hard cutover must leave no app-only helper tools');
-  const listedByName = new Map(listed.result.tools.map(tool => [tool.name, tool]));
-  assert.equal(listedByName.get('relai_work')?._meta?.ui?.resourceUri, 'ui://relai/task-card/v5.html');
-  assert.ok(listed.result.tools.filter(tool => tool.name !== 'relai_work').every(tool => tool._meta?.ui === undefined && tool._meta?.['openai/outputTemplate'] === undefined),
-    'hard cutover keeps only the passive relai_work card; frequent tools remain data-only');
+  assert.ok(listed.result.tools.every(tool => tool._meta?.ui === undefined && tool._meta?.['openai/outputTemplate'] === undefined),
+    'hard cutover keeps the canonical tool surface iframe-free while native invocation labels provide status');
   assert.ok(listed.result.tools.every(tool => tool.outputSchema));
   assert.ok(removedTools.every(name => listed.result.tools.every(tool => tool.name !== name)));
 

@@ -1,25 +1,27 @@
 import assert from 'node:assert/strict';
 
-import { appUiResourceContent } from '../src/mcp/appUi.js';
+import { listResources } from '../src/resources.js';
 import { getMcpToolSchemas } from '../src/tools/schema.js';
 
-const html = appUiResourceContent().text;
 const tools = getMcpToolSchemas();
 const work = tools.find(tool => tool.name === 'relai_work');
+const iframeTools = tools.filter(tool => tool._meta?.ui?.resourceUri || tool._meta?.['openai/outputTemplate']);
 
-assert.equal(tools.length, 12, 'task card must keep the canonical 12-tool MCP surface');
-assert.equal(tools.some(tool => tool.name.startsWith('relai_app_')), false, 'task card must not register an app-only polling helper');
-assert.ok(work?._meta?.['openai/outputTemplate'], 'relai_work keeps the lightweight task card');
-for (const tool of tools.filter(tool => tool.name !== 'relai_work')) {
-  assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must never mount the task card`);
-}
-for (const forbidden of ['relai_app_task', 'tools/call', 'window.openai.callTool', 'setTimeout(', 'setInterval(', 'ResizeObserver', 'refreshLiveStatus', 'scheduleLiveStatus']) {
-  assert.equal(html.includes(forbidden), false, `task card must not contain background-work primitive ${forbidden}`);
-}
-assert.match(html, /if\(height===lastReportedHeight\)return/, 'task card must deduplicate host height notifications');
-assert.match(html, /\['begin','finish','cancel'\]\.includes\(action\)/, 'only lifecycle-changing work actions remain visible');
-assert.match(html, /requestHostClose\(\)/, 'non-lifecycle mounts must close promptly');
+assert.equal(tools.length, 12, 'ChatGPT status performance must keep the canonical 12-tool MCP surface');
+assert.equal(tools.some(tool => tool.name.startsWith('relai_app_')), false, 'status presentation must not register an app-only helper');
+assert.deepEqual(iframeTools.map(tool => tool.name), [], 'normal Rel.AI tools must not mount ChatGPT iframes');
+assert.deepEqual([
+  work?._meta?.['openai/toolInvocation/invoking'],
+  work?._meta?.['openai/toolInvocation/invoked']
+], ['Updating Rel.AI task…', 'Rel.AI task updated'], 'relai_work must retain lightweight native ChatGPT status labels');
+assert.equal(
+  listResources({ workspaces: {} }).resources.some(resource => String(resource.uri || '').startsWith('ui://relai/')),
+  false,
+  'resource discovery must not advertise an unused ChatGPT iframe component'
+);
 
-const backgroundRequestsPerHour = 0;
-assert.equal(backgroundRequestsPerHour, 0, 'passive task-card SLO is zero background MCP requests per hour');
-console.log('Passive MCP task-card performance contract passed: zero polling, timers, helper tools, or background requests.');
+const simulatedStatusCalls = 10_000;
+const iframeMountEligibleCalls = work?._meta?.ui?.resourceUri || work?._meta?.['openai/outputTemplate'] ? simulatedStatusCalls : 0;
+assert.equal(iframeMountEligibleCalls, 0, 'repeated relai_work status calls must remain ineligible for iframe mounting');
+
+console.log('ChatGPT status performance contract passed: native labels stay visible with zero Rel.AI iframe mounts.');

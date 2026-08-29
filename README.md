@@ -32,6 +32,12 @@
 
 ---
 
+> [!WARNING]
+> **Use Rel.AI MCP only on repositories, systems, and services you own or are authorized to access.** Rel.AI can read and modify files, execute project commands, and perform Git actions when requested. You are responsible for complying with applicable third-party terms, policies, and laws. The project authors and maintainers are not responsible for consequences resulting from misuse. Use at your own risk.
+
+> [!IMPORTANT]
+> **Official release binaries are built and published by this repository's GitHub Actions release workflow from the source commit used for the release.** The release workflow also produces SHA-256 checksums and GitHub build-provenance and SBOM attestations for supported artifacts, so releases can be checked against the public source and CI/CD pipeline. You can also use DeepWiki to explore and ask questions about the codebase: [Ask DeepWiki](https://deepwiki.com/Kyne0328/rel-ai-mcp) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Kyne0328/rel-ai-mcp)
+
 Rel.AI MCP is a **local coding agent bridge for ChatGPT Web**. You keep the normal ChatGPT conversation, while Rel.AI gives that conversation controlled access to repositories you choose on your own computer.
 
 Instead of copying files into chat or moving every repository task into a separate coding product, you can ask ChatGPT to inspect a project, make focused edits, run the relevant checks, review the result, and use Git without giving it open-ended access to your machine.

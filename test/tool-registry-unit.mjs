@@ -35,8 +35,8 @@ const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
 const mcpSchemas = getMcpToolSchemas(config);
 assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact model-facing tool surface');
-assert.equal(mcpSchemas.length, 12, 'passive task card must not add app-only helper tools');
-assert.equal(mcpSchemas.some(item => item.name.startsWith('relai_app_')), false, 'no app-only polling helper may be registered');
+assert.equal(mcpSchemas.length, 12, 'native status presentation must not add app-only helper tools');
+assert.equal(mcpSchemas.some(item => item.name.startsWith('relai_app_')), false, 'no app-only status helper may be registered');
 const schemaBytes = bytes(publicSchemas);
 assert.ok(schemaBytes > 0, 'unified discovery schema must serialize to a non-empty payload');
 assert.deepEqual(
@@ -49,6 +49,8 @@ assert.match(connectorInstructions(config), /task-ownership/i, 'global instructi
 assert.match(connectorInstructions(config), /approval/i, 'global instructions retain approval safety as a universal invariant');
 assert.match(connectorInstructions(config), /authoritative evidence/i, 'global instructions retain truthful evidence semantics');
 assert.match(connectorInstructions(config), /explicit task-completion contract/i, 'global instructions retain explicit completion semantics');
+assert.match(connectorInstructions(config), /brief normal assistant progress messages/i, 'global instructions must keep user-visible progress in normal assistant messages');
+assert.match(connectorInstructions(config), /Native tool invocation labels are supplemental status only/i, 'native status chrome must not suppress user-visible progress messages');
 assert.match(connectorInstructions(config), /Do not poll relai_work status merely to refresh UI/i, 'global instructions must avoid redundant UI-only status polling');
 assert.doesNotMatch(connectorInstructions(config), /Inspect relevant files|Validate after changes|recovery guidance/i, 'discretionary workflow tactics belong to the workflow runtime/skills, not global MCP instructions');
 
@@ -81,6 +83,8 @@ for (const schema of publicSchemas) {
   assert.equal(schema.inputSchema.additionalProperties, false, `${schema.name} discovery must reject unknown fields`);
   assert.deepEqual(schema.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, `${schema.name} must use local developer-mode read-only presentation hints`);
   assert.deepEqual(schema._meta?.securitySchemes, [{ type: 'noauth' }], `${schema.name} must advertise local noauth through ChatGPT compatibility metadata`);
+  assert.equal(schema._meta?.ui, undefined, `${schema.name} must stay iframe-free`);
+  assert.equal(schema._meta?.['openai/outputTemplate'], undefined, `${schema.name} must not attach a ChatGPT output template`);
   assert.match(schema.description || '', /\bUse\b/i, `${schema.name} must state when to use the tool`);
   assert.match(schema.description || '', /\bDo not\b/i, `${schema.name} must state when not to use the tool`);
 }

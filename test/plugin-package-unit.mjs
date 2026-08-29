@@ -44,7 +44,7 @@ try {
     '.codex-plugin/plugin.json', '.mcp.json', 'skills/PROVENANCE.md',
     ...expectedSkills.flatMap(skill => [`skills/${skill}/SKILL.md`, `skills/${skill}/agents/openai.yaml`]),
     'skills/rel-ai-workflow/references/workflows.md', 'skills/rel-ai-workflow/references/safety.md',
-    'src/mcp/appUi.js', 'src/mcp/localDeveloperMode.js', 'src/mcp/ui/workflow-card.html',
+    'src/mcp/appUi.js', 'src/mcp/localDeveloperMode.js',
     'bin/rel-ai-mcp.js', 'package.json'
   ];
   const packedFiles = new Set(metadata.files.map(item => item.path.replaceAll('\\', '/')));
@@ -85,7 +85,7 @@ try {
 
     client.send(2, 'tools/list');
     const listed = await client.waitFor(2);
-    assert.deepEqual(listed.result.tools, getMcpToolSchemas(config), 'source and extracted MCP tools/list must match, including passive task-card metadata');
+    assert.deepEqual(listed.result.tools, getMcpToolSchemas(config), 'source and extracted MCP tools/list must match, including native ChatGPT status metadata');
 
     client.call(3, 'relai_work', { action: 'begin', workspace: root, bootstrap: 'none' });
     const started = structuredContentOf(await client.waitFor(3));
