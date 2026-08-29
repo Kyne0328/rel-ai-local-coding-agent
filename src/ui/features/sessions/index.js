@@ -9,6 +9,7 @@ import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
 import { eventTimestampMs, eventTimestampValue, terminalTaskTimestamp, terminalTaskTimestampValue } from '../../../taskEvents.js';
+import { buildTaskSemanticProgress, classifyTaskChangedFiles } from '../../../taskSemanticProgress.js';
 import { taskEntityView, workSessionStateView } from '../../task-identity.js';
 
 const SESSION_PAGE_SIZE = 50;
@@ -251,9 +252,10 @@ function sessionRow(session) {
   const id = sessionIdentifier(session);
   const state = workSessionStateView(session);
   const live = isOngoingSession(session);
-  const operation = session.currentActivity || session.operation || operationForTool(session.lastTool);
-  const description = sessionDescription(session, live, operation);
-  const facts = sessionFacts(session, live);
+  const semantic = semanticProgressFor(session);
+  const operation = semantic.currentActivity || session.currentActivity || session.operation || operationForTool(session.lastTool);
+  const description = sessionDescription(session, live, operation, semantic);
+  const facts = sessionFacts(session, live, semantic);
   const progress = live && session.progress ? taskProgressHtml(session.progress, session.status, { compact: true }) : '';
 
   return `
@@ -270,24 +272,25 @@ function sessionRow(session) {
     </button>`;
 }
 
-function sessionDescription(session, live, operation) {
-  if (live) return session.currentActivity || session.currentStage || operation || 'Ready for the next step';
+function sessionDescription(session, live, operation, semantic = semanticProgressFor(session)) {
+  if (live) return semantic.currentActivity || semantic.currentStage || operation || 'Task is open';
   if (session.summary) return session.summary;
   if (session.status === 'validation_failed') return 'Checks failed';
   if (session.status === 'blocked') return session.endReason || workSessionStateView(session).label;
   if (session.status === 'cancelled') return 'Cancelled before completion';
-  return session.currentActivity || session.currentStage || operation || 'Task ended';
+  return semantic.currentActivity || session.currentActivity || session.currentStage || operation || 'Task ended';
 }
 
-function sessionFacts(session, live) {
+function sessionFacts(session, live, semantic = semanticProgressFor(session)) {
   const facts = [];
   const toolCalls = Number(session.toolCallCount ?? session.calls ?? 0);
-  const changed = sessionChangedFileCount(session);
+  const fileCounts = semanticFileCounts(session, semantic);
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
   const state = workSessionStateView(session);
   const completed = state.status === 'completed';
   facts.push(`${toolCalls} action${toolCalls === 1 ? '' : 's'}`);
-  facts.push(`${changed} file${changed === 1 ? '' : 's'} edited`);
+  facts.push(`${fileCounts.product} product file${fileCounts.product === 1 ? '' : 's'}`);
+  if (fileCounts.support > 0) facts.push(`${fileCounts.support} support artifact${fileCounts.support === 1 ? '' : 's'}`);
   if (failures > 0) facts.push(completed
     ? `${failures} recovered failed action${failures === 1 ? '' : 's'}`
     : `${failures} failed action${failures === 1 ? '' : 's'}`);
@@ -310,6 +313,7 @@ function sessionFingerprint(session) {
     session.workspace || '',
     session.currentStage || '',
     session.currentActivity || '',
+    session.semanticProgress || null,
     session.operation || '',
     session.summary || '',
     session.progress || null,
@@ -380,11 +384,13 @@ function buildSessionDetail(session) {
   const identities = taskEntityView(session);
   const state = workSessionStateView(session);
   const live = isOngoingSession(session);
+  const semantic = semanticProgressFor(session);
+  const fileCounts = semanticFileCounts(session, semantic);
   const operationValue = session.operation || operationForTool(session.lastTool) || '—';
-  const currentTitle = live ? (session.currentStage || state.label) : state.label;
+  const currentTitle = live ? (semantic.currentStage || state.label) : state.label;
   const currentCopy = live
-    ? (session.currentActivity || operationValue || 'Ready for the next step.')
-    : (session.summary || session.endReason || sessionDescription(session, false, operationValue));
+    ? (semantic.currentActivity || operationValue || 'Task is open.')
+    : (session.summary || session.endReason || sessionDescription(session, false, operationValue, semantic));
 
   content.innerHTML = `
     <header class="task-detail-header">
@@ -397,15 +403,15 @@ function buildSessionDetail(session) {
       ${detail('Project', session.workspace || '—')}
       ${durationDetail(session, live)}
       ${detail('Actions', session.toolCallCount ?? session.calls ?? 0)}
-      ${detail('Files changed', sessionChangedFileCount(session))}
+      ${detail('Product files', fileCounts.product)}
+      ${fileCounts.support > 0 ? detail('Support artifacts', fileCounts.support) : ''}
     </div>
     ${attentionSection(session)}
     ${sessionActionSection(session)}
+    ${taskMilestonesSection(semantic)}
     ${failureHistorySection(session)}
-    ${currentOperations(session)}
     ${changedFilesSection(session.changedFiles || [])}
-    ${toolEventsSection(session.events || [], session)}
-    ${technicalDetailsSection(session, identities, state, operationValue)}
+    ${technicalDetailsSection(session, identities, state, operationValue, session.events || [])}
     <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">Open in Activity</a></div>`;
 
   for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) link.addEventListener('click', closeOpenSession);
@@ -537,7 +543,7 @@ function failureHistorySection(session) {
   return `<section class="task-detail-section task-detail-history"><h3>${esc(title)}</h3><p>${esc(copy)}</p></section>`;
 }
 
-function technicalDetailsSection(session, identities, state, operationValue) {
+function technicalDetailsSection(session, identities, state, operationValue, events = []) {
   const workflow = workflowTechnicalHtml(session);
   return `<details class="task-detail-technical">
     <summary>Technical details</summary>
@@ -554,6 +560,8 @@ function technicalDetailsSection(session, identities, state, operationValue) {
       ${detail('Completion confirmed', session.completionKnown ? 'Yes' : 'No')}
     </div>
     ${workflow}
+    ${currentOperations(session)}
+    ${toolEventsSection(events, session)}
   </details>`;
 }
 
@@ -565,12 +573,20 @@ function workflowTechnicalHtml(session = {}) {
 }
 
 function changedFilesSection(files) {
+  const classified = classifyTaskChangedFiles(orderChangedFiles(files));
+  return [
+    changedFileGroup('Product files', classified.productFiles),
+    changedFileGroup('Support artifacts', classified.supportArtifacts)
+  ].filter(Boolean).join('');
+}
+
+function changedFileGroup(title, files) {
   const ordered = orderChangedFiles(files);
   if (!ordered.length) return '';
   const visible = ordered.slice(0, DETAIL_FILE_PREVIEW);
   const hidden = ordered.slice(DETAIL_FILE_PREVIEW);
   return `<section class="task-detail-section">
-    <div class="task-detail-heading"><h3>Changed files</h3><span>${ordered.length}</span></div>
+    <div class="task-detail-heading"><h3>${esc(title)}</h3><span>${ordered.length}</span></div>
     ${fileList(visible)}
     ${hidden.length ? `<details class="task-detail-overflow"><summary>Show ${hidden.length} more file${hidden.length === 1 ? '' : 's'}</summary>${fileList(hidden)}</details>` : ''}
   </section>`;
@@ -586,7 +602,7 @@ function toolEventsSection(events, session) {
   const visible = ordered.slice(0, DETAIL_EVENT_PREVIEW);
   const hidden = ordered.slice(DETAIL_EVENT_PREVIEW);
   return `<section class="task-detail-section">
-    <div class="task-detail-heading"><h3>Recent activity</h3><span>${events.length}</span></div>
+    <div class="task-detail-heading"><h3>Technical activity</h3><span>${events.length}</span></div>
     <div class="task-event-list">${visible.map(event => eventRow(event, session)).join('')}</div>
     ${hidden.length ? `<details class="task-detail-overflow"><summary>Show ${hidden.length} older event${hidden.length === 1 ? '' : 's'}</summary><div class="task-event-list">${hidden.map(event => eventRow(event, session)).join('')}</div></details>` : ''}
   </section>`;
@@ -618,6 +634,33 @@ function sessionStartTimestamp(session = {}) {
 function sessionListTimestampValue(session = {}) {
   if (String(session.status || '').toLowerCase() === 'inactive' && session.inactiveAt) return session.inactiveAt;
   return terminalTaskTimestampValue(session);
+}
+
+function semanticProgressFor(session = {}) {
+  if (Array.isArray(session.events)) return buildTaskSemanticProgress(session);
+  if (session.semanticProgress && typeof session.semanticProgress === 'object') return session.semanticProgress;
+  return buildTaskSemanticProgress(session);
+}
+
+function semanticFileCounts(session = {}, semantic = semanticProgressFor(session)) {
+  const classified = classifyTaskChangedFiles(session.changedFiles || []);
+  const product = Number.isFinite(Number(semantic?.productChangedFileCount))
+    ? Math.max(0, Number(semantic.productChangedFileCount))
+    : classified.productChangedFileCount;
+  const support = Number.isFinite(Number(semantic?.supportArtifactCount))
+    ? Math.max(0, Number(semantic.supportArtifactCount))
+    : classified.supportArtifactCount;
+  return { product, support };
+}
+
+function taskMilestonesSection(semantic = {}) {
+  const milestones = Array.isArray(semantic.milestones) ? semantic.milestones : [];
+  if (!milestones.length) return '';
+  return `<section class="task-detail-section">
+    <div class="task-detail-heading"><h3>Meaningful progress</h3><span>${milestones.length}</span></div>
+    <ol class="task-milestone-list">${milestones.map(item => `
+      <li><span class="task-milestone-state">${item.status === 'failed' ? 'Issue' : 'Done'}</span><span><strong>${esc(item.label || 'Task progress')}</strong>${item.detail ? `<small>${esc(item.detail)}</small>` : ''}</span></li>`).join('')}</ol>
+  </section>`;
 }
 
 function sessionChangedFileCount(session = {}) {

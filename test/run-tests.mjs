@@ -39,6 +39,7 @@ const files = [
   'safety-paths.mjs',
   'smoke.mjs',
   'task-state-unit.mjs',
+  'task-semantic-progress-unit.mjs',
   'task-history-storage-unit.mjs',
   'task-history-live-unit.mjs',
   'task-integrity-unit.mjs',

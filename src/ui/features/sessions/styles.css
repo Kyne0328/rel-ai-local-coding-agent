@@ -50,7 +50,7 @@
 .task-detail-current span { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
 .task-detail-current.attention strong, .task-detail-current.attention span { color: var(--ui-status-danger-foreground); }
 .task-detail-grid { @apply grid gap-1.5; grid-template-columns: repeat(2,minmax(0,1fr)); }
-.task-detail-facts { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.task-detail-facts { grid-template-columns: repeat(auto-fit,minmax(110px,1fr)); }
 .task-detail-grid > div { @apply grid min-w-0 gap-1 rounded-md px-2.5 py-2; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .task-detail-grid span { @apply text-[11px] font-bold uppercase tracking-[.05em]; color: var(--ui-text-tertiary); }
 .task-detail-grid strong { @apply break-words text-[12px]; }
@@ -69,6 +69,12 @@
 .task-file-list { @apply m-0 grid list-none gap-1 p-0; }
 .task-file-list li { @apply min-w-0 rounded-md px-2.5 py-2; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .task-file-list code { @apply block break-all text-[11px] leading-5; color: var(--ui-text-primary); }
+.task-milestone-list { @apply m-0 grid list-none gap-1 p-0; }
+.task-milestone-list li { @apply grid min-w-0 items-start gap-2 rounded-md px-2.5 py-2; grid-template-columns: auto minmax(0,1fr); background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.task-milestone-list li > span:last-child { @apply grid min-w-0 gap-0.5; }
+.task-milestone-list strong { @apply text-[12px] leading-5; color: var(--ui-text-primary); }
+.task-milestone-list small { @apply truncate text-[11px]; color: var(--ui-text-tertiary); }
+.task-milestone-state { @apply inline-flex min-h-6 items-center rounded-full px-2 text-[10px] font-bold uppercase tracking-[.04em]; background: var(--ui-surface-raised); border: 1px solid var(--ui-border-default); color: var(--ui-text-secondary); }
 .task-event-list { @apply grid gap-1; }
 .task-event { @apply grid min-w-0 items-center gap-3 rounded-md px-2.5 py-2 text-left; grid-template-columns: 72px minmax(0,1fr) auto; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-primary); text-decoration: none; }
 .task-event > span { @apply whitespace-nowrap text-[11px]; color: var(--ui-text-tertiary); }
@@ -84,6 +90,7 @@
 .task-detail-technical { @apply border-t pt-3; border-color: var(--ui-border-default); }
 .task-detail-technical > summary { @apply flex min-h-11 cursor-pointer items-center text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .task-detail-technical > .task-detail-grid { @apply mt-2; }
+.task-detail-technical > .task-detail-section { @apply mt-3; }
 .task-detail-workflow { @apply mt-2 grid gap-1 rounded-md p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .task-detail-workflow strong { @apply text-[12px] font-bold; color: var(--ui-text-primary); }
 .task-detail-workflow span { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }

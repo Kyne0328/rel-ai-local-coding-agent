@@ -4,6 +4,7 @@ import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { connectionStateFor, connectionSummary, hasObservedMcpConnection, hasObservedMcpToolCall } from '../../connection-state.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
 import { workSessionStateView } from '../../task-identity.js';
+import { buildTaskSemanticProgress } from '../../../taskSemanticProgress.js';
 import { completeDesktopSetup, createDesktopSetupChecklist, desktopSetupItems } from '../onboarding/index.js';
 import { routeMetadata } from '../../navigation-catalog.js';
 import { loadAnalyticsData } from '../usage/data.js';
@@ -218,15 +219,14 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
   const activeCalls = activeTasks.reduce((sum, item) => sum + Number(item.activeCalls || 0), 0);
   const waiting = activeCalls === 0;
   const location = activeTaskLocation(activeTasks);
-  const operation = task.currentActivity || task.operation || taskAction(task.lastTool || task.tool);
-  let title = task.title || (waiting ? 'Task is ready.' : operation);
+  const semantic = semanticProgressFor(task);
+  const operation = semantic.currentActivity || task.currentActivity || task.operation || taskAction(task.lastTool || task.tool);
+  let title = task.title || operation || 'Current task';
   if (!task.title && !waiting && sessionCount > 1) title = `${activeCalls} Rel.AI actions are running.`;
-  let description = waiting
-    ? `${esc(task.currentStage || 'Planning next step')} · Rel.AI is not running an action right now.`
-    : `${esc(task.currentStage || operation)} in <strong>${esc(task.workspace || location)}</strong>.`;
+  let description = semanticTaskDescription(semantic, task.workspace || location);
   if (!waiting && sessionCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active action')} across ${location}.`;
   const activityLabel = waiting
-    ? `${statusLabel(task.status)} · waiting`
+    ? `${statusLabel(task.status)} · latest progress`
     : `${activeCalls} ${pluralLabel(activeCalls, 'active call')}`;
   card.className = `card task-overview ${waiting ? 'waiting' : 'active'}`;
   card.innerHTML = `
@@ -278,6 +278,19 @@ function renderInactiveSessionCard(card, task) {
       ${taskProgressHtml(task.progress, task.status, { compact: true })}
     </div>
     <div class="task-overview-meta"><span data-clock-relative="${esc(task.endedAt || task.completedAt || '')}">${esc(timeAgo(task.endedAt || task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
+}
+
+function semanticProgressFor(task = {}) {
+  if (task.semanticProgress && typeof task.semanticProgress === 'object') return task.semanticProgress;
+  return buildTaskSemanticProgress(task);
+}
+
+function semanticTaskDescription(semantic = {}, workspace = '') {
+  const stage = String(semantic.currentStage || 'Task progress').trim();
+  const activity = String(semantic.currentActivity || '').trim();
+  const location = String(workspace || '').trim();
+  const progress = activity && activity !== stage ? `${esc(stage)} · ${esc(activity)}` : esc(stage || activity || 'Task is open');
+  return location ? `${progress} in <strong>${esc(location)}</strong>.` : `${progress}.`;
 }
 
 function activeTaskLocation(tasks) {

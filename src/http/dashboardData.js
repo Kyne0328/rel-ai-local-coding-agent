@@ -7,6 +7,7 @@ import { deriveConnectionState } from '../desktopUxContracts.js';
 import { getApplicationMetadata } from '../appMetadata.js';
 import { readTaskHistory } from '../taskHistoryStore.js';
 import { buildSafeActivityProjection, sanitizeActivityEventRecord, sanitizeTaskRecordForProjection } from '../taskObservability.js';
+import { buildTaskSemanticProgress } from '../taskSemanticProgress.js';
 import { eventIdentityKey, eventTimestampMs, eventTimestampValue } from '../taskEvents.js';
 import { buildWorkspaceStates } from '../workspaceState.js';
 import { runtimeCompatibility } from '../runtimeCompatibility.js';
@@ -197,8 +198,9 @@ function normalizeDashboardActivity(entry) {
 
 function summarizeDashboardTask(task) {
   if (!task || typeof task !== 'object') return task;
+  const semanticProgress = buildTaskSemanticProgress(task);
   const { events: _events, ...withoutEvents } = task;
-  const projected = sanitizeTaskRecordForProjection(withoutEvents);
+  const projected = sanitizeTaskRecordForProjection({ ...withoutEvents, semanticProgress });
   return projected && typeof projected === 'object' ? { ...projected } : projected;
 }
 

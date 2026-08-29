@@ -32,6 +32,7 @@ import { repositoryIntelligence } from '../repository/intelligence/service.js';
 const DASHBOARD_SHARED_MODULES = Object.freeze({
   '/public/analyticsFailureCategory.js': Object.freeze(['src', 'analyticsFailureCategory.js']),
   '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
+  '/public/taskSemanticProgress.js': Object.freeze(['src', 'taskSemanticProgress.js']),
   '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
 });
 async function handleFavicon(ctx) {
