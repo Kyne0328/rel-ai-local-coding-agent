@@ -64,6 +64,19 @@ for (const [platform, filter] of [['win', ['manifest.json', 'win32/**']], ['linu
   assert.deepEqual(resource.filter, filter);
   assert.equal(electronPkg.build[platform].extraResources.some(item => /vendor\/ngrok/i.test(String(item.from || ''))), false);
 }
+const ptyResources = {
+  win: ['package.json', 'lib/**', 'prebuilds/win32-${arch}/**'],
+  linux: ['package.json', 'lib/**', 'build/Release/pty.node', 'build/Release/spawn-helper'],
+  mac: ['package.json', 'lib/**', 'prebuilds/darwin-${arch}/**']
+};
+for (const [platform, filter] of Object.entries(ptyResources)) {
+  const resource = electronPkg.build[platform].extraResources.find(item => item.from === 'node_modules/node-pty');
+  assert.ok(resource, `${platform} packaging must include the node-pty runtime.`);
+  assert.equal(resource.to, 'node_modules/node-pty');
+  assert.deepEqual(resource.filter, filter);
+}
+assert.equal(rootPkg.optionalDependencies?.['node-pty'], electronPkg.dependencies?.['node-pty'], 'root and packaged Electron PTY runtimes must use the same native dependency build');
+assert.equal(electronPkg.dependencies?.['node-pty'], '1.1.0', 'packaged Electron PTY runtime must pin the native dependency exactly'); // rigidity-ok: node-pty is a native ABI dependency intentionally pinned for deterministic packaging.
 assert.match(String(rootPkg.scripts['fetch:tunnel-client'] || ''), /scripts\/fetch-tunnel-client\.mjs/, 'fetch:tunnel-client must route to the tunnel-client fetcher');
 assert.match(String(rootPkg.scripts['verify:tunnel-client'] || ''), /scripts\/verify-tunnel-client\.mjs/, 'verify:tunnel-client must route to the tunnel-client verifier');
 assert.equal(rootPkg.scripts['fetch:ngrok'], undefined);

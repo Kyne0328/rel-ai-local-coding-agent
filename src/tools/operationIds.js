@@ -20,6 +20,8 @@ const OPERATION_IDS = Object.freeze({
   VALIDATE_DIAGNOSTICS: 'validate.diagnostics',
   VALIDATE_HTTP: 'validate.http',
   CHANGES_DIFF: 'changes.diff',
+  CHANGES_CHECKPOINT: 'changes.checkpoint',
+  CHANGES_REPLAY: 'changes.replay',
   CHANGES_RESTORE: 'changes.restore',
   CHANGES_RESET: 'changes.reset',
   CHANGES_TIDY_PLAN: 'changes.tidy_plan',

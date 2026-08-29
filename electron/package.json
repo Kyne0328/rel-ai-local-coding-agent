@@ -220,6 +220,15 @@
             "LICENSE",
             "win32/**"
           ]
+        },
+        {
+          "from": "node_modules/node-pty",
+          "to": "node_modules/node-pty",
+          "filter": [
+            "package.json",
+            "lib/**",
+            "prebuilds/win32-${arch}/**"
+          ]
         }
       ]
     },
@@ -264,6 +273,16 @@
             "LICENSE",
             "linux/**"
           ]
+        },
+        {
+          "from": "node_modules/node-pty",
+          "to": "node_modules/node-pty",
+          "filter": [
+            "package.json",
+            "lib/**",
+            "build/Release/pty.node",
+            "build/Release/spawn-helper"
+          ]
         }
       ]
     },
@@ -290,6 +309,15 @@
             "manifest.json",
             "LICENSE",
             "darwin/**"
+          ]
+        },
+        {
+          "from": "node_modules/node-pty",
+          "to": "node_modules/node-pty",
+          "filter": [
+            "package.json",
+            "lib/**",
+            "prebuilds/darwin-${arch}/**"
           ]
         }
       ]
@@ -324,7 +352,8 @@
     }
   },
   "dependencies": {
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.9",
+    "node-pty": "1.1.0"
   },
   "allowScripts": {
     "electron-winstaller@5.4.0": true

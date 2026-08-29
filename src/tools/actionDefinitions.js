@@ -12,7 +12,7 @@ import { OPERATION_IDS as OP } from './operationIds.js';
 /** @type {Set<string>} */
 const READ_ONLY_TOOLS = new Set([
   OP.SNAPSHOT, OP.READ, OP.SEARCH_TEXT, OP.INSPECT, OP.SEARCH_SEMANTIC,
-  OP.PROCESS_READ, OP.PROCESS_LIST, OP.CHANGES_TIDY_PLAN, OP.VALIDATE_HTTP, OP.CHANGES_DIFF,
+  OP.PROCESS_READ, OP.PROCESS_LIST, OP.CHANGES_TIDY_PLAN, OP.VALIDATE_HTTP, OP.CHANGES_DIFF, OP.CHANGES_REPLAY,
   OP.WORK_STATUS, OP.PUBLISH_DRAFT_PR
 ]);
 /** @type {Set<string>} */
@@ -129,7 +129,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_read', title: 'Read Repository',
-    description: 'Use when exact file content, ranges, or directories are known and needed. Do not use for discovery across unknown locations.'
+    description: 'Use when exact file content, ranges, directories, or one discovered skill are known and needed. Do not use for discovery across unknown locations.'
   },
   {
     name: 'relai_search', title: 'Search Repository',
@@ -170,7 +170,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_changes', title: 'Review or Restore Changes',
-    description: 'Use to review, restore, reset, or tidy workspace changes. Do not use to create new source edits.',
+    description: 'Use to review, checkpoint/replay a review, restore, reset, or tidy workspace changes. Do not use to create new source edits.',
     annotations: annotations(false, true, false, false), dashboard: { capabilities: ['review', 'recover'] },
     groups: ['audit', 'cleanup']
   },

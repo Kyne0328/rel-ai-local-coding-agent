@@ -207,6 +207,7 @@ function requiredArgs(entry) {
     case 'relai_validate:http': return { route: '/health' };
     case 'relai_changes:restore': return { paths: ['README.md'] };
     case 'relai_changes:reset': return { confirmation: 'RESET' };
+    case 'relai_changes:replay': return { checkpointId: 'review_abcdefghijklmnopqrstuvwx' };
     case 'relai_changes:tidy_run': return { planId: 'tidy_abcdefghijklmnopqrst' };
     case 'relai_publish:commit': return { message: 'Validate output' };
     default: return {};

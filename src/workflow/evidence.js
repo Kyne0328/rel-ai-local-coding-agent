@@ -98,7 +98,7 @@ function evidenceKind(tool, args, result) {
   if (tool === OP.READ) return 'read';
   if (tool === OP.UI) return 'ui';
   if (tool === OP.INSPECT || tool === OP.SEARCH_TEXT || tool === OP.SEARCH_SEMANTIC) return 'inspection';
-  if (tool === OP.CHANGES_DIFF) return 'review';
+  if (tool === OP.CHANGES_DIFF || tool === OP.CHANGES_CHECKPOINT || tool === OP.CHANGES_REPLAY) return 'review';
   if (tool === OP.PROCESS_START || tool === OP.PROCESS_READ) return 'process';
   return '';
 }

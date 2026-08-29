@@ -21,6 +21,7 @@ import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
+import { createReviewCheckpoint, replayReviewCheckpoint } from '../reviewCheckpoints.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
@@ -86,6 +87,11 @@ const HANDLERS = Object.freeze({
   runChecks: inWorkspace((workspace, config, args, context) => relaiVerify(workspace, config, mapCheckArgs(args), context)),
   httpProbe: inWorkspace((workspace, config, args) => relaiHttpProbe(workspace, config, args)),
   diff: inWorkspace((workspace, config, args, context) => relaiDiff(workspace, config, withTaskOwnedReviewContext(config, workspace, args, context))),
+  reviewCheckpoint: inWorkspace(async (workspace, config, args, context) => {
+    const review = await relaiDiff(workspace, config, withTaskOwnedReviewContext(config, workspace, args, context));
+    return createReviewCheckpoint(workspace, config, review);
+  }),
+  reviewReplay: inWorkspace((workspace, config, args) => replayReviewCheckpoint(workspace, config, args.checkpointId)),
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
   status: relaiStatus,

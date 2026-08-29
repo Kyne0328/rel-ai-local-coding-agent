@@ -72,6 +72,9 @@ function compactForConnector(name, value, args = {}) {
     }
     case OP.CHANGES_DIFF:
       return pruneEmpty({ ...compactRepositoryState(value), staged: value.staged, path: value.path, reviewScope: value.reviewScope || value.reviewedScope, reviewedScope: value.reviewedScope, reviewHash: value.reviewHash, reviewedFiles: value.reviewedFiles, excludedWorkspaceFiles: value.excludedWorkspaceFiles, diff: value.diff });
+    case OP.CHANGES_CHECKPOINT:
+    case OP.CHANGES_REPLAY:
+      return pruneEmpty({ ...compactRepositoryState(value), checkpointId: value.checkpointId, payloadSha256: value.payloadSha256, createdAt: value.createdAt, replayed: value.replayed, staged: value.staged, path: value.path, reviewScope: value.reviewScope || value.reviewedScope, reviewedScope: value.reviewedScope, reviewHash: value.reviewHash, reviewedFiles: value.reviewedFiles, excludedWorkspaceFiles: value.excludedWorkspaceFiles, diff: value.diff });
     case OP.VALIDATE_CHECKS:
       return pruneEmpty({
         ok: value.ok,
@@ -146,6 +149,7 @@ function compactForConnector(name, value, args = {}) {
         manifests: value.manifests,
         discoveredCommands: value.discoveredCommands,
         projectInstructions: value.projectInstructions,
+        skills: value.skills,
         fileCount: value.fileCount,
         files: files.values,
         returnedFileCount: files.count,

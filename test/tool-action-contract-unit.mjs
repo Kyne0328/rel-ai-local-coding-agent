@@ -208,6 +208,7 @@ function sampleArgs(entry) {
     case 'relai_validate:http': args.route = '/health'; break;
     case 'relai_changes:restore': args.paths = ['README.md']; break;
     case 'relai_changes:reset': args.confirmation = 'RESET'; break;
+    case 'relai_changes:replay': args.checkpointId = 'review_abcdefghijklmnopqrstuvwx'; break;
     case 'relai_changes:tidy_run': args.planId = 'tidy_abcdefghijklmnopqrst'; break;
     case 'relai_publish:commit': args.message = 'Contract commit'; break;
   }

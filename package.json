@@ -190,5 +190,8 @@
     "typescript-lsp-runtime",
     "web-tree-sitter",
     "zod"
-  ]
+  ],
+  "optionalDependencies": {
+    "node-pty": "1.1.0"
+  }
 }

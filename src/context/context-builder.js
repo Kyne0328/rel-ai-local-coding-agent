@@ -16,6 +16,7 @@ function fullBootstrap(snapshot) {
     manifests: snapshot.manifests,
     discoveredCommands: snapshot.discoveredCommands,
     projectInstructions: snapshot.projectInstructions,
+    skills: snapshot.skills,
     truncated: snapshot.truncated,
     hints: snapshot.hints,
     git: snapshot.git,

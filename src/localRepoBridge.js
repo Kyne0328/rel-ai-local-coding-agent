@@ -20,6 +20,7 @@ import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
 import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
 import { relaiApplyPatch, normalizeOpenAIPatchFormat } from "./bridge/patch.js";
 import { readProjectInstructions } from "./projectInstructions.js";
+import { discoverSkills, readDiscoveredSkill } from './skillDiscovery.js';
 import { discoverRepositoryTopology } from "./workflow/topology.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
 
@@ -48,6 +49,7 @@ async function repoSnapshot(workspace, config, args = {}) {
   const topology = discoverRepositoryTopology(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path, { topology });
   const projectInstructions = readProjectInstructions(workspace, { targetPath: args.instructionPath });
+  const skills = discoverSkills(workspace);
   const git = await gitSummary;
   return {
     ok: true,
@@ -57,6 +59,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     manifestContents: manifests,
     discoveredCommands,
     projectInstructions,
+    skills,
     fileCount: tree.files.length,
     effectiveMaxEntries: maxEntries,
     budgetMultiplied: effectiveDefault !== configuredDefault,
@@ -109,6 +112,21 @@ function relaiRead(workspace, config, args = {}, context = {}) {
 }
 
 async function relaiReadAsync(workspace, config, args = {}, context = {}) {
+  if (args.skill) {
+    if ((Array.isArray(args.paths) && args.paths.length) || (Array.isArray(args.ranges) && args.ranges.length)) {
+      throw new Error('relai_read skill cannot be combined with paths or ranges.');
+    }
+    const item = readDiscoveredSkill(workspace, args.skill, { maxBytes: args.maxBytes });
+    return {
+      ok: true,
+      workspace: workspace.alias,
+      items: [item],
+      skipped: [],
+      requestedCount: 1,
+      returnedCount: 1,
+      ...(item.truncated ? { truncated: true } : {})
+    };
+  }
   const request = prepareReadRequest(workspace, config, args, context);
   const results = await mapWithConcurrency(request.paths, READ_IO_CONCURRENCY, (requested, index) => readSingleItemAsync(
     workspace,

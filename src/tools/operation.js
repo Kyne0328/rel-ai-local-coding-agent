@@ -38,6 +38,8 @@ function describeToolOperation(name, args = {}) {
     case OP.VALIDATE_CHECKS: return `Running ${String(args.level || 'standard')} validation${suffix}`;
     case OP.VALIDATE_HTTP: return `Probing local route ${args.route || '/'}${suffix}`;
     case OP.CHANGES_DIFF: return `Reviewing repository changes${suffix}`;
+    case OP.CHANGES_CHECKPOINT: return `Checkpointing repository changes${suffix}`;
+    case OP.CHANGES_REPLAY: return `Replaying a review checkpoint${suffix}`;
     case OP.CHANGES_RESTORE: return `Restoring ${Array.isArray(args.paths) ? args.paths.length : 0} tracked paths${suffix}`;
     case OP.CHANGES_RESET: return args.removeUntracked ? `Resetting and cleaning the workspace${suffix}` : `Resetting tracked workspace changes${suffix}`;
     case OP.PUBLISH_COMMIT: return `Creating a Git commit${suffix}`;

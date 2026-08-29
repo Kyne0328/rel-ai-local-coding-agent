@@ -28,7 +28,10 @@ function publicProcessInputSchema(inputSchema) {
       command: describe('command', 'Shell command string for start. Use only when shell syntax is deliberately required.'),
       executable: describe('executable', 'Executable to launch directly with shell:false. Preferred for persistent process startup.'),
       argv: describe('argv', 'Literal arguments passed directly to executable without shell parsing.'),
-      input: describe('input', 'For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream. For write, UTF-8 input sent to the running process.')
+      input: describe('input', 'For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream; PTY starts write the same input to the terminal. For write, UTF-8 input is sent to the running process or PTY.'),
+      pty: describe('pty', 'For start, allocate a real pseudo-terminal. Only valid with kind:interactive.'),
+      columns: describe('columns', 'For PTY start or write, terminal width from 1 to 1000 columns.'),
+      rows: describe('rows', 'For PTY start or write, terminal height from 1 to 1000 rows.')
     }
   };
 }
@@ -49,7 +52,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       newText: describe('newText', 'Replacement text paired with oldText. An empty string deletes the matched text.'),
       occurrence: describe('occurrence', 'One-based occurrence to replace when oldText is not unique.'),
       replacements: describe('replacements', 'Several exact oldText/newText replacements in one file.'),
-      content: describe('content', 'Complete replacement content for one file. Use with path; an empty string creates an empty file. Large complete-file writes are staged internally when needed.'),
+      content: describe('content', 'Complete replacement content as text for one file, or a native ChatGPT file reference object to stream into path without overwrite. Large complete-file text writes are staged internally when needed.'),
       expectedSha256: describe('expectedSha256', 'Optional stale-write guard for direct, staged, batch, symbol, and environment edits.'),
       updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes. Keep one logical patch together when the client transport can carry it.'),
       envAction: describe('envAction', 'Secret-safe environment operation: list, set, remove, or compare.'),

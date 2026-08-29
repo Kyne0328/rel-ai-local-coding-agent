@@ -12,6 +12,7 @@ import { classifyWorkflowRisk } from "./workflow/risk.js";
 import { codeIntelligence } from './codeIntelligence/service.js';
 import { resolveSymbolEdit } from './semanticEdit.js';
 import { discoverRepositoryTopology, packageForPath } from "./workflow/topology.js";
+import { importNativeArtifact } from './artifactIntake.js';
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -535,6 +536,10 @@ async function _handleSingleEdit(workspace, config, args) {
 
 async function planEdit(workspace, config, args, context = {}) {
   assertSupportedEditForm(args);
+  if (args.content && typeof args.content === 'object' && !Array.isArray(args.content)) {
+    const result = await importNativeArtifact(workspace, config, { ...args, file: args.content });
+    return attachPost(result, await runPostActions(workspace, config, args, result.changedFiles));
+  }
   if (args.semantic && typeof args.semantic === 'object') {
     const proposal = await codeIntelligence.semanticRename(workspace, args.semantic, { signal: context.signal });
     const result = await _handleBatchEdits(workspace, config, { ...args, semantic: undefined, edits: proposal.edits });

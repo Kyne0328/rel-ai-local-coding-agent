@@ -54,6 +54,10 @@ const files = [
   'intelligence-lsp-unit.mjs',
   'branch-concurrency-unit.mjs',
   'process-manager-unit.mjs',
+  'process-pty-unit.mjs',
+  'review-checkpoints-unit.mjs',
+  'skill-discovery-unit.mjs',
+  'artifact-intake-unit.mjs',
   'baseline-tracking-unit.mjs',
   'unborn-workspace-unit.mjs',
   'validation-task-scope-unit.mjs',
@@ -78,7 +82,8 @@ const serialFiles = new Set([
   'http-auth-smoke.mjs',
   'http-smoke.mjs',
   'smoke.mjs',
-  'process-manager-unit.mjs'
+  'process-manager-unit.mjs',
+  'process-pty-unit.mjs'
 ]);
 const parallelEntries = files
   .map((name, index) => ({ name, index }))

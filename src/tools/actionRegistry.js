@@ -86,6 +86,8 @@ const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
   [OP.VALIDATE_DIAGNOSTICS]: [expose('relai_validate', 'diagnostics', { capability: EXECUTE })],
   [OP.VALIDATE_HTTP]: [expose('relai_validate', 'http', { capability: READ })],
   [OP.CHANGES_DIFF]: [expose('relai_changes', 'diff', { capability: READ })],
+  [OP.CHANGES_CHECKPOINT]: [expose('relai_changes', 'checkpoint', { capability: READ })],
+  [OP.CHANGES_REPLAY]: [expose('relai_changes', 'replay', { capability: READ })],
   [OP.CHANGES_RESTORE]: [expose('relai_changes', 'restore', { capability: WRITE })],
   [OP.CHANGES_RESET]: [expose('relai_changes', 'reset', {
     capability: WRITE,

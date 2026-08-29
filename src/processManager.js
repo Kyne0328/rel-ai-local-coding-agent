@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { combineAbortSignals } from './abortSignals.js';
 import { readJsonFile, writeJsonAtomic, writeJsonAtomicAsync } from './durableState.js';
 import { normalizeExecutionInvocation, resolveCommandCwd, normalizeCommandEnv, redactCommandForAudit } from './bridge/exec.js';
@@ -13,7 +14,7 @@ import { readTaskHistorySession } from './taskHistoryStore.js';
 import { runSpan, addSpanEvent, traceContextEnvironment } from './telemetry.js';
 import { getCurrentTaskAbortSignal, taskError } from './toolActivity.js';
 
-const PROCESS_SCHEMA_VERSION = 2;
+const PROCESS_SCHEMA_VERSION = 3;
 const RUNTIME_ID = crypto.randomUUID();
 const RECENT_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_LOG_BYTES = 16 * 1024 * 1024;
@@ -33,6 +34,7 @@ const metadataPruneAt = new Map();
 const metadataWriteQueues = new Map();
 const processStateListeners = new Set();
 let processStateVersion = 0;
+let nodePtyPromise = null;
 
 function processRoot(config) {
   return path.join(getStateDir(config), 'processes');
@@ -57,6 +59,11 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   const purpose = String(args.purpose || '').trim();
   if (!purpose) throw new Error('relai_process action "start" requires a persistent-process purpose.');
   if (purpose.length > 300) throw new Error('relai_process action "start" purpose must be 300 characters or fewer.');
+  const pty = args.pty === true;
+  if (pty && kind !== 'interactive') throw new Error('PTY mode is only available for kind: interactive.');
+  if (!pty && (args.columns !== undefined || args.rows !== undefined)) throw new Error('columns and rows require pty:true.');
+  const columns = clampNumber(args.columns, 1, 1000, 80);
+  const rows = clampNumber(args.rows, 1, 1000, 24);
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const workSessionId = String(context.taskId || args.work_id || '').trim();
@@ -72,6 +79,9 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     cwd: cwd.relativePath,
     kind,
     purpose,
+    pty,
+    columns,
+    rows,
     environmentKeys
   });
   hydrateProcessMetadata(config);
@@ -123,6 +133,12 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     stderrPath,
     environmentKeys,
     child: null,
+    ptyProcess: null,
+    pty,
+    columns,
+    rows,
+    ptyExitPromise: null,
+    resolvePtyExit: null,
     maxLogBytes: clampNumber(args.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
     persistTimer: null,
     logBuffers: { stdout: [], stderr: [] },
@@ -150,50 +166,77 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   }, async () => {
     const childEnvironment = makeProcessEnvironment(env, { allow: config.processEnvironment?.allow });
     Object.assign(childEnvironment, traceContextEnvironment());
+    const startupSignal = combineAbortSignals(
+      context.signal,
+      getCurrentTaskAbortSignal()
+    );
     let child;
+    let initialState;
     try {
-      child = spawn(invocation.processExecutable, invocation.processArgv, {
-        cwd: cwd.absolutePath,
-        env: childEnvironment,
-        detached: process.platform !== 'win32',
-        windowsHide: true,
-        shell: false,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+      if (record.pty) {
+        const nodePty = await loadNodePty();
+        const ptyProcess = nodePty.spawn(invocation.processExecutable, invocation.processArgv, {
+          name: String(process.env.TERM || 'xterm-256color'),
+          cwd: cwd.absolutePath,
+          env: childEnvironment,
+          cols: record.columns,
+          rows: record.rows,
+          ...(process.platform === 'win32' ? { useConpty: false } : {})
+        });
+        record.ptyProcess = ptyProcess;
+        record.pid = ptyProcess.pid || null;
+        record.status = 'running';
+        record.ptyExitPromise = new Promise(resolve => { record.resolvePtyExit = resolve; });
+        ptyProcess.onData(data => appendLog(config, record, 'stdout', data));
+        ptyProcess.onExit(event => {
+          record.resolvePtyExit?.(event);
+          finishRecord(config, record, {
+            status: record.status === 'stopping' ? 'stopped' : (event.exitCode === 0 ? 'exited' : 'failed'),
+            exitCode: Number.isInteger(event.exitCode) ? event.exitCode : -1,
+            signal: event.signal ? String(event.signal) : ''
+          });
+        });
+        initialState = Promise.resolve({ type: 'spawned' });
+        addSpanEvent('process.spawned', { 'process.pid': record.pid || 0, 'process.pty': true });
+      } else {
+        child = spawn(invocation.processExecutable, invocation.processArgv, {
+          cwd: cwd.absolutePath,
+          env: childEnvironment,
+          detached: process.platform !== 'win32',
+          windowsHide: true,
+          shell: false,
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+        record.child = child;
+        record.pid = child.pid || null;
+        initialState = observeInitialProcessState(child, startupSignal);
+        child.stdout?.on('data', chunk => appendLog(config, record, 'stdout', chunk));
+        child.stderr?.on('data', chunk => appendLog(config, record, 'stderr', chunk));
+        child.once('spawn', () => {
+          if (record.status !== 'starting') return;
+          record.status = 'running';
+          safePersistMetadata(config, record);
+          notifyProcessState(record);
+          addSpanEvent('process.spawned', { 'process.pid': record.pid || 0 });
+        });
+        child.once('error', error => finishRecord(config, record, {
+          status: 'failed',
+          exitCode: -1,
+          error: error.message
+        }));
+        child.once('close', (code, signal) => finishRecord(config, record, {
+          status: record.status === 'stopping' ? 'stopped' : (code === 0 ? 'exited' : 'failed'),
+          exitCode: typeof code === 'number' ? code : -1,
+          signal: signal || ''
+        }));
+      }
     } catch (error) {
       fs.rmSync(directory, { recursive: true, force: true });
       throw error;
     }
 
-    record.child = child;
-    record.pid = child.pid || null;
     processes.set(processId, record);
     notifyProcessState(record);
-    const startupSignal = combineAbortSignals(
-      context.signal,
-      getCurrentTaskAbortSignal()
-    );
-    const initialState = observeInitialProcessState(child, startupSignal);
-
-    child.stdout?.on('data', chunk => appendLog(config, record, 'stdout', chunk));
-    child.stderr?.on('data', chunk => appendLog(config, record, 'stderr', chunk));
-    child.once('spawn', () => {
-      if (record.status !== 'starting') return;
-      record.status = 'running';
-      safePersistMetadata(config, record);
-      notifyProcessState(record);
-      addSpanEvent('process.spawned', { 'process.pid': record.pid || 0 });
-    });
-    child.once('error', error => finishRecord(config, record, {
-      status: 'failed',
-      exitCode: -1,
-      error: error.message
-    }));
-    child.once('close', (code, signal) => finishRecord(config, record, {
-      status: record.status === 'stopping' ? 'stopped' : (code === 0 ? 'exited' : 'failed'),
-      exitCode: typeof code === 'number' ? code : -1,
-      signal: signal || ''
-    }));
 
     try {
       persistMetadata(config, record);
@@ -201,8 +244,9 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
       record.discarded = true;
       record.persistenceFailureHandled = true;
       clearScheduledPersist(record);
-      await terminateProcessTree(child, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS }).catch(() => null);
+      await terminateManagedRecord(record, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS }).catch(() => null);
       record.child = null;
+      record.ptyProcess = null;
       processes.delete(processId);
       fs.rmSync(directory, { recursive: true, force: true });
       throw new Error(`Could not persist managed process record: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
@@ -287,6 +331,7 @@ function waitDuringStartup(record, waitMs, signal) {
   if (signal?.aborted) return Promise.resolve('aborted');
   if (!ACTIVE_STATUSES.has(record.status)) return Promise.resolve('closed');
   if (waitMs <= 0) return Promise.resolve('ready');
+  if (record.pty) return waitDuringPtyStartup(record, waitMs, signal);
   return new Promise(resolve => {
     let settled = false;
     const onClose = () => finish('closed');
@@ -306,7 +351,31 @@ function waitDuringStartup(record, waitMs, signal) {
   });
 }
 
+function waitDuringPtyStartup(record, waitMs, signal) {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => finish('ready'), waitMs);
+    const onAbort = () => finish('aborted');
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+    record.ptyExitPromise?.then(() => finish('closed'));
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve(result);
+    }
+  });
+}
+
 function writeInitialProcessInput(record, input) {
+  if (record.pty) {
+    if (!record.ptyProcess || !['starting', 'running'].includes(record.status)) {
+      throw new Error(`Process ${record.processId} does not have writable PTY input.`);
+    }
+    record.ptyProcess.write(String(input));
+    return Promise.resolve();
+  }
   const stream = record.child?.stdin;
   if (!stream || stream.destroyed || !['starting', 'running'].includes(record.status)) {
     throw new Error(`Process ${record.processId} does not have writable stdin.`);
@@ -426,20 +495,47 @@ function readManagedProcess(config, args = {}, context = {}) {
 async function writeManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
   assertProcessAccess(config, record, args, context);
-  const stream = record.child?.stdin;
-  if (!stream || stream.destroyed || !['starting', 'running'].includes(record.status)) {
-    throw new Error(`Process ${record.processId} does not have writable stdin.`);
+  if (!['starting', 'running'].includes(record.status)) throw new Error(`Process ${record.processId} is not accepting input.`);
+  const hasInput = args.input !== undefined;
+  const hasResize = args.columns !== undefined || args.rows !== undefined;
+  if (!hasInput && !hasResize) throw new Error('relai_process action "write" requires input or PTY columns+rows.');
+  if (hasResize) {
+    if (!record.pty || !record.ptyProcess) throw new Error('PTY resize requires a running pty:true process.');
+    if (args.columns === undefined || args.rows === undefined) throw new Error('PTY resize requires both columns and rows.');
+    const columns = clampNumber(args.columns, 1, 1000, record.columns || 80);
+    const rows = clampNumber(args.rows, 1, 1000, record.rows || 24);
+    record.ptyProcess.resize(columns, rows);
+    record.columns = columns;
+    record.rows = rows;
+    safePersistMetadata(config, record);
+    notifyProcessState(record);
   }
-  const input = String(args.input ?? '');
-  const bytes = Buffer.byteLength(input, 'utf8');
-  if (bytes > 1024 * 1024) throw new Error('Process input exceeds 1 MiB.');
-  await new Promise((resolve, reject) => {
-    stream.write(input, error => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-  return { ok: true, processId: record.processId, acceptedBytes: bytes, status: record.status };
+  let bytes = 0;
+  if (hasInput) {
+    const input = String(args.input ?? '');
+    bytes = Buffer.byteLength(input, 'utf8');
+    if (bytes > 1024 * 1024) throw new Error('Process input exceeds 1 MiB.');
+    if (record.pty) {
+      if (!record.ptyProcess) throw new Error(`Process ${record.processId} does not have writable PTY input.`);
+      record.ptyProcess.write(input);
+    } else {
+      const stream = record.child?.stdin;
+      if (!stream || stream.destroyed) throw new Error(`Process ${record.processId} does not have writable stdin.`);
+      await new Promise((resolve, reject) => {
+        stream.write(input, error => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+    }
+  }
+  return {
+    ok: true,
+    processId: record.processId,
+    acceptedBytes: bytes,
+    status: record.status,
+    ...(hasResize ? { resized: true, columns: record.columns, rows: record.rows } : {})
+  };
 }
 
 async function stopManagedProcess(config, args = {}, context = {}) {
@@ -474,7 +570,7 @@ async function stopRecordInternal(config, record, options = {}) {
   record.status = 'stopping';
   safePersistMetadata(config, record);
   notifyProcessState(record);
-  const outcome = await terminateProcessTree(target, {
+  const outcome = await terminateManagedRecord(record, {
     graceMs: clampNumber(options.graceMs, 0, 30000, DEFAULT_STOP_GRACE_MS),
     forceWaitMs: DEFAULT_FORCE_WAIT_MS
   });
@@ -575,7 +671,7 @@ function workSessionWorkspace(config, taskId) {
   return String(readTaskHistorySession(config, id)?.workspace || '').trim();
 }
 
-function managedProcessReuseFingerprint({ workspaceId = '', workSessionId = '', principalKey = '', executionMode = '', command = '', input = '', cwd = '.', kind = '', purpose = '', environmentKeys = [] } = {}) {
+function managedProcessReuseFingerprint({ workspaceId = '', workSessionId = '', principalKey = '', executionMode = '', command = '', input = '', cwd = '.', kind = '', purpose = '', pty = false, columns = 80, rows = 24, environmentKeys = [] } = {}) {
   return crypto.createHash('sha256').update(JSON.stringify([
     normalizeWorkspaceReference(workspaceId),
     String(workSessionId || '').trim(),
@@ -586,6 +682,9 @@ function managedProcessReuseFingerprint({ workspaceId = '', workSessionId = '', 
     String(cwd || '.').trim().replaceAll('\\', '/'),
     String(kind || '').trim().toLowerCase(),
     String(purpose || '').trim(),
+    pty === true,
+    Number(columns) || 80,
+    Number(rows) || 24,
     [...new Set((environmentKeys || []).map(value => String(value || '').trim()).filter(Boolean))].sort()
   ])).digest('base64url');
 }
@@ -666,6 +765,11 @@ function processSnapshot(record, options = {}) {
     stderrRetainedFromOffset: Number(record.stderrStartOffset || 0),
     environmentKeys: record.environmentKeys || []
   };
+  if (record.pty) {
+    result.pty = true;
+    result.columns = Number(record.columns || 80);
+    result.rows = Number(record.rows || 24);
+  }
   if (record.error) result.error = record.error;
   if (options.includeTail) {
     result.stdoutTail = readLogTail(record, 'stdout', options.tailBytes || 8192);
@@ -681,7 +785,10 @@ function processMetadataRevision(record) {
     record.endedAt || '',
     record.exitCode,
     record.signal || '',
-    record.error || ''
+    record.error || '',
+    record.pty === true,
+    Number(record.columns || 0),
+    Number(record.rows || 0)
   ])).digest('base64url').slice(0, 16);
 }
 
@@ -690,6 +797,7 @@ function finishRecord(config, record, fields) {
   clearScheduledPersist(record);
   Object.assign(record, fields, { endedAt: new Date().toISOString() });
   record.child = null;
+  record.ptyProcess = null;
   notifyProcessState(record);
   if (!record.discarded) {
     void drainLogWrites(config, record).then(() => queueMetadataPersist(config, record));
@@ -766,6 +874,9 @@ function metadataRecord(record) {
     stdoutStartOffset: Number(record.stdoutStartOffset || 0),
     stderrStartOffset: Number(record.stderrStartOffset || 0),
     environmentKeys: record.environmentKeys || [],
+    pty: record.pty === true,
+    columns: Number(record.columns || 80),
+    rows: Number(record.rows || 24),
     maxLogBytes: record.maxLogBytes
   };
 }
@@ -802,17 +913,18 @@ function handlePersistenceFailure(config, record, error) {
   clearScheduledPersist(record);
   clearScheduledLogFlushes(record);
   record.error = `Managed process persistence failed: ${error instanceof Error ? error.message : String(error)}`;
-  const target = record.child || record.pid;
-  void terminateProcessTree(target, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS })
+  void terminateManagedRecord(record, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS })
     .then(outcome => {
       record.status = outcome.exited ? 'failed' : 'orphaned';
       if (outcome.exited) record.endedAt = new Date().toISOString();
       record.child = null;
+      record.ptyProcess = null;
       try { persistMetadata(config, record); } catch {}
     })
     .catch(() => {
       record.status = 'orphaned';
       record.child = null;
+      record.ptyProcess = null;
     });
 }
 
@@ -861,6 +973,12 @@ function readMetadata(config, processId) {
       stderrPath,
       environmentKeys: Array.isArray(metadata.environmentKeys) ? metadata.environmentKeys : [],
       child: null,
+      ptyProcess: null,
+      pty: metadata.pty === true,
+      columns: clampNumber(metadata.columns, 1, 1000, 80),
+      rows: clampNumber(metadata.rows, 1, 1000, 24),
+      ptyExitPromise: null,
+      resolvePtyExit: null,
       maxLogBytes: clampNumber(metadata.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
       persistTimer: null,
       logBuffers: { stdout: [], stderr: [] },
@@ -1018,7 +1136,7 @@ async function cleanupFailedStartup(config, record) {
     await drainLogWrites(config, record);
     return { exited: true, forced: false };
   }
-  const outcome = await terminateProcessTree(target, {
+  const outcome = await terminateManagedRecord(record, {
     graceMs: 0,
     forceWaitMs: DEFAULT_FORCE_WAIT_MS
   });
@@ -1035,6 +1153,51 @@ function processNeedsTermination(record) {
   if (ACTIVE_STATUSES.has(record.status)) return true;
   if (record.status === 'orphaned') return isProcessTreeAlive(record.pid);
   return false;
+}
+
+async function terminateManagedRecord(record, options = {}) {
+  if (record.ptyProcess) {
+    const ptyProcess = record.ptyProcess;
+    const exitPromise = record.ptyExitPromise;
+    try { ptyProcess.kill(); } catch {}
+    const graceMs = clampNumber(options.graceMs, 0, 30000, DEFAULT_STOP_GRACE_MS);
+    const exited = await waitForPtyExit(exitPromise, Math.max(250, graceMs));
+    await disposeNodePtyResources(ptyProcess);
+    if (exited) {
+      return { exited: true, forced: false };
+    }
+    const fallback = await terminateProcessTree(record.pid, {
+      graceMs: 0,
+      forceWaitMs: clampNumber(options.forceWaitMs, 0, 30000, DEFAULT_FORCE_WAIT_MS)
+    });
+    await waitForPtyExit(exitPromise, 250);
+    return fallback;
+  }
+  return terminateProcessTree(record.child || record.pid, options);
+}
+
+async function disposeNodePtyResources(ptyProcess) {
+  if (process.platform !== 'win32') return;
+  // node-pty 1.1.0 leaves its WinPTY conout worker alive after kill(). Rel.AI
+  // pins that version, so close the worker deterministically instead of keeping
+  // the MCP service event loop alive after an interactive process ends.
+  const worker = ptyProcess?._agent?._conoutSocketWorker;
+  if (!worker) return;
+  try {
+    if (typeof worker._destroySocket === 'function') await worker._destroySocket();
+    else if (typeof worker.dispose === 'function') worker.dispose();
+  } catch {}
+}
+
+function waitForPtyExit(exitPromise, timeoutMs) {
+  if (!exitPromise || typeof exitPromise.then !== 'function') return Promise.resolve(false);
+  return Promise.race([
+    exitPromise.then(() => true),
+    new Promise(resolve => {
+      const timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs));
+      timer.unref?.();
+    })
+  ]);
 }
 
 function onManagedProcessChange(listener) {
@@ -1064,6 +1227,40 @@ function cancellationError(message) {
   const error = taskError('TASK_CANCELLED', message);
   error.cancelled = true;
   return error;
+}
+
+function loadNodePty() {
+  if (!nodePtyPromise) nodePtyPromise = importNodePty().catch(error => {
+    nodePtyPromise = null;
+    throw error;
+  });
+  return nodePtyPromise;
+}
+
+async function importNodePty() {
+  let firstError;
+  try {
+    return normalizeNodePty(await import('node-pty'));
+  } catch (error) {
+    firstError = error;
+  }
+  const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'node_modules', 'node-pty', 'lib', 'index.js') : '',
+    path.resolve(moduleDirectory, '..', 'electron', 'node_modules', 'node-pty', 'lib', 'index.js')
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue;
+    try { return normalizeNodePty(await import(pathToFileURL(candidate).href)); }
+    catch {}
+  }
+  throw new Error('PTY support requires the packaged node-pty runtime. Reinstall Rel.AI or run the Electron dependency install before using pty:true.', { cause: firstError || undefined });
+}
+
+function normalizeNodePty(module) {
+  const api = module?.spawn ? module : module?.default;
+  if (!api || typeof api.spawn !== 'function') throw new Error('node-pty did not expose a spawn function.');
+  return api;
 }
 
 function clampNumber(value, min, max, fallback) {

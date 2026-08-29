@@ -55,6 +55,8 @@ function titleForTool(tool, details = {}) {
     [OP.PUBLISH_PUSH]: 'Publish Git branch',
     [OP.PUBLISH_DRAFT_PR]: 'Draft pull request',
     [OP.CHANGES_DIFF]: 'Review repository changes',
+    [OP.CHANGES_CHECKPOINT]: 'Checkpoint repository review',
+    [OP.CHANGES_REPLAY]: 'Replay repository review',
     [OP.WORK_STATUS]: 'Inspect repository status',
     [OP.WORK_CANCEL]: 'Cancel work session',
     [OP.WORK_FINISH]: 'Finish work session'
