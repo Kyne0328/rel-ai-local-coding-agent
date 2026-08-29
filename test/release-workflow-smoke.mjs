@@ -155,6 +155,8 @@ function verifyPackageContracts() {
   assert.doesNotMatch(wrapper, /quitAndInstall|Setup.*\.exe|uninstall/i, 'build orchestration must not execute installer lifecycle behavior');
   assert.match(wrapper, /ensureTunnelClient\(platform, targetArch\)/, 'packaging must provision its pinned tunnel-client dependency');
   assert.match(wrapper, /ensureZoekt\(platform, targetArch\)/, 'packaging must provision its pinned Zoekt dependency');
+  const windowsPrebuildReuse = wrapper.match(/--config\.npmRebuild=false/g) || [];
+  assert.equal(windowsPrebuildReuse.length, 2, 'Windows unpacked and release staging must reuse the pinned node-pty prebuild instead of requiring a local native rebuild');
   assert.match(wrapper, /codesign'[\s\S]*'--force'[\s\S]*'--deep'[\s\S]*'--sign'[\s\S]*'-'/,
     'macOS release packaging must apply an explicit ad-hoc signature before DMG creation');
   assert.match(wrapper, /codesign'[\s\S]*'--verify'[\s\S]*'--deep'[\s\S]*'--strict'[\s\S]*'--verbose=2'/,

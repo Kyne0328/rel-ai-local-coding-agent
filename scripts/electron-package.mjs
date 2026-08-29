@@ -57,6 +57,7 @@ if (mode === 'unpacked') {
     platformSpec.builderFlag,
     ...architectureArgs(platformSpec),
     '--dir',
+    '--config.npmRebuild=false',
     '--config.directories.output=../dist/build-check',
     '--publish', 'never',
     ...options.builderArgs
@@ -99,6 +100,7 @@ async function packageWindowsRelease(electronBuilder, builderArgs, spec) {
     runNode('Electron Windows release staging', electronBuilder, [
       spec.builderFlag,
       '--dir',
+      '--config.npmRebuild=false',
       stagingOutputArg,
       '--publish', 'never',
       ...builderArgs
