@@ -331,6 +331,8 @@ jobs:
         run: |
           node test/electron-platform-unit.mjs
           node test/current-unpacked-unit.mjs
+          node test/app-updater-unit.mjs
+          node test/macos-manual-updater-unit.mjs
           node test/installer-test-entrypoints-unit.mjs
       - name: Build macOS release
         env:

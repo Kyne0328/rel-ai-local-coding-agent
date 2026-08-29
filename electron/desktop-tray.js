@@ -72,7 +72,10 @@ function createDesktopTray(deps) {
     if (status.state === 'checking') return { label: 'Checking for updates…', enabled: false };
     if (status.state === 'downloading') return { label: `Downloading update… ${Math.round(status.progress?.percent || 0)}%`, enabled: false };
     if (status.state === 'installing') return { label: 'Installing update…', enabled: false };
-    if (status.state === 'downloaded') return { label: `Restart to install${version}`, click: () => runUpdateAction(installUpdate) };
+    if (status.state === 'downloaded') {
+      const label = status.installMode === 'open_dmg' ? `Open update DMG${version}` : `Restart to install${version}`;
+      return { label, click: () => runUpdateAction(installUpdate) };
+    }
     if (status.state === 'available') return { label: `Download update${version}`, click: () => runUpdateAction(downloadUpdate) };
     if (status.state === 'unsupported') return { label: 'Updates require the installed app', enabled: false };
     return { label: 'Check for updates', click: () => runUpdateAction(checkForUpdates) };

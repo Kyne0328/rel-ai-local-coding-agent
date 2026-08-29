@@ -228,6 +228,7 @@ const desktopLifecycle = createDesktopLifecycleManager({ app,
 appUpdater = createAppUpdater({ app, autoUpdater, getTaskActivity: toolActivityRuntime.getStatus,
   onStatusChange: pushUpdateStatus, onLog: (message, options) => runtimeLogs.append(message, options),
   onBeforeInstall: () => shutdownCoordinator.prepare('update_install'),
+  openUpdateFile: file => shell.openPath(file),
   errorCodes: ERROR_CODES });
 updateSupportPolicy = createUpdateSupportPolicy({
   app,
@@ -403,8 +404,8 @@ async function downloadApplicationUpdate() {
   return combineUpdateActionResult(await appUpdater?.downloadUpdate());
 }
 
-function installApplicationUpdate() {
-  return combineUpdateActionResult(appUpdater?.installUpdate());
+async function installApplicationUpdate() {
+  return combineUpdateActionResult(await appUpdater?.installUpdate());
 }
 
 function updateRuntimeAccess() {

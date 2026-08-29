@@ -189,7 +189,11 @@ function supportUpdateAction(status = {}) {
   const state = String(status.state || 'idle');
   if (state === 'unsupported') return { kind: 'link', label: 'Open GitHub Releases' };
   if (state === 'available') return { kind: 'button', method: 'downloadUpdate', label: `Download v${cleanVersion(status.availableVersion) || 'update'}`, disabled: false, busy: false };
-  if (state === 'downloaded') return { kind: 'button', method: 'installUpdate', label: 'Restart and install', disabled: false, busy: false };
+  if (state === 'downloaded') return {
+    kind: 'button', method: 'installUpdate',
+    label: status.installMode === 'open_dmg' ? 'Open DMG' : 'Restart and install',
+    disabled: false, busy: false
+  };
   if (state === 'checking') return { kind: 'button', method: '', label: 'Checking for update…', disabled: true, busy: true };
   if (state === 'downloading') return { kind: 'button', method: '', label: 'Downloading update…', disabled: true, busy: true };
   if (state === 'installing') return { kind: 'button', method: '', label: 'Installing update…', disabled: true, busy: true };

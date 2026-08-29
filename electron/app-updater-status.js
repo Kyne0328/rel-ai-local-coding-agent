@@ -2,9 +2,11 @@ function normalizeStatus(value) {
   const state = String(value.state || 'idle');
   const supported = value.supported === true;
   const availableVersion = cleanVersion(value.availableVersion);
+  const installMode = value.installMode === 'open_dmg' ? 'open_dmg' : 'restart';
   return {
     state,
     supported,
+    installMode,
     supportReason: cleanText(value.supportReason, 300),
     currentVersion: cleanVersion(value.currentVersion),
     availableVersion,

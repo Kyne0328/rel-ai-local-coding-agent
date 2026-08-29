@@ -66,6 +66,10 @@ assert.equal(tray.update(), true, 'a visible updater percentage change must refr
 assert.equal(buildCount, 3);
 assert.ok(currentMenu.some(item => item.label === 'Downloading update… 13%'));
 
+updateStatus = { state: 'downloaded', availableVersion: '0.28.0', installMode: 'open_dmg', integrityVerified: true };
+assert.equal(tray.update(), true);
+assert.ok(currentMenu.some(item => item.label === 'Open update DMG v0.28.0'), 'macOS manual installs must not be labeled as automatic restarts');
+
 status = { ...status, localMcpUrl: 'http://127.0.0.1:4444/mcp' };
 assert.equal(tray.update(), true, 'menu actions must refresh when their captured desktop state changes');
 const copyItem = currentMenu.find(item => item.label === 'Copy local MCP address');

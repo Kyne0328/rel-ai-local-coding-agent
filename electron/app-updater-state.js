@@ -54,6 +54,7 @@ function detectUpdateSupport({ app, platform, env, resourcesPath = process.resou
     if (env.APPIMAGE || readLinuxPackageType(resourcesPath) === 'deb') return { supported: true, reason: '' };
     return { supported: false, reason: 'Automatic updates are available for installed Linux AppImage and DEB builds.' };
   }
+  if (platform === 'darwin') return { supported: true, reason: '' };
   return { supported: false, reason: 'Automatic updates are not available for this operating system.' };
 }
 

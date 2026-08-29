@@ -103,10 +103,13 @@ function updateView(state, status, currentVersion, availableVersion) {
     };
   }
   if (state === 'downloaded') {
+    const opensDmg = status.installMode === 'open_dmg';
     return {
       label: 'Ready to install', tone: 'ok',
-      description: `${availableVersion || 'The update'} is ready. Restart when Rel.AI is not working on a task.`,
-      action: { id: 'install', label: 'Restart and install', className: 'primary' }
+      description: opensDmg
+        ? `${availableVersion || 'The update'} is verified and downloaded. Open the DMG, then replace Rel.AI MCP in Applications.`
+        : `${availableVersion || 'The update'} is ready. Restart when Rel.AI is not working on a task.`,
+      action: { id: 'install', label: opensDmg ? 'Open DMG' : 'Restart and install', className: 'primary' }
     };
   }
   if (state === 'installing') return { label: 'Installing', tone: 'working', description: 'Rel.AI is restarting to install the downloaded update.' };
@@ -119,7 +122,9 @@ function updateView(state, status, currentVersion, availableVersion) {
   }
   return {
     label: 'Updates enabled', tone: 'ok',
-    description: 'Rel.AI checks once per day. Downloads and restarts always require your approval.',
+    description: status.installMode === 'open_dmg'
+      ? 'Rel.AI checks once per day. Downloads and opening the macOS installer always require your approval.'
+      : 'Rel.AI checks once per day. Downloads and restarts always require your approval.',
     action: { id: 'check', label: 'Check for updates', className: 'secondary' }
   };
 }

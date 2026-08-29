@@ -38,7 +38,7 @@ async function waitFor(condition, message, timeoutMs = 2000) {
   }
 }
 
-function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null, lastCheckAt = 0 } = {}) {
+function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, platform = 'win32', manualMacUpdater = null, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null, lastCheckAt = 0 } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-'));
   roots.push(temp);
   if (lastCheckAt > 0) fs.writeFileSync(path.join(temp, 'update-state.json'), `${JSON.stringify({ lastCheckAt })}\n`);
@@ -55,7 +55,8 @@ function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, a
       getPath: () => temp
     },
     autoUpdater: fake,
-    platform: 'win32',
+    platform,
+    manualMacUpdater,
     env,
     now: () => Date.parse('2026-07-25T00:00:00.000Z'),
     setTimer: (callback, delay) => {
@@ -104,7 +105,7 @@ fs.writeFileSync(path.join(debResources, 'package-type'), 'deb\n');
 assert.equal(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {}, resourcesPath: debResources }).supported, true,
   'installed DEB builds must use electron-updater instead of sending users to App Center');
 assert.match(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {}, resourcesPath: os.tmpdir() }).reason, /installed Linux AppImage and DEB builds/);
-assert.match(detectUpdateSupport({ app: supportApp, platform: 'darwin', env: {} }).reason, /not available/);
+assert.deepEqual(detectUpdateSupport({ app: supportApp, platform: 'darwin', env: {} }), { supported: true, reason: '' });
 assert.deepEqual(progressPayload({ percent: 44.44, transferred: -2, total: 100.8, bytesPerSecond: 20.2 }), {
   percent: 44.4,
   transferred: 0,
@@ -123,6 +124,8 @@ assert.ok(Number.isSafeInteger(AUTO_CHECK_DELAY_MS) && AUTO_CHECK_DELAY_MS >= 0,
 assert.ok(Number.isSafeInteger(AUTO_CHECK_INTERVAL_MS) && AUTO_CHECK_INTERVAL_MS > AUTO_CHECK_DELAY_MS, 'automatic update interval must remain longer than the initial delay');
 assert.equal(normalizeStatus({ supported: true, state: 'downloaded', integrityVerified: false }).canInstall, false);
 assert.equal(normalizeStatus({ supported: true, state: 'downloaded', integrityVerified: true }).canInstall, true);
+assert.equal(normalizeStatus({ supported: true, installMode: 'open_dmg' }).installMode, 'open_dmg');
+assert.equal(normalizeStatus({ supported: true, installMode: 'unexpected' }).installMode, 'restart');
 
 const valid = createHarness();
 assert.equal(valid.updater.start().state, 'idle');
@@ -133,6 +136,50 @@ await waitFor(
   () => valid.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
   'starting the updater must eventually schedule its automatic update check'
 );
+
+const macCalls = { checks: 0, downloads: 0, opens: 0 };
+const macManualUpdater = {
+  async checkForUpdates() {
+    macCalls.checks += 1;
+    return {
+      version: '0.21.0',
+      releaseDate: '2026-07-26T00:00:00.000Z',
+      releaseNotes: 'macOS updater release notes'
+    };
+  },
+  async downloadUpdate({ version, onProgress }) {
+    macCalls.downloads += 1;
+    assert.equal(version, '0.21.0');
+    onProgress({ percent: 50, transferred: 500, total: 1000, bytesPerSecond: 100 });
+    onProgress({ percent: 100, transferred: 1000, total: 1000, bytesPerSecond: 0 });
+    return {
+      version: '0.21.0',
+      releaseDate: '2026-07-26T00:00:00.000Z',
+      releaseNotes: 'macOS updater release notes'
+    };
+  },
+  async openDownloaded(version) {
+    macCalls.opens += 1;
+    assert.equal(version, '0.21.0');
+    return { ok: true };
+  }
+};
+const mac = createHarness({ platform: 'darwin', manualMacUpdater: macManualUpdater });
+assert.equal(mac.updater.start().state, 'idle');
+assert.equal(mac.updater.getStatus().installMode, 'open_dmg');
+assert.equal((await mac.updater.checkForUpdates()).ok, true);
+assert.equal(mac.updater.getStatus().state, 'available');
+assert.equal(mac.updater.getStatus().availableVersion, '0.21.0');
+assert.equal((await mac.updater.downloadUpdate()).ok, true);
+assert.equal(mac.updater.getStatus().state, 'downloaded');
+assert.equal(mac.updater.getStatus().integrityVerified, true);
+assert.equal(mac.updater.getStatus().progress.percent, 100);
+const macOpen = await mac.updater.installUpdate();
+assert.equal(macOpen.ok, true);
+assert.equal(macOpen.opened, true);
+assert.deepEqual(macCalls, { checks: 1, downloads: 1, opens: 1 });
+assert.equal(mac.fake.checkCalls, 0, 'macOS must not call electron-updater without latest-mac.yml metadata');
+assert.equal(mac.fake.downloadCalls, 0, 'macOS downloads the architecture-specific DMG through the manual updater');
 
 const recentLaunch = createHarness({ lastCheckAt: Date.parse('2026-07-24T23:59:00.000Z') });
 recentLaunch.updater.start();
