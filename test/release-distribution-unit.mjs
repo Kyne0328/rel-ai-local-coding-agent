@@ -14,6 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 verifyDependencyGuard();
+verifyNodePtyNativeGuard();
 verifyReleaseSurfaces();
 verifyReleaseMetadataSynchronization();
 verifyReleaseWorkflowPreflight();
@@ -56,6 +57,27 @@ function verifyDependencyGuard() {
     assert.throws(
       () => assertInstalledElectronDependencies({ electronRoot: temp, manifest, lockfile }),
       /runtime-package: electron\/package\.json requests \^1\.0\.0, but electron\/package-lock\.json records \^9\.0\.0/
+    );
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+function verifyNodePtyNativeGuard() {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-electron-node-pty-'));
+  try {
+    const manifest = { dependencies: { 'node-pty': '1.1.0' } };
+    const lockfile = {
+      packages: {
+        '': { dependencies: { 'node-pty': '1.1.0' } },
+        'node_modules/node-pty': { version: '1.1.0' }
+      }
+    };
+    writeInstalledPackage(temp, 'node-pty', '1.1.0');
+    assert.throws(
+      () => assertInstalledElectronDependencies({ electronRoot: temp, manifest, lockfile }),
+      /node-pty's native runtime is unavailable/i,
+      'packaging must reject a node-pty package whose native addon was never built'
     );
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });

@@ -116,6 +116,9 @@ function verifyPackageContracts() {
   assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
   assert.deepEqual(electronLockRoot.dependencies || {}, electronPackage.dependencies || {}, 'Electron runtime dependencies must stay synchronized with the lockfile');
   assert.deepEqual(electronLockRoot.devDependencies || {}, electronPackage.devDependencies || {}, 'Electron development dependencies must stay synchronized with the lockfile');
+  assert.equal(rootPackage.allowScripts?.['node-pty@1.1.0'], true, 'root installs must explicitly approve the pinned node-pty native build under npm 12');
+  assert.equal(electronPackage.allowScripts?.['node-pty@1.1.0'], true, 'Electron installs must explicitly approve the pinned node-pty native build under npm 12');
+  assert.match(String(rootPackage.scripts['test:all'] || ''), /verify:node-pty[\s\S]*verify:generated/, 'the full test gate must verify the native PTY runtime before the long suite');
 
   for (const name of ['electron:build', 'electron:build:linux', 'electron:build:mac', 'electron:dist', 'electron:dist:linux', 'electron:dist:mac']) {
     assert.match(String(rootPackage.scripts[name] || ''), /scripts\/electron-package\.mjs/, `${name} must use the shared cross-platform packager`);

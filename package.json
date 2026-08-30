@@ -46,6 +46,7 @@
     "knip:production": "knip --production --dependencies --config knip.production.json",
     "generate:color-tokens": "node scripts/generate-color-tokens.mjs",
     "verify:generated": "node scripts/check-generated.mjs",
+    "verify:node-pty": "node scripts/verify-node-pty-runtime.mjs",
     "verify:color-tokens": "node scripts/generate-color-tokens.mjs --check",
     "generate:sbom": "node scripts/generate-sbom.mjs",
     "audit:production": "npm audit --omit=dev --audit-level=high && cd electron && npm audit --omit=dev --audit-level=high",
@@ -118,7 +119,7 @@
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
     "test:colors": "npm run verify:color-tokens && node test/color-system-unit.mjs",
-    "test:all": "npm run verify:generated && npm run verify:tree-sitter-assets && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && npm run audit:test-rigidity && npm run test:security && node test/run-tests.mjs && node test/session-summary-unit.mjs",
+    "test:all": "npm run verify:node-pty && npm run verify:generated && npm run verify:tree-sitter-assets && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && npm run audit:test-rigidity && npm run test:security && node test/run-tests.mjs && node test/session-summary-unit.mjs",
     "build:css": "node scripts/dashboard-css.mjs",
     "watch:css": "node scripts/dashboard-css.mjs --watch",
     "test:custom-chrome-browser": "node test/electron-custom-chrome-browser.mjs",
@@ -195,5 +196,8 @@
   ],
   "optionalDependencies": {
     "node-pty": "1.1.0"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
   }
 }

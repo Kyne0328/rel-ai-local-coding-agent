@@ -356,6 +356,7 @@
     "node-pty": "1.1.0"
   },
   "allowScripts": {
-    "electron-winstaller@5.4.0": true
+    "electron-winstaller@5.4.0": true,
+    "node-pty@1.1.0": true
   }
 }

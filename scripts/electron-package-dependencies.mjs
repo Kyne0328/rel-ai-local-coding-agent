@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { verifyNodePtyPackage } from './verify-node-pty-runtime.mjs';
 
 function assertInstalledElectronDependencies({ electronRoot, manifest, lockfile }) {
   const rootEntry = lockfile?.packages?.[''];
@@ -45,6 +46,17 @@ function assertInstalledElectronDependencies({ electronRoot, manifest, lockfile 
 
   if (failures.length) {
     throw new Error(`Electron packaging dependencies do not match the committed lockfile:\n  - ${failures.join('\n  - ')}\nRun "npm ci" in electron/ before packaging.`);
+  }
+  if (manifest?.dependencies?.['node-pty']) {
+    try {
+      verifyNodePtyPackage(path.join(electronRoot, 'node_modules', 'node-pty'), { label: 'Electron node-pty' });
+    } catch (error) {
+      throw new Error(
+        `Electron packaging dependencies are installed but node-pty's native runtime is unavailable. `
+        + `Approve node-pty@${manifest.dependencies['node-pty']} in electron/package.json allowScripts and rerun npm ci in electron/.`,
+        { cause: error }
+      );
+    }
   }
   return Object.freeze({ checked });
 }
