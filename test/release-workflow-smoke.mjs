@@ -38,6 +38,7 @@ function copyFixture() {
     'scripts/release-bump.mjs',
     'scripts/release-surfaces.mjs',
     'scripts/check-generated.mjs',
+    'scripts/dashboard-css.mjs',
     'scripts/electron-package.mjs',
     'scripts/electron-platform.mjs',
     'scripts/release-artifacts.mjs',
@@ -47,7 +48,8 @@ function copyFixture() {
     'scripts/verify-macos-release.mjs',
     'scripts/current-unpacked.mjs',
     'scripts/active-controller-guard.mjs',
-    '.github/workflows/release.yml'
+    '.github/workflows/release.yml',
+    '.github/workflows/ci.yml'
   ]) {
     const source = path.join(root, relativePath);
     const destination = path.join(tmp, relativePath);
@@ -124,6 +126,13 @@ function verifyPackageContracts() {
     assert.doesNotMatch(command, /--strict\b/, `${name} must not turn ordinary measured growth into a release blocker`);
   }
   assert.equal(rootPackage.scripts['test:installed'], undefined);
+  assert.match(String(rootPackage.scripts['release:check'] || ''), /verify:generated[\s\S]*release-check\.mjs/, 'release preflight must reject stale generated assets before packaging starts');
+  assert.match(String(rootPackage.scripts['build:css'] || ''), /dashboard-css\.mjs\b/, 'normal CSS builds must use the shared dashboard generator');
+  assert.match(String(rootPackage.scripts['watch:css'] || ''), /dashboard-css\.mjs\b[\s\S]*--watch\b/, 'CSS watch mode must use the same shared generator contract as normal builds');
+
+  const generatedCheck = fs.readFileSync(path.join(tmp, 'scripts', 'check-generated.mjs'), 'utf8');
+  assert.match(generatedCheck, /verifyGeneratedAssets/, 'generated-asset verification must use the non-destructive shared verifier');
+  assert.doesNotMatch(generatedCheck, /build:css|git\s+diff|runNpm/, 'generated-asset verification must not repair tracked files before reporting staleness');
 
   assert.equal(electronPackage.build.electronUpdaterCompatibility, '>=2.16');
   assert.deepEqual(electronPackage.build.electronLanguages, ['en-US']);
@@ -167,6 +176,7 @@ function verifyPackageContracts() {
 
 function verifyWorkflowContracts() {
   const workflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'release.yml'), 'utf8');
+  const ciWorkflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'ci.yml'), 'utf8');
   const productionAuditIndex = workflow.indexOf('npm run audit:production');
   const packagingAuditIndex = workflow.indexOf('npm run audit:packaging');
   const windowsBuildIndex = workflow.indexOf('npm run electron:dist:windows');
@@ -176,6 +186,8 @@ function verifyWorkflowContracts() {
   assert.ok(packagingAuditIndex < windowsBuildIndex);
   assert.doesNotMatch(workflow, /Install gateway test dependencies|gateway\/package\.json/i, 'public release workflow must not depend on the private gateway workspace');
   assert.doesNotMatch(workflow, /scripts\/fetch-(?:tunnel-client|zoekt)/, 'platform workflows must let the shared packager provision pinned runtime binaries');
+  assert.match(workflow, /preflight:[\s\S]*Verify release consistency[\s\S]*npm run release:check/, 'release preflight must run generated-asset and version consistency checks before platform packaging jobs');
+  assert.match(ciWorkflow, /Verify release and generated-asset consistency[\s\S]*npm run release:check[\s\S]*xvfb-run --auto-servernum npm run test:all/, 'normal CI must reject release/version drift before the full Xvfb test gate');
 
   for (const pattern of [
     /workflow_dispatch:/,

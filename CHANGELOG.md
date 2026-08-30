@@ -8,6 +8,8 @@
 - **Generate the same minified dashboard CSS used by verification.** Watch mode now passes Tailwind's `--minify` flag so development output matches the generated CSS contract checked elsewhere in the repository.
 
 ### Maintenance and validation
+- **Keep dashboard CSS generation identical across build, watch, Electron development, and CI verification.** A shared generator now owns the Tailwind arguments so every path emits the same minified artifact instead of letting a watch command silently rewrite `public/dashboard.css` into a different format.
+- **Fail release preflight before packaging when generated dashboard assets are stale.** `release:check` now includes the same non-destructive generated-asset verification used by CI, and regression coverage proves the checker reports drift without repairing tracked files behind the caller's back.
 - **Document audited plugin-scanner false positives without weakening the scanner rules.** Repository-local suppressions are limited to reviewed test, generated, credential-fixture, CSS identifier, and structured-process-launch surfaces.
 - **Keep reliability and connector-refresh regression wording aligned with the current UI copy.** Focused tests now assert the current analytics and refresh-notice language.
 - **No ChatGPT connector refresh is required for 0.27.2.** This release does not change the public MCP tool definitions or connector metadata, so the forced-refresh version list remains unchanged.

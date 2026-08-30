@@ -30,6 +30,7 @@ const files = [
   'electron-dynamic-resource-contract-unit.mjs',
   'electron-product-path-unit.mjs',
   'test-rigidity-audit-unit.mjs',
+  'generated-assets-check-unit.mjs',
   'http-auth-smoke.mjs',
   'mcp-app-ui-unit.mjs',
   'mcp-task-card-performance-unit.mjs',
@@ -83,6 +84,7 @@ const serialFiles = new Set([
   'http-auth-smoke.mjs',
   'http-smoke.mjs',
   'smoke.mjs',
+  'generated-assets-check-unit.mjs',
   'process-manager-unit.mjs',
   'process-pty-unit.mjs'
 ]);

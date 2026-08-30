@@ -32,6 +32,8 @@ jobs:
         run: test -x electron/node_modules/electron/dist/electron
       - run: npm run audit:production
       - run: npm run test:native-tasks-release-gate
+      - name: Verify release and generated-asset consistency
+        run: npm run release:check
       - run: xvfb-run --auto-servernum npm run test:all
 
   packaged-windows:

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { dashboardCssArgs, resolveTailwindCli } from './dashboard-css.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronRoot = path.join(root, 'electron');
@@ -71,13 +72,6 @@ function sourceWatchTargets(baseRoot = root) {
   return targets.filter(target => fs.existsSync(target.directory));
 }
 
-function packageBin(packageRoot, binName) {
-  const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
-  const relative = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.[binName];
-  if (!relative) throw new Error(`${manifest.name || packageRoot} does not declare ${binName}.`);
-  return path.resolve(packageRoot, relative);
-}
-
 function runNode(script, args = []) {
   const result = spawnSync(process.execPath, [script, ...args], { cwd: root, stdio: 'inherit', windowsHide: true });
   if (result.error) throw result.error;
@@ -113,16 +107,14 @@ async function main(argv = process.argv.slice(2)) {
   const binary = electronExecutable();
 
   const generateColorTokens = path.join(root, 'scripts', 'generate-color-tokens.mjs');
-  const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
+  const tailwindCli = resolveTailwindCli(root);
   runNode(generateColorTokens);
 
-  const cssWatcher = spawn(process.execPath, [
-    tailwindCli,
-    '-i', path.join(root, 'src', 'ui', 'styles', 'app.css'),
-    '-o', path.join(root, 'public', 'dashboard.css'),
-    '--minify',
-    '--watch'
-  ], { cwd: root, stdio: 'inherit', windowsHide: true });
+  const cssWatcher = spawn(process.execPath, [tailwindCli, ...dashboardCssArgs({ baseRoot: root, watch: true })], {
+    cwd: root,
+    stdio: 'inherit',
+    windowsHide: true
+  });
 
   let electronChild = null;
   let restartTimer = null;
