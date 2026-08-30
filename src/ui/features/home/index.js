@@ -161,7 +161,7 @@ function resolveBridgeState({ findings, connectionState }) {
     return {
       tone: 'bad',
       kicker: 'Needs attention',
-      title: 'Rel.AI is connected, but diagnostics found a problem.',
+      title: 'Rel.AI is connected, but a problem needs attention.',
       description: 'Rel.AI can connect to ChatGPT, but one or more issues should be resolved before automated changes.'
     };
   }
@@ -356,7 +356,7 @@ export function homeAnalyticsHtml(scope = {}) {
   const workspaceScoped = scope.kind === 'workspace';
   const activeProjects = (Array.isArray(scope.workspaces) ? scope.workspaces : []).filter(item => Number(item.toolCalls || 0) > 0).length;
   const metricFour = workspaceScoped
-    ? homeAnalyticsMetric('Execution time', completed ? formatAnalyticsDuration(scope.executionMs) : '—')
+    ? homeAnalyticsMetric('Total execution time', completed ? formatAnalyticsDuration(scope.executionMs) : '—')
     : homeAnalyticsMetric('Active projects', formatInteger(activeProjects));
   const heading = workspaceScoped ? `${scope.label} activity` : 'Activity';
   const href = routeHref('usage', workspaceScoped ? { workspace: scope.workspace } : {});
@@ -372,7 +372,7 @@ export function homeAnalyticsHtml(scope = {}) {
     <div class="home-analytics-body">
       <div class="home-analytics-metrics">
         ${homeAnalyticsMetric('Actions', formatInteger(actions))}
-        ${homeAnalyticsMetric('Reliable actions', reliabilityCalls ? formatPercent(scope.reliabilityRate) : '—', reliabilityCalls ? `${formatInteger(reliabilityCalls)} measured` : 'Starts measuring with new actions')}
+        ${homeAnalyticsMetric('Reliable actions', reliabilityCalls ? formatPercent(scope.reliabilityRate) : '—', reliabilityCalls ? `${formatInteger(reliabilityCalls)} measured` : 'Measured after new actions run')}
         ${homeAnalyticsMetric('Average time', completed ? formatAnalyticsDuration(scope.averageDuration) : '—', completed ? 'Per completed action' : '')}
         ${metricFour}
       </div>

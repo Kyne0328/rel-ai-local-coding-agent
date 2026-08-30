@@ -194,7 +194,7 @@ function lazySection(loadModule, mount) {
 
 function renderRouteFailure(element, error) {
   const message = error instanceof Error ? error.message : String(error || 'The page could not be loaded.');
-  element.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Page unavailable</span><h2>This page could not load.</h2><p>${escapeHtml(message)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-route-retry>Retry page</button><a class="buttonlike secondary" href="#diagnostics">Open diagnostics</a></div></div></div>`;
+  element.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Page unavailable</span><h2>This page could not load.</h2><p>${escapeHtml(message)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-route-retry>Retry page</button><a class="buttonlike secondary" href="#diagnostics">Open Troubleshooting</a></div></div></div>`;
   element.querySelector('[data-route-retry]')?.addEventListener('click', () => rerender({ preserveView: false }));
 }
 
@@ -269,7 +269,7 @@ async function performRefresh(options = {}) {
 }
 
 async function recoverDashboard(options = {}) {
-  let latest = { ok: false, error: 'The dashboard could not reach the Rel.AI connection service.' };
+  let latest = { ok: false, error: 'The dashboard could not connect to Rel.AI.' };
   for (let attempt = 0; attempt < AUTO_RECOVERY_DELAYS_MS.length; attempt += 1) {
     const delay = AUTO_RECOVERY_DELAYS_MS[attempt];
     if (delay) await wait(delay);
@@ -281,7 +281,7 @@ async function recoverDashboard(options = {}) {
 }
 
 function renderRefreshFailure(data = {}) {
-  const message = data?.error || 'The dashboard could not reach the Rel.AI connection service.';
+  const message = data?.error || 'The dashboard could not connect to Rel.AI.';
   _shellStatus = { label: data?.status === 401 ? 'Authentication failed' : 'Disconnected', tone: 'bad' };
   renderConnectionStatus();
   const updated = document.getElementById('lastUpdated');
@@ -369,7 +369,7 @@ function mountRecoveryActions(container, data = {}) {
   const diagnostics = document.createElement('a');
   diagnostics.className = 'buttonlike secondary';
   diagnostics.href = '#diagnostics';
-  diagnostics.textContent = 'Open diagnostics';
+  diagnostics.textContent = 'Open Troubleshooting';
   actions.appendChild(diagnostics);
 }
 

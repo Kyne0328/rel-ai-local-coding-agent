@@ -380,6 +380,14 @@ npm ci --prefix electron
 npm run electron:dev
 ```
 
+For normal desktop iteration, avoid packaging and keep a source-mode watcher running instead:
+
+```bash
+npm run electron:dev:watch
+```
+
+It rebuilds dashboard CSS continuously and restarts source Electron when relevant `electron/`, `src/`, `public/`, or `bin/` files change. The default command reuses the normal Rel.AI profile, so fully close the installed app first. Use `npm run electron:dev:watch:isolated` when you want a separate persistent Electron/ChatGPT development profile. Neither command writes a packaged app to `dist`.
+
 For validation, use the smallest checks that prove the current change and broaden only when the risk warrants it:
 
 ```bash

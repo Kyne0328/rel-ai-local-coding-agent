@@ -35,7 +35,7 @@ export function mountDiagnostics(container) {
         <div><h2>Troubleshooting</h2><p>Find problems, view app logs with sensitive values removed, and export support information.</p></div>
         <div class="section-head-actions diagnostic-page-actions">
           <button class="secondary" type="button" data-copy-report disabled>Copy report</button>
-          <button class="secondary" type="button" data-export-report disabled>Export support info</button>
+          <button class="secondary" type="button" data-export-report disabled>Export support information</button>
           <button class="secondary" type="button" data-open-diagnostics-folder>Open support folder</button>
         </div>
       </div>
@@ -151,13 +151,13 @@ function bindHeaderActions(container) {
       await copyText(currentReport.reportText);
       return { ok: true };
     });
-    toast(result?.ok ? 'Sanitized diagnostic report copied.' : result?.error || 'Could not copy the report.', { variant: result?.ok ? 'success' : 'error' });
+    toast(result?.ok ? 'Diagnostic report copied. Sensitive values were removed.' : result?.error || 'Could not copy the report.', { variant: result?.ok ? 'success' : 'error' });
   };
 
   const exportButton = container.querySelector('[data-export-report]');
   exportButton.onclick = async () => {
     const result = await runButtonAction(exportButton, {
-      idleText: 'Export support info', loadingText: 'Exporting…', successText: 'Support info exported', errorText: 'Export failed'
+      idleText: 'Export support information', loadingText: 'Exporting…', successText: 'Support information exported', errorText: 'Export failed'
     }, async () => {
       if (!currentReport) return { ok: false, error: 'No diagnostic state is available.' };
       if (typeof window.relaiDesktop?.exportDiagnosticState === 'function') {
@@ -165,7 +165,7 @@ function bindHeaderActions(container) {
       }
       return downloadDiagnosticState(currentReport);
     });
-    if (result?.ok) toast(`Sanitized diagnostic state exported${result.filename ? ` as ${result.filename}` : ''}.`, { variant: 'success' });
+    if (result?.ok) toast(`Support data exported${result.filename ? ` as ${result.filename}` : ''}. Sensitive values were removed.`, { variant: 'success' });
     else toast(result?.error || 'Could not export diagnostic state.', { variant: 'error' });
   };
 
@@ -251,7 +251,7 @@ function activeDiagnosticFilters(container) {
 
 function openDiagnosticFilters(container) {
   openFilterDrawer({
-    title: 'Diagnostic filters',
+    title: 'Troubleshooting filters',
     value: { scope: filters.scope, severity: filters.severity, source: filters.source },
     resetValue: { scope: 'all', severity: 'all', source: 'all' },
     renderFields(fields, draft) {
@@ -573,7 +573,7 @@ function renderReport(report, view) {
   const body = view.findings.length
     ? `<div class="diagnostic-list" data-diagnostic-region="findings">${view.findings.map(findingCard).join('')}</div>`
     : view.totalFindings === 0
-      ? '<div class="diagnostic-clear" data-diagnostic-region="findings"><strong>Current health looks good</strong><span>No current connection, project, or configuration problems were found. Recent failures can still appear in the logs below.</span></div>'
+      ? '<div class="diagnostic-clear" data-diagnostic-region="findings"><strong>No current problems found</strong><span>No current connection, project, or configuration problems were found. Recent failures can still appear in the logs below.</span></div>'
       : '<div class="diagnostic-log-empty" data-diagnostic-region="findings"><strong>No findings match the current filters.</strong></div>';
   return summaryCards(countFindings(view.findings))
     + body
@@ -680,7 +680,7 @@ function logsHtml(logs, view) {
   const runtime = logs.runtime || { available: false, entries: [] };
   const runtimeEmpty = runtime.available ? 'No app messages match the current filters.' : 'App logs are available in the desktop app.';
   return `<div class="diagnostic-log-grid" data-diagnostic-region="logs">
-    ${logPanel('App log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? (runtime.persistence?.healthy === false ? 'Saving locally is currently unavailable; in-memory messages remain visible' : 'Saved locally with sensitive values removed') : '')}
+    ${logPanel('App log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? (runtime.persistence?.healthy === false ? 'Rel.AI cannot save logs now. Logs from this session are still visible.' : 'Saved locally with sensitive values removed') : '')}
     ${logPanel('Failed activity', view.failed, 'No failed activity matches the current filters.', true, '')}
   </div>`;
 }
@@ -742,7 +742,7 @@ function maintenanceHtml(maintenance) {
     <div class="card-head"><div><h3>Saved troubleshooting data</h3><p>Clear troubleshooting data you no longer need. Project files and connection keys are never removed here.</p></div></div>
     <div class="card-body diagnostic-maintenance-list">
       ${maintenanceRow('Task and activity history', 'Removes saved Tasks and Activity entries. Running actions are protected.', 'history', maintenance.history, 'Clear history')}
-      ${maintenanceRow('Saved app log', 'Clears the saved app log and the copy currently held in memory.', 'runtime_logs', maintenance.runtimeLogs, 'Clear app log')}
+      ${maintenanceRow('Saved app log', 'Clears the saved app log.', 'runtime_logs', maintenance.runtimeLogs, 'Clear app log')}
       ${fullResetRow(maintenance.all)}
     </div>
   </section>`;

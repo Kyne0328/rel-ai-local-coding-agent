@@ -22,13 +22,13 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '', connectorNam
     ];
   }
   return [
-    'In OpenAI Platform, create or select a Secure MCP Tunnel under Organization settings → Tunnels. Complete Name, Description, Organizations, and ChatGPT workspaces, choosing the organization(s) and workspace(s) where you will actually use Rel.AI, then copy its tunnel_ ID.',
-    'Under Organization settings → API Keys, create an API key for the tunnel with Tunnel Read and Use permissions.',
-    'Save the Tunnel ID and API key in Rel.AI Connection settings, then keep Rel.AI running until the connection shows Connected.',
+    'In OpenAI Platform, open Organization settings → Tunnels. Create or select a Secure MCP Tunnel. Set Name, Description, Organizations, and ChatGPT workspaces. Select the organizations and workspaces where you will use Rel.AI. Copy the ID that starts with tunnel_.',
+    'Open Organization settings → API Keys. Create an API key for the tunnel. Give it Tunnel Read and Use permissions.',
+    'Save the Tunnel ID and API key in Rel.AI Connection settings. Keep Rel.AI running until the connection shows Connected.',
     'Save the Rel.AI icon below before opening ChatGPT connector creation.',
-    tunnel ? `In ChatGPT, use Name “${name}”, Connection “Tunnel”, select ${tunnel}, and set Authentication to “No authentication”.` : `In ChatGPT, use Name “${name}”, Connection “Tunnel”, select this computer’s tunnel, and set Authentication to “No authentication”.`,
-    'Click Scan Tools, confirm the Rel.AI tools appear, then click Create.',
-    `After creation, open Manage and upload ${RELAI_CONNECTOR_ICON_FILENAME} as the connector logo, then enable “${name}” in the chat.`
+    tunnel ? `In ChatGPT, set Name to “${name}”. Set Connection to “Tunnel”. Select ${tunnel}. Set Authentication to “No authentication”.` : `In ChatGPT, set Name to “${name}”. Set Connection to “Tunnel”. Select this computer’s tunnel. Set Authentication to “No authentication”.`,
+    'Click Scan Tools. Confirm that the Rel.AI tools appear. Then click Create.',
+    `After you create the connector, open Manage. Upload ${RELAI_CONNECTOR_ICON_FILENAME} as the connector logo. Then enable “${name}” in the chat.`
   ];
 }
 
@@ -60,9 +60,9 @@ function connectorHandoffHtml(tunnelId, connectorName) {
       </dl>
       <div class="chatgpt-connector-actions" role="group" aria-label="ChatGPT connector setup actions">
         <button class="secondary" type="button" data-save-relai-icon>Save Rel.AI icon <span>PNG · under 10 KB</span></button>
-        <button class="primary" type="button" data-open-chatgpt-setup disabled>Open ChatGPT plugin setup</button>
+        <button class="primary" type="button" data-open-chatgpt-setup disabled>Open ChatGPT connector setup</button>
       </div>
-      <p class="chatgpt-connector-note" data-chatgpt-handoff-note>Save the icon first. The next button opens ChatGPT Plugins with the + connector form ready.</p>
+      <p class="chatgpt-connector-note" data-chatgpt-handoff-note>Save the icon first. The next button opens the connector form in ChatGPT.</p>
     </section>`;
 }
 

@@ -116,15 +116,15 @@ function updateView(state, status, currentVersion, availableVersion) {
   if (state === 'error') {
     return {
       label: 'Update failed', tone: 'bad',
-      description: status.error || 'The update could not be completed. The current installed version remains available.',
+      description: status.error || 'The update could not be completed. The installed version is still available.',
       action: { id: 'check', label: 'Try again', className: 'primary' }
     };
   }
   return {
     label: 'Updates enabled', tone: 'ok',
     description: status.installMode === 'open_dmg'
-      ? 'Rel.AI checks once per day. Downloads and opening the macOS installer always require your approval.'
-      : 'Rel.AI checks once per day. Downloads and restarts always require your approval.',
+      ? 'Rel.AI checks once per day. Rel.AI asks before it downloads an update or opens the macOS installer.'
+      : 'Rel.AI checks once per day. Rel.AI asks before it downloads an update or restarts.',
     action: { id: 'check', label: 'Check for updates', className: 'secondary' }
   };
 }
@@ -149,7 +149,7 @@ function releaseNotesHtml(status = {}, installedReleaseNotes = null) {
     : [];
   if (releases.length) {
     const body = releases.map(changelogReleaseHtml).join('');
-    return `<details class="application-update-release-notes"><summary>What changed · Changelog</summary><div class="application-update-release-notes-body">${body}</div></details>`;
+    return `<details class="application-update-release-notes"><summary>What changed</summary><div class="application-update-release-notes-body">${body}</div></details>`;
   }
 
   const version = String(installedReleaseNotes?.version || '').trim();

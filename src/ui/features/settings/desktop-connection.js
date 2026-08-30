@@ -54,7 +54,7 @@ function render(container, { expanded = false } = {}) {
   const fields = document.createElement('div');
   fields.className = 'settings-panel-body';
   fields.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI Secure MCP Tunnel ID for this computer.'));
-  const runtimeKeyField = field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely — enter a new key only to replace it' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.');
+  const runtimeKeyField = field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely. Enter a new key only to replace it.' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key is encrypted on this computer. Rel.AI does not show it again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.');
   const credentialError = tunnelCredentialError(state);
   if (credentialError) {
     const error = document.createElement('div');
@@ -76,8 +76,8 @@ function render(container, { expanded = false } = {}) {
 
   const footer = document.createElement('div');
   footer.className = 'connection-actions';
-  footer.innerHTML = '<div class="muted">Changing the tunnel reconnects it without restarting the local project service. Changing the local port restarts the full connection.</div>';
-  const save = button('Save and restart connection', 'primary', () => saveSettings(container, save));
+  footer.innerHTML = '<div class="muted">Changing the tunnel reconnects the tunnel only. Changing the local port restarts the full Rel.AI connection.</div>';
+  const save = button('Save connection settings', 'primary', () => saveSettings(container, save));
   footer.appendChild(save);
 
   disclosureBody.append(intro, fields, footer);

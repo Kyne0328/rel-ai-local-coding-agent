@@ -40,8 +40,14 @@ const APP_ICON_PATH = app.isPackaged
 const RENDERER_ROOT = path.join(electronRoot, 'renderer');
 
 registerLocalScheme(protocol);
-app.setName('Rel.AI MCP');
-if (process.platform === 'win32') app.setAppUserModelId('com.relai.mcp');
+const devUserDataPath = String(process.env.REL_AI_ELECTRON_DEV_USER_DATA || '').trim();
+if (devUserDataPath) {
+  app.setName('Rel.AI MCP Dev');
+  app.setPath('userData', path.resolve(devUserDataPath));
+} else {
+  app.setName('Rel.AI MCP');
+}
+if (process.platform === 'win32') app.setAppUserModelId(devUserDataPath ? 'com.relai.mcp.dev' : 'com.relai.mcp');
 
 const [
   connection,

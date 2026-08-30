@@ -20,7 +20,7 @@ function desktopSetupSteps({
     {
       id: 'workspace',
       title: 'Add a project',
-      description: 'Choose the project folder ChatGPT can work with and give it a short name.',
+      description: 'Choose a project folder and give it a short name.',
       href: routeMetadata('workspaces').href,
       action: hasWorkspace ? 'Project added' : 'Add project',
       complete: hasWorkspace,
@@ -29,7 +29,7 @@ function desktopSetupSteps({
     {
       id: 'connection',
       title: 'Connect this computer',
-      description: 'In OpenAI Platform, copy your Secure MCP Tunnel ID and create its runtime API key, then save them here.',
+      description: 'In OpenAI Platform, copy the Secure MCP Tunnel ID and create a runtime API key. Save both values here.',
       href: routeMetadata('connection').href,
       action: 'Set up connection',
       complete: hasWorkspace && endpointReady,
@@ -75,7 +75,7 @@ export function createDesktopSetupChecklist(options = {}) {
       <div>
         <span class="desktop-setup-eyebrow">Getting started</span>
         <h3>Get Rel.AI working with ChatGPT</h3>
-        <p>${completedCount} of ${steps.length} steps complete · follow the highlighted step next</p>
+        <p>${completedCount} of ${steps.length} steps complete. Follow the highlighted step.</p>
       </div>
       <button class="secondary compact-button" type="button" data-dismiss-setup>Dismiss guide</button>
     </div>`;
@@ -109,7 +109,7 @@ function renderSetupStep(item, index, currentId, workspaceAlias) {
   const row = document.createElement('div');
   const current = item.id === currentId;
   row.className = `desktop-setup-item${item.complete ? ' done' : ''}${current ? ' current' : ''}${item.locked ? ' locked' : ''}`;
-  const state = item.complete ? 'Done' : item.locked ? 'Waiting' : current ? 'Next' : 'Ready';
+  const state = item.complete ? 'Done' : item.locked ? 'Not ready' : current ? 'Next' : 'Ready';
   const action = renderSetupAction(item, current);
   row.innerHTML = `
     <span class="desktop-setup-index" aria-hidden="true">${item.complete ? '✓' : index + 1}</span>

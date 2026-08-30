@@ -44,7 +44,7 @@ const unsupported = clientCapabilityViews({
 assert.equal(unsupported.capabilityState, 'not_advertised');
 assert.equal(unsupported.capabilityLabel, 'Native MCP Tasks: Not advertised by client');
 assert.equal(unsupported.executionLabel, 'Eligible long work: Work-session continuation');
-assert.match(unsupported.description, /continue under the same work session/i);
+assert.match(unsupported.description, /continue in the same work session/i);
 
 const unknown = clientCapabilityViews({ mcpConnection: { recentEvents: [] } })[0];
 assert.equal(unknown.capabilityState, 'unknown');
@@ -155,7 +155,7 @@ assert.equal(restartAliasProcess.canStop, true);
 const unavailableOutput = processOutputView({ stdoutBytes: 8, stderrBytes: 2 });
 assert.equal(unavailableOutput.included, false);
 assert.equal(unavailableOutput.hasOutput, false);
-assert.match(unavailableOutput.message, /Required backend fields: stdoutTail and stderrTail/);
+assert.equal(unavailableOutput.message, 'Recent output is not available in this dashboard snapshot.');
 const emptyIncludedOutput = processOutputView({ stdoutTail: '', stderrTail: '' });
 assert.equal(emptyIncludedOutput.included, true);
 assert.equal(emptyIncludedOutput.hasOutput, false);
@@ -225,7 +225,7 @@ assert.match(processesSource, />Stop<\/button>/);
 assert.doesNotMatch(processesSource, /Startup task completed; process still running|Native task ID|Process ID|Saved output|process-detail-grid|process-relationship/);
 assert.doesNotMatch(processesSource, /Cancel task|data-cancel-native-task/);
 assert.match(processesSource, /aria-label="Recent \$\{stream\} output"/);
-assert.match(taskIdentitySource, /Required backend fields: stdoutTail and stderrTail/);
+assert.doesNotMatch(taskIdentitySource, /Required backend fields|stdoutTail and stderrTail/);
 assert.doesNotMatch(connectorSource, /Native MCP Tasks|Execution mode|connector-technical-details/);
 assert.doesNotMatch(cssSource, /\.native-task-row|\.runtime-activity-spinner|\.runtime-capability-row/);
 assert.match(sessionCssSource, /\.task-progress\.static\.terminal\.cancelled[\s\S]*--ui-status-neutral-background/);

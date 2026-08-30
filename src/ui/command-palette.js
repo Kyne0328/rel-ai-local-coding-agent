@@ -62,7 +62,7 @@ function openCommandPalette() {
     if (activeIndex >= visible.length) activeIndex = Math.max(0, visible.length - 1);
     list.innerHTML = visible.length
       ? visible.map((command, index) => commandHtml(command, index === activeIndex, index)).join('')
-      : '<div class="command-empty">No matching page, action, or workspace.</div>';
+      : '<div class="command-empty">No matching page, action, or project.</div>';
     input.setAttribute('aria-expanded', visible.length ? 'true' : 'false');
     syncActiveOption(input, list, visible, activeIndex);
   };

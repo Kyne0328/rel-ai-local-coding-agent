@@ -113,7 +113,7 @@ async function loadExistingSettings() {
     if (config?.port) $('portInput').value = String(config.port);
     if (config?.tunnelId) $('tunnelIdInput').value = config.tunnelId;
     if (config?.tunnelApiKeyConfigured) {
-      $('tunnelApiKeyInput').placeholder = 'Stored securely — leave blank to keep it';
+      $('tunnelApiKeyInput').placeholder = 'Stored securely. Leave blank to keep it.';
       $('tunnelApiKeyInput').dataset.configured = '1';
       $('tunnelApiKeyInput').required = false;
     }

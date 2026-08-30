@@ -9,8 +9,8 @@ export function initSidebar() {
   const syncToggle = () => {
     const collapsed = root.dataset.sidebar === 'collapsed';
     toggle.setAttribute('aria-expanded', String(!collapsed));
-    toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Minimize sidebar');
-    toggle.title = collapsed ? 'Expand sidebar' : 'Minimize sidebar';
+    toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    toggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
   };
 
   toggle.addEventListener('click', () => {

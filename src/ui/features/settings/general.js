@@ -3,7 +3,7 @@ import { getUiPreferences, setThemePreference } from '../../preferences.js';
 import { desktopNotificationsPanel } from './desktop-notifications.js';
 
 export function mountGeneral(container) {
-  container.innerHTML = '<div class="settings-loading">Loading preferences…</div>';
+  container.innerHTML = '<div class="settings-loading">Loading general settings…</div>';
   return loadAndRender(container);
 }
 
@@ -14,7 +14,7 @@ async function loadAndRender(container) {
     : null;
 
   container.innerHTML = '';
-  container.appendChild(header('Preferences', 'Change appearance and desktop notifications.'));
+  container.appendChild(header('General', 'Change appearance and desktop notifications.'));
 
   const appearance = panel('Appearance');
   renderAppearanceSettings(appearance.body);

@@ -47,8 +47,15 @@ if (!health.ok) {
 }
 
 // --- 1. Fetch dashboard JSON and check for forbidden terms ---
-const dashboardUrl = `http://127.0.0.1:${port}/api/dashboard/v10?token=${encodeURIComponent(token)}`;
-const dashboardResponse = await fetch(dashboardUrl);
+const dashboardLogin = await fetch(`http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}`);
+if (!dashboardLogin.ok) {
+  child.kill('SIGKILL');
+  throw new Error(`Dashboard login returned ${dashboardLogin.status}`);
+}
+const dashboardCookie = String(dashboardLogin.headers.get('set-cookie') || '').split(';')[0];
+await dashboardLogin.arrayBuffer();
+const dashboardUrl = `http://127.0.0.1:${port}/api/dashboard/v10`;
+const dashboardResponse = await fetch(dashboardUrl, { headers: { cookie: dashboardCookie } });
 if (!dashboardResponse.ok) {
   child.kill('SIGKILL');
   throw new Error(`Dashboard API returned ${dashboardResponse.status}`);

@@ -134,7 +134,7 @@ function initUpdateAvailableModal(options = {}) {
     detail.className = 'muted';
     detail.textContent = view.blocking
       ? 'You can still use the dashboard and update controls, but Rel.AI cannot work with ChatGPT until a supported version is installed.'
-      : 'You can update now or continue for this launch. This notice will appear again on a future launch while this version is nearing the end of support.';
+      : 'You can update now or continue. Rel.AI will show this notice again on a later launch until you update.';
     const actions = document.createElement('div');
     actions.className = 'modal-actions';
     const action = supportUpdateAction(status);

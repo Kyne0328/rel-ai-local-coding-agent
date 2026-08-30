@@ -4,9 +4,9 @@ import { deltaFor } from './range-model.js';
 
 const METRIC_HELP = Object.freeze({
   toolCalls: 'Total Rel.AI tool actions recorded in this range. The change compares with the previous equivalent period.',
-  reliabilityRate: 'Share of measured, non-cancelled actions that did not fail because of Rel.AI infrastructure. “pp” means percentage points: 90% to 95% is +5 pp.',
-  infrastructureFailures: 'Actions classified as Rel.AI infrastructure failures. Expected command or check failures and cancellations are excluded.',
-  recoverableFailures: 'Actions that hit a recoverable task or context state and can usually be fixed by retrying or refreshing context.',
+  reliabilityRate: 'Share of measured, non-cancelled actions without a Rel.AI system error. “pp” means percentage points. A change from 90% to 95% is +5 pp.',
+  infrastructureFailures: 'Actions with Rel.AI system errors. Expected command failures, check failures, and cancellations are excluded.',
+  recoverableFailures: 'Actions with a recoverable task or context problem. A retry or context refresh can usually resolve the problem.',
   operationSuccessRate: 'Share of recorded actions where the requested command or check succeeded. Rate changes use percentage points (pp).',
   averageDuration: 'Average elapsed time per completed action in this range. The change compares with the previous equivalent period when available.'
 });
@@ -20,7 +20,7 @@ export function renderUsage(content, { bounds, current, previous }) {
       <div class="usage-metrics">${analyticsMetrics(current, previous).map(metricHtml).join('')}</div>
     </section>
     ${timelineSection(current)}
-    ${activityBarsSection('Action usage', current.tools, 'tool')}
+    ${activityBarsSection('Actions by tool', current.tools, 'tool')}
     ${current.kind === 'workspace'
       ? `${failureCategoriesSection(current.failureCategories, current.failures)}${breakdownSection('Devices', current.devices, 'device')}`
       : `<div class="usage-side-by-side">${failureCategoriesSection(current.failureCategories, current.failures)}${activityBarsSection('Project activity', current.workspaces, 'workspace')}</div>`}`;
@@ -34,7 +34,7 @@ function analyticsMetrics(scope, previous) {
   const metric = (label, key, value, detail = '', options = {}) => ({ key, label, value, detail, help: METRIC_HELP[key] || '', delta: compare(key, options), values: options.spark === false ? [] : values(options.sparkKey || key), tone: options.metricTone || '' });
   return [
     metric('Actions', 'toolCalls', integer(scope.toolCalls), '', { neutral: true }),
-    metric('Reliable actions', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} measured actions` : 'Starts measuring with new actions', { rate: true, available: scope.reliabilityCalls > 0, previousAvailable: Number(previous?.reliabilityCalls || 0) > 0, spark: false }),
+    metric('Reliable actions', 'reliabilityRate', scope.reliabilityCalls ? percent(scope.reliabilityRate) : '—', scope.reliabilityCalls ? `${integer(scope.reliabilityCalls)} measured actions` : 'Measured after new actions run', { rate: true, available: scope.reliabilityCalls > 0, previousAvailable: Number(previous?.reliabilityCalls || 0) > 0, spark: false }),
     metric('System errors', 'infrastructureFailures', integer(scope.infrastructureFailures), 'Rel.AI internal errors only', { inverse: true, metricTone: scope.infrastructureFailures ? 'bad' : 'good' }),
     metric('Retryable problems', 'recoverableFailures', integer(scope.recoverableFailures), 'Usually fixed by retrying or refreshing context', { inverse: true }),
     metric('Successful actions', 'operationSuccessRate', scope.completed ? percent(scope.operationSuccessRate) : '—', 'Whether the command or check itself succeeded', { rate: true, sparkKey: 'operationSuccessRate', available: scope.completed > 0, previousAvailable: Number(previous?.completed || 0) > 0 }),
@@ -101,7 +101,7 @@ function timeline(values, metricLabel = 'Actions') {
   const peakIndex = data.indexOf(peak);
   const bucketsAgo = Math.max(0, data.length - 1 - peakIndex);
   const trend = latest > data[0] ? 'increasing' : latest < data[0] ? 'decreasing' : 'steady';
-  const summary = `${metricLabel} trend. Peak ${formatChartValue(peak, metricLabel)} ${bucketsAgo ? `${bucketsAgo} buckets ago` : 'in the latest bucket'}. Latest ${formatChartValue(latest, metricLabel)}. Overall trend ${trend}.`;
+  const summary = `${metricLabel} trend. Peak ${formatChartValue(peak, metricLabel)} ${bucketsAgo ? `${bucketsAgo} periods ago` : 'in the latest period'}. Latest ${formatChartValue(latest, metricLabel)}. Overall trend ${trend}.`;
   return `<div class="usage-timeline-plot"><svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(summary)}"><line x1="0" y1="${height*.28}" x2="${width}" y2="${height*.28}" class="usage-chart-grid"/><line x1="0" y1="${height*.52}" x2="${width}" y2="${height*.52}" class="usage-chart-grid"/><line x1="0" y1="${height*.76}" x2="${width}" y2="${height*.76}" class="usage-chart-grid"/><polygon points="${area}" class="usage-chart-area"/><line x1="0" y1="${baseline}" x2="${width}" y2="${baseline}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="usage-timeline-scale"><span>Earlier</span><span>Now</span></div></div>`;
 }
 
@@ -126,7 +126,7 @@ function failureCategoriesSection(rows, totalFailures = 0) {
   const max = Math.max(1, ...visible.map(row => row.failures));
   const body = visible.length
     ? `<div class="usage-bar-list">${visible.map(row => failureCategoryRow(row, max)).join('')}</div>`
-    : `<div class="usage-breakdown-empty">${Number(totalFailures || 0) > 0 ? 'Failure categories are unavailable for older data.' : 'No failures in this range.'}</div>`;
+    : `<div class="usage-breakdown-empty">${Number(totalFailures || 0) > 0 ? 'Problem types are unavailable for older data.' : 'No failures in this range.'}</div>`;
   return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><div><h3>What went wrong</h3><p>Detailed error messages are not stored.</p></div></div><div class="card-body">${body}</div></section>`;
 }
 
@@ -142,7 +142,7 @@ function failureCategoryLabel(category) {
 
 function activityBarsSection(title,rows,key){const visible=[...rows].sort((a,b)=>b.toolCalls-a.toolCalls).slice(0,10);const max=Math.max(1,...visible.map(row=>row.toolCalls));const body=visible.length?`<div class="usage-bar-list">${visible.map(row=>bar(row,key,max)).join('')}</div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
 function bar(row,key,max){const label=key==='workspace'?(row.workspace||'Unattributed'):(row.tool||'Unknown tool');const inner=`<span class="usage-bar-label" title="${esc(label)}">${esc(label)}</span><progress max="${max}" value="${row.toolCalls}">${integer(row.toolCalls)}</progress><strong>${integer(row.toolCalls)}</strong>`;return key==='workspace'&&row.workspace?`<a class="usage-bar-row usage-bar-link" href="${routeHref('usage',{workspace:row.workspace})}">${inner}</a>`:`<div class="usage-bar-row">${inner}</div>`;}
-function breakdownSection(title,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Actions</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
+function breakdownSection(title,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Actions</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Total execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No activity in this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><h3>${esc(title)}</h3></div><div class="card-body">${body}</div></section>`;}
 function breakdownRow(row,key){const label=key==='device'?(row.displayName||shortId(row.deviceId)||'Unknown device'):(row[key]||'Unknown');return `<tr><th scope="row">${esc(label)}</th><td>${integer(row.toolCalls)}</td><td>${integer(row.successes)}</td><td>${integer(row.failures)}</td><td>${duration(row.executionMs)}</td></tr>`;}
 function formatChartValue(value, metricLabel) {
   if (metricLabel === 'Reliable actions' || metricLabel === 'Successful actions' || metricLabel === 'Success rate') return percent(value);

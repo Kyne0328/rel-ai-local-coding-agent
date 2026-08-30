@@ -240,7 +240,7 @@ function syncSessionFooter(body, remaining) {
 
 function sessionFooterHtml(remaining) {
   return remaining
-    ? `<div class="session-list-footer"><span>${remaining} older session${remaining === 1 ? '' : 's'} hidden</span><button class="secondary" type="button" data-load-more-sessions>Show ${Math.min(SESSION_PAGE_SIZE, remaining)} more</button></div>`
+    ? `<div class="session-list-footer"><span>${remaining} older task${remaining === 1 ? '' : 's'} hidden</span><button class="secondary" type="button" data-load-more-sessions>Show ${Math.min(SESSION_PAGE_SIZE, remaining)} more</button></div>`
     : '';
 }
 
@@ -403,7 +403,7 @@ function buildSessionDetail(session) {
       ${detail('Project', session.workspace || '—')}
       ${durationDetail(session, live)}
       ${detail('Actions', session.toolCallCount ?? session.calls ?? 0)}
-      ${detail('Product files', fileCounts.product)}
+      ${detail('Project files', fileCounts.product)}
       ${fileCounts.support > 0 ? detail('Support artifacts', fileCounts.support) : ''}
     </div>
     ${attentionSection(session)}
@@ -568,14 +568,14 @@ function technicalDetailsSection(session, identities, state, operationValue, eve
 function workflowTechnicalHtml(session = {}) {
   const workflow = session.workflow;
   if (!workflow || typeof workflow !== 'object' || !workflow.stage) return '';
-  const next = workflow.recommendedAction || 'No additional advisory action is recorded.';
+  const next = workflow.recommendedAction || 'No additional action is recorded.';
   return `<div class="task-detail-workflow"><strong>Workflow ${esc(workflow.stage)}</strong><span>${esc(next)}</span></div>`;
 }
 
 function changedFilesSection(files) {
   const classified = classifyTaskChangedFiles(orderChangedFiles(files));
   return [
-    changedFileGroup('Product files', classified.productFiles),
+    changedFileGroup('Project files', classified.productFiles),
     changedFileGroup('Support artifacts', classified.supportArtifacts)
   ].filter(Boolean).join('');
 }
@@ -657,7 +657,7 @@ function taskMilestonesSection(semantic = {}) {
   const milestones = Array.isArray(semantic.milestones) ? semantic.milestones : [];
   if (!milestones.length) return '';
   return `<section class="task-detail-section">
-    <div class="task-detail-heading"><h3>Meaningful progress</h3><span>${milestones.length}</span></div>
+    <div class="task-detail-heading"><h3>Progress</h3><span>${milestones.length}</span></div>
     <ol class="task-milestone-list">${milestones.map(item => `
       <li><span class="task-milestone-state">${item.status === 'failed' ? 'Issue' : 'Done'}</span><span><strong>${esc(item.label || 'Task progress')}</strong>${item.detail ? `<small>${esc(item.detail)}</small>` : ''}</span></li>`).join('')}</ol>
   </section>`;

@@ -50,7 +50,7 @@ function clientCapabilityView(value = {}) {
       capabilityLabel: 'Native MCP Tasks: Supported',
       executionMode: mode,
       executionLabel: 'Eligible long work: Native MCP task',
-      description: 'The client advertised the MCP Tasks extension. Short bounded operations still complete directly.',
+      description: 'The client supports the MCP Tasks extension. Short operations still complete directly.',
       pill: 'supported',
       pillClass: 'ok'
     };
@@ -64,7 +64,7 @@ function clientCapabilityView(value = {}) {
       capabilityLabel: 'Native MCP Tasks: Not advertised by client',
       executionMode: mode,
       executionLabel: 'Eligible long work: Work-session continuation',
-      description: 'Short bounded operations complete directly. Longer eligible operations can continue under the same work session and be checked by work_id.',
+      description: 'Short operations complete directly. Longer eligible operations can continue in the same work session. You can check them by work_id.',
       pill: 'not advertised',
       pillClass: 'warn'
     };
@@ -77,7 +77,7 @@ function clientCapabilityView(value = {}) {
     capabilityLabel: 'Native MCP Tasks: Unknown',
     executionMode: mode,
     executionLabel: 'Eligible long work: Capability unknown',
-    description: 'No client capability advertisement is present in the current dashboard data.',
+    description: 'No MCP Tasks capability data is available.',
     pill: 'unknown',
     pillClass: ''
   };
@@ -176,8 +176,8 @@ export function nativeTaskStatusView(statusValue, options = {}) {
     return {
       label: options.cancellationConfirmed ? 'Cancelled (confirmed)' : 'Cancelled',
       description: options.cancellationConfirmed
-        ? 'Cancellation was acknowledged after execution stopped.'
-        : 'The asynchronous MCP request ended without completing.',
+        ? 'Cancellation was acknowledged after the MCP task stopped.'
+        : 'The MCP task ended without completing.',
       terminal: true,
       active: false,
       showSpinner: false,
@@ -188,7 +188,7 @@ export function nativeTaskStatusView(statusValue, options = {}) {
   if (options.cancelRequested) {
     return {
       label: 'Cancellation requested',
-      description: 'Rel.AI is waiting for execution to stop before cancellation is confirmed.',
+      description: 'Rel.AI is waiting for the MCP task to stop before it confirms cancellation.',
       terminal: false,
       active: true,
       showSpinner: false,
@@ -197,11 +197,11 @@ export function nativeTaskStatusView(statusValue, options = {}) {
     };
   }
   const states = {
-    working: ['Working', 'The asynchronous MCP request is executing.', false, true, true, false, 'working'],
-    input_required: ['Input required', 'The server is waiting for the client to provide requested input.', false, false, false, true, 'warn'],
-    completed: ['Completed', 'The asynchronous MCP request completed successfully.', true, false, false, false, 'ok'],
-    failed: ['Failed', 'The asynchronous MCP request ended with an error.', true, false, false, false, 'bad'],
-    unknown: ['Unknown', 'The native task status is unavailable or unrecognized.', false, false, false, false, '']
+    working: ['Working', 'The MCP task is running.', false, true, true, false, 'working'],
+    input_required: ['Input required', 'Rel.AI is waiting for the client to provide input.', false, false, false, true, 'warn'],
+    completed: ['Completed', 'The MCP task completed successfully.', true, false, false, false, 'ok'],
+    failed: ['Failed', 'The MCP task ended with an error.', true, false, false, false, 'bad'],
+    unknown: ['Unknown', 'The MCP task status is unavailable or unknown.', false, false, false, false, '']
   };
   const [label, description, terminal, active, showSpinner, waitingForInput, pillClass] = states[status] || states.unknown;
   return { label, description, terminal, active, showSpinner, waitingForInput, pillClass };
@@ -301,7 +301,7 @@ export function processOutputView(process = {}) {
     stderr,
     message: included
       ? 'No recent stdout or stderr output was recorded.'
-      : 'Recent output was not included in this dashboard snapshot. Required backend fields: stdoutTail and stderrTail.'
+      : 'Recent output is not available in this dashboard snapshot.'
   };
 }
 

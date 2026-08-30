@@ -22,18 +22,18 @@ function route(id, label, path, description, group) {
 
 export const WORK_NAV_ITEMS = Object.freeze([
   route('home', 'Overview', 'home', 'Connection status, projects, and recent tasks.', 'Work'),
-  route('tasks', 'Tasks', 'tasks', 'See what Rel.AI is working on and what it finished.', 'Work'),
+  route('tasks', 'Tasks', 'tasks', 'See active and completed Rel.AI tasks.', 'Work'),
   route('code', 'Changes', 'code', 'Review current and committed file changes for a Rel.AI task.', 'Work'),
   route('workspaces', 'Projects', 'workspaces', 'Choose which project folders Rel.AI can use.', 'Work'),
-  route('activity', 'Activity', 'activity', 'See what Rel.AI did and whether it worked.', 'Work')
+  route('activity', 'Activity', 'activity', 'See Rel.AI actions and their results.', 'Work')
 ]);
 
 export const SYSTEM_NAV_ITEMS = Object.freeze([
   route('connection', 'Connection', 'connection', 'Set up ChatGPT and fix connection problems.', 'System'),
   route('processes', 'Running commands', 'processes', 'See and stop long-running commands started by Rel.AI.', 'System'),
-  route('diagnostics', 'Troubleshooting', 'diagnostics', 'Find and fix problems, view logs, or export support info.', 'System'),
+  route('diagnostics', 'Troubleshooting', 'diagnostics', 'Find and fix problems, view logs, or export support information.', 'System'),
   route('tools', 'ChatGPT tools', 'tools', 'See the actions ChatGPT can ask Rel.AI to perform.', 'System'),
-  route('usage', 'Analytics', 'usage', 'See activity trends, reliability, and where problems happen.', 'System')
+  route('usage', 'Analytics', 'usage', 'See activity trends, reliability, and problem areas.', 'System')
 ]);
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([

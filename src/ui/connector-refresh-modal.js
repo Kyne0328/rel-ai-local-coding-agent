@@ -34,7 +34,7 @@ function prepareConnectorRefreshNotice(lifecycle = {}, storage) {
     acknowledgedKey,
     pendingKey,
     title: 'Refresh Rel.AI MCP in ChatGPT',
-    description: `Rel.AI MCP ${currentVersion} changed the ChatGPT connector presentation or tool metadata. Refresh the connector so ChatGPT loads the current Rel.AI contract.`,
+    description: `Rel.AI MCP ${currentVersion} changed the connector details or tool definitions. Refresh the connector so ChatGPT loads the latest Rel.AI tools.`,
     steps: REFRESH_STEPS,
     dismissDelayMs: DISMISS_DELAY_MS
   };
@@ -101,12 +101,12 @@ function initConnectorRefreshModal(options = {}) {
       const remainingMs = Math.max(0, unlockAt - now());
       if (remainingMs > 0) {
         dismiss.disabled = true;
-        dismiss.textContent = `I understand (${Math.ceil(remainingMs / 1000)}s)`;
+        dismiss.textContent = `Continue (${Math.ceil(remainingMs / 1000)}s)`;
         return;
       }
       unlocked = true;
       dismiss.disabled = false;
-      dismiss.textContent = 'I understand';
+      dismiss.textContent = 'Continue';
       modal?.setDismissEnabled(true);
       if (countdownTimer) clearIntervalFn(countdownTimer);
       countdownTimer = null;

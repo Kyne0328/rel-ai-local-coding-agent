@@ -45,7 +45,7 @@ function connectionView(status) {
     return {
       key: 'connecting', badge: authenticating ? 'Authenticating' : 'Connecting', eyebrow: 'Secure MCP Tunnel',
       title: authenticating ? 'Checking the Secure MCP Tunnel…' : 'Starting Secure MCP Tunnel…',
-      description: authenticating ? 'Rel.AI is verifying the tunnel and local MCP channel with OpenAI.' : 'Rel.AI is connecting this computer to OpenAI.'
+      description: authenticating ? 'Rel.AI is checking the tunnel connection with OpenAI.' : 'Rel.AI is connecting this computer to OpenAI.'
     };
   }
   if (status.serverRunning && status.tunnelStatus === 'degraded') {

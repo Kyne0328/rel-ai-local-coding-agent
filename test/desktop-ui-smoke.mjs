@@ -123,8 +123,8 @@ assert.match(desktopSettings, /setTunnelApiKey/);
 assert.doesNotMatch(desktopSettings, /ngrok|gateway|approval/i);
 assert.match(desktopConnection, /OpenAI Secure MCP Tunnel/);
 assert.match(desktopConnection, /Runtime API key/);
-assert.match(desktopConnection, /saved key for this Secure MCP Tunnel is encrypted on this computer and is never shown again/i);
-assert.match(desktopConnection, /Save and restart connection/);
+assert.match(desktopConnection, /saved key is encrypted on this computer\. Rel\.AI does not show it again/i);
+assert.match(desktopConnection, /Save connection settings/);
 assert.doesNotMatch(desktopConnection, /ngrok|gateway|pairing|approval token/i);
 
 for (const file of ['secure-tunnel-runtime.js','tunnel-recovery-supervisor.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));

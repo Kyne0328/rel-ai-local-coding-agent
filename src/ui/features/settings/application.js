@@ -3,7 +3,7 @@ import { applicationUpdatesPanel } from './desktop-updates.js';
 import { desktopStartupPanel } from './desktop-startup.js';
 
 export function mountApplication(container) {
-  container.innerHTML = '<div class="settings-loading">Loading application settings…</div>';
+  container.innerHTML = '<div class="settings-loading">Loading app settings…</div>';
   return loadAndRender(container);
 }
 
@@ -14,7 +14,7 @@ async function loadAndRender(container) {
     : null;
 
   container.innerHTML = '';
-  container.appendChild(header('Application', 'Startup, availability, and updates.'));
+  container.appendChild(header('App', 'Startup, integrations, and updates.'));
   container.appendChild(desktopStartupPanel(lifecycle).el);
   container.appendChild(applicationUpdatesPanel().el);
 }
