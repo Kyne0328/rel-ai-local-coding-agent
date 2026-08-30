@@ -126,7 +126,8 @@ function buildPackageSizeReport(options) {
       capturedAt: baseline.capturedAt,
       policy: baseline.policy,
       tolerancePercent: baseline.tolerancePercent,
-      blockingGrowthPercent: baseline.blockingGrowthPercent
+      blockingGrowthPercent: baseline.blockingGrowthPercent,
+      blockingMetrics: baseline.blockingMetrics
     } : null,
     comparison,
     warnings,
@@ -170,6 +171,13 @@ function readBaseline(file) {
     throw new Error(`Package-size baseline must declare a blockingGrowthPercent above its advisory tolerance: ${file}`);
   }
   if (!baseline.metrics || typeof baseline.metrics !== 'object') throw new Error(`Package-size baseline has no metrics object: ${file}`);
+  if (!Array.isArray(baseline.blockingMetrics) || baseline.blockingMetrics.length === 0) {
+    throw new Error(`Package-size baseline must declare aggregate blockingMetrics: ${file}`);
+  }
+  const unknownBlockingMetrics = baseline.blockingMetrics.filter(metric => !Object.hasOwn(baseline.metrics, metric));
+  if (unknownBlockingMetrics.length > 0) {
+    throw new Error(`Package-size baseline blockingMetrics are missing from metrics: ${unknownBlockingMetrics.join(', ')}.`);
+  }
   return baseline;
 }
 
@@ -177,6 +185,7 @@ function compareMetrics(metrics, baseline) {
   if (!baseline) return [];
   const threshold = Number(baseline.tolerancePercent || 0);
   const blockingThreshold = Number(baseline.blockingGrowthPercent || Number.POSITIVE_INFINITY);
+  const blockingMetrics = new Set(Array.isArray(baseline.blockingMetrics) ? baseline.blockingMetrics : Object.keys(baseline.metrics || {}));
   return Object.entries(baseline.metrics).flatMap(([metric, baselineBytes]) => {
     const currentBytes = metrics[metric];
     if (!Number.isFinite(currentBytes) || !Number.isFinite(baselineBytes)) return [];
@@ -188,8 +197,9 @@ function compareMetrics(metrics, baseline) {
       currentBytes,
       deltaBytes,
       deltaPercent,
+      blocksRelease: blockingMetrics.has(metric),
       exceedsTolerance: deltaPercent > threshold,
-      exceedsBlockingGrowth: deltaPercent > blockingThreshold
+      exceedsBlockingGrowth: blockingMetrics.has(metric) && deltaPercent > blockingThreshold
     }];
   });
 }

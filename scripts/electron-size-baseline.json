@@ -6,7 +6,13 @@
   "policy": "advisory",
   "tolerancePercent": 3,
   "blockingGrowthPercent": 25,
-  "notes": "Measured Windows release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
+  "blockingMetrics": [
+    "installerBytes",
+    "portableBytes",
+    "unpackedBytes",
+    "resourcesBytes"
+  ],
+  "notes": "Measured Windows release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Component drift remains diagnostic; only structural packaging mistakes or an exceptional 25%+ jump in aggregate release footprint blocks release for investigation.",
   "metrics": {
     "installerBytes": 140968515,
     "portableBytes": 120609317,

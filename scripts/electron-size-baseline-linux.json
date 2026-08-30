@@ -6,8 +6,14 @@
   "policy": "advisory",
   "tolerancePercent": 5,
   "blockingGrowthPercent": 25,
+  "blockingMetrics": [
+    "appImageBytes",
+    "debBytes",
+    "unpackedBytes",
+    "resourcesBytes"
+  ],
   "provisional": false,
-  "notes": "Measured Linux release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Normal growth above the advisory tolerance is reported, not blocked; only structural packaging mistakes or an exceptional 25%+ jump block release for investigation.",
+  "notes": "Measured Linux release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Component drift remains diagnostic; only structural packaging mistakes or an exceptional 25%+ jump in aggregate release footprint blocks release for investigation.",
   "metrics": {
     "appImageBytes": 167228358,
     "debBytes": 128878952,
