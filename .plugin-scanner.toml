@@ -1,0 +1,31 @@
+# plugin-scanner 2.0.1116 false-positive suppressions.
+# Keep the security rules enabled; ignore only surfaces audited as non-actionable.
+[scanner]
+ignore_paths = [
+  # Tests intentionally contain synthetic credentials, redaction fixtures, and
+  # process-launch fixtures. The scanner reports these as production findings.
+  "test*",
+
+  # Generated CSS duplicates the source `task-*` class false positive below.
+  "public/dashboard.css",
+
+  # Acceptance-only local bearer token used to exercise packaged auth.
+  "scripts/packaged-connector-acceptance.mjs",
+
+  # Builds a setup command from a runtime token parameter; no credential is
+  # hardcoded in this source file.
+  "src/productUx.js",
+
+  # `task-*` CSS identifiers contain the substring `sk-`, which the scanner's
+  # OpenAI-key heuristic currently matches without a word boundary.
+  "src/ui/features/sessions/styles.css",
+
+  # The shell-injection heuristic matches an interpolated error message followed
+  # by Electron's `spawn` event name; this code does not execute a shell command.
+  "electron*service-process-client.js",
+
+  # These launch executables with structured argv. Their nearby interpolated log
+  # or error strings trigger the scanner's adjacency-based shell heuristic.
+  "scripts*electron-dev-watch.mjs",
+  "scripts*observability-benchmark.mjs",
+]

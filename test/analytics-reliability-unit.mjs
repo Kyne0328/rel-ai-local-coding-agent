@@ -58,7 +58,7 @@ try {
     querySelectorAll: () => []
   };
   renderUsage(legacyContent, { bounds, current: legacyScope, previous: analyticsRangeScope([], bounds) });
-  assert.match(legacyContent.innerHTML, /Starts (?:with newly classified calls|measuring with new actions)/);
+  assert.match(legacyContent.innerHTML, /Measured after new actions run/);
   assert.doesNotMatch(legacyContent.innerHTML, /Operation success/);
 
   const legacyStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-reliability-v1-'));

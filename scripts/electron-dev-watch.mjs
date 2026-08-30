@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronRoot = path.join(root, 'electron');
 const restartDelayMs = 450;
 const watchRoots = Object.freeze(['electron', 'src', 'public', 'bin']);
+const electronNestedWatchRoots = Object.freeze(['renderer', 'scripts']);
 
 function defaultDevUserDataPath(homeDir = os.homedir()) {
   return path.join(homeDir, '.rel-ai-mcp-dev', 'electron-user-data');
@@ -24,9 +25,50 @@ function shouldRestartForPath(rootName, fileName) {
   return ['.js', '.mjs', '.cjs', '.html', '.css', '.json'].includes(extension);
 }
 
-function electronExecutable() {
-  const name = process.platform === 'win32' ? 'electron.exe' : 'electron';
-  return path.join(electronRoot, 'node_modules', 'electron', 'dist', name);
+function electronPackageRoot() {
+  return path.join(electronRoot, 'node_modules', 'electron');
+}
+
+function electronExecutable(packageRoot = electronPackageRoot(), platform = process.platform) {
+  const name = platform === 'win32' ? 'electron.exe' : 'electron';
+  return path.join(packageRoot, 'dist', name);
+}
+
+function missingElectronRuntimeFiles(packageRoot = electronPackageRoot(), platform = process.platform) {
+  const required = [
+    path.join(packageRoot, 'package.json'),
+    path.join(packageRoot, 'path.txt'),
+    electronExecutable(packageRoot, platform),
+    path.join(packageRoot, 'dist', 'icudtl.dat'),
+    path.join(packageRoot, 'dist', 'resources', 'default_app.asar')
+  ];
+  return required.filter(file => !fs.existsSync(file));
+}
+
+function assertElectronRuntimeReady(packageRoot = electronPackageRoot(), platform = process.platform) {
+  const missing = missingElectronRuntimeFiles(packageRoot, platform);
+  if (!missing.length) return;
+  const relative = missing.map(file => path.relative(electronRoot, file).replaceAll('\\', '/'));
+  throw new Error(`Electron runtime is incomplete (${relative.join(', ')}). Stop the dev watcher and run npm ci --prefix electron before starting it again.`);
+}
+
+function sourceWatchTargets(baseRoot = root) {
+  const targets = [
+    { rootName: 'electron', directory: path.join(baseRoot, 'electron'), recursive: false, prefix: '' },
+    ...electronNestedWatchRoots.map(prefix => ({
+      rootName: 'electron',
+      directory: path.join(baseRoot, 'electron', prefix),
+      recursive: true,
+      prefix: `${prefix}/`
+    })),
+    ...watchRoots.filter(rootName => rootName !== 'electron').map(rootName => ({
+      rootName,
+      directory: path.join(baseRoot, rootName),
+      recursive: true,
+      prefix: ''
+    }))
+  ];
+  return targets.filter(target => fs.existsSync(target.directory));
 }
 
 function packageBin(packageRoot, binName) {
@@ -67,8 +109,8 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   const isolated = argv.includes('--isolated');
+  assertElectronRuntimeReady();
   const binary = electronExecutable();
-  if (!fs.existsSync(binary)) throw new Error(`Electron binary is missing: ${binary}. Run npm ci --prefix electron first.`);
 
   const generateColorTokens = path.join(root, 'scripts', 'generate-color-tokens.mjs');
   const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
@@ -78,6 +120,7 @@ async function main(argv = process.argv.slice(2)) {
     tailwindCli,
     '-i', path.join(root, 'src', 'ui', 'styles', 'app.css'),
     '-o', path.join(root, 'public', 'dashboard.css'),
+    '--minify',
     '--watch'
   ], { cwd: root, stdio: 'inherit', windowsHide: true });
 
@@ -122,12 +165,12 @@ async function main(argv = process.argv.slice(2)) {
     }, restartDelayMs);
   }
 
-  for (const rootName of watchRoots) {
-    const directory = path.join(root, rootName);
-    if (!fs.existsSync(directory)) continue;
-    const watcher = fs.watch(directory, { recursive: true }, (_eventType, fileName) => {
-      if (!fileName || !shouldRestartForPath(rootName, fileName)) return;
-      scheduleRestart(`${rootName}/${String(fileName).replaceAll('\\', '/')}`);
+  for (const target of sourceWatchTargets()) {
+    const watcher = fs.watch(target.directory, { recursive: target.recursive }, (_eventType, fileName) => {
+      if (!fileName) return;
+      const relative = `${target.prefix}${String(fileName).replaceAll('\\', '/')}`;
+      if (!shouldRestartForPath(target.rootName, relative)) return;
+      scheduleRestart(`${target.rootName}/${relative}`);
     });
     watchers.push(watcher);
   }
@@ -161,4 +204,4 @@ if (isEntrypoint) {
   });
 }
 
-export { defaultDevUserDataPath, electronExecutable, main, shouldRestartForPath, watchRoots };
+export { assertElectronRuntimeReady, defaultDevUserDataPath, electronExecutable, main, missingElectronRuntimeFiles, shouldRestartForPath, sourceWatchTargets, watchRoots };

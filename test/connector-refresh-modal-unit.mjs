@@ -74,7 +74,7 @@ const v0271Notice = prepareConnectorRefreshNotice({
   updated: true
 }, v0271Storage);
 assert.ok(v0271Notice, 'updating into 0.27.1 must require the one-time connector refresh notice');
-assert.match(v0271Notice.description, /presentation or tool metadata/i);
+assert.match(v0271Notice.description, /connector details or tool definitions/i);
 
 assert.equal(prepareConnectorRefreshNotice({ currentVersion: '0.25.1', previousVersion: '0.25.0', updated: true }, memoryStorage()), null, 'releases without a public schema refresh must stay silent');
 

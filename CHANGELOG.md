@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.27.2] — 2026-08-30
+
+### Electron development reliability
+- **Fail fast when the local Electron runtime is incomplete.** The development watcher now verifies the Electron package metadata, executable, ICU data, and default app resources before launch and points developers to `npm ci --prefix electron` when the runtime needs repair.
+- **Keep source watching focused and stable.** Electron's package root is watched non-recursively while renderer and script sources remain recursive, avoiding unnecessary watcher handles inside `electron/node_modules` without missing nested source changes.
+- **Generate the same minified dashboard CSS used by verification.** Watch mode now passes Tailwind's `--minify` flag so development output matches the generated CSS contract checked elsewhere in the repository.
+
+### Maintenance and validation
+- **Document audited plugin-scanner false positives without weakening the scanner rules.** Repository-local suppressions are limited to reviewed test, generated, credential-fixture, CSS identifier, and structured-process-launch surfaces.
+- **Keep reliability and connector-refresh regression wording aligned with the current UI copy.** Focused tests now assert the current analytics and refresh-notice language.
+- **No ChatGPT connector refresh is required for 0.27.2.** This release does not change the public MCP tool definitions or connector metadata, so the forced-refresh version list remains unchanged.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.27.2.
+
 ## [0.27.1] — 2026-08-27
 
 ### ChatGPT status and responsiveness
