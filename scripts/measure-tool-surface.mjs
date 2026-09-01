@@ -9,6 +9,7 @@ import { slimCompactPublicResult } from '../src/tools/compactResult.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseline = Object.freeze({ publicTools: 30, discoverySchemaBytes: 30524, estimatedDiscoveryTokens: 7631, globalInstructionBytes: 1471 });
+const budget = Object.freeze({ discoverySchemaBytes: 40000, globalInstructionBytes: baseline.globalInstructionBytes });
 
 function measure() {
   const config = { workspaces: {} };
@@ -43,6 +44,7 @@ const snapshot = compactForConnector('snapshot', {
 const skillMetrics = skillMeasurements();
 const report = {
   baseline,
+  budget,
   surface,
   resultBudgets: {
     workBeginBefore: bytes(representativeResult),
@@ -77,4 +79,4 @@ function skillMeasurements() {
 function reduction(current) { return Number(((1 - current / baseline.discoverySchemaBytes) * 100).toFixed(2)); }
 function bytes(value) { return Buffer.byteLength(JSON.stringify(value), 'utf8'); }
 
-export { baseline, measure };
+export { baseline, budget, measure };

@@ -144,7 +144,7 @@ try {
   assert.match(win.options.backgroundColor, /^#[0-9a-f]{6}$/i, 'dashboard window must provide an opaque fallback background while the UI loads');
   assert.equal(win.options.webPreferences.sandbox, true);
   assert.notEqual(win.options.webPreferences.backgroundThrottling, false, 'hidden dashboards should use Electron background throttling');
-  assert.equal(win.options.webPreferences.partition, 'relai-dashboard');
+  assert.equal(win.options.webPreferences.partition, 'persist:relai-dashboard', 'dashboard storage must survive app restarts so theme preferences persist');
   assert.equal(win.webContents.url, 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code');
   assert.equal(win.webContents.url.includes('secret-token'), false);
   assert.equal(typeof permissionHandler, 'function');

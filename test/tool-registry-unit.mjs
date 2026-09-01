@@ -72,7 +72,7 @@ for (const schema of schemas) {
   const publicSchema = publicSchemas.find(item => item.name === schema.name);
   assert.ok(publicSchema?.outputSchema, `${schema.name} must advertise outputSchema`);
   assert.equal(publicSchema.outputSchema.type, 'object');
-  assert.equal(publicSchema.outputSchema.additionalProperties, false, 'public structured output must advertise the stable returned result fields');
+  assert.equal(publicSchema.outputSchema.additionalProperties, true, 'public discovery must keep detailed operation output fields on demand instead of embedding every action result shape');
   assert.deepEqual(publicSchema.outputSchema.required, ['ok']);
 }
 const importUnsafeRootKeywords = ['oneOf', 'anyOf', 'allOf', 'if', 'then', 'else', 'not', 'propertyNames'];
@@ -105,8 +105,11 @@ assert.match(publicWorkSchema?.properties?.maxBytes?.description || '', /Action 
 const publicValidateInputSchema = publicSchemas.find(item => item.name === 'relai_validate')?.inputSchema;
 assert.equal(publicValidateInputSchema?.properties?.timeoutMs?.anyOf, undefined, 'relai_validate root timeoutMs schema must collapse bounded action variants instead of advertising a redundant union');
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
-assert.equal(publicSearchSchema?.properties?.neuralEmbeddings?.type, 'boolean', 'semantic search output metadata must remain declared');
-assert.equal(publicSearchSchema?.properties?.originalBytes?.type, 'number', 'compacted tool results must remain valid against the public output schema');
+assert.equal(publicSearchSchema?.properties?.neuralEmbeddings, undefined, 'action-specific result fields must stay out of lightweight MCP discovery');
+assert.equal(publicSearchSchema?.properties?.originalBytes, undefined, 'compaction metadata must stay out of lightweight MCP discovery');
+const searchSurface = manifest.tools.find(item => item.name === 'relai_search');
+assert.ok(searchSurface?.outputFields?.includes('neuralEmbeddings'), 'semantic-search output metadata must remain available on demand');
+assert.ok(searchSurface?.outputFields?.includes('originalBytes'), 'compaction output metadata must remain available on demand');
 const publicExecSchema = publicSchemas.find(item => item.name === 'relai_exec');
 for (const field of ['command', 'executable', 'argv', 'input', 'cwd', 'env', 'timeoutMs', 'maxOutputBytes', 'work_id']) {
   assert.ok(publicExecSchema?.inputSchema?.properties?.[field], `relai_exec connector schema must expose ${field}`);

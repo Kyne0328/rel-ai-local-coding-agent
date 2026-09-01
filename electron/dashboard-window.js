@@ -99,7 +99,7 @@ function createDashboardWindowManager(deps) {
       icon: iconPath || undefined,
       backgroundColor: STARTUP_BACKGROUND_COLOR,
       webPreferences: {
-        ...localWindowWebPreferences(dashboardPreloadPath, 'relai-dashboard', 'dashboard')
+        ...localWindowWebPreferences(dashboardPreloadPath, 'persist:relai-dashboard', 'dashboard')
       }
     });
     secureSession(dashboardWindow.webContents.session);
