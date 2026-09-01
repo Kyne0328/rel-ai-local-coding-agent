@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.27.3] — 2026-09-01
+
+### ChatGPT file transfer and tool behavior
+- **Add bidirectional file transfer between ChatGPT and local projects.** `relai_read` can return one exact local file as a private, task-scoped MCP `resource_link`, while `relai_edit` accepts a dedicated native ChatGPT `file` parameter for safe no-overwrite imports. Artifact links are bound to the work session and principal, expire automatically, enforce path and size limits, and verify file hashes before download.
+- **Preserve full command output without bloating normal tool responses.** When `relai_exec` output exceeds the bounded response size, Rel.AI keeps a task-scoped spill and returns an `outputRef` that `relai_read` can retrieve later; spill files and empty task directories are pruned within fixed retention limits.
+- **Add task trace export and repeated-call guidance.** Task details can show and export a best-effort local JSONL trace from the audit history, while repeated identical connector requests receive an advisory after the third unchanged call instead of silently wasting work.
+- **Advance the public MCP tool surface to version 60.** Tool discovery now advertises native file intake, private artifact-resource transfer, and the current compact output contracts while keeping the model-facing surface at 12 tools.
+- **Require a one-time ChatGPT connector refresh for 0.27.3.** Existing installations show the standard refresh notice after updating because this release changes public tool definitions and connector-visible metadata; fresh installations remain exempt.
+
+### Reliability, performance, and persistence
+- **Make long edits recoverable and keep warning-only health findings non-blocking.** Eligible `relai_edit` calls can use the recoverable task path, including clients without Native Tasks support, while dashboard readiness now distinguishes warnings from errors instead of treating every finding as a blocker.
+- **Bound non-Git search and native-task cleanup.** Filesystem fallback search is asynchronous, cancellable, time-bounded, and skips oversized files; native tasks are opportunistically pruned, stale quarantine artifacts expire, active executors are aborted when records expire or become invalid, and tool-task retention safely outlives the maximum operation runtime.
+- **Improve startup, tunnel, shutdown, and minimized-window reliability.** Foreground dashboard opening follows authoritative local-service readiness instead of a shorter recovery timeout, persistent tunnel outages escalate to automatic restart, hidden dashboard time no longer consumes request timeout budgets, and stdio shutdown flushes audit, task history, analytics, telemetry, processes, and UI sessions before exit.
+- **Preserve dashboard preferences across app restarts.** The dashboard now uses a persistent Electron partition so theme and other local browser storage survive relaunches.
+- **Keep MCP discovery and dashboard updates lightweight.** Public discovery output schemas keep detailed action fields on demand, repeated manifest builds reuse stable cached schema objects, dashboard progress bursts coalesce, live clocks update incrementally, and CI now enforces these performance budgets plus Repository Intelligence worker lifecycle coverage.
+
+### Setup and desktop UI/UX
+- **Simplify first-run setup and Connection navigation.** Connection now lives under Settings, completed tunnel setup hands off to the remaining guide on Overview instead of reopening Connection, the connector icon is optional, account/workspace switching is explained without adding a Rel.AI login, and healthy projects avoid a duplicate Ready-for-ChatGPT block.
+- **Progressively reveal post-setup content.** Overview waits for the first real Rel.AI tool request before showing task history and analytics, keeping first-run screens focused on the next required action.
+- **Reduce notification noise and keep validation beside the affected control.** Identical toasts coalesce, transient notifications pause while hovered or focused, redundant success toasts were removed, project and Connection validation is inline with `aria-invalid`, and durable code-viewer failures no longer also create duplicate global errors.
+- **Tighten small-control accessibility.** The theme selector now uses radio-group semantics with arrow, Home, and End keyboard navigation, toast announcements isolate live text from the dismiss control, and unavailable desktop-only diagnostics actions explain their limitation visibly.
+
+### Validation
+- **Expand regression coverage around the new behavior.** The suite now covers artifact resource round trips, native file intake, output spills, repeat-call advisories, task-trace export, non-Git search bounds, stdio persistence, dashboard visibility timeouts, manifest/update budgets, persistent dashboard storage, connector onboarding, toast lifecycle behavior, inline validation, and theme keyboard navigation.
+- **Make interrupted GitHub publication recoverable.** Release preflight now distinguishes a completed release from an interrupted draft, verifies that an existing release belongs to the current release commit, and reruns replace partial draft assets before publishing instead of silently treating the draft as finished.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.27.3.
+
 ## [0.27.2] — 2026-08-30
 
 ### Electron development reliability

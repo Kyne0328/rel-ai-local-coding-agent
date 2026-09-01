@@ -203,6 +203,9 @@ function verifyWorkflowContracts() {
     /needs:[\s\S]*- windows[\s\S]*- linux/,
     /publish=true/,
     /publish=false/,
+    /recover_draft/,
+    /release-response\.json[^\n]*\.draft|\.draft === true/,
+    /Existing release \$VERSION targets \$release_target, not current release commit \$GITHUB_SHA/,
     /GitHub API returned HTTP \$http_status/,
     /curl --silent --show-error/,
     /npm run electron:dist:windows/,
@@ -238,6 +241,8 @@ function verifyWorkflowContracts() {
     /npm run prepare:release-assets/,
     /release-assets\.txt/,
     /SHA256SUMS\.txt/,
+    /gh release upload "\$VERSION" "\$\{assets\[@\]\}" --repo "\$GITHUB_REPOSITORY" --clobber/,
+    /release edit "\$VERSION"[\s\S]*--draft=false/,
     /actions\/attest-build-provenance@/,
     /actions\/attest-sbom@/,
     /dist\/\*\.AppImage/,
@@ -266,6 +271,10 @@ function verifyWorkflowContracts() {
   ]) assert.match(macVerifier, pattern);
   assert.match(workflow, /publish:[\s\S]*needs:[\s\S]*- windows-install-upgrade[\s\S]*- linux-install-upgrade/,
     'publishing must wait for installed release lifecycle validation');
+  assert.match(workflow, /release_draft[\s\S]*recover_draft=true[\s\S]*Recovering interrupted draft release/,
+    'an interrupted draft release must remain recoverable instead of being mistaken for a completed publication');
+  assert.match(workflow, /RECOVER_DRAFT:[\s\S]*gh release upload[\s\S]*--clobber[\s\S]*release edit[\s\S]*--draft=false/,
+    'draft recovery must replace partial assets and publish the recovered release');
   assert.match(
     workflow,
     /linux-install-upgrade:[\s\S]*apt-get install --yes --no-install-recommends xvfb xauth[\s\S]*Validate fresh install and in-place upgrade/,

@@ -33,6 +33,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       publish: ${{ steps.preflight.outputs.publish }}
+      recover_draft: ${{ steps.preflight.outputs.recover_draft }}
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -66,11 +67,39 @@ jobs:
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "$release_url")"
+          recover_draft=false
           case "$http_status" in
             200)
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-              echo "GitHub release $VERSION already exists. Nothing will be republished."
-              exit 0
+              release_tag="$(node -p "require('./release-response.json').tag_name || ''")"
+              release_target="$(node -p "require('./release-response.json').target_commitish || ''")"
+              release_draft="$(node -p "require('./release-response.json').draft === true ? 'true' : 'false'")"
+              if [ "$release_tag" != "$VERSION" ]; then
+                echo "GitHub release lookup returned tag $release_tag instead of $VERSION." >&2
+                exit 1
+              fi
+              if [ "$release_target" != "$GITHUB_SHA" ]; then
+                echo "Existing release $VERSION targets $release_target, not current release commit $GITHUB_SHA." >&2
+                exit 1
+              fi
+              if [ "$release_draft" = 'true' ]; then
+                recover_draft=true
+                echo "Recovering interrupted draft release $VERSION."
+              else
+                if ! git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+                  echo "Published GitHub release $VERSION has no matching Git tag." >&2
+                  exit 1
+                fi
+                git fetch --force origin "refs/tags/$VERSION:refs/tags/$VERSION"
+                tag_commit="$(git rev-list -n 1 "refs/tags/$VERSION")"
+                if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+                  echo "Existing tag $VERSION points to $tag_commit, not current release commit $GITHUB_SHA." >&2
+                  exit 1
+                fi
+                echo "recover_draft=false" >> "$GITHUB_OUTPUT"
+                echo "publish=false" >> "$GITHUB_OUTPUT"
+                echo "GitHub release $VERSION is already published from current release commit $GITHUB_SHA. Nothing will be republished."
+                exit 0
+              fi
               ;;
             404)
               ;;
@@ -90,6 +119,7 @@ jobs:
             fi
             echo "Recovering unpublished release from existing tag $VERSION at $tag_commit."
           fi
+          echo "recover_draft=$recover_draft" >> "$GITHUB_OUTPUT"
           echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Use declared npm
         if: steps.preflight.outputs.publish == 'true'
@@ -527,6 +557,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.preflight.outputs.version }}
+          RECOVER_DRAFT: ${{ needs.preflight.outputs.recover_draft }}
           CHANGELOG_NOTES_FOUND: ${{ steps.notes.outputs.found }}
         run: |
           set -euo pipefail
@@ -540,7 +571,12 @@ jobs:
             test -f "dist/$name"
             assets+=("dist/$name")
           done
-          arguments=(release create "$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rel.AI MCP $VERSION")
+          if [ "$RECOVER_DRAFT" = 'true' ]; then
+            gh release upload "$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            arguments=(release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rel.AI MCP $VERSION" --draft=false)
+          else
+            arguments=(release create "$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rel.AI MCP $VERSION")
+          fi
           if [ "$CHANGELOG_NOTES_FOUND" = 'true' ]; then
             arguments+=(--notes-file release-notes.md)
           else
