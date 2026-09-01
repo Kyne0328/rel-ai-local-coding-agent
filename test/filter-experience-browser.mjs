@@ -93,7 +93,7 @@ try {
   assert.equal(result.diagnostics.applied.badge, 'Filters (2)');
   assert.match(result.diagnostics.applied.summary, /findings.*log entries shown/);
   assert.equal(result.diagnostics.applied.liveTailPressed, 'false');
-  assert.deepEqual(result.diagnostics.applied.reportActions, ['Copy report', 'Export support information', 'Open support folder']);
+  assert.deepEqual(result.diagnostics.applied.reportActions, ['Copy report', 'Export support information', 'Open support folder — desktop app only']);
   assert.match(result.tools.applied.chip, /Validate/);
   assert.equal(result.tools.applied.badge, 'Filters (1)');
   assert.match(result.tools.applied.summary, /tools shown/);
@@ -103,13 +103,27 @@ try {
   assert.equal(result.tools.emptyState, true);
   assert.deepEqual(result.settings.themes.map(item => item.preference), ['dark', 'light', 'system']);
   assert.deepEqual(result.settings.themeSwitchLabels, ['Follow system appearance', 'Dark theme', 'Light theme']);
-  assert.equal(result.settings.themeSwitchPressedCount, 1);
+  assert.equal(result.settings.themeSwitchCheckedCount, 1);
+  assert.equal(result.settings.themeSwitchRole, 'radiogroup');
+  assert.deepEqual(result.settings.themeOptionRoles, ['radio', 'radio', 'radio']);
+  assert.equal(result.settings.themeKeyboardSelected, 'dark');
+  assert.equal(result.settings.themeKeyboardFocused, 'dark');
   assert.equal(result.settings.densityControlRemoved, true);
   assert.equal(result.settings.appearancePreviewRemoved, true);
   assert.equal(result.settings.legacyDensityIgnored, true);
   assert.equal(result.settings.secondaryNavigationRemoved, true);
   assert.equal(result.settings.labelsAssociated, true);
-  assert.deepEqual(result.workspaces, { validationPreferenceRemoved: true, validationMetricRemoved: true, editDetailsConsolidated: true, redundantProjectActionsRemoved: true, focusChipLabel: 'Clear selected project filter: app', scopeName: 'Project filter: All projects' });
+  assert.deepEqual(result.workspaces, {
+    validationPreferenceRemoved: true,
+    validationMetricRemoved: true,
+    editDetailsConsolidated: true,
+    inlineAliasValidation: true,
+    aliasValidationToastAbsent: true,
+    aliasValidationCleared: true,
+    redundantProjectActionsRemoved: true,
+    focusChipLabel: 'Clear selected project filter: app',
+    scopeName: 'Project filter: All projects'
+  });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
   assert.equal(result.connection.detailsDisclosure, true);

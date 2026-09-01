@@ -53,8 +53,18 @@ function render(container, { expanded = false } = {}) {
 
   const fields = document.createElement('div');
   fields.className = 'settings-panel-body';
-  fields.appendChild(field('Tunnel ID', textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }), 'The OpenAI Secure MCP Tunnel ID for this computer.'));
-  const runtimeKeyField = field('Runtime API key', secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely. Enter a new key only to replace it.' : 'Paste runtime API key'), state.tunnelApiKeyConfigured ? 'The saved key is encrypted on this computer. Rel.AI does not show it again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.');
+  fields.appendChild(connectionField(
+    'Tunnel ID',
+    textControl(state.tunnelId, value => { state.tunnelId = value.trim(); dirty(container); }),
+    'The OpenAI Secure MCP Tunnel ID for this computer.',
+    'tunnelId'
+  ));
+  const runtimeKeyField = connectionField(
+    'Runtime API key',
+    secretControl(state.tunnelApiKey, value => { state.tunnelApiKey = value.trim(); dirty(container); }, state.tunnelApiKeyConfigured ? 'Stored securely. Enter a new key only to replace it.' : 'Paste runtime API key'),
+    state.tunnelApiKeyConfigured ? 'The saved key is encrypted on this computer. Rel.AI does not show it again.' : 'Create a runtime API key for this Secure MCP Tunnel in OpenAI Platform.',
+    'tunnelApiKey'
+  );
   const credentialError = tunnelCredentialError(state);
   if (credentialError) {
     const error = document.createElement('div');
@@ -71,7 +81,12 @@ function render(container, { expanded = false } = {}) {
   advanced.innerHTML = '<summary>Advanced local settings</summary>';
   const advancedBody = document.createElement('div');
   advancedBody.className = 'settings-panel-body';
-  advancedBody.appendChild(field('Local connection port', numberControl(state.port, value => { state.port = Number(value); dirty(container); }, { min: 1024, max: 65535 }), 'Change this only when port 3333 conflicts with another local application.'));
+  advancedBody.appendChild(connectionField(
+    'Local connection port',
+    numberControl(state.port, value => { state.port = Number(value); dirty(container); }, { min: 1024, max: 65535 }),
+    'Change this only when port 3333 conflicts with another local application.',
+    'port'
+  ));
   advanced.appendChild(advancedBody);
   fields.appendChild(advanced);
 
@@ -88,7 +103,11 @@ function render(container, { expanded = false } = {}) {
 
 async function saveSettings(container, saveButton) {
   const error = validate();
-  if (error) return toast(error, { variant: 'error' });
+  if (error) {
+    showValidationError(container, error);
+    return;
+  }
+  clearValidationErrors(container);
   saveButton.disabled = true;
   saveButton.textContent = 'Saving and restarting…';
   try {
@@ -107,7 +126,11 @@ async function saveSettings(container, saveButton) {
     }
     state.tunnelErrorCode = '';
     state.tunnelError = '';
-    toast('Connection settings saved. Rel.AI reconnected.', { variant: 'success' });
+    saveButton.disabled = false;
+    saveButton.textContent = 'Connection settings saved';
+    setTimeout(() => {
+      if (saveButton.isConnected) saveButton.textContent = 'Save connection settings';
+    }, 1200);
   } catch (error) {
     toast(messageOf(error), { variant: 'error' });
     saveButton.disabled = false;
@@ -116,11 +139,61 @@ async function saveSettings(container, saveButton) {
 }
 
 function validate() {
-  if (!Number.isInteger(state.port) || state.port < 1024 || state.port > 65535) return 'Enter a local connection port from 1024 to 65535.';
-  if (!/^tunnel_[A-Za-z0-9_-]{8,200}$/.test(state.tunnelId)) return 'Enter a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.';
-  if (!state.tunnelApiKeyConfigured && !state.tunnelApiKey) return 'Enter the OpenAI Secure MCP Tunnel runtime API key.';
-  if (state.tunnelApiKey && (state.tunnelApiKey.length < 12 || /\s/.test(state.tunnelApiKey))) return 'Enter a valid runtime API key with no spaces.';
-  return '';
+  if (!Number.isInteger(state.port) || state.port < 1024 || state.port > 65535) {
+    return { field: 'port', message: 'Enter a local connection port from 1024 to 65535.' };
+  }
+  if (!/^tunnel_[A-Za-z0-9_-]{8,200}$/.test(state.tunnelId)) {
+    return { field: 'tunnelId', message: 'Enter a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.' };
+  }
+  if (!state.tunnelApiKeyConfigured && !state.tunnelApiKey) {
+    return { field: 'tunnelApiKey', message: 'Enter the OpenAI Secure MCP Tunnel runtime API key.' };
+  }
+  if (state.tunnelApiKey && (state.tunnelApiKey.length < 12 || /\s/.test(state.tunnelApiKey))) {
+    return { field: 'tunnelApiKey', message: 'Enter a valid runtime API key with no spaces.' };
+  }
+  return null;
+}
+
+function connectionField(label, control, help, key) {
+  const wrapper = field(label, control, help);
+  const input = wrapper.querySelector('input, select, textarea');
+  if (!input) return wrapper;
+  const error = document.createElement('div');
+  error.id = `connectionValidation${key}`;
+  error.className = 'connection-key-error';
+  error.dataset.connectionValidation = key;
+  error.setAttribute('role', 'alert');
+  error.hidden = true;
+  input.dataset.connectionField = key;
+  input.setAttribute('aria-describedby', error.id);
+  input.addEventListener('input', () => {
+    input.removeAttribute('aria-invalid');
+    error.hidden = true;
+    error.textContent = '';
+  });
+  wrapper.appendChild(error);
+  return wrapper;
+}
+
+function clearValidationErrors(container) {
+  for (const input of container.querySelectorAll('[data-connection-field]')) input.removeAttribute('aria-invalid');
+  for (const error of container.querySelectorAll('[data-connection-validation]')) {
+    error.hidden = true;
+    error.textContent = '';
+  }
+}
+
+function showValidationError(container, validation) {
+  clearValidationErrors(container);
+  const input = container.querySelector(`[data-connection-field="${validation.field}"]`);
+  const error = container.querySelector(`[data-connection-validation="${validation.field}"]`);
+  if (!input || !error) return;
+  input.setAttribute('aria-invalid', 'true');
+  error.textContent = validation.message;
+  error.hidden = false;
+  const disclosure = input.closest('details');
+  if (disclosure) disclosure.open = true;
+  input.focus();
 }
 
 function accountWorkspaceSwitch() {

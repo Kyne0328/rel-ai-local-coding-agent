@@ -6,12 +6,12 @@ const TOAST_VARIANTS = Object.freeze({
 });
 
 let _region = null;
+const _active = new Map();
 
 function getRegion() {
-  if (_region) return _region;
+  if (_region?.isConnected) return _region;
   _region = document.createElement('div');
   _region.className = 'toast-region';
-  _region.setAttribute('aria-live', 'polite');
   document.body.appendChild(_region);
   return _region;
 }
@@ -19,10 +19,18 @@ function getRegion() {
 export function toast(message, { variant = 'info', duration } = {}) {
   const tone = Object.hasOwn(TOAST_VARIANTS, variant) ? variant : 'info';
   const metadata = TOAST_VARIANTS[tone];
+  const text = String(message || '');
   const effectiveDuration = Number.isFinite(duration) ? Math.max(0, duration) : metadata.duration;
+  const key = `${tone}\u0000${text}`;
+  const existing = _active.get(key);
+  if (existing?.element?.isConnected) {
+    existing.restart(effectiveDuration);
+    return existing.element;
+  }
+  _active.delete(key);
+
   const element = document.createElement('div');
   element.className = `toast toast-${tone}`;
-  element.setAttribute('role', metadata.role);
 
   const marker = document.createElement('span');
   marker.className = 'toast-marker';
@@ -31,24 +39,67 @@ export function toast(message, { variant = 'info', duration } = {}) {
 
   const copy = document.createElement('span');
   copy.className = 'toast-copy';
-  copy.textContent = String(message || '');
-  copy.setAttribute('aria-label', `${metadata.label}: ${String(message || '')}`);
+  copy.textContent = text;
+  copy.setAttribute('role', metadata.role);
+  copy.setAttribute('aria-atomic', 'true');
+  copy.setAttribute('aria-label', `${metadata.label}: ${text}`);
 
   const dismiss = document.createElement('button');
   dismiss.type = 'button';
   dismiss.className = 'toast-dismiss';
   dismiss.setAttribute('aria-label', `Dismiss ${metadata.label.toLowerCase()} notification`);
   dismiss.textContent = '×';
+
   let timer = null;
-  const remove = () => {
+  let timerStartedAt = 0;
+  let remainingMs = effectiveDuration;
+  let paused = false;
+
+  const clearTimer = () => {
     if (timer) clearTimeout(timer);
     timer = null;
+    timerStartedAt = 0;
+  };
+  const remove = () => {
+    clearTimer();
+    _active.delete(key);
     element.remove();
   };
+  const schedule = () => {
+    clearTimer();
+    if (paused || remainingMs <= 0) return;
+    timerStartedAt = Date.now();
+    timer = setTimeout(remove, remainingMs);
+  };
+  const pause = () => {
+    if (paused) return;
+    paused = true;
+    if (timer && timerStartedAt) remainingMs = Math.max(0, remainingMs - (Date.now() - timerStartedAt));
+    clearTimer();
+  };
+  const resume = () => {
+    if (!paused) return;
+    paused = false;
+    schedule();
+  };
+  const restart = nextDuration => {
+    remainingMs = nextDuration;
+    if (!paused) schedule();
+  };
+
   dismiss.addEventListener('click', remove, { once: true });
+  element.addEventListener('mouseenter', pause);
+  element.addEventListener('mouseleave', resume);
+  element.addEventListener('focusin', pause);
+  element.addEventListener('focusout', () => {
+    queueMicrotask(() => {
+      if (!element.contains(document.activeElement)) resume();
+    });
+  });
 
   element.append(marker, copy, dismiss);
   getRegion().appendChild(element);
-  if (effectiveDuration > 0) timer = setTimeout(remove, effectiveDuration);
+  _active.set(key, { element, restart });
+  schedule();
   return element;
 }

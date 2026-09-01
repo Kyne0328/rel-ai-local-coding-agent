@@ -67,7 +67,6 @@ async function setLaunchAtLogin(container, toggle, enabled) {
     }
     const actual = result?.status?.launchAtLogin?.enabled === true;
     syncToggle(toggle, actual, LAUNCH_TOGGLE_LABELS);
-    toast(actual ? 'Rel.AI will launch at Windows sign-in.' : 'Rel.AI will not launch at Windows sign-in.', { variant: 'success' });
   } catch (error) {
     syncToggle(toggle, !enabled, LAUNCH_TOGGLE_LABELS);
     toast(messageOf(error), { variant: 'error' });
@@ -88,12 +87,6 @@ async function setKeepAwake(container, toggle, enabled) {
       return;
     }
     syncToggle(toggle, actual, KEEP_AWAKE_TOGGLE_LABELS);
-    toast(
-      actual
-        ? 'Rel.AI will keep this computer awake while it is running.'
-        : 'Rel.AI will use normal sleep behavior when no Rel.AI task is active.',
-      { variant: 'success' }
-    );
   } catch (error) {
     syncToggle(toggle, !enabled, KEEP_AWAKE_TOGGLE_LABELS);
     toast(messageOf(error), { variant: 'error' });

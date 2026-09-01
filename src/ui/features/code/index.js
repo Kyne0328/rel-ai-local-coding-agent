@@ -54,7 +54,7 @@ export function updateCodeLiveState(container, data = {}) {
   state.tasks = nextTasks;
   syncTaskOptions(state, nextTasks);
   if (!state.taskId || !nextTasks.some(task => task.id === state.taskId)) return true;
-  void refreshWorkspace(state, { refreshCurrent: false, quiet: true });
+  void refreshWorkspace(state, { refreshCurrent: false });
   return true;
 }
 
@@ -99,16 +99,15 @@ async function refreshWorkspace(state, options = {}) {
     renderWorkspaceMeta(state);
     renderFiles(state);
     if (options.refreshCurrent && state.filePath) {
-      await openFile(state, state.filePath, { preserveSelection: true, quiet: options.quiet });
+      await openFile(state, state.filePath, { preserveSelection: true });
       return;
     }
     if (!state.filePath) {
       const first = changedFiles[0] || '';
-      if (first) await openFile(state, first, { quiet: options.quiet });
+      if (first) await openFile(state, first);
       else setViewerMessage(state, emptyViewerMessage(workspace));
     }
   } catch (error) {
-    if (!options.quiet) toast(messageFor(error), { variant: 'error' });
     renderWorkspaceError(state, error);
   }
 }
@@ -194,7 +193,6 @@ async function openFile(state, filePath, options = {}) {
   } catch (error) {
     state.filePath = previous;
     renderFiles(state);
-    if (!options.quiet) toast(messageFor(error), { variant: 'error' });
     setViewerMessage(state, messageFor(error), 'error');
   }
 }

@@ -208,10 +208,18 @@ app.whenReady().then(async () => {
         theme.querySelector('[data-theme-option="' + value + '"]').click(); await delay(20);
         themes.push({ preference: document.documentElement.dataset.themePreference, resolved: document.documentElement.dataset.theme });
       }
+      const systemTheme = theme.querySelector('[data-theme-option="system"]');
+      systemTheme.focus();
+      systemTheme.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await delay(20);
       return {
         themes,
         themeSwitchLabels: [...theme.querySelectorAll('[data-theme-option]')].map(button => button.getAttribute('aria-label')),
-        themeSwitchPressedCount: theme.querySelectorAll('[aria-pressed="true"]').length,
+        themeSwitchCheckedCount: theme.querySelectorAll('[aria-checked="true"]').length,
+        themeSwitchRole: theme.getAttribute('role'),
+        themeOptionRoles: [...theme.querySelectorAll('[data-theme-option]')].map(button => button.getAttribute('role')),
+        themeKeyboardSelected: theme.querySelector('[aria-checked="true"]')?.dataset.themeOption || '',
+        themeKeyboardFocused: document.activeElement?.dataset?.themeOption || '',
         densityControlRemoved: !selects.some(select => [...select.options].some(option => option.value === 'compact')),
         appearancePreviewRemoved: !document.querySelector('.appearance-preview'),
         legacyDensityIgnored: !document.documentElement.dataset.density,
@@ -241,6 +249,20 @@ app.whenReady().then(async () => {
       const redundantProjectActionsRemoved = !document.querySelector('[data-repository-details], .workspace-action-menu');
       document.querySelector('[data-edit-workspace]')?.click();
       const editDetailsConsolidated = await waitUntil(() => Boolean(document.querySelector('.modal-panel .ws-project-details-section .workspace-operational')));
+      const aliasInput = document.querySelector('.modal-panel input[name="alias"]');
+      aliasInput.value = 'bad project name';
+      aliasInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await delay(20);
+      const aliasError = document.querySelector('.modal-panel [data-alias-error]');
+      const inlineAliasValidation = aliasInput.getAttribute('aria-invalid') === 'true'
+        && aliasError?.hidden === false
+        && /Project names may use only/.test(aliasError.textContent || '');
+      const aliasValidationToastAbsent = ![...document.querySelectorAll('.toast-copy')]
+        .some(element => /Project names may use only/.test(element.textContent || ''));
+      aliasInput.value = 'app';
+      aliasInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await delay(20);
+      const aliasValidationCleared = aliasInput.getAttribute('aria-invalid') === 'false' && aliasError?.hidden === true;
       document.getElementById('__relai-modal-backdrop')?.click();
       location.hash = '#workspaces?workspace=app';
       await waitUntil(() => Boolean(document.querySelector('.workspace-focus-chip')));
@@ -251,6 +273,9 @@ app.whenReady().then(async () => {
         validationPreferenceRemoved,
         validationMetricRemoved,
         editDetailsConsolidated,
+        inlineAliasValidation,
+        aliasValidationToastAbsent,
+        aliasValidationCleared,
         redundantProjectActionsRemoved,
         focusChipLabel,
         scopeName: document.querySelector('.workspace-menu-trigger')?.getAttribute('aria-label') || ''

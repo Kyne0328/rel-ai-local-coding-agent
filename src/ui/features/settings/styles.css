@@ -60,7 +60,7 @@
 .theme-switch { @apply flex w-fit items-center gap-0.5 rounded-lg p-0.5; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
 .theme-switch-option { @apply grid size-11 place-items-center rounded-md border border-transparent p-0; min-height: 44px; background: transparent; color: var(--ui-text-secondary); }
 .theme-switch-option:hover { background: var(--ui-surface-raised); color: var(--ui-text-primary); }
-.theme-switch-option[aria-pressed="true"] { background: var(--ui-surface-raised); border-color: var(--ui-border-default); color: var(--ui-action-primary); }
+.theme-switch-option[aria-checked="true"] { background: var(--ui-surface-raised); border-color: var(--ui-border-default); color: var(--ui-action-primary); }
 .theme-switch-option svg { @apply size-4 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-number-control { @apply max-w-[180px]; }
 .settings-textarea-control { @apply min-h-24 w-full; }

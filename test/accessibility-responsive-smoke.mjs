@@ -61,9 +61,8 @@ assert.match(processesCss, /\.process-output summary\s*\{[^}]*min-height:\s*44px
 assert.match(systemCss, /\.diagnostic-copy summary\s*\{[^}]*min-h-11/s, 'diagnostic detail disclosures must meet the touch-target baseline');
 assert.match(workspaceForm, /pathValidationGeneration/, 'workspace preflight validation must reject stale async results');
 assert.match(workspaceForm, /generation !== pathValidationGeneration/, 'workspace preflight results must be generation guarded');
-for (const name of ['path', 'alias']) {
-  assert.match(workspaceForm, new RegExp(`name="${name}"[^>]*type="text"|type="text"[^>]*name="${name}"`), `workspace ${name} input must declare type=text explicitly`);
-}
+assert.match(workspaceForm, /name="alias"[^>]*type="text"|type="text"[^>]*name="alias"/, 'workspace alias input must declare type=text explicitly');
+assert.match(workspaceForm, /<textarea[^>]*name="paths"/, 'workspace source paths must use the current multi-source textarea');
 const toastSource = read('src/ui/components/toast.js');
 assert.match(toastSource, /error:\s*\{[^}]*duration:\s*0/s, 'error notifications must remain visible until dismissed by default');
 assert.match(toastSource, /toast-dismiss/, 'notifications must expose a manual dismiss control');

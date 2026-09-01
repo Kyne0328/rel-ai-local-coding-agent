@@ -151,7 +151,7 @@ function bindHeaderActions(container) {
       await copyText(currentReport.reportText);
       return { ok: true };
     });
-    toast(result?.ok ? 'Diagnostic report copied. Sensitive values were removed.' : result?.error || 'Could not copy the report.', { variant: result?.ok ? 'success' : 'error' });
+    if (!result?.ok) toast(result?.error || 'Could not copy the report.', { variant: 'error' });
   };
 
   const exportButton = container.querySelector('[data-export-report]');
@@ -165,20 +165,19 @@ function bindHeaderActions(container) {
       }
       return downloadDiagnosticState(currentReport);
     });
-    if (result?.ok) toast(`Support data exported${result.filename ? ` as ${result.filename}` : ''}. Sensitive values were removed.`, { variant: 'success' });
-    else toast(result?.error || 'Could not export diagnostic state.', { variant: 'error' });
+    if (!result?.ok) toast(result?.error || 'Could not export diagnostic state.', { variant: 'error' });
   };
 
   const folderButton = container.querySelector('[data-open-diagnostics-folder]');
   const canOpenFolder = typeof window.relaiDesktop?.openDiagnosticsFolder === 'function';
   folderButton.disabled = !canOpenFolder;
-  if (!canOpenFolder) folderButton.title = 'The support folder is available in the installed desktop app.';
+  if (!canOpenFolder) folderButton.textContent = 'Open support folder — desktop app only';
   folderButton.onclick = async () => {
     if (!canOpenFolder) return;
     const result = await runButtonAction(folderButton, {
       idleText: 'Open support folder', loadingText: 'Opening folder…', successText: 'Folder opened', errorText: 'Open failed'
     }, () => window.relaiDesktop.openDiagnosticsFolder());
-    toast(result?.ok ? 'Support folder opened.' : result?.error || 'Could not open the support folder.', { variant: result?.ok ? 'success' : 'error' });
+    if (!result?.ok) toast(result?.error || 'Could not open the support folder.', { variant: 'error' });
   };
 }
 

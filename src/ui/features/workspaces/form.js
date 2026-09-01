@@ -74,10 +74,11 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       <label class="ws-form-label" for="workspaceAliasInput">Project name</label>
       <div class="ws-project-name-field">
         <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
-        <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="Project name" autocomplete="off">
+        <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="Project name" autocomplete="off" aria-describedby="workspaceAliasHelp workspaceAliasError">
       </div>
-      <div class="ws-form-help">This is the project name ChatGPT uses when selecting a folder.</div>
-      <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
+      <div class="ws-form-help" id="workspaceAliasHelp">This is the project name ChatGPT uses when selecting a folder.</div>
+      <div class="ws-form-conflict" id="workspaceAliasError" data-alias-error hidden role="alert"></div>
+      <div class="ws-form-conflict" data-conflict hidden role="alert" tabindex="-1"></div>
     </section>
 
     <section class="ws-source-section" aria-labelledby="wsSourceFolderHeading">
@@ -85,7 +86,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       <div class="ws-source-folder-box">
         <div data-source-picker-wrap ${isDesktop ? '' : 'hidden'}>
           <ul class="ws-source-folder-list" data-source-folder-list>${renderSourceFolderRows(initialPaths)}</ul>
-          <button type="button" class="ws-source-folder-empty" data-source-empty data-add-source ${initialPaths.length ? 'hidden' : ''}>
+          <button type="button" class="ws-source-folder-empty" data-source-empty data-add-source aria-describedby="workspaceSourceError" ${initialPaths.length ? 'hidden' : ''}>
             <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
             <span>Choose a source folder</span>
           </button>
@@ -93,11 +94,12 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
         </div>
         <div class="ws-source-manual ws-source-manual-only" ${isDesktop ? 'hidden' : ''} data-manual-path-wrap>
           <label for="workspacePathsInput">Folder paths</label>
-          <textarea class="ws-form-path" id="workspacePathsInput" name="paths" rows="4" placeholder="One absolute folder path per line" autocomplete="off">${esc(initialPaths.join('\n'))}</textarea>
-          <span class="ws-form-help">Enter one absolute source-folder path per line.</span>
+          <textarea class="ws-form-path" id="workspacePathsInput" name="paths" rows="4" placeholder="One absolute folder path per line" autocomplete="off" aria-describedby="workspacePathsHelp workspaceSourceError">${esc(initialPaths.join('\n'))}</textarea>
+          <span class="ws-form-help" id="workspacePathsHelp">Enter one absolute source-folder path per line.</span>
         </div>
       </div>
       <div class="ws-form-help">The first folder is the primary repository used for project-level Git and command actions.</div>
+      <div class="ws-form-conflict" id="workspaceSourceError" data-source-error hidden role="alert"></div>
       <div class="ws-form-status" data-path-status aria-live="polite"></div>
     </section>
 
@@ -127,6 +129,8 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   const pathsInput = form.querySelector('textarea[name="paths"]');
   const aliasInput = form.querySelector('input[name="alias"]');
   const statusEl = form.querySelector('[data-path-status]');
+  const aliasErrorEl = form.querySelector('[data-alias-error]');
+  const sourceErrorEl = form.querySelector('[data-source-error]');
   const conflictEl = form.querySelector('[data-conflict]');
   const sourcePickerWrap = form.querySelector('[data-source-picker-wrap]');
   const sourceFolderList = form.querySelector('[data-source-folder-list]');
@@ -142,6 +146,30 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
 
   const getSourcePaths = () => parseSourcePaths(pathsInput.value);
   const setSourcePaths = paths => { pathsInput.value = normalizeSourcePaths(paths).join('\n'); };
+  const setFieldError = (element, targets, message) => {
+    const hasError = Boolean(message);
+    element.hidden = !hasError;
+    element.textContent = message || '';
+    for (const target of targets) target?.setAttribute('aria-invalid', String(hasError));
+  };
+  const validateLocal = ({ required = false } = {}) => {
+    const alias = String(aliasInput.value || '').trim();
+    const paths = getSourcePaths();
+    const normalizedPaths = paths.map(normalizeWorkspacePath).filter(Boolean);
+    const aliasMessage = !alias
+      ? (required ? 'Enter a project name.' : '')
+      : !isValidWorkspaceAlias(alias)
+        ? 'Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.'
+        : '';
+    const sourceMessage = !paths.length
+      ? (required ? 'Choose at least one source folder.' : '')
+      : new Set(normalizedPaths).size !== normalizedPaths.length
+        ? 'Each source folder can be added only once.'
+        : '';
+    setFieldError(aliasErrorEl, [aliasInput], aliasMessage);
+    setFieldError(sourceErrorEl, [sourceEmpty, pathsInput], sourceMessage);
+    return { aliasMessage, sourceMessage };
+  };
   const suggestAlias = () => {
     if (aliasEdited) return;
     aliasInput.value = deriveWorkspaceAlias(getSourcePaths()[0] || '');
@@ -179,6 +207,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     const generation = ++pathValidationGeneration;
     syncSourceFolders();
     suggestAlias();
+    validateLocal();
     syncConflicts();
     if (!paths.length) renderPathStatus(statusEl, null);
     else if (validate) runValidate(paths, generation);
@@ -187,6 +216,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   pathsInput.addEventListener('input', () => syncPathState());
   aliasInput.addEventListener('input', () => {
     aliasEdited = Boolean(aliasInput.value.trim());
+    validateLocal();
     syncConflicts();
   });
   form.addEventListener('input', syncDirty);
@@ -273,15 +303,14 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     event.preventDefault();
     const alias = String(aliasInput.value || '').trim();
     const sourcePaths = getSourcePaths();
-    if (!sourcePaths.length) {
-      toast('Choose at least one source folder.', { variant: 'error' });
+    const validation = validateLocal({ required: true });
+    if (validation.sourceMessage) {
       const target = manualPathWrap.hidden ? sourceEmpty : pathsInput;
       target?.focus();
       return;
     }
-    if (!alias) { toast('Enter a project name.', { variant: 'error' }); aliasInput.focus(); return; }
-    if (!isValidWorkspaceAlias(alias)) { toast('Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.', { variant: 'error' }); aliasInput.focus(); return; }
-    if (syncConflicts()) { conflictEl.focus?.(); return; }
+    if (validation.aliasMessage) { aliasInput.focus(); return; }
+    if (syncConflicts()) { conflictEl.focus(); return; }
 
     const result = await runButtonAction(submitBtn, {
       idleText: isEdit ? 'Save' : 'Create project',
@@ -390,8 +419,6 @@ function workspaceConflict(workspaces, values) {
   const sourcePaths = Array.isArray(values.paths) ? values.paths : [];
   const normalizedPaths = sourcePaths.map(normalizeWorkspacePath).filter(Boolean);
   const originalAlias = String(values.originalAlias || '').trim();
-  if (alias && !isValidWorkspaceAlias(alias)) return 'Project names may use only 1–80 letters, numbers, dots, underscores, and dashes.';
-  if (new Set(normalizedPaths).size !== normalizedPaths.length) return 'Each source folder can be added only once.';
   const aliasConflict = workspaces.find(item => item.alias === alias && item.alias !== originalAlias);
   if (aliasConflict) return `Project name '${alias}' is already in use.`;
   const pathConflict = workspaces.find(item => {

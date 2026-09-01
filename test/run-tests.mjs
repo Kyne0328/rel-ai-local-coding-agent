@@ -17,6 +17,7 @@ const files = [
   'tunnel-recovery-supervisor-unit.mjs',
   'service-runtime-lifecycle-unit.mjs',
   'desktop-ui-smoke.mjs',
+  'toast-unit.mjs',
   'secure-tunnel-packaging-contract-unit.mjs',
   'authorization-policy-unit.mjs',
   'connector-result-contract-unit.mjs',

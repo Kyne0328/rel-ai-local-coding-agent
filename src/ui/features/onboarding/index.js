@@ -96,7 +96,6 @@ export function createDesktopSetupChecklist(options = {}) {
     try {
       await copyText(chatGptFirstPrompt(options.workspaceAlias));
       button.textContent = 'Copied';
-      toast('First Rel.AI request copied. Paste it into ChatGPT with Rel.AI MCP selected.', { variant: 'success' });
       setTimeout(() => { if (button.isConnected) button.textContent = 'Copy first request'; }, 1400);
     } catch {
       toast('Clipboard access failed.', { variant: 'error' });

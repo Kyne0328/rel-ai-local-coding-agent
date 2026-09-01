@@ -201,7 +201,6 @@ function renderActivityFilterBar(scope = document) {
       }
       _paused = true;
       updatePauseButton();
-      toast('Live activity is frozen. New events will be applied when you resume.', { variant: 'warn', duration: 2200 });
     }
   });
   pause.id = '__activity-freeze';
@@ -405,7 +404,6 @@ async function resumeLiveActivity() {
     maybeOpenRequestedEvent();
   }
   updatePauseButton();
-  toast(buffered.length ? 'Buffered activity applied.' : 'Live activity resumed.', { variant: 'success', duration: 2200 });
   await loadLogs(_mountToken, { mode: 'merge' });
 }
 

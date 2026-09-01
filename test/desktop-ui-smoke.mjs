@@ -130,6 +130,10 @@ assert.match(desktopConnection, /saved key is encrypted on this computer\. Rel\.
 assert.match(desktopConnection, /Save connection settings/);
 assert.match(desktopConnection, /Use a different OpenAI account or workspace/);
 assert.match(desktopConnection, /update the existing Rel\.AI connector/);
+assert.match(desktopConnection, /function connectionField/);
+assert.match(desktopConnection, /function showValidationError/);
+assert.match(desktopConnection, /setAttribute\('aria-invalid', 'true'\)/);
+assert.doesNotMatch(desktopConnection, /if \(error\) return toast\(/, 'connection validation must stay beside the owning field');
 assert.doesNotMatch(desktopConnection, /ngrok|gateway|pairing|approval token/i);
 
 for (const file of ['secure-tunnel-runtime.js','tunnel-recovery-supervisor.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));

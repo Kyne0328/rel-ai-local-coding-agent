@@ -47,7 +47,7 @@ export function desktopNotificationsPanel(initialState = null) {
   function render() {
     section.body.innerHTML = '';
     const master = toggleControl(preferences.enabled, value => {
-      void update({ enabled: value }, value ? 'Desktop notifications enabled.' : 'Desktop notifications disabled.');
+      void update({ enabled: value });
     }, { enabled: 'Notifications on', disabled: 'Notifications off' });
     setControlState(master, { disabled: pending, busy: pending });
     section.body.appendChild(toggleRow(
@@ -58,7 +58,7 @@ export function desktopNotificationsPanel(initialState = null) {
 
     for (const item of CATEGORY_FIELDS) {
       const control = toggleControl(preferences[item.key], value => {
-        void update({ [item.key]: value }, `${item.label} notifications ${value ? 'enabled' : 'disabled'}.`);
+        void update({ [item.key]: value });
       }, { enabled: 'On', disabled: 'Off' });
       setControlState(control, { disabled: pending || !preferences.enabled, busy: pending });
       section.body.appendChild(toggleRow(item.label, control, item.help));
@@ -80,7 +80,7 @@ export function desktopNotificationsPanel(initialState = null) {
     reset.textContent = `Notify me about v${version} again`;
     reset.disabled = pending;
     reset.addEventListener('click', () => {
-      void update({ ignoredUpdateVersion: '' }, `Update v${version} is no longer ignored.`);
+      void update({ ignoredUpdateVersion: '' });
     });
     control.append(value, reset);
     return field(
@@ -90,7 +90,7 @@ export function desktopNotificationsPanel(initialState = null) {
     );
   }
 
-  async function update(patch, successMessage) {
+  async function update(patch) {
     if (pending) return;
     const previous = preferences;
     pending = true;
@@ -99,7 +99,6 @@ export function desktopNotificationsPanel(initialState = null) {
       const result = await bridge.setNotificationPreferences(patch);
       if (result?.ok === false) throw new Error(result.error || 'Desktop notification preferences could not be changed.');
       preferences = normalizePreferences(result?.preferences || { ...preferences, ...patch });
-      toast(successMessage, { variant: 'success' });
     } catch (error) {
       preferences = previous;
       toast(messageOf(error), { variant: 'error' });

@@ -35,27 +35,51 @@ function themeSwitch(value) {
   ];
   const group = document.createElement('div');
   group.className = 'theme-switch';
-  group.setAttribute('role', 'group');
+  group.setAttribute('role', 'radiogroup');
   group.setAttribute('aria-label', 'Theme');
 
   for (const [optionValue, label, icon] of options) {
+    const selected = optionValue === value;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'theme-switch-option';
     button.dataset.themeOption = optionValue;
     button.title = label;
+    button.setAttribute('role', 'radio');
     button.setAttribute('aria-label', label);
-    button.setAttribute('aria-pressed', String(optionValue === value));
+    button.setAttribute('aria-checked', String(selected));
+    button.tabIndex = selected ? 0 : -1;
     button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>`;
     group.appendChild(button);
   }
-  group.onclick = event => {
-    const button = event.target.closest?.('[data-theme-option]');
+
+  const select = button => {
     if (!button || !group.contains(button)) return;
     setThemePreference(button.dataset.themeOption);
     group.querySelectorAll('[data-theme-option]').forEach(option => {
-      option.setAttribute('aria-pressed', String(option === button));
+      const selected = option === button;
+      option.setAttribute('aria-checked', String(selected));
+      option.tabIndex = selected ? 0 : -1;
     });
   };
+  group.addEventListener('click', event => {
+    select(event.target.closest?.('[data-theme-option]'));
+  });
+  group.addEventListener('keydown', event => {
+    const buttons = [...group.querySelectorAll('[data-theme-option]')];
+    const current = event.target.closest?.('[data-theme-option]');
+    const index = buttons.indexOf(current);
+    if (index < 0) return;
+    let nextIndex = null;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + buttons.length) % buttons.length;
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % buttons.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = buttons.length - 1;
+    if (nextIndex == null) return;
+    event.preventDefault();
+    const next = buttons[nextIndex];
+    next.focus();
+    select(next);
+  });
   return group;
 }
