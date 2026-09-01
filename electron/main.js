@@ -57,6 +57,7 @@ const [
   localAnalytics,
   telemetry,
   processEnvironment,
+  onboardingState,
   taskCodeWorkspace
 ] = await Promise.all([
   importResourceModule('src/connectionProfile.js'),
@@ -66,6 +67,7 @@ const [
   importResourceModule('src/localAnalytics.js'),
   importResourceModule('src/telemetry.js'),
   importResourceModule('src/processEnvironment.js'),
+  importResourceModule('src/onboardingState.js'),
   importResourceModule('src/taskCodeWorkspace.js')
 ]);
 const { ERROR_CODES } = desktopUxContracts;
@@ -532,8 +534,18 @@ async function launchConfiguredDesktop(options = {}) {
       recoveryWindowManager.show();
       return status;
     }
-    if (!options.background) await showDashboardWindow(options.firstRun ? '#settings/connection' : '');
-    else recoveryWindowManager.hide();
+    if (!options.background) {
+      if (options.firstRun) {
+        onboardingState.writeOnboardingState({
+          completed: false,
+          skipped: false,
+          source: 'desktop-setup',
+          handoffPending: true,
+          updatedAt: new Date().toISOString()
+        });
+      }
+      await showDashboardWindow('');
+    } else recoveryWindowManager.hide();
     return currentStatus;
   } catch (error) {
     if (currentStatus.errorCode !== ERROR_CODES.DASHBOARD_UNAVAILABLE) {

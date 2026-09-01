@@ -83,11 +83,13 @@ function taskDirectoryName(taskId) {
 
 function pruneOutputSpills(root) {
   let files = [];
+  const directories = [];
   try {
     if (!fs.existsSync(root)) return;
     for (const directory of fs.readdirSync(root, { withFileTypes: true })) {
       if (!directory.isDirectory()) continue;
       const base = path.join(root, directory.name);
+      directories.push(base);
       for (const entry of fs.readdirSync(base, { withFileTypes: true })) {
         if (!entry.isFile() || !entry.name.endsWith('.log')) continue;
         const file = path.join(base, entry.name);
@@ -114,6 +116,9 @@ function pruneOutputSpills(root) {
     if (!item) break;
     try { fs.rmSync(item.file, { force: true }); } catch {}
     total -= item.size;
+  }
+  for (const directory of directories) {
+    try { fs.rmdirSync(directory); } catch {}
   }
 }
 

@@ -40,11 +40,14 @@ export function createChatGptSetupGuide(options = {}) {
   guide.className = `chatgpt-setup-guide ${options.compact ? 'compact' : ''}`.trim();
   const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Finish ChatGPT setup';
   const steps = chatGptGuideSteps({ mode, tunnelId, connectorName });
+  const firstPrompt = options.includeFirstPrompt === false
+    ? ''
+    : `<div class="chatgpt-first-prompt"><span>First test request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
   guide.innerHTML = `
     <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI keeps the local connection private.</span></div>
     ${mode === 'create' ? connectorHandoffHtml(tunnelId, connectorName) : ''}
     <ol>${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
-    <div class="chatgpt-first-prompt"><span>First test request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
+    ${firstPrompt}`;
   if (mode === 'create') bindConnectorHandoff(guide);
   return guide;
 }

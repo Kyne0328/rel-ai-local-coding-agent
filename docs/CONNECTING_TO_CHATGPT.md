@@ -7,13 +7,13 @@ Rel.AI connects ChatGPT web to local projects through **OpenAI Secure MCP Tunnel
 1. Create an OpenAI Secure MCP Tunnel for this computer and create a runtime API key for it in OpenAI Platform.
 2. Open Rel.AI MCP and enter the **Tunnel ID** and **runtime API key** in the first-run wizard or **Connection** page.
 3. Keep Rel.AI running until Connection reports the Secure MCP Tunnel as **Connected**.
-4. Add at least one local workspace before asking ChatGPT to inspect repository files.
+4. Follow the highlighted ChatGPT connector guide on **Overview**, then add at least one local workspace before asking ChatGPT to inspect repository files.
 
 Rel.AI encrypts the saved runtime API key with Electron `safeStorage`. The key is never returned to the renderer after storage; entering a new value replaces it.
 
 ## Connect ChatGPT
 
-After the Secure MCP Tunnel connects, Rel.AI opens the **Connection** page for the remaining ChatGPT setup. Save the provided `relai-mcp.png` icon first, then use **Open ChatGPT plugin setup** to open `https://chatgpt.com/plugins#settings/Connectors?create-connector=true`.
+After the Secure MCP Tunnel connects, Rel.AI opens **Overview** and highlights the remaining ChatGPT setup so you can continue from the same getting-started guide. Save the provided `relai-mcp.png` icon if you want to use it, then use **Open ChatGPT plugin setup** to open `https://chatgpt.com/plugins#settings/Connectors?create-connector=true`.
 
 Create the connector with **Name: Rel.AI MCP**, **Connection: Tunnel**, the same Tunnel ID shown in Rel.AI, and **Authentication: No authentication**. Click **Scan Tools**, confirm the Rel.AI tools appear, then click **Create**. After creation, open **Manage** and upload the saved Rel.AI icon as the connector logo.
 

@@ -60,6 +60,13 @@
 .desktop-setup-item.current .desktop-setup-state { color: var(--ui-action-primary); }
 .desktop-setup-item.done .desktop-setup-state { color: var(--ui-status-success-foreground); }
 .desktop-setup-item p { margin-top: 4px; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.55; }
+.desktop-chatgpt-guide {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--ui-border-default);
+  border-radius: var(--radius-md);
+  background: var(--ui-surface-primary);
+}
 .desktop-first-request {
   display: grid;
   gap: 5px;

@@ -3,7 +3,7 @@ import { copyText } from '../../clipboard.js';
 import { toast } from '../../components/toast.js';
 import { routeMetadata } from '../../navigation-catalog.js';
 import { esc } from '../../utils.js';
-import { chatGptFirstPrompt } from '../settings/connection-guidance.js';
+import { chatGptFirstPrompt, createChatGptSetupGuide } from '../settings/connection-guidance.js';
 
 const DISMISSED_KEY = 'relai_desktop_setup_dismissed';
 let completionPersisted = false;
@@ -18,6 +18,24 @@ function desktopSetupSteps({
   const requestUnlocked = hasWorkspace && endpointReady && chatgptReady;
   return [
     {
+      id: 'connection',
+      title: 'Connect this computer',
+      description: 'In OpenAI Platform, copy the Secure MCP Tunnel ID and create a runtime API key. Save both values here.',
+      href: routeMetadata('settings/connection').href,
+      action: 'Set up connection',
+      complete: endpointReady,
+      locked: false
+    },
+    {
+      id: 'chatgpt',
+      title: 'Create the Rel.AI connector in ChatGPT',
+      description: 'Open the ChatGPT Plugins + connector form. Use Tunnel + No authentication. Scan the Rel.AI tools.',
+      action: 'Follow ChatGPT setup',
+      actionType: 'guide',
+      complete: endpointReady && chatgptReady,
+      locked: !endpointReady
+    },
+    {
       id: 'workspace',
       title: 'Add a project',
       description: 'Choose a project folder and give it a short name.',
@@ -25,24 +43,6 @@ function desktopSetupSteps({
       action: hasWorkspace ? 'Project added' : 'Add project',
       complete: hasWorkspace,
       locked: false
-    },
-    {
-      id: 'connection',
-      title: 'Connect this computer',
-      description: 'In OpenAI Platform, copy the Secure MCP Tunnel ID and create a runtime API key. Save both values here.',
-      href: routeMetadata('settings/connection').href,
-      action: 'Set up connection',
-      complete: hasWorkspace && endpointReady,
-      locked: !hasWorkspace
-    },
-    {
-      id: 'chatgpt',
-      title: 'Create the Rel.AI connector in ChatGPT',
-      description: 'Open the ChatGPT Plugins + connector form. Use Tunnel + No authentication. Scan the Rel.AI tools.',
-      href: routeMetadata('settings/connection').href,
-      action: 'Finish ChatGPT setup',
-      complete: hasWorkspace && endpointReady && chatgptReady,
-      locked: !hasWorkspace || !endpointReady
     },
     {
       id: 'first-request',
@@ -82,7 +82,7 @@ export function createDesktopSetupChecklist(options = {}) {
 
   const body = document.createElement('div');
   body.className = 'card-body desktop-setup-items';
-  steps.forEach((item, index) => body.appendChild(renderSetupStep(item, index, current?.id, options.workspaceAlias)));
+  steps.forEach((item, index) => body.appendChild(renderSetupStep(item, index, current?.id, options)));
   checklist.appendChild(body);
 
   checklist.querySelector('[data-dismiss-setup]').addEventListener('click', async () => {
@@ -105,7 +105,7 @@ export function createDesktopSetupChecklist(options = {}) {
   return checklist;
 }
 
-function renderSetupStep(item, index, currentId, workspaceAlias) {
+function renderSetupStep(item, index, currentId, options = {}) {
   const row = document.createElement('div');
   const current = item.id === currentId;
   row.className = `desktop-setup-item${item.complete ? ' done' : ''}${current ? ' current' : ''}${item.locked ? ' locked' : ''}`;
@@ -116,14 +116,25 @@ function renderSetupStep(item, index, currentId, workspaceAlias) {
     <div class="desktop-setup-copy">
       <div class="desktop-setup-title-row"><strong>${esc(item.title)}</strong><span class="desktop-setup-state">${state}</span></div>
       <p>${esc(item.description)}</p>
-      ${item.id === 'first-request' && current ? `<div class="desktop-first-request"><span>Paste this into ChatGPT</span><code>${esc(chatGptFirstPrompt(workspaceAlias))}</code></div>` : ''}
+      ${item.id === 'first-request' && current ? `<div class="desktop-first-request"><span>Paste this into ChatGPT</span><code>${esc(chatGptFirstPrompt(options.workspaceAlias))}</code></div>` : ''}
     </div>
     ${action}`;
+  if (item.id === 'chatgpt' && current) {
+    const guide = createChatGptSetupGuide({
+      compact: true,
+      mode: 'create',
+      tunnelId: options.tunnelId,
+      connectorName: options.connectorName,
+      includeFirstPrompt: false
+    });
+    guide.classList.add('desktop-chatgpt-guide');
+    row.querySelector('.desktop-setup-copy')?.appendChild(guide);
+  }
   return row;
 }
 
 function renderSetupAction(item, current) {
-  if (item.complete || item.locked) return '';
+  if (item.complete || item.locked || item.actionType === 'guide') return '';
   if (item.actionType === 'copy') {
     return `<button class="${current ? 'primary' : 'secondary'} compact-button" type="button" data-copy-first-request>${esc(item.action)}</button>`;
   }

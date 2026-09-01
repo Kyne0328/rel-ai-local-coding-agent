@@ -67,6 +67,7 @@ const files = [
   'review-checkpoints-unit.mjs',
   'skill-discovery-unit.mjs',
   'artifact-intake-unit.mjs',
+  'artifact-resource-unit.mjs',
   'baseline-tracking-unit.mjs',
   'unborn-workspace-unit.mjs',
   'validation-task-scope-unit.mjs',
@@ -75,6 +76,7 @@ const files = [
   'edit-recovery-unit.mjs',
   'exec-dirty-mutation-unit.mjs',
   'exec-tool-unit.mjs',
+  'output-spill-unit.mjs',
   'tool-failure-accounting-unit.mjs',
   'tool-action-contract-unit.mjs',
   'tool-output-validation-unit.mjs',
@@ -89,6 +91,7 @@ const files = [
 ];
 
 const serialFiles = new Set([
+  'artifact-resource-unit.mjs',
   'http-auth-smoke.mjs',
   'http-smoke.mjs',
   'smoke.mjs',

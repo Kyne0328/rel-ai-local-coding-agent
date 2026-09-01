@@ -13,6 +13,7 @@ import { desktopSetupItems } from '../src/ui/features/onboarding/index.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const onboardingSource = read('src/ui/features/onboarding/index.js');
 
 assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'code', 'workspaces', 'activity']);
 assert.equal(WORK_NAV_ITEMS.find(item => item.id === 'code')?.label, 'Changes', 'the task file surface must be presented as a read-only changes viewer');
@@ -54,6 +55,9 @@ assert.match(createSteps, /Rel\.AI MCP - Test PC/i);
 assert.equal(CHATGPT_CONNECTOR_CREATE_URL, 'https://chatgpt.com/plugins#settings/Connectors?create-connector=true');
 assert.equal(RELAI_CONNECTOR_ICON_URL, '/assets/favicon.png');
 assert.equal(RELAI_CONNECTOR_ICON_FILENAME, 'relai-mcp.png');
+assert.match(onboardingSource, /createChatGptSetupGuide/, 'Overview onboarding must reuse the canonical ChatGPT connector guide after tunnel setup');
+assert.match(onboardingSource, /actionType:\s*'guide'/, 'the ChatGPT onboarding step must render guidance inline instead of routing back to Connection');
+assert.match(onboardingSource, /includeFirstPrompt:\s*false/, 'ChatGPT connector setup must not show a fake project prompt before a project exists');
 const connectorIconBytes = fs.statSync(path.join(root, 'public', 'assets', 'favicon.png')).size;
 assert.ok(connectorIconBytes < 10 * 1024, `Rel.AI connector icon must stay below 10 KB, got ${connectorIconBytes} bytes`);
 assert.equal(hasObservedMcpConnection({ activityStatus: 'no_requests' }), false, 'a connected tunnel alone must not hide ChatGPT connector setup');
@@ -73,8 +77,8 @@ assert.match(firstPrompt, /files and folders/i);
 assert.match(firstPrompt, /do not change any files yet/i);
 
 for (const scenario of [
-  { hasWorkspace: false, endpointReady: false, chatgptReady: false, firstRequestObserved: false, expected: ['workspace', 'connection', 'chatgpt', 'first-request'] },
-  { hasWorkspace: false, endpointReady: true, chatgptReady: true, firstRequestObserved: true, expected: ['workspace', 'connection', 'chatgpt', 'first-request'] },
+  { hasWorkspace: false, endpointReady: false, chatgptReady: false, firstRequestObserved: false, expected: ['connection', 'chatgpt', 'workspace', 'first-request'] },
+  { hasWorkspace: false, endpointReady: true, chatgptReady: true, firstRequestObserved: true, expected: ['workspace', 'first-request'] },
   { hasWorkspace: true, endpointReady: false, chatgptReady: false, firstRequestObserved: false, expected: ['connection', 'chatgpt', 'first-request'] },
   { hasWorkspace: true, endpointReady: false, chatgptReady: true, firstRequestObserved: true, expected: ['connection', 'chatgpt', 'first-request'] },
   { hasWorkspace: true, endpointReady: true, chatgptReady: false, firstRequestObserved: false, expected: ['chatgpt', 'first-request'] },
@@ -272,7 +276,7 @@ for (const relative of publicRouteOwners) {
   const source = read(relative);
   assert.doesNotMatch(source, /#settings\/(?:diagnostics|tools-validation)/, `${relative} still targets a removed Settings route`);
 }
-assert.match(read('electron/main.js'), /#settings\/connection/, 'first-run setup must open the canonical Settings > Connection route');
+assert.doesNotMatch(read('electron/main.js'), /options\.firstRun\s*\?\s*'#settings\/connection'/, 'first-run setup must continue on Overview instead of reopening completed Connection setup');
 
 console.log('Frontend streamlining contracts passed.');
 
