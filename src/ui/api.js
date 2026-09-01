@@ -35,6 +35,47 @@ function timeoutFor(timeout) {
   return Number.isFinite(timeout) ? timeout : 8000;
 }
 
+function startVisibleRequestTimeout(controller, timeoutMs) {
+  if (!(timeoutMs > 0)) return () => {};
+  const documentRef = globalThis.document;
+  if (!documentRef?.addEventListener || !documentRef?.removeEventListener) {
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return () => clearTimeout(timer);
+  }
+
+  let remainingMs = timeoutMs;
+  let timer = null;
+  let startedAt = 0;
+
+  const pause = () => {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+    remainingMs = Math.max(1, remainingMs - (Date.now() - startedAt));
+  };
+  const resume = () => {
+    if (timer || remainingMs <= 0 || documentRef.visibilityState === 'hidden') return;
+    startedAt = Date.now();
+    timer = setTimeout(() => {
+      timer = null;
+      remainingMs = 0;
+      controller.abort();
+    }, remainingMs);
+  };
+  const onVisibilityChange = () => {
+    if (documentRef.visibilityState === 'hidden') pause();
+    else resume();
+  };
+
+  documentRef.addEventListener('visibilitychange', onVisibilityChange);
+  resume();
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    documentRef.removeEventListener('visibilitychange', onVisibilityChange);
+  };
+}
+
 function requestHeaders(fetchOpts) {
   const headers = { 'Content-Type': 'application/json' };
   if (fetchOpts.headers) Object.assign(headers, fetchOpts.headers);
@@ -98,7 +139,7 @@ export async function fetchJson(url, opts = {}) {
 
   const timeoutMs = timeoutFor(timeout);
   const ctrl = new AbortController();
-  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  const clearRequestTimeout = startVisibleRequestTimeout(ctrl, timeoutMs);
 
   try {
     const res = await fetch(url, {
@@ -113,7 +154,7 @@ export async function fetchJson(url, opts = {}) {
   } catch (err) {
     return requestError(err, timeoutMs);
   } finally {
-    if (timer) clearTimeout(timer);
+    clearRequestTimeout();
   }
 }
 

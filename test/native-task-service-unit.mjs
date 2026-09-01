@@ -26,6 +26,7 @@ import {
   updateNativeTaskInputs,
   updateNativeTaskRecovery
 } from '../src/mcp/nativeTaskService.js';
+import { createNativeToolTask } from '../src/mcp/nativeToolTasks.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-native-task-service-'));
 const config = { stateDir: root };
@@ -90,6 +91,16 @@ function runInputWorker(taskId, key) {
 }
 
 try {
+  const toolTask = createNativeToolTask(config, {
+    principal: owner,
+    method: 'tools/call',
+    name: 'relai_exec',
+    workspace: 'repo'
+  });
+  assert.ok(toolTask.ttlMs > 24 * 60 * 60 * 1000,
+    'tool task tracking must outlive the maximum supported 24-hour operation runtime');
+  completeNativeTask(config, toolTask.taskId, { ok: true }, { principal: owner });
+
   assert.equal(normalizePrincipalKey('client-a'), 'client-a', 'string principal fingerprints remain restart-compatible');
   assert.equal(normalizePrincipalKey(owner), normalizePrincipalKey(sameOwner));
   assert.equal(principalFingerprint(owner), principalFingerprint(sameOwner));
@@ -404,6 +415,16 @@ try {
   });
   assertUnavailable(() => getNativeTask(config, expiring.taskId, { principal: 'client-a', now: 10_100 }));
 
+  const expiryController = new AbortController();
+  const activeExpiring = activeTask('active-expiry-test', {
+    controller: expiryController,
+    taskOptions: { ttlMs: 100, now: 11_000 }
+  });
+  assertUnavailable(() => getNativeTask(config, activeExpiring.taskId, { principal: owner, now: 11_100 }));
+  assert.equal(expiryController.signal.aborted, true,
+    'expiring an active native task must abort its executor before discarding the durable record');
+  assert.match(String(expiryController.signal.reason?.message || ''), /expired/i);
+
   const concurrent = createNativeTask(config, {
     principal: 'client-a',
     method: 'tools/call',
@@ -469,6 +490,29 @@ try {
   assert.ok(pruned.removed >= 1);
   assertUnavailable(() => getNativeTask(config, pruneTarget.taskId, { principal: 'client-a', now: 20_100 }));
 
+  const opportunisticConfig = { stateDir: path.join(root, 'opportunistic-state') };
+  const opportunisticExpired = createNativeTask(opportunisticConfig, {
+    principal: 'client-a',
+    method: 'tools/call',
+    name: 'opportunistic-prune-expired',
+    ttlMs: 100,
+    now: 1_000,
+    restartPolicy: 'restart_reconcilable',
+    recovery: { mode: 'deadline', completeAtMs: 60_000, result: { ok: true } }
+  });
+  const opportunisticExpiredFile = path.join(opportunisticConfig.stateDir, 'native-tasks', `${opportunisticExpired.taskId}.json`);
+  assert.equal(fs.existsSync(opportunisticExpiredFile), true);
+  createNativeTask(opportunisticConfig, {
+    principal: 'client-a',
+    method: 'tools/call',
+    name: 'opportunistic-prune-trigger',
+    now: 1_000 + 60 * 60 * 1000,
+    restartPolicy: 'restart_reconcilable',
+    recovery: { mode: 'deadline', completeAtMs: 10_000_000, result: { ok: true } }
+  });
+  assert.equal(fs.existsSync(opportunisticExpiredFile), false,
+    'creating native tasks after the prune interval must opportunistically remove expired records');
+
   const corrupt = createNativeTask(config, {
     principal: 'client-a',
     method: 'tools/call',
@@ -499,6 +543,28 @@ try {
   fs.writeFileSync(path.join(root, 'native-tasks', `${pruneCorrupt.taskId}.json`), '{}', 'utf8');
   const corruptionPrune = pruneNativeTasks(config);
   assert.equal(corruptionPrune.quarantined, 1);
+
+  const quarantineConfig = { stateDir: path.join(root, 'quarantine-retention-state') };
+  const quarantineTarget = createNativeTask(quarantineConfig, {
+    principal: 'client-a',
+    method: 'tools/call',
+    name: 'quarantine-retention-test',
+    restartPolicy: 'restart_reconcilable',
+    recovery: { mode: 'deadline', completeAtMs: Date.now() + 60_000, result: { ok: true } }
+  });
+  const quarantineTargetFile = path.join(quarantineConfig.stateDir, 'native-tasks', `${quarantineTarget.taskId}.json`);
+  fs.writeFileSync(quarantineTargetFile, '{corrupt', 'utf8');
+  assert.throws(
+    () => getNativeTask(quarantineConfig, quarantineTarget.taskId, { principal: 'client-a' }),
+    error => error instanceof NativeTaskStoreError && error.reason === 'record_corrupt'
+  );
+  const retentionDirectory = path.join(quarantineConfig.stateDir, 'native-tasks-quarantine');
+  const retentionFile = path.join(retentionDirectory, fs.readdirSync(retentionDirectory)[0]);
+  fs.utimesSync(retentionFile, new Date(0), new Date(0));
+  const retentionPrune = pruneNativeTasks(quarantineConfig, { now: 8 * 24 * 60 * 60 * 1000 });
+  assert.equal(retentionPrune.quarantineRemoved, 1,
+    'native task pruning must remove quarantine artifacts older than the retention window');
+  assert.equal(fs.existsSync(retentionFile), false);
 
   const blockedState = path.join(root, 'blocked-state');
   fs.writeFileSync(blockedState, 'not a directory', 'utf8');

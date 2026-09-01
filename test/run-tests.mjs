@@ -16,12 +16,14 @@ const files = [
   'secure-tunnel-runtime-unit.mjs',
   'tunnel-recovery-supervisor-unit.mjs',
   'service-runtime-lifecycle-unit.mjs',
+  'desktop-ui-smoke.mjs',
   'secure-tunnel-packaging-contract-unit.mjs',
   'authorization-policy-unit.mjs',
   'connector-result-contract-unit.mjs',
   'desktop-lifecycle-unit.mjs',
   'desktop-settings-unit.mjs',
   'dashboard-session-unit.mjs',
+  'dashboard-events-visibility-unit.mjs',
   'durable-state-unit.mjs',
   'electron-updater-config-unit.mjs',
   'update-support-policy-unit.mjs',
@@ -34,6 +36,8 @@ const files = [
   'http-auth-smoke.mjs',
   'mcp-app-ui-unit.mjs',
   'mcp-task-card-performance-unit.mjs',
+  'search-filesystem-fallback-unit.mjs',
+  'stdio-shutdown-persistence-unit.mjs',
   'http-smoke.mjs',
   'ipc-security-unit.mjs',
   'package-size-policy-unit.mjs',
@@ -86,7 +90,8 @@ const serialFiles = new Set([
   'smoke.mjs',
   'generated-assets-check-unit.mjs',
   'process-manager-unit.mjs',
-  'process-pty-unit.mjs'
+  'process-pty-unit.mjs',
+  'stdio-shutdown-persistence-unit.mjs'
 ]);
 const parallelEntries = files
   .map((name, index) => ({ name, index }))

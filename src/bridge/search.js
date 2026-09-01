@@ -16,6 +16,7 @@ const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 25_000;
 const MAX_STDERR_BYTES = 64 * 1024;
+const FILESYSTEM_SEARCH_MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 // Stream git grep output instead of buffering it through runProcess. Broad searches
 // can exceed the generic process-output cap; streaming preserves the earliest
@@ -104,7 +105,7 @@ async function runWorkspaceSearch(workspace, gitArgs, args, maxResults, signal) 
     if (result.exitCode !== 0 && result.exitCode !== 1) {
       const failure = String(result.stderr || result.error || '');
       if (/not a git repository/i.test(failure)) {
-        result = runFilesystemSearch(scoped, args, remaining, signal);
+        result = await runFilesystemSearch(scoped, args, remaining, signal);
       } else {
         throw new Error(`relai_search failed in source folder ${source.number}: ${failure || `git grep exited ${result.exitCode}`}`);
       }
@@ -134,7 +135,7 @@ async function runWorkspaceSearch(workspace, gitArgs, args, maxResults, signal) 
   };
 }
 
-function runFilesystemSearch(workspace, args, maxResults, signal) {
+async function runFilesystemSearch(workspace, args, maxResults, signal) {
   if (signal?.aborted) throw searchAbortError(signal);
   const pattern = String(args.pattern || '');
   const flags = args.ignoreCase === true ? 'i' : '';
@@ -145,19 +146,55 @@ function runFilesystemSearch(workspace, args, maxResults, signal) {
   }
   const needle = args.ignoreCase === true ? pattern.toLowerCase() : pattern;
   const glob = String(args.glob || '').trim();
+  const deadline = Date.now() + SEARCH_TIMEOUT_MS;
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries: 50_000 }));
   const matches = [];
   let matchCount = 0;
   let truncated = tree.truncated === true;
+  let timedOut = false;
+  let skippedLargeFiles = 0;
 
   outer: for (const relativePath of tree.files) {
     if (signal?.aborted) throw searchAbortError(signal);
+    if (Date.now() >= deadline) {
+      timedOut = true;
+      truncated = true;
+      break;
+    }
     if (glob && typeof path.matchesGlob === 'function' && !path.matchesGlob(relativePath, glob)) continue;
-    let text;
-    try { text = fs.readFileSync(path.join(workspace.path, relativePath), 'utf8'); }
+    const absolutePath = path.join(workspace.path, relativePath);
+    let stat;
+    try { stat = await fs.promises.stat(absolutePath); }
     catch { continue; }
+    if (!stat.isFile()) continue;
+    if (stat.size > FILESYSTEM_SEARCH_MAX_FILE_BYTES) {
+      skippedLargeFiles += 1;
+      truncated = true;
+      continue;
+    }
+    const remainingMs = Math.max(1, deadline - Date.now());
+    const timeoutSignal = AbortSignal.timeout(remainingMs);
+    const readSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+    let text;
+    try {
+      text = await fs.promises.readFile(absolutePath, { encoding: 'utf8', signal: readSignal });
+    } catch {
+      if (signal?.aborted) throw searchAbortError(signal);
+      if (timeoutSignal.aborted) {
+        timedOut = true;
+        truncated = true;
+        break;
+      }
+      continue;
+    }
     const lines = text.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
+      if (signal?.aborted) throw searchAbortError(signal);
+      if ((index & 255) === 0 && Date.now() >= deadline) {
+        timedOut = true;
+        truncated = true;
+        break outer;
+      }
       const line = lines[index];
       const matched = args.fixed === true
         ? (args.ignoreCase === true ? line.toLowerCase().includes(needle) : line.includes(needle))
@@ -172,7 +209,16 @@ function runFilesystemSearch(workspace, args, maxResults, signal) {
       break outer;
     }
   }
-  return { exitCode: matches.length ? 0 : 1, matches, matchCount, truncated, filesystemFallback: true, stderr: '' };
+  return {
+    exitCode: matches.length ? 0 : 1,
+    matches,
+    matchCount,
+    truncated,
+    timedOut,
+    filesystemFallback: true,
+    skippedLargeFiles,
+    stderr: ''
+  };
 }
 
 function shouldUseGraphContext(searchPlan, workspace, config) {

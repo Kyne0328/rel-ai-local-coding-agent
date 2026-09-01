@@ -126,6 +126,25 @@ export function startMcpClient({
       child.kill('SIGTERM');
       await once(child, 'close').catch(() => {});
     }
+    cleanupOwnedState();
+  }
+
+  async function closeGracefully(graceMs = 2_000) {
+    if (!closed) {
+      child.stdin.end();
+      await Promise.race([
+        once(child, 'close').catch(() => {}),
+        new Promise(resolve => setTimeout(resolve, graceMs))
+      ]);
+      if (!closed) {
+        child.kill('SIGTERM');
+        await once(child, 'close').catch(() => {});
+      }
+    }
+    cleanupOwnedState();
+  }
+
+  function cleanupOwnedState() {
     if (ownedStateDir) {
       fs.rmSync(ownedStateDir, {
         recursive: true,
@@ -136,7 +155,7 @@ export function startMcpClient({
     }
   }
 
-  return { send, notify, initialize, call, waitFor, close };
+  return { send, notify, initialize, call, waitFor, close, closeGracefully };
 }
 
 export function structuredContentOf(response) {

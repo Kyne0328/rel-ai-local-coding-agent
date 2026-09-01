@@ -34,6 +34,12 @@ jobs:
       - run: npm run test:native-tasks-release-gate
       - name: Verify release and generated-asset consistency
         run: npm run release:check
+      - name: Enforce lightweight MCP manifest reuse budget
+        run: node test/mcp-manifest-performance-unit.mjs
+      - name: Enforce lightweight dashboard update budget
+        run: node test/dashboard-update-budget-unit.mjs
+      - name: Verify Repository Intelligence worker lifecycle
+        run: node test/repository-intelligence-worker-unit.mjs
       - run: xvfb-run --auto-servernum npm run test:all
 
   packaged-windows:

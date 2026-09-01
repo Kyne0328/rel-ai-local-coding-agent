@@ -91,6 +91,26 @@ try {
 
   const startPromise = runtime.startServer();
   await new Promise(resolve => setImmediate(resolve));
+
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let readinessSettled = false;
+  try {
+    globalThis.setTimeout = callback => { callback(); return 1; };
+    globalThis.clearTimeout = () => {};
+    const readiness = runtime.waitUntilListening(0).then(status => {
+      readinessSettled = true;
+      return status;
+    });
+    await Promise.resolve();
+    assert.equal(readinessSettled, false,
+      'timeout 0 must follow the in-progress local readiness promise instead of scheduling an early recovery deadline');
+    void readiness;
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+
   const stopPromise = runtime.stopServer();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(localStopCalls, 0, 'shutdown must not race ahead while the local utility service is still binding');

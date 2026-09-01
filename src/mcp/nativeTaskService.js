@@ -18,6 +18,8 @@ const MAX_INPUT_UPDATES = 100;
 const STALE_LOCK_MS = 30_000;
 const LOCK_RETRY_TIMEOUT_MS = 5_000;
 const LOCK_RETRY_DELAY_MS = 10;
+const PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+const QUARANTINE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const TASK_ID_PATTERN = /^task_[A-Za-z0-9_-]{32,160}$/;
 const INPUT_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 const VALID_STATUSES = new Set(['working', 'input_required', 'completed', 'failed', 'cancelled']);
@@ -30,6 +32,7 @@ const TASK_TRANSITIONS = Object.freeze({
 });
 const RUNTIME_ID = crypto.randomUUID();
 const executors = new Map();
+const lastPruneAtByDirectory = new Map();
 
 class NativeTaskUnavailableError extends Error {
   constructor() {
@@ -62,6 +65,7 @@ class NativeTaskStoreError extends Error {
 
 function createNativeTask(config, options = {}) {
   const nowMs = nowValue(options.now);
+  opportunisticPrune(config, nowMs);
   const createdAt = new Date(nowMs).toISOString();
   const taskId = `task_${crypto.randomBytes(32).toString('base64url')}`;
   const status = normalizeStatus(options.status || 'working');
@@ -366,7 +370,8 @@ function nativeTaskSignal(taskId) {
 
 function pruneNativeTasks(config, options = {}) {
   const directory = taskDirectory(config);
-  if (!fs.existsSync(directory)) return { removed: 0, reconciled: 0, quarantined: 0, artifactsRemoved: 0 };
+  const quarantineRemoved = pruneNativeTaskQuarantine(config, options.now);
+  if (!fs.existsSync(directory)) return { removed: 0, reconciled: 0, quarantined: 0, artifactsRemoved: 0, quarantineRemoved };
   let removed = 0;
   let reconciled = 0;
   let quarantined = 0;
@@ -414,7 +419,45 @@ function pruneNativeTasks(config, options = {}) {
       throw error;
     }
   }
-  return { removed, reconciled, quarantined, artifactsRemoved };
+  return { removed, reconciled, quarantined, artifactsRemoved, quarantineRemoved };
+}
+
+function opportunisticPrune(config, nowMs) {
+  const directory = taskDirectory(config);
+  const lastPruneAt = Number(lastPruneAtByDirectory.get(directory) || 0);
+  if (lastPruneAt && nowMs - lastPruneAt < PRUNE_INTERVAL_MS) return;
+  try {
+    pruneNativeTasks(config, { now: nowMs });
+    lastPruneAtByDirectory.set(directory, nowMs);
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] native task opportunistic prune:', error);
+  }
+}
+
+function pruneNativeTaskQuarantine(config, nowSource) {
+  const directory = path.join(getStateDir(config), 'native-tasks-quarantine');
+  if (!fs.existsSync(directory)) return 0;
+  const nowMs = nowValue(nowSource);
+  let removed = 0;
+  let entries;
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch (error) {
+    throw taskStoreError('read_failed', error);
+  }
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const target = path.join(directory, entry.name);
+    try {
+      const stat = fs.statSync(target);
+      if (nowMs - stat.mtimeMs <= QUARANTINE_RETENTION_MS) continue;
+      fs.rmSync(target, { force: true });
+      removed += 1;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw taskStoreError('delete_failed', error);
+    }
+  }
+  return removed;
 }
 
 function transitionTerminal(config, taskId, status, payload, options = {}) {
@@ -762,7 +805,7 @@ function syncDirectory(directory) {
 }
 
 function removeTask(config, taskId) {
-  executors.delete(taskId);
+  abortExecutor(taskId, 'Native task expired before execution completed.');
   try {
     fs.rmSync(taskPath(config, taskId), { force: true });
   } catch (error) {
@@ -779,12 +822,20 @@ function quarantineTaskRecord(config, taskId, nowSource) {
   try {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     fs.renameSync(source, target);
-    executors.delete(taskId);
+    abortExecutor(taskId, 'Native task record became unreadable while execution was active.');
     return true;
   } catch (error) {
     if (error?.code === 'ENOENT') return false;
     throw taskStoreError('quarantine_failed', error, taskId);
   }
+}
+
+function abortExecutor(taskId, reason) {
+  const executor = executors.get(taskId);
+  if (executor?.controller && !executor.controller.signal.aborted) {
+    executor.controller.abort(new Error(reason));
+  }
+  executors.delete(taskId);
 }
 
 function removeUnrecognizedTaskFile(directory, name) {

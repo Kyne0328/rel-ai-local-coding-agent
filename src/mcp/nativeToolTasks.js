@@ -7,7 +7,9 @@ import {
   retryNativeTaskOperation
 } from './nativeTaskService.js';
 
-const TOOL_TASK_TTL_MS = 24 * 60 * 60 * 1000;
+// Tool calls may legally run for 24 hours. Keep the durable task record alive
+// beyond that execution ceiling so queue/startup/response overhead cannot outlive it.
+const TOOL_TASK_TTL_MS = 25 * 60 * 60 * 1000;
 
 function createNativeToolTask(config, options = {}) {
   const controller = new AbortController();

@@ -257,12 +257,14 @@ function createDesktopServiceRuntime(deps) {
     if (isListening() && activePort) return getCurrentStatus();
     const pending = localReadyPromise || startPromise;
     if (!pending) return getCurrentStatus();
+    const waitMs = Number(timeoutMs);
+    if (Number.isFinite(waitMs) && waitMs <= 0) return pending;
     let timer = null;
     try {
       return await Promise.race([
         pending,
         new Promise(resolve => {
-          timer = setTimeout(() => resolve(getCurrentStatus()), Math.max(1, Number(timeoutMs || 10_000)));
+          timer = setTimeout(() => resolve(getCurrentStatus()), Math.max(1, Number.isFinite(waitMs) ? waitMs : 10_000));
         })
       ]);
     } finally {

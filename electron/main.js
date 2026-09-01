@@ -498,7 +498,7 @@ async function showDashboardWindow(routeHash = '', options = {}) {
 async function openDashboardWindow(routeHash = '', options = {}) {
   if (!serviceRuntime.isListening()) {
     void startServer();
-    await serviceRuntime.waitUntilListening();
+    await serviceRuntime.waitUntilListening(0);
   }
   if (!serviceRuntime.isListening()) {
     recoveryWindowManager.show();
@@ -527,7 +527,7 @@ async function launchConfiguredDesktop(options = {}) {
     const pendingStart = startServer();
     const status = options.firstRun || options.background
       ? await pendingStart
-      : await serviceRuntime.waitUntilListening();
+      : await serviceRuntime.waitUntilListening(0);
     if (!serviceRuntime.isListening()) {
       recoveryWindowManager.show();
       return status;
