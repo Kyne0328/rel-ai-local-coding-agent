@@ -25,6 +25,7 @@ import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
 import { buildWorkflowSnapshot } from '../workflow/runtime.js';
 import { invalidateRepositoryTopology } from '../workflow/topology.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
+import { observeRepeatCall } from './repeatCallGuard.js';
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
@@ -105,6 +106,13 @@ async function callTool(name, args = {}, context = {}) {
     await validateExecutableOperationInput(operationName, effectiveArgs, {
       publicLabel: resolved.action ? `${name} action '${resolved.action}'` : name
     });
+    const repeatCall = observeRepeatCall({
+      connector,
+      taskId: requestedTaskId,
+      operationName,
+      args: effectiveArgs,
+      mutationGeneration: requestTaskContext?.integrity?.mutationGeneration
+    });
     const duplicateTerminalCancellation = operationName === OP.WORK_CANCEL && knownTask?.status === 'cancelled';
     const terminalTaskReference = isTerminalTaskReference(knownTask, operationName, effectiveArgs);
     finishActivity = beginConnectorToolCall({
@@ -141,7 +149,10 @@ async function callTool(name, args = {}, context = {}) {
     if (!valueOk) analyticsFailureCode = analyticsErrorCodeFromValue(value);
     activityResult = { ok: valueOk, ...(valueOk ? {} : { error: String(value?.error || value?.message || `${name} returned ok:false`) }) };
     if (sessionStart.started && !hasWorkspaceChanges(value)) clearSessionPolicy(config, sessionStart.alias, finishActivity?.taskId);
-    const extraAudit = buildExtraAudit(operationName, value, effectiveArgs || {});
+    const extraAudit = {
+      ...buildExtraAudit(operationName, value, effectiveArgs || {}),
+      ...(repeatCall ? { repeatCallCount: repeatCall.count, repeatCallWarning: true } : {})
+    };
     activityResult.activity = buildToolActivityDetails(operationName, effectiveArgs || {}, value, valueOk ? null : activityResult.error, {
       operation: finishActivity?.operation,
       phase: 'complete',
@@ -207,7 +218,10 @@ async function callTool(name, args = {}, context = {}) {
         workId
       })
       : withTaskIdentity(valueWithWorkflow, workId);
-    return ok(responseValue);
+    const responseWithRepeatWarning = repeatCall && responseValue && typeof responseValue === 'object'
+      ? { ...responseValue, warning: repeatCall.warning }
+      : responseValue;
+    return ok(responseWithRepeatWarning);
   } catch (error) {
     const enhanced = enhanceToolError(operationName, error);
     analyticsFailureCode = String(enhanced.code || '');

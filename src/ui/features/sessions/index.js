@@ -412,10 +412,11 @@ function buildSessionDetail(session) {
     ${failureHistorySection(session)}
     ${changedFilesSection(session.changedFiles || [])}
     ${technicalDetailsSection(session, identities, state, operationValue, session.events || [])}
-    <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">Open in Activity</a></div>`;
+    <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">Open in Activity</a>${session.trace?.entries?.length ? '<button class="secondary" type="button" data-export-task-trace>Export trace (.jsonl)</button>' : ''}</div>`;
 
   for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) link.addEventListener('click', closeOpenSession);
   bindCopyActions(content);
+  bindTraceExportAction(content, session);
   const id = sessionIdentifier(session);
   return { title: session.title || `Task ${id ? id.slice(0, 8) : 'unknown'}`, content };
 }
@@ -445,6 +446,7 @@ function mergeSessionDetail(previous = {}, summary = {}, data = {}) {
   return {
     ...previous,
     ...(summary || {}),
+    trace: summary?.trace || previous.trace,
     changedFiles,
     changedFileCount: Math.max(sessionChangedFileCount(previous), sessionChangedFileCount(summary), changedFiles.length),
     events
@@ -475,7 +477,9 @@ function sessionDetailFingerprint(session) {
       event.status || '',
       event.summary || '',
       eventTimestampValue(event)
-    ])
+    ]),
+    Number(session.trace?.count || session.trace?.entries?.length || 0),
+    Number(session.trace?.persistence?.droppedEntries || 0)
   ]);
 }
 
@@ -493,10 +497,12 @@ function closeOpenSession() {
 
 async function loadSessionDetail(session) {
   const id = sessionIdentifier(session);
-  if (!id || Array.isArray(session.events)) return session;
+  if (!id || Array.isArray(session.trace?.entries)) return session;
   try {
     const response = await fetchJson(TASK_SESSION_URL + "?task=" + encodeURIComponent(id), { cache: 'no-store' });
-    return response?.ok !== false && response?.session ? response.session : session;
+    return response?.ok !== false && response?.session
+      ? { ...response.session, ...(response.trace ? { trace: response.trace } : {}) }
+      : session;
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), { variant: 'error' });
     return session;
@@ -561,7 +567,7 @@ function technicalDetailsSection(session, identities, state, operationValue, eve
     </div>
     ${workflow}
     ${currentOperations(session)}
-    ${toolEventsSection(events, session)}
+    ${taskTraceSection(session.trace, events, session)}
   </details>`;
 }
 
@@ -596,16 +602,43 @@ function fileList(files) {
   return `<ul class="task-file-list">${files.map(file => `<li><code>${esc(file)}</code></li>`).join('')}</ul>`;
 }
 
-function toolEventsSection(events, session) {
+function taskTraceSection(trace, fallbackEvents, session) {
+  const events = Array.isArray(trace?.entries) ? trace.entries : fallbackEvents;
   if (!events.length) return '';
   const ordered = orderSessionEvents(events);
   const visible = ordered.slice(0, DETAIL_EVENT_PREVIEW);
   const hidden = ordered.slice(DETAIL_EVENT_PREVIEW);
+  const dropped = Number(trace?.persistence?.droppedEntries || 0);
+  const limitation = trace
+    ? `Best-effort local task/tool trace. Audit rotation${trace.limited ? ', response limits' : ''}${dropped ? ` and ${dropped} dropped entr${dropped === 1 ? 'y' : 'ies'}` : ''} can make older history incomplete.`
+    : 'Task activity projected from local history.';
   return `<section class="task-detail-section">
-    <div class="task-detail-heading"><h3>Technical activity</h3><span>${events.length}</span></div>
+    <div class="task-detail-heading"><h3>Rel.AI task trace</h3><span>${events.length}</span></div>
+    <p class="task-detail-note">${esc(limitation)}</p>
     <div class="task-event-list">${visible.map(event => eventRow(event, session)).join('')}</div>
     ${hidden.length ? `<details class="task-detail-overflow"><summary>Show ${hidden.length} older event${hidden.length === 1 ? '' : 's'}</summary><div class="task-event-list">${hidden.map(event => eventRow(event, session)).join('')}</div></details>` : ''}
   </section>`;
+}
+
+function bindTraceExportAction(root, session) {
+  const button = root.querySelector('[data-export-task-trace]');
+  if (!button) return;
+  button.addEventListener('click', () => {
+    const jsonl = taskTraceJsonl(session);
+    if (!jsonl) return;
+    const blob = new Blob([jsonl], { type: 'application/x-ndjson;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `relai-task-trace-${sessionIdentifier(session).slice(0, 24) || 'task'}.jsonl`;
+    link.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
+export function taskTraceJsonl(session = {}) {
+  const entries = Array.isArray(session.trace?.entries) ? session.trace.entries : [];
+  return entries.length ? `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n` : '';
 }
 
 export function orderSessionsForDisplay(sessions = []) {

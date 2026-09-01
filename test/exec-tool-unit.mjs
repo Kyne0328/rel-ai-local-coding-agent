@@ -211,6 +211,30 @@ try {
   assert.equal(large.stdoutBytes, 20000);
   assert.match(large.stdout, /truncated output/);
   assert.ok(Buffer.byteLength(large.stdout, 'utf8') <= 1000);
+  assert.match(large.stdoutOutputRef, /^spill_/);
+  assert.equal(large.stdoutSpillTruncated, false);
+  const spilled = await callTool('relai_read', {
+    work_id: initialTask.work_id,
+    outputRef: large.stdoutOutputRef,
+    maxBytes: 50000,
+    guidanceMode: 'none'
+  }, context);
+  assert.equal(spilled.ok, true);
+  assert.equal(spilled.items[0].type, 'output');
+  assert.equal(spilled.items[0].outputRef, large.stdoutOutputRef);
+  assert.equal(spilled.items[0].content, 'x'.repeat(20000), 'task-scoped spill must preserve output discarded from the bounded connector response');
+  const otherTask = await callTool('relai_work', { action: 'begin', workspace: 'app', bootstrap: 'none' }, context);
+  await assert.rejects(
+    () => callTool('relai_read', {
+      work_id: otherTask.work_id,
+      outputRef: large.stdoutOutputRef,
+      maxBytes: 50000,
+      guidanceMode: 'none'
+    }, context),
+    /not found for this work_id/i,
+    'outputRef must not be readable from a different work session'
+  );
+  await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: otherTask.work_id, reason: 'Spill ownership regression complete.' }, context);
 
   const timedOut = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'hang.js')),

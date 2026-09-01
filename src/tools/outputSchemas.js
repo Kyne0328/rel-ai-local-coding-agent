@@ -209,6 +209,10 @@ const FIELD_SCHEMAS = Object.freeze({
   stderrBytes: NUMBER,
   stdoutTruncated: BOOLEAN,
   stderrTruncated: BOOLEAN,
+  stdoutOutputRef: STRING,
+  stderrOutputRef: STRING,
+  stdoutSpillTruncated: BOOLEAN,
+  stderrSpillTruncated: BOOLEAN,
   timedOut: BOOLEAN,
   cancelled: BOOLEAN,
   terminationConfirmed: BOOLEAN,
@@ -367,7 +371,7 @@ const TOOL_FIELDS = Object.freeze({
   [OP.READ]: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'requestedCount', 'returnedCount', 'partial', 'truncated', 'error'],
   [OP.SEARCH_TEXT]: ['ok', 'workspace', 'work_id', 'pattern', 'queries', 'queryCount', 'uniqueFileCount', 'execution', 'glob', 'fixed', 'ignoreCase', 'matches', 'matchCount', 'mode', 'effectiveMode', 'autoTier', 'selectionStrategy', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'files', 'results', 'resultCount', 'returnedFileCount', 'returnedRangeCount', 'contextMatchCount', 'returnedBytes', 'maxBytes', 'omittedFiles', 'omittedRanges', 'truncated', 'contextTruncated', 'next'],
   [OP.INSPECT]: ['ok', 'workspace', 'work_id', 'action', 'index', 'query', 'strategy', 'semanticEmbeddings', 'fallbackResultKind', 'intelligence', 'files', 'matchCount', 'symbol', 'definitions', 'definitionCount', 'references', 'items', 'referenceCount', 'callCount', 'calls', 'seeds', 'maxDepth', 'impactedPaths', 'impactedPathCount', 'affectedTests', 'importEdges', 'definitionPaths', 'directCallers', 'importers', 'indirectImpact', 'relatedSymbols', 'uiSurfaces', 'registrationSurfaces', 'recommendedReadOrder', 'architecture', 'relationshipTypes', 'modules', 'entryPoints', 'hotspots', 'layers', 'cycles', 'communities', 'languages', 'diagnosticCommands', 'discoveryWarnings', 'validationCommands', 'configuredTestCommands', 'diagnosticsExecuted', 'summary', 'truncated', 'next'],
-  [OP.EXEC]: ['ok', 'executed', 'commandSucceeded', 'workspace', 'work_id', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error', 'environmentKeys', 'changedFiles', 'changedFilesTruncated', 'mutationTracking', 'mutationUnknown'],
+  [OP.EXEC]: ['ok', 'executed', 'commandSucceeded', 'workspace', 'work_id', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'stdoutOutputRef', 'stderrOutputRef', 'stdoutSpillTruncated', 'stderrSpillTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error', 'environmentKeys', 'changedFiles', 'changedFilesTruncated', 'mutationTracking', 'mutationUnknown'],
   [OP.PROCESS_START]: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'pty', 'columns', 'rows', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'reused', 'readiness', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdoutTail', 'stderrTail', 'readiness', 'error'],
   [OP.PROCESS_READ]: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'pty', 'columns', 'rows', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'reused', 'readiness', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdout', 'stderr', 'error'],
   [OP.PROCESS_WRITE]: ['ok', 'work_id', 'processId', 'acceptedBytes', 'status', 'resized', 'columns', 'rows'],
@@ -411,7 +415,7 @@ const CLOSED_SUCCESS_TOOLS = new Set(Object.keys(TOOL_FIELDS));
 const COMPACT_RESULT_FIELDS = Object.freeze([
   'ok', 'truncated', 'originalBytes', 'workspace', 'work_id', 'processId', 'status', 'duplicate',
   'mode', 'check', 'exitCode', 'durationMs', 'diagnosticCount', 'validationStatus', 'completionKnown',
-  'message', 'error', 'errorCode', 'level', 'summary', 'nextAction', 'stdout', 'stderr', 'results'
+  'message', 'error', 'errorCode', 'warning', 'level', 'summary', 'nextAction', 'stdout', 'stderr', 'results'
 ]);
 
 function outputSchemaFor(name) {

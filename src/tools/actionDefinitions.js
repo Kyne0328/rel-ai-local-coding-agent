@@ -129,7 +129,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_read', title: 'Read Repository',
-    description: 'Use when exact file content, ranges, directories, or one discovered skill are known and needed. Do not use for discovery across unknown locations.'
+    description: 'Use when exact file content, ranges, directories, one discovered skill, or a task-scoped outputRef from truncated relai_exec output is known and needed. Do not use for discovery across unknown locations.'
   },
   {
     name: 'relai_search', title: 'Search Repository',

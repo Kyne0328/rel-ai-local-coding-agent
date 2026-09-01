@@ -347,6 +347,7 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
       timeout: timeoutMs,
       maxOutputBytes,
       signal,
+      outputSpillTaskId: String(context.taskId || args.work_id || ''),
       ...(input !== undefined ? { input } : {})
     },
     config
@@ -394,6 +395,8 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
     stderrBytes: result.stderrBytes || 0,
     stdoutTruncated: result.stdoutTruncated === true,
     stderrTruncated: result.stderrTruncated === true,
+    ...(result.stdoutOutputRef ? { stdoutOutputRef: result.stdoutOutputRef, stdoutSpillTruncated: result.stdoutSpillTruncated === true } : {}),
+    ...(result.stderrOutputRef ? { stderrOutputRef: result.stderrOutputRef, stderrSpillTruncated: result.stderrSpillTruncated === true } : {}),
     timedOut: result.timedOut === true,
     cancelled: result.cancelled === true,
     ...(result.signal ? { signal: result.signal } : {}),

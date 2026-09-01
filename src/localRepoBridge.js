@@ -23,6 +23,7 @@ import { readProjectInstructions } from "./projectInstructions.js";
 import { discoverSkills, readDiscoveredSkill } from './skillDiscovery.js';
 import { discoverRepositoryTopology } from "./workflow/topology.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
+import { readOutputSpill } from './outputSpill.js';
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
@@ -112,6 +113,7 @@ function relaiRead(workspace, config, args = {}, context = {}) {
 }
 
 async function relaiReadAsync(workspace, config, args = {}, context = {}) {
+  if (args.outputRef) return readSpilledOutput(workspace, config, args, context);
   if (args.skill) {
     if ((Array.isArray(args.paths) && args.paths.length) || (Array.isArray(args.ranges) && args.ranges.length)) {
       throw new Error('relai_read skill cannot be combined with paths or ranges.');
@@ -138,6 +140,37 @@ async function relaiReadAsync(workspace, config, args = {}, context = {}) {
     readOptions(request, requested, index)
   ));
   return collectReadResults(workspace, results);
+}
+
+async function readSpilledOutput(workspace, config, args, context) {
+  if (args.skill || (Array.isArray(args.paths) && args.paths.length) || (Array.isArray(args.ranges) && args.ranges.length)) {
+    throw new Error('relai_read outputRef cannot be combined with paths, ranges, or skill.');
+  }
+  const spill = readOutputSpill(config, context.taskId || args.work_id, args.outputRef);
+  const defaultMaxBytes = context.connector ? DEFAULT_CONNECTOR_READ_BYTES : DEFAULT_MAX_READ_BYTES;
+  const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
+  const data = await fs.promises.readFile(spill.file);
+  const text = data.toString('utf8');
+  const selection = selectReadContent(text, normalizeReadLineRange(args), maxBytes);
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    items: [{
+      type: 'output',
+      outputRef: spill.outputRef,
+      bytes: spill.bytes,
+      returnedBytes: selection.returnedBytes,
+      lineCount: selection.totalLines,
+      truncated: selection.truncated,
+      ...(selection.truncated ? { hint: `Output spill truncated for this read. Re-call relai_read with outputRef plus startLine/endLine (spill has ${selection.totalLines} lines).` } : {}),
+      ...(selection.lineRange ? { lineRange: selection.lineRange } : {}),
+      content: selection.content
+    }],
+    skipped: [],
+    requestedCount: 1,
+    returnedCount: 1,
+    ...(selection.truncated ? { truncated: true } : {})
+  };
 }
 
 function prepareReadRequest(workspace, config, args, context) {

@@ -3,6 +3,7 @@ import { getReleaseNotes } from '../releaseNotes.js';
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { ensureConfig, getConfigPath, readConfig } from '../config.js';
+import { readAudit } from '../audit.js';
 import * as productUx from "../productUx.js";
 import * as release from "../release.js";
 import * as configEditor from "../configEditor.js";
@@ -481,7 +482,19 @@ const handleTaskSession = (ctx) => {
   if (!taskId) { sendJson(ctx.res, 400, { ok: false, error: "task is required." }); return; }
   const session = readTaskHistorySession(config, taskId);
   if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Work session not found." }); return; }
-  sendJson(ctx.res, 200, { ok: true, session });
+  const audit = readAudit(config, { taskId, limit: 10000 });
+  sendJson(ctx.res, 200, {
+    ok: true,
+    session,
+    trace: {
+      source: 'local_audit',
+      diagnosticOnly: true,
+      entries: audit.entries,
+      count: audit.entries.length,
+      limited: audit.entries.length >= 10000,
+      persistence: audit.persistence
+    }
+  });
 };
 
 const handleApiLogs = (ctx) => {

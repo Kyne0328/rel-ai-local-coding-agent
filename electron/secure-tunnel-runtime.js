@@ -9,6 +9,7 @@ const START_POLL_MS = 200;
 const HEALTH_REQUEST_TIMEOUT_MS = 1_500;
 const MONITOR_INTERVAL_MS = 2_000;
 const DEGRADED_FAILURE_THRESHOLD = 3;
+const FAILED_FAILURE_THRESHOLD = 30;
 const TUNNEL_RUNTIME_UNAVAILABLE_CODE = 'tunnel_runtime_unavailable';
 const FATAL_TUNNEL_CODES = new Set([
   'tunnel_authentication_failed',
@@ -27,7 +28,8 @@ function createSecureTunnelRuntime({
   onLog = () => {},
   onStatus = () => {},
   monitorIntervalMs = MONITOR_INTERVAL_MS,
-  degradedFailureThreshold = DEGRADED_FAILURE_THRESHOLD
+  degradedFailureThreshold = DEGRADED_FAILURE_THRESHOLD,
+  failedFailureThreshold = FAILED_FAILURE_THRESHOLD
 } = {}) {
   if (typeof spawnImpl !== 'function') throw new TypeError('spawnImpl is required.');
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl is required.');
@@ -42,6 +44,7 @@ function createSecureTunnelRuntime({
   let monitorPromise = null;
   const monitorDelayMs = Math.max(50, Number(monitorIntervalMs || MONITOR_INTERVAL_MS));
   const degradedAfterFailures = Math.max(1, Math.floor(Number(degradedFailureThreshold || DEGRADED_FAILURE_THRESHOLD)));
+  const failedAfterFailures = Math.max(degradedAfterFailures + 1, Math.floor(Number(failedFailureThreshold || FAILED_FAILURE_THRESHOLD)));
   let state = freezeState({
     state: 'stopped',
     tunnelId: '',
@@ -262,6 +265,20 @@ function createSecureTunnelRuntime({
 
       consecutiveFailures += 1;
       outageStartedAt ||= Date.now();
+      if (consecutiveFailures >= failedAfterFailures) {
+        if (child === ownedChild) child = null;
+        await stopProcess(ownedChild, { graceMs: 1000, forceWaitMs: 2000 }).catch(() => {});
+        update({
+          state: 'failed',
+          tunnelId,
+          healthUrl: '',
+          errorCode: 'tunnel_connection_interrupted',
+          error: 'Tunnel connectivity remained interrupted. Rel.AI will restart the secure tunnel automatically.',
+          consecutiveFailures,
+          outageStartedAt
+        });
+        return;
+      }
       if (consecutiveFailures < degradedAfterFailures) continue;
       update({
         state: 'degraded',

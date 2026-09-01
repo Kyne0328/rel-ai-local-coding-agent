@@ -8,7 +8,7 @@ import { makeTunnelProcessEnvironment } from '../src/processEnvironment.js';
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-secure-tunnel-'));
 let spawned = null;
-let stopped = false;
+let primaryChild;
 let operational = true;
 const statuses = [];
 const logs = [];
@@ -40,7 +40,7 @@ try {
   const runtime = createSecureTunnelRuntime({
     spawnImpl: fakeSpawn,
     fetchImpl: fetchTunnel,
-    stopProcess: async child => { stopped = child === spawned.child; child.exitCode = 0; return { exited: true, forced: false }; },
+    stopProcess: async child => { child.exitCode = 0; return { exited: true, forced: false }; },
     resolveExecutable: () => process.execPath,
     makeEnvironment: makeTunnelProcessEnvironment,
     stateDir,
@@ -50,6 +50,7 @@ try {
     onStatus: status => statuses.push(status)
   });
   const result = await runtime.start({ tunnelId: 'tunnel_example123456', port: 3333, localToken: 'local-secret', apiKey: 'sk-runtime-example-123456789', timeoutMs: 2000 });
+  primaryChild = spawned.child;
   assert.equal(result.ok, true);
   assert.equal(runtime.snapshot().state, 'running');
   assert.equal(spawned.executable, process.execPath);
@@ -72,8 +73,26 @@ try {
   await waitFor(() => runtime.snapshot().state === 'running');
   assert.equal(runtime.snapshot().error, '');
 
+  const persistentRuntime = createSecureTunnelRuntime({
+    spawnImpl: fakeSpawn,
+    fetchImpl: fetchTunnel,
+    stopProcess: async child => { child.exitCode = 0; return { exited: true, forced: false }; },
+    resolveExecutable: () => process.execPath,
+    makeEnvironment: makeTunnelProcessEnvironment,
+    stateDir,
+    monitorIntervalMs: 10,
+    degradedFailureThreshold: 2,
+    failedFailureThreshold: 4
+  });
+  await persistentRuntime.start({ tunnelId: 'tunnel_example123456', port: 3333, localToken: 'local-secret', apiKey: 'sk-runtime-persistent-outage-123456', timeoutMs: 1000 });
+  operational = false;
+  await waitFor(() => persistentRuntime.snapshot().state === 'failed');
+  assert.equal(persistentRuntime.snapshot().errorCode, 'tunnel_connection_interrupted');
+  assert.ok(persistentRuntime.snapshot().consecutiveFailures >= 4, 'persistent outage must escalate only after the second failure threshold');
+
+  operational = true;
   await runtime.stop();
-  assert.equal(stopped, true);
+  assert.equal(primaryChild.exitCode, 0, 'manual stop must terminate the original tunnel child');
   assert.equal(runtime.snapshot().state, 'stopped');
   assert.ok(logs.some(entry => entry.source === 'openai-tunnel'));
 

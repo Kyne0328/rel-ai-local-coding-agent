@@ -5,6 +5,7 @@ import { resolveGitExecutable } from './gitExecutable.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
 import { getStateDir } from './statePaths.js';
 import { traceContextEnvironment } from './telemetry.js';
+import { createOutputSpillWriter } from './outputSpill.js';
 
 const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 const DEFAULT_TERMINATION_GRACE_MS = 1000;
@@ -216,8 +217,10 @@ function runProcess(command, args, options = {}, config = {}) {
     const maxOutputBytes = Number.isFinite(configuredMaxOutputBytes) && configuredMaxOutputBytes > 0
       ? configuredMaxOutputBytes
       : DEFAULT_MAX_OUTPUT_BYTES;
-    const stdoutBuffer = new BoundedOutputBuffer(maxOutputBytes);
-    const stderrBuffer = new BoundedOutputBuffer(maxOutputBytes);
+    const stdoutSpill = createOutputSpillWriter(config, options.outputSpillTaskId);
+    const stderrSpill = createOutputSpillWriter(config, options.outputSpillTaskId);
+    const stdoutBuffer = new BoundedOutputBuffer(maxOutputBytes, stdoutSpill);
+    const stderrBuffer = new BoundedOutputBuffer(maxOutputBytes, stderrSpill);
     const timeoutMs = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
       ? Number(options.timeout)
       : 0;
@@ -260,13 +263,17 @@ function runProcess(command, args, options = {}, config = {}) {
       settled = true;
       if (timer) clearTimeout(timer);
       abortSignal?.removeEventListener?.('abort', onAbort);
+      const stdoutSpillResult = stdoutSpill.finish();
+      const stderrSpillResult = stderrSpill.finish();
       resolve({
         ...payload,
         durationMs: Date.now() - startedAt,
         stdoutBytes,
         stderrBytes,
         stdoutTruncated,
-        stderrTruncated
+        stderrTruncated,
+        ...(stdoutSpillResult ? { stdoutOutputRef: stdoutSpillResult.outputRef, stdoutSpillTruncated: stdoutSpillResult.spillTruncated } : {}),
+        ...(stderrSpillResult ? { stderrOutputRef: stderrSpillResult.outputRef, stderrSpillTruncated: stderrSpillResult.spillTruncated } : {})
       });
     }
 
@@ -397,20 +404,27 @@ const TRUNCATED_OUTPUT_MARKER = '\n[rel-ai-mcp truncated output]\n';
 const TRUNCATED_OUTPUT_MARKER_BYTES = Buffer.byteLength(TRUNCATED_OUTPUT_MARKER, 'utf8');
 
 class BoundedOutputBuffer {
-  constructor(maxBytes) {
+  constructor(maxBytes, spill = null) {
     this.maxBytes = Math.max(0, Number(maxBytes) || 0);
     this.chunks = [];
     this.retainedBytes = 0;
     this.truncated = false;
+    this.spill = spill;
   }
 
   append(value) {
     const chunk = Buffer.isBuffer(value) ? value : Buffer.from(String(value || ''), 'utf8');
     if (!chunk.length) return;
+    const wasTruncated = this.truncated;
     this.chunks.push(chunk);
     this.retainedBytes += chunk.length;
-    if (!this.truncated && this.retainedBytes <= this.maxBytes) return;
-    this.truncated = true;
+    if (!wasTruncated && this.retainedBytes <= this.maxBytes) return;
+    if (!wasTruncated) {
+      this.truncated = true;
+      this.spill?.start(Buffer.concat(this.chunks, this.retainedBytes));
+    } else {
+      this.spill?.append(chunk);
+    }
     this.trimTo(Math.max(0, this.maxBytes - TRUNCATED_OUTPUT_MARKER_BYTES));
   }
 
