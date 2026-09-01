@@ -143,7 +143,7 @@ const disconnectedTunnelFinding = disconnected.findings.find(item => item.code =
 assert.ok(disconnectedTunnelFinding);
 assert.equal(disconnectedTunnelFinding.action.kind, 'restart_connection');
 assert.equal(disconnectedTunnelFinding.action.label, 'Retry now');
-assert.equal(disconnectedTunnelFinding.action.href, '#connection');
+assert.equal(disconnectedTunnelFinding.action.href, '#settings/connection');
 assert.equal(disconnected.findings.some(item => item.code === 'configuration_invalid'), false);
 
 const missingBearer = buildDiagnosticReport({

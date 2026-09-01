@@ -84,18 +84,11 @@
   </section>
 
   <details class="app-card status-details" data-disclosure="service">
-    <summary>App controls and preferences <span aria-hidden="true">⌄</span></summary>
+    <summary>App controls <span aria-hidden="true">⌄</span></summary>
     <div class="detail-list">
       <div class="detail-row">
         <span class="detail-label">Rel.AI</span>
         <button class="secondary compact-control" id="serverToggleBtn" type="button">Stop Rel.AI</button>
-      </div>
-      <div class="detail-row">
-        <span class="detail-label">Desktop notifications<small>Connection status, failed project actions, and completed tasks</small></span>
-        <button class="notification-switch" id="notificationToggleBtn" type="button" role="switch" aria-checked="true" aria-label="Desktop notifications on">
-          <span class="switch-track" aria-hidden="true"><span></span></span>
-          <span id="notificationState">On</span>
-        </button>
       </div>
       <div class="detail-row"><span class="detail-label">Version</span><span class="detail-value mono" id="appVersion">v0.27.2</span></div>
     </div>
@@ -109,17 +102,6 @@
     </div>
   </details>
 
-  <details class="app-card status-details" data-disclosure="chatgpt-setup">
-    <summary>Connect to ChatGPT <span aria-hidden="true">⌄</span></summary>
-    <ol class="guide-list">
-      <li>Wait until the Secure MCP Tunnel shows Connected, then open the main dashboard and go to Connection.</li>
-      <li>Save the provided Rel.AI icon before you open ChatGPT connector setup.</li>
-      <li>Set the name to <strong>Rel.AI MCP</strong>. Set the connection to <strong>Tunnel</strong>. Select this computer's tunnel ID. Set authentication to <strong>No authentication</strong>.</li>
-      <li>Click <strong>Scan Tools</strong>. Confirm that the Rel.AI tools appear. Then click <strong>Create</strong>.</li>
-      <li>After creation, open Manage and upload the saved Rel.AI icon as the connector logo.</li>
-      <li>Keep Rel.AI running while ChatGPT works with your projects.</li>
-    </ol>
-  </details>
 </main>
 <script src="status.js"></script>
 </body>

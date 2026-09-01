@@ -4,12 +4,12 @@ const CANONICAL_PATHS = new Set([
   'code',
   'workspaces',
   'activity',
-  'connection',
   'processes',
   'tools',
   'diagnostics',
   'usage',
   'settings',
+  'settings/connection',
   'settings/application',
   'settings/about'
 ]);

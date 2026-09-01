@@ -119,7 +119,7 @@ function structuredRequestError(message, status = 0) {
     errorCode: 'dashboard_unavailable',
     title: 'Dashboard request failed',
     error: String(message || 'The Rel.AI dashboard did not respond.'),
-    recovery: { message: 'Refresh the dashboard. Restart the connection service if the problem continues.', actionLabel: 'Open Connection', href: '#connection', retryable: true }
+    recovery: { message: 'Refresh the dashboard. Restart the connection service if the problem continues.', actionLabel: 'Open Connection', href: '#settings/connection', retryable: true }
   };
 }
 

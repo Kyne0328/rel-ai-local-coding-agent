@@ -454,7 +454,7 @@ ${renderDashboardWindowTitlebar()}
       </div>
       <div class="top-controls">
         <button class="secondary command-trigger" id="commandPaletteBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Open quick navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><span class="command-trigger-label">Quick navigation</span><kbd>Ctrl K</kbd></button>
-        <a class="status-pill warn connection-status-link" id="connectionStatus" href="#connection" aria-label="Open Connection settings; current status Connecting">Connecting…</a>
+        <a class="status-pill warn connection-status-link" id="connectionStatus" href="#settings/connection" aria-label="Open Connection settings; current status Connecting">Connecting…</a>
         <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>

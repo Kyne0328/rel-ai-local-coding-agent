@@ -29,7 +29,6 @@ export const WORK_NAV_ITEMS = Object.freeze([
 ]);
 
 export const SYSTEM_NAV_ITEMS = Object.freeze([
-  route('connection', 'Connection', 'connection', 'Set up ChatGPT and fix connection problems.', 'System'),
   route('processes', 'Running commands', 'processes', 'See and stop long-running commands started by Rel.AI.', 'System'),
   route('diagnostics', 'Troubleshooting', 'diagnostics', 'Find and fix problems, view logs, or export support information.', 'System'),
   route('tools', 'ChatGPT tools', 'tools', 'See the actions ChatGPT can ask Rel.AI to perform.', 'System'),
@@ -37,14 +36,15 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
 ]);
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
-  route('system', 'Advanced', 'connection', 'Connection, running commands, troubleshooting, tools, and analytics.', 'Application'),
-  route('settings', 'Settings', 'settings', 'Change how Rel.AI looks and behaves.', 'Application')
+  route('system', 'System', 'processes', 'Running commands, troubleshooting, tools, and analytics.', 'Application'),
+  route('settings', 'Settings', 'settings', 'Change connection, appearance, and app settings.', 'Application')
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
 export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
+  route('connection', 'Connection', 'settings/connection', 'Connect this computer and change OpenAI connection settings.', 'Settings'),
   route('preferences', 'General', 'settings', 'Change appearance and desktop notifications.', 'Settings'),
   route('application', 'App', 'settings/application', 'Choose startup behavior and manage app updates.', 'Settings'),
   route('about', 'About', 'settings/about', 'View app, developer, source code, and license information.', 'Settings')
@@ -58,7 +58,9 @@ export function routeMetadata(path) {
 
 export function desktopNavigationOwner(sectionId) {
   const id = String(sectionId || '').toLowerCase();
-  return SYSTEM_NAV_ITEMS.some(item => item.id === id) ? 'system' : id;
+  if (SYSTEM_NAV_ITEMS.some(item => item.id === id)) return 'system';
+  if (SETTINGS_NAV_ITEMS.some(item => item.id === id)) return 'settings';
+  return id;
 }
 
 export function navigationCommands() {

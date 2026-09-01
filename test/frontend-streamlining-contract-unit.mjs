@@ -16,17 +16,19 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'code', 'workspaces', 'activity']);
 assert.equal(WORK_NAV_ITEMS.find(item => item.id === 'code')?.label, 'Changes', 'the task file surface must be presented as a read-only changes viewer');
-assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['connection', 'processes', 'diagnostics', 'tools', 'usage']);
+assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['processes', 'diagnostics', 'tools', 'usage']);
 assert.equal(SYSTEM_NAV_ITEMS.find(item => item.id === 'usage')?.label, 'Analytics', 'the dedicated analytics page must use the same name as Overview links');
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'code', 'workspaces', 'activity', 'system', 'settings']);
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['General', 'App', 'About']);
-assert.equal(desktopNavigationOwner('connection'), 'system');
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'General', 'App', 'About']);
+assert.equal(APPLICATION_NAV_ITEMS.find(item => item.id === 'system')?.label, 'System');
+assert.equal(desktopNavigationOwner('connection'), 'settings');
 assert.equal(desktopNavigationOwner('diagnostics'), 'system');
 assert.equal(desktopNavigationOwner('system'), 'system');
 assert.equal(desktopNavigationOwner('settings'), 'settings');
 
-assert.equal(canonicalPathFor('settings/connection'), 'home');
+assert.equal(canonicalPathFor('settings/connection'), 'settings/connection');
+assert.equal(canonicalPathFor('connection'), 'home');
 assert.equal(canonicalPathFor('settings/diagnostics'), 'home');
 assert.equal(canonicalPathFor('settings/tools-validation'), 'home');
 assert.equal(normalizeRouteKey('activity?status=succeeded'), 'activity?status=succeeded');
@@ -38,12 +40,10 @@ assert.equal(normalizeRouteKey('usage?range=custom&start=2026-08-01&end=2026-08-
 assert.equal(normalizeRouteKey('usage?range=invalid&start=nope'), 'usage');
 
 const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456', connectorName: 'Rel.AI MCP - Test PC' }).join(' ');
-assert.match(createSteps, /tunnel/i);
-assert.match(createSteps, /API key/i);
-assert.match(createSteps, /Name, Description, Organizations, and ChatGPT workspaces/i);
-assert.match(createSteps, /where you will actually use Rel\.AI/i);
-assert.match(createSteps, /Connection [“"]Tunnel[”"]/i);
-assert.match(createSteps, /Authentication to [“"]No authentication[”"]/i);
+assert.match(createSteps, /Open ChatGPT connector setup/i);
+assert.doesNotMatch(createSteps, /API key|Name, Description, Organizations/i, 'ChatGPT handoff must not repeat completed tunnel setup.');
+assert.match(createSteps, /Connection to Tunnel/i);
+assert.match(createSteps, /Authentication to No authentication/i);
 assert.match(createSteps, /Scan Tools/i);
 assert.match(createSteps, /click Create/i);
 assert.match(createSteps, /Manage/i);
@@ -61,9 +61,10 @@ assert.equal(hasObservedMcpConnection({ lastRequestAt: '2026-08-16T12:00:00.000Z
 assert.equal(hasObservedMcpToolCall({ lastRequestMethod: 'tools/list' }), false, 'scanning tools must not count as the first Rel.AI tool request');
 assert.equal(hasObservedMcpToolCall({ recentEvents: [{ method: 'tools/call' }] }), true, 'a tools/call request completes the first-request onboarding step');
 const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456', connectorName: 'Rel.AI MCP - Test PC' }).join(' ');
-assert.match(reconnectSteps, /existing .*Rel\.AI MCP - Test PC.* connector/i);
-assert.match(reconnectSteps, /(?:do not delete or recreate the app|instead of creating a duplicate)/i);
-assert.match(reconnectSteps, /Connection set to Tunnel/i);
+assert.match(reconnectSteps, /changed ChatGPT accounts or workspaces/i);
+assert.match(reconnectSteps, /Rel\.AI MCP - Test PC.*already exists.*instead of creating a duplicate/i);
+assert.match(reconnectSteps, /does not exist.*create it once/i);
+assert.match(reconnectSteps, /Connection to Tunnel/i);
 assert.match(reconnectSteps, /Authentication to No authentication/i);
 assert.match(reconnectSteps, /tunnel_example123456/i);
 const firstPrompt = chatGptFirstPrompt();
@@ -92,7 +93,7 @@ const readyConnection = {
 };
 assert.deepEqual(
   connectionLayerViews(readyConnection).map(layer => layer.title),
-  ['Local MCP service', 'OpenAI Secure MCP Tunnel', 'Ready for ChatGPT', 'MCP activity', 'Dashboard updates']
+  ['Local Rel.AI service', 'OpenAI Secure MCP Tunnel', 'Ready for ChatGPT', 'ChatGPT requests', 'Dashboard updates']
 );
 assert.deepEqual(
   connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'disabled' } }),
@@ -136,7 +137,9 @@ assert.deepEqual(
 );
 
 const wizard = read('electron/renderer/wizard.html');
-assert.match(wizard, /Connect Rel\.AI to ChatGPT/);
+assert.match(wizard, /Connect this computer to OpenAI/);
+assert.match(wizard, /Before you start/);
+assert.doesNotMatch(wizard, /Support Rel\.AI on GitHub|supportProject/);
 assert.match(wizard, /id="tunnelIdInput"/);
 assert.match(wizard, /id="tunnelApiKeyInput"/);
 assert.match(wizard, /id="runtimeKeyToggle"[^>]*aria-controls="tunnelApiKeyInput"/, 'setup should let users verify the runtime API key they pasted');
@@ -151,7 +154,9 @@ assert.match(statusRendererSource, /addEventListener\('visibilitychange', ensure
 assert.match(statusRendererSource, /lastWindowFit/, 'fallback status window fitting must cache the last requested dimensions');
 const homeSource = read('src/ui/features/home/index.js');
 assert.match(homeSource, /patchHomeNode/, 'Overview live updates should patch stable DOM instead of replacing whole regions');
-assert.match(homeSource, /data-home-analytics/, 'Overview analytics preview must remain available');
+assert.match(homeSource, /data-home-analytics/, 'Overview analytics preview must remain available after setup');
+assert.match(homeSource, /postSetup = setupState\.firstRequestObserved/, 'Overview must hide post-setup content until the first real Rel.AI request');
+assert.match(homeSource, /postSetup \? recentTasksCard/, 'Latest tasks must use the same first-request progressive-disclosure boundary');
 assert.match(diagnosticsSource, /value: 'all', label: 'Everything'/);
 assert.match(diagnosticsSource, /document\.visibilityState === 'hidden'/, 'hidden diagnostics tabs must pause live-tail requests');
 assert.match(diagnosticsSource, /relai:diagnostics-live/, 'diagnostics live tail must use the shared SSE event stream');
@@ -202,6 +207,7 @@ assert.doesNotMatch(workspaceCards, /data-repository-details=|workspace-action-m
 assert.match(workspaceCards, /data-edit-workspace=/, 'project cards must keep Edit project as the single project-management action');
 assert.match(workspaceCards, />Analytics</, 'project cards must keep Analytics directly available');
 assert.doesNotMatch(workspaceCards, /data-run-validation=|>Run checks<|readinessFact\('Checks'/, 'project cards must not expose validation controls or a Checks readiness section');
+assert.match(workspaceCards, /workspace-readiness compact good/, 'healthy project cards must avoid a second Ready-for-ChatGPT status block');
 assert.doesNotMatch(workspaceActions, /data-run-validation|runValidationFromTrigger/, 'workspace action bindings must not retain the removed project-card checks action');
 assert.match(workspaceCards, /const title = finding\.message \|\| humanizeFindingCode/, 'project health rows should lead with a user-facing problem description instead of an internal finding code');
 assert.match(workspaceCards, /pillHtml\(findingSeverityLabel\(finding\.severity\), statusClass\(finding\.severity\)\)/, 'project health badges should use the same readable severity language as Troubleshooting');
@@ -243,6 +249,8 @@ const settingsSharedSource = read('src/ui/features/settings/shared.js');
 assert.match(connectorSource, /card connection-layer-disclosure connector-details|card connector-details connection-layer-disclosure/, 'Connection layers must share the aligned connector disclosure contract');
 assert.match(connectorSource, /mountDesktopConnection\(controls,\{expanded:String\(state\.publicEndpoint\?\.status\|\|''\)===['"]disabled['"]\}\)/, 'connection credentials should open for initial setup and stay collapsed during normal use');
 assert.match(desktopConnectionSource, /connection-settings-disclosure/, 'low-frequency connection credentials should use progressive disclosure');
+assert.match(desktopConnectionSource, /Use a different OpenAI account or workspace/, 'Connection settings must expose account and workspace switching without adding a Rel.AI login');
+assert.match(desktopConnectionSource, /update the existing Rel\.AI connector/, 'account switching must prefer updating an existing connector instead of creating duplicates');
 assert.match(settingsSharedSource, /labelElement\.htmlFor = labelTarget\.id/, 'shared settings fields must associate visible labels with their controls');
 assert.doesNotMatch(connectorSource, /connection-status-body[\s\S]{0,600}field-caption[^\n]*Tunnel ID/, 'primary connection status must not duplicate technical setup identifiers');
 assert.match(connectorSource, /action\.href===['"]#diagnostics['"]/, 'connection recovery must not render a duplicate Troubleshooting link beside the primary recovery action');
@@ -262,8 +270,9 @@ const publicRouteOwners = [
 ];
 for (const relative of publicRouteOwners) {
   const source = read(relative);
-  assert.doesNotMatch(source, /#settings\/(?:connection|diagnostics|tools-validation)/, `${relative} still targets a removed Settings route`);
+  assert.doesNotMatch(source, /#settings\/(?:diagnostics|tools-validation)/, `${relative} still targets a removed Settings route`);
 }
+assert.match(read('electron/main.js'), /#settings\/connection/, 'first-run setup must open the canonical Settings > Connection route');
 
 console.log('Frontend streamlining contracts passed.');
 

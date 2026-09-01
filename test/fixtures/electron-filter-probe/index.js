@@ -257,7 +257,7 @@ app.whenReady().then(async () => {
       };
     })()`);
 
-    await win.webContents.executeJavaScript(`location.hash = '#connection'`);
+    await win.webContents.executeJavaScript(`location.hash = '#settings/connection'`);
     await waitFor(win, `document.querySelector('.connection-primary-action')`);
     const connection = await win.webContents.executeJavaScript(`(() => ({
       primaryCount: document.querySelectorAll('.connection-primary-action > a, .connection-primary-action > button').length,

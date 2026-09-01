@@ -8,7 +8,12 @@
 .workspace-validation-preference-row p { margin-top: 4px; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.5; }
 .connection-advanced-settings { margin-top: 14px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); }
 .connection-advanced-settings > summary { cursor: pointer; padding: 12px 14px; font-weight: 700; }
-.connection-advanced-settings[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
+.connection-advanced-settings[open] > summary, .connection-account-switch[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
+.connection-account-switch { border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); }
+.connection-account-switch > summary { cursor: pointer; padding: 12px 14px; font-weight: 700; }
+.connection-account-switch-body { padding: 14px; }
+.connection-account-switch-body ol { display: grid; gap: 8px; margin: 0; padding-left: 20px; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.55; }
+.connection-account-switch-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 640px) {
   .workspace-validation-preference-row { flex-direction: column; }
 }

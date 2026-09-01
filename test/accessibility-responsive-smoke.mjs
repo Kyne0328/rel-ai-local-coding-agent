@@ -15,7 +15,7 @@ assert.equal(new Set(mobileNavIds).size, mobileNavIds.length, 'mobile navigation
 for (const required of ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']) {
   assert.ok(mobileNavIds.includes(required), `${required} must remain reachable from mobile navigation`);
 }
-assert.equal(MOBILE_NAV_ITEMS.find(item => item.id === 'system')?.href, '#connection');
+assert.equal(MOBILE_NAV_ITEMS.find(item => item.id === 'system')?.href, '#processes');
 assert.ok((filterCss.match(/@media \(max-width:/g) || []).length >= 1, 'filter controls must have a narrow-screen layout');
 assert.match(filterCss, /safe-area-inset-bottom/);
 assert.match(appCss, /@import "\.\.\/components\/filter-controls\.css"/);

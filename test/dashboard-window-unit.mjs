@@ -173,11 +173,11 @@ try {
   assert.equal(reopenedVisibleRoute, win);
   assert.equal(win.loadCount, initialLoadCount, 'reopening an existing dashboard must not reload its active route');
   assert.equal(win.webContents.url.endsWith('#activity'), true, 'reopening without a route must preserve the current route');
-  const reused = await manager.open('#connection');
+  const reused = await manager.open('#settings/connection');
   assert.equal(reused, win);
   assert.equal(windows.length, 1);
   assert.equal(win.loadCount, initialLoadCount, 'same-document route changes must not reload the dashboard');
-  assert.equal(win.webContents.url.endsWith('#connection'), true);
+  assert.equal(win.webContents.url.endsWith('#settings/connection'), true);
   assert.match(win.executedScripts.at(-1) || '', /location\.hash/);
 
   dashboardAuthGeneration += 1;
@@ -187,7 +187,7 @@ try {
   assert.equal(refreshedAfterRestart, win);
   assert.equal(win.loadCount, beforeAuthRefresh + 1, 'a new local-service auth generation must reload the one-time dashboard bootstrap');
   assert.equal(new URL(win.webContents.url).searchParams.get('bootstrap'), 'post-restart-code');
-  assert.equal(win.webContents.url.endsWith('#connection'), true, 'authenticated reload must preserve the active dashboard route');
+  assert.equal(win.webContents.url.endsWith('#settings/connection'), true, 'authenticated reload must preserve the active dashboard route');
   const afterAuthRefresh = win.loadCount;
   await manager.open();
   assert.equal(win.loadCount, afterAuthRefresh, 'reopening within the same auth generation must not reload the dashboard');
@@ -197,7 +197,7 @@ try {
   await manager.open('', { forceReload: true });
   assert.equal(win.loadCount, beforeSessionRefresh + 1, 'session reauthentication must consume a fresh bootstrap even within the same service generation');
   assert.equal(new URL(win.webContents.url).searchParams.get('bootstrap'), 'session-refresh-code');
-  assert.equal(win.webContents.url.endsWith('#connection'), true, 'session reauthentication must preserve the active dashboard route');
+  assert.equal(win.webContents.url.endsWith('#settings/connection'), true, 'session reauthentication must preserve the active dashboard route');
 
   assert.deepEqual(manager.getState(), {
     platform: 'win32', customTitleBar: true, controls: 'custom',
@@ -290,8 +290,8 @@ try {
   );
 
   assert.equal(validateConnection({ url: 'http://localhost:3333/dashboard' }).pathname, '/dashboard');
-  assert.equal(normalizeRouteHash('connection'), '#connection');
-  assert.throws(() => normalizeRouteHash('connection?token=secret'), /Invalid dashboard route/);
+  assert.equal(normalizeRouteHash('settings/connection'), '#settings/connection');
+  assert.throws(() => normalizeRouteHash('settings/connection?token=secret'), /Invalid dashboard route/);
   assert.throws(() => validateConnection({ url: 'https://example.com/dashboard' }), /local loopback/);
   assert.throws(() => validateConnection({ url: 'http://127.0.0.1:3333/health' }), /local loopback/);
 } finally {

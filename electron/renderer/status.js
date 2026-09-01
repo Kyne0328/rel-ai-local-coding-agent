@@ -10,7 +10,6 @@ let currentStatus = {
 };
 let previousAnnouncementKey = '';
 let actionError = '';
-let notificationsEnabled = localStorage.getItem('relai_activity_notifications') !== 'off';
 let clockTimer = null;
 let windowFitFrame = 0;
 let lastWindowFit = { width: 0, height: 0 };
@@ -282,7 +281,6 @@ function renderControls() {
   toggle.className = currentStatus.serverRunning ? 'danger compact-control' : 'primary compact-control';
   document.getElementById('dashboardBtn').disabled = !currentStatus.serverRunning;
   document.getElementById('appVersion').textContent = currentStatus.version ? `v${currentStatus.version}` : '—';
-  updateNotificationButton();
 }
 
 function ensureClock() {
@@ -336,42 +334,6 @@ function formatDuration(milliseconds) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
-}
-
-function updateNotificationButton() {
-  const button = document.getElementById('notificationToggleBtn');
-  button.setAttribute('aria-checked', notificationsEnabled ? 'true' : 'false');
-  button.setAttribute('aria-label', `Desktop notifications ${notificationsEnabled ? 'on' : 'off'}`);
-  button.classList.toggle('enabled', notificationsEnabled);
-  document.getElementById('notificationState').textContent = notificationsEnabled ? 'On' : 'Off';
-}
-
-async function loadNotificationPreference() {
-  try {
-    const result = await window.electronAPI.getNotificationsEnabled();
-    notificationsEnabled = result?.enabled !== false;
-    localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
-    updateNotificationButton();
-  } catch {
-    setActionError('The desktop notification setting could not be loaded. Try again from Settings.');
-  }
-}
-
-async function toggleNotifications() {
-  const next = !notificationsEnabled;
-  const button = document.getElementById('notificationToggleBtn');
-  button.disabled = true;
-  try {
-    const result = await window.electronAPI.setNotificationsEnabled(next);
-    notificationsEnabled = result?.enabled === true;
-    localStorage.setItem('relai_activity_notifications', notificationsEnabled ? 'on' : 'off');
-    setActionError('');
-  } catch {
-    setActionError('The desktop notification setting could not be saved. Try again from Settings.');
-  } finally {
-    button.disabled = false;
-    updateNotificationButton();
-  }
 }
 
 function diagnosticSummary() {
@@ -590,7 +552,6 @@ function bindEvents() {
   document.getElementById('restartAppBtn').addEventListener('click', () => {
     runAsync(withBusy(document.getElementById('restartAppBtn'), 'Restarting Rel.AI…', () => window.electronAPI.relaunchApp()));
   });
-  document.getElementById('notificationToggleBtn').addEventListener('click', () => runAsync(toggleNotifications()));
   document.getElementById('debugLogsToggle')?.addEventListener('change', renderServiceLogs);
   document.getElementById('copyDiagnosticsBtn').addEventListener('click', () => {
     runAsync(copyWithFeedback(document.getElementById('copyDiagnosticsBtn'), diagnosticSummary(), 'Details copied'));
@@ -627,4 +588,3 @@ document.addEventListener('visibilitychange', ensureClock);
 initDisclosures();
 bindEvents();
 updateUI(currentStatus);
-runAsync(loadNotificationPreference());

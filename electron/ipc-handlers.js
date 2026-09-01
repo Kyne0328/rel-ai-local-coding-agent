@@ -4,8 +4,7 @@ import { registerCodeWorkspaceIpc } from './ipc-handlers-code.js';
 
 const OPENAI_SETUP_URLS = Object.freeze({
   tunnels: 'https://platform.openai.com/settings/organization/tunnels',
-  apiKeys: 'https://platform.openai.com/settings/organization/api-keys',
-  supportProject: 'https://github.com/Kyne0328/rel-ai-mcp'
+  apiKeys: 'https://platform.openai.com/settings/organization/api-keys'
 });
 
 function registerIpcHandlers(deps) {

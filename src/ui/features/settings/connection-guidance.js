@@ -14,21 +14,21 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '', connectorNam
   const name = String(connectorName || 'Rel.AI MCP').trim() || 'Rel.AI MCP';
   if (mode === 'reconnect') {
     return [
-      'Keep Rel.AI running and confirm OpenAI Secure MCP Tunnel shows Connected on the Connection page.',
-      `In ChatGPT, open the existing “${name}” connector instead of creating a duplicate.`,
-      tunnel ? `Reconnect it with Connection set to Tunnel and select ${tunnel}.` : 'Reconnect it with Connection set to Tunnel and select this computer’s Secure MCP Tunnel.',
-      'Set Authentication to No authentication. Do not choose OAuth for the Rel.AI tunnel connection.',
-      `Return to the chat, enable “${name}”, and retry the request.`
+      'Keep Rel.AI running. Confirm that the Secure MCP Tunnel shows Connected on the Connection page.',
+      'If you changed ChatGPT accounts or workspaces, sign in to the workspace that you want to use.',
+      `If “${name}” already exists in that workspace, open it instead of creating a duplicate.`,
+      tunnel ? `Set Connection to Tunnel and select ${tunnel}.` : 'Set Connection to Tunnel and select this computer’s Secure MCP Tunnel.',
+      'Set Authentication to No authentication.',
+      `If “${name}” does not exist in that workspace, create it once with these settings.`,
+      `Enable “${name}” in the chat. Retry the request.`
     ];
   }
   return [
-    'In OpenAI Platform, open Organization settings → Tunnels. Create or select a Secure MCP Tunnel. Set Name, Description, Organizations, and ChatGPT workspaces. Select the organizations and workspaces where you will use Rel.AI. Copy the ID that starts with tunnel_.',
-    'Open Organization settings → API Keys. Create an API key for the tunnel. Give it Tunnel Read and Use permissions.',
-    'Save the Tunnel ID and API key in Rel.AI Connection settings. Keep Rel.AI running until the connection shows Connected.',
-    'Save the Rel.AI icon below before opening ChatGPT connector creation.',
-    tunnel ? `In ChatGPT, set Name to “${name}”. Set Connection to “Tunnel”. Select ${tunnel}. Set Authentication to “No authentication”.` : `In ChatGPT, set Name to “${name}”. Set Connection to “Tunnel”. Select this computer’s tunnel. Set Authentication to “No authentication”.`,
+    'Open ChatGPT connector setup.',
+    tunnel ? `Set Name to “${name}”. Set Connection to Tunnel. Select ${tunnel}. Set Authentication to No authentication.` : `Set Name to “${name}”. Set Connection to Tunnel. Select this computer’s tunnel. Set Authentication to No authentication.`,
     'Click Scan Tools. Confirm that the Rel.AI tools appear. Then click Create.',
-    `After you create the connector, open Manage. Upload ${RELAI_CONNECTOR_ICON_FILENAME} as the connector logo. Then enable “${name}” in the chat.`
+    `Enable “${name}” in the chat.`,
+    `Optional: Open Manage and upload ${RELAI_CONNECTOR_ICON_FILENAME} as the connector logo.`
   ];
 }
 
@@ -38,7 +38,7 @@ export function createChatGptSetupGuide(options = {}) {
   const connectorName = String(options.connectorName || 'Rel.AI MCP').trim() || 'Rel.AI MCP';
   const guide = document.createElement(options.compact ? 'div' : 'section');
   guide.className = `chatgpt-setup-guide ${options.compact ? 'compact' : ''}`.trim();
-  const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Connect ChatGPT';
+  const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Finish ChatGPT setup';
   const steps = chatGptGuideSteps({ mode, tunnelId, connectorName });
   guide.innerHTML = `
     <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI keeps the local connection private.</span></div>
@@ -59,10 +59,10 @@ function connectorHandoffHtml(tunnelId, connectorName) {
         <dt>Authentication</dt><dd>No authentication</dd>
       </dl>
       <div class="chatgpt-connector-actions" role="group" aria-label="ChatGPT connector setup actions">
-        <button class="secondary" type="button" data-save-relai-icon>Save Rel.AI icon <span>PNG · under 10 KB</span></button>
-        <button class="primary" type="button" data-open-chatgpt-setup disabled>Open ChatGPT connector setup</button>
+        <button class="primary" type="button" data-open-chatgpt-setup>Open ChatGPT connector setup</button>
+        <button class="secondary" type="button" data-save-relai-icon>Save optional Rel.AI icon <span>PNG · under 10 KB</span></button>
       </div>
-      <p class="chatgpt-connector-note" data-chatgpt-handoff-note>Save the icon first. The next button opens the connector form in ChatGPT.</p>
+      <p class="chatgpt-connector-note" data-chatgpt-handoff-note>Open ChatGPT now. You can add the Rel.AI icon after the connector works.</p>
     </section>`;
 }
 
@@ -78,12 +78,10 @@ function bindConnectorHandoff(guide) {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    if (openButton) openButton.disabled = false;
-    saveButton.textContent = `Icon ready · ${RELAI_CONNECTOR_ICON_FILENAME}`;
-    if (note) note.textContent = 'Next, open ChatGPT setup. After Create, use Manage to upload the saved icon as the connector logo.';
+    saveButton.textContent = `Optional icon saved · ${RELAI_CONNECTOR_ICON_FILENAME}`;
+    if (note) note.textContent = 'The icon is optional. Open ChatGPT setup when you are ready.';
   });
   openButton?.addEventListener('click', () => {
-    if (openButton.disabled) return;
     window.open(CHATGPT_CONNECTOR_CREATE_URL, '_blank', 'noopener,noreferrer');
   });
 }

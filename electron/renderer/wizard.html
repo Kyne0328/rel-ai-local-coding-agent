@@ -13,17 +13,16 @@
     <header class="wizard-brand"><img class="wizard-logo" src="relai-logo.png" alt="" aria-hidden="true" width="193" height="187"><div><span>Rel.AI</span><small>/ MCP</small></div></header>
     <section class="wizard-step">
       <div class="wizard-cloud-hero">
-        <span class="wizard-eyebrow">Connect Rel.AI to ChatGPT</span>
-        <h1>Connect ChatGPT to your projects on this computer</h1>
-        <p>Set up an OpenAI Secure MCP Tunnel so ChatGPT can use Rel.AI with your local projects.</p>
+        <span class="wizard-eyebrow">Connect this computer</span>
+        <h1>Connect this computer to OpenAI</h1>
+        <p>Create an OpenAI Secure MCP Tunnel. After it connects, Rel.AI will show the ChatGPT connector setup step.</p>
       </div>
 
-      <div class="wizard-cloud-card" id="supportProjectCard">
+      <div class="wizard-cloud-card wizard-prerequisite-card">
         <div class="wizard-cloud-status">
-          <strong>Support Rel.AI on GitHub</strong>
-          <span>Rel.AI is free and open source. You can support the project on GitHub. This is optional and does not affect setup.</span>
+          <strong>Before you start</strong>
+          <span>Use the OpenAI organization and ChatGPT workspace where you will use Rel.AI. You need access to create or use a Secure MCP Tunnel in that organization.</span>
         </div>
-        <button class="secondary wizard-open-button wizard-standalone-button" type="button" data-open-openai="supportProject">Support project on GitHub</button>
       </div>
 
       <div class="wizard-cloud-card wizard-security-card">
@@ -107,7 +106,7 @@
           </div>
         </details>
         <p class="wizard-inline-error" id="setupError" role="alert" aria-live="polite"></p>
-        <button class="primary wizard-main-action" id="connectBtn" type="button">Connect to ChatGPT</button>
+        <button class="primary wizard-main-action" id="connectBtn" type="button">Connect this computer</button>
       </div>
       <div class="wizard-actions"><button class="secondary" id="cancelWizardBtn" type="button">Cancel</button></div>
     </section>

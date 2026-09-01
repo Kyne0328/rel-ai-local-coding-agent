@@ -66,7 +66,7 @@ export function connectionSummary(state = {}) {
   if (local === 'stopped') return summary('Rel.AI is stopped', 'Stopped', 'warn', 'Start or restart Rel.AI before ChatGPT can use this computer.');
   if (local === 'starting') return summary('Starting Rel.AI', 'Starting', 'working', 'Rel.AI is getting this computer ready for ChatGPT.');
   if (tunnel === 'unavailable') return summary('ChatGPT connection unavailable', 'Needs attention', 'bad', 'Review the Connection settings for this computer or open Troubleshooting.');
-  if (tunnel === 'disabled') return summary('Connect Rel.AI to ChatGPT', 'Setup required', 'warn', 'Set up the secure ChatGPT connection for this computer.');
+  if (tunnel === 'disabled') return summary('Connect this computer', 'Setup required', 'warn', 'Set up the Secure MCP Tunnel for this computer.');
   if (tunnel === 'connecting') return summary('Connecting to ChatGPT', 'Connecting', 'working', 'Rel.AI is finishing the secure connection. No setup changes are needed while it connects.');
   if (tunnel === 'degraded') { const retry=normalized.publicEndpoint; const detail=retry.nextRetryAt?` Retry ${Math.max(1,Number(retry.retryAttempt||1))} is scheduled automatically.`:''; return summary('ChatGPT connection interrupted', 'Reconnecting', 'warn', `The local service is still running while Rel.AI retries the Secure MCP Tunnel automatically.${detail}`); }
   if (activity === 'request_failed') return summary('The last ChatGPT request failed', 'Last request failed', 'warn', 'The local Rel.AI service and Secure MCP Tunnel are ready for another request. Restart Rel.AI only if a connection layer has a problem.');

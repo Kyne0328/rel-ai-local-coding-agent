@@ -161,8 +161,6 @@ function getSections() {
     workspaces: lazySection(() => import('./ui/features/workspaces/index.js'), (module, element) => module.mountWorkspaces(element, getStore())),
     activity: lazySection(() => import('./ui/features/activity/index.js'), (module, element) => module.mountActivity(element, getStore())),
     settings: lazySection(() => import('./ui/features/settings/index.js'), (module, element) => module.mountSettings(element, settingsSubPage())),
-    system: systemSection('connection'),
-    connection: systemSection('connection'),
     processes: systemSection('processes'),
     diagnostics: systemSection('diagnostics'),
     tools: systemSection('tools'),
@@ -499,8 +497,11 @@ async function updateLiveView(data) {
       const module = await import('./ui/features/workspaces/index.js');
       return module.updateWorkspacesLiveState(root, data);
     }
-    case 'system':
-    case 'connection':
+    case 'settings': {
+      if (currentRoutePath() !== 'settings/connection') return false;
+      const module = await import('./ui/features/settings/connector.js');
+      return module.updateConnectorLiveState(root, data);
+    }
     case 'processes':
     case 'diagnostics':
     case 'usage': {
@@ -521,7 +522,7 @@ function liveStateChange(detail) {
   patchLocalConnection({ connectionState: projected.connectionState });
   const data = getStore();
   renderConnectionStatus();
-  if (_routerReady && ['system', 'connection'].includes(currentRoutePath())) void syncLiveView(data);
+  if (_routerReady && currentRoutePath() === 'settings/connection') void syncLiveView(data);
   if (reconnectStarted) void doRefresh({ source: 'sse-reconnect-probe', quietFailure: true, render: false });
   if (catchUpRequired) void doRefresh({ source: 'sse-catch-up' });
 }
@@ -627,9 +628,7 @@ function viewRevisionKey(data = {}) {
     case 'code': return `${route}|t:${task}`;
     case 'workspaces': return `${route}|t:${task}|w:${workspace}`;
     case 'processes': return `${route}|p:${process}`;
-    case 'connection': return `${route}|c:${connection}`;
-    case 'system': return `${route}|c:${connection}|p:${process}`;
-    case 'settings':
+    case 'settings': return currentRoutePath() === 'settings/connection' ? `${route}|c:${connection}` : `${route}|s:${structural}`;
     case 'tools':
     case 'reference':
     case 'diagnostics':

@@ -18,6 +18,8 @@
 .workspace-path { @apply mt-1 truncate text-[11px]; color: var(--ui-text-tertiary); }
 .workspace-warning { @apply flex items-center justify-between gap-3 px-4 py-3 text-[12px]; background: var(--ui-status-danger-background); color: var(--ui-status-danger-foreground); border-bottom: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 28%, transparent); }
 .workspace-readiness { @apply grid min-w-0 gap-0; grid-template-columns: minmax(0,1.35fr) minmax(180px,.65fr); border-bottom: 1px solid var(--ui-border-default); }
+.workspace-readiness.compact { grid-template-columns: 1fr; }
+.workspace-readiness.compact .workspace-readiness-facts { border-left: 0; }
 .workspace-access-summary { @apply flex items-start gap-3 p-4; }
 .workspace-readiness-icon { @apply grid size-9 shrink-0 place-items-center rounded-xl font-bold; background: var(--ui-status-success-background); color: var(--ui-status-success-foreground); border: 1px solid color-mix(in srgb, var(--ui-status-success-foreground) 28%, transparent); }
 .workspace-readiness.bad .workspace-readiness-icon { background: var(--ui-status-danger-background); color: var(--ui-status-danger-foreground); border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 28%, transparent); }

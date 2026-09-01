@@ -64,6 +64,7 @@ function render(container, { expanded = false } = {}) {
     runtimeKeyField.appendChild(error);
   }
   fields.appendChild(runtimeKeyField);
+  fields.appendChild(accountWorkspaceSwitch());
 
   const advanced = document.createElement('details');
   advanced.className = 'settings-advanced connection-advanced-settings';
@@ -120,6 +121,27 @@ function validate() {
   if (!state.tunnelApiKeyConfigured && !state.tunnelApiKey) return 'Enter the OpenAI Secure MCP Tunnel runtime API key.';
   if (state.tunnelApiKey && (state.tunnelApiKey.length < 12 || /\s/.test(state.tunnelApiKey))) return 'Enter a valid runtime API key with no spaces.';
   return '';
+}
+
+function accountWorkspaceSwitch() {
+  const details = document.createElement('details');
+  details.className = 'settings-advanced connection-account-switch';
+  details.innerHTML = `
+    <summary>Use a different OpenAI account or workspace</summary>
+    <div class="settings-panel-body connection-account-switch-body">
+      <ol>
+        <li>Sign in to the OpenAI account that you want to use.</li>
+        <li>Select or create a Secure MCP Tunnel in that organization.</li>
+        <li>Create a runtime API key for that tunnel.</li>
+        <li>Replace the Tunnel ID and runtime API key above. Then save the connection settings.</li>
+        <li>In ChatGPT, update the existing Rel.AI connector if it is available in that workspace. Create one connector only if the workspace does not have it.</li>
+      </ol>
+      <div class="connection-account-switch-actions">
+        <a class="buttonlike secondary compact-button" href="https://platform.openai.com/settings/organization/tunnels" target="_blank" rel="noopener noreferrer">Open OpenAI Tunnels</a>
+        <a class="buttonlike secondary compact-button" href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Open OpenAI API Keys</a>
+      </div>
+    </div>`;
+  return details;
 }
 
 function textControl(value, onChange) {

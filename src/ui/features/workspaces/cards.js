@@ -125,17 +125,20 @@ function workspaceHealthHtml(view) {
 
 function workspaceReadinessHtml(view) {
   const repository = repositorySummary(view.operational);
-  const accessTitle = view.available ? 'Ready for ChatGPT' : 'Project folder unavailable';
-  const accessDescription = view.available
-    ? 'Rel.AI can read and update this project when ChatGPT asks it to.'
-    : 'Fix the project folder before using this project.';
-  return `<section class="workspace-readiness ${view.available ? 'good' : 'bad'}" aria-label="Project status">
+  if (view.available) {
+    return `<section class="workspace-readiness compact good" aria-label="Project status">
+      <dl class="workspace-readiness-facts">
+        ${readinessFact('Git', repository.label, repository.description, repository.tone)}
+      </dl>
+    </section>`;
+  }
+  return `<section class="workspace-readiness bad" aria-label="Project status">
     <div class="workspace-access-summary">
-      <span class="workspace-readiness-icon" aria-hidden="true">${view.available ? '✓' : '!'}</span>
+      <span class="workspace-readiness-icon" aria-hidden="true">!</span>
       <div class="workspace-readiness-copy">
         <span class="workspace-readiness-kicker">Project access</span>
-        <strong>${esc(accessTitle)}</strong>
-        <p>${esc(accessDescription)}</p>
+        <strong>Project folder unavailable</strong>
+        <p>Fix the project folder before using this project.</p>
       </div>
     </div>
     <dl class="workspace-readiness-facts">

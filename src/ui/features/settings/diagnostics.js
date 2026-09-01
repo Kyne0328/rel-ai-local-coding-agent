@@ -627,7 +627,7 @@ function metric(label, count, severity) {
 function findingCard(finding) {
   const canRestart = finding.action?.kind === 'restart_connection' && typeof window.relaiDesktop?.restartConnection === 'function';
   const action = canRestart
-    ? `<button class="secondary compact-button" type="button" data-restart-connection data-diagnostic-action="${esc(finding.code)}">${esc(finding.action.label || 'Restart connection')}</button> <a class="buttonlike secondary compact-button" href="${esc(finding.action.href || '#connection')}">Review connection settings</a>`
+    ? `<button class="secondary compact-button" type="button" data-restart-connection data-diagnostic-action="${esc(finding.code)}">${esc(finding.action.label || 'Restart connection')}</button> <a class="buttonlike secondary compact-button" href="${esc(finding.action.href || '#settings/connection')}">Review connection settings</a>`
     : finding.action?.href
       ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
       : '';
@@ -806,7 +806,7 @@ function unavailableHtml(report) {
   const title = report?.title || 'Troubleshooting info unavailable';
   const message = report?.error || 'Rel.AI could not load troubleshooting information.';
   const recovery = report?.recovery?.message || 'Refresh the dashboard or restart the Rel.AI connection.';
-  const href = report?.recovery?.href || '#connection';
+  const href = report?.recovery?.href || '#settings/connection';
   return `<div class="diagnostic-clear diagnostic-unavailable">
     <strong>${esc(title)}</strong><span>${esc(message)}</span><small>${esc(recovery)}</small>
     <a class="buttonlike secondary" href="${esc(href)}">${esc(report?.recovery?.actionLabel || 'Open Connection')}</a>

@@ -102,7 +102,7 @@ async function connect() {
   } catch (error) {
     setError(messageOf(error));
     button.disabled = false;
-    button.textContent = 'Connect to ChatGPT';
+    button.textContent = 'Connect this computer';
   }
 }
 
@@ -119,8 +119,6 @@ async function loadExistingSettings() {
     }
   } catch {}
 }
-
-if (recoveryMode) $('supportProjectCard')?.remove();
 
 function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Setup failed.');

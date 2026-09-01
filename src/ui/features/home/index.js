@@ -15,7 +15,7 @@ export function mountHome(container, data) {
   container.innerHTML = '';
   const payload = data || {};
   container.appendChild(buildOverview(payload));
-  void hydrateHomeAnalytics(container, { workspace: getWorkspaceFilter() });
+  if (container.querySelector('[data-home-analytics]')) void hydrateHomeAnalytics(container, { workspace: getWorkspaceFilter() });
   void finalizeSetupChecklist(payload);
 }
 
@@ -23,14 +23,34 @@ export function updateHomeLiveState(container, data = {}) {
   const current = container.querySelector('.section');
   if (!current) return false;
   const state = overviewState(data);
+  const setupState = desktopSetupState(data);
+  const postSetup = setupState.firstRequestObserved;
   syncHomeRegion(current, taskActivityCard(data.taskActivity, state.tasks[0]), '[data-home-live-activity]', '[data-home-live-connection]');
-  syncHomeInteractiveRegion(current, createDesktopSetupChecklist(desktopSetupState(data)), '[data-desktop-setup-checklist]', '[data-home-live-connection]');
+  syncHomeInteractiveRegion(current, createDesktopSetupChecklist(setupState), '[data-desktop-setup-checklist]', '[data-home-live-connection]');
   syncHomeRegion(current, connectionHero(state.bridgeState), '[data-home-live-connection]', '.layout-grid');
   syncHomeRegion(current, workspaceSummaryCard(state.workspaces, state.findings), '[data-home-live-workspaces]');
-  syncHomeRegion(current, recentTasksCard(state.tasks), '[data-home-live-sessions]');
-  refreshHomeAnalyticsAfterTaskBoundary(current, data);
+  syncHomeRegion(current, postSetup ? recentTasksCard(state.tasks) : null, '[data-home-live-sessions]');
+  syncHomeAnalyticsVisibility(current, data, state.tasks, postSetup);
   void finalizeSetupChecklist(data);
   return true;
+}
+
+function syncHomeAnalyticsVisibility(current, data, tasks, visible) {
+  const target = current.querySelector('[data-home-analytics]');
+  if (!visible) {
+    if (target) {
+      homeAnalyticsGeneration += 1;
+      target.remove();
+    }
+    return;
+  }
+  if (!target) {
+    const shell = homeAnalyticsShell(analyticsTaskBoundary(tasks));
+    current.insertBefore(shell, current.querySelector('.layout-grid'));
+    void hydrateHomeAnalytics(current, { workspace: getWorkspaceFilter() });
+    return;
+  }
+  refreshHomeAnalyticsAfterTaskBoundary(current, data);
 }
 
 function syncHomeInteractiveRegion(current, nextNode, selector, beforeSelector = '') {
@@ -129,20 +149,22 @@ function overviewState(data = {}) {
 
 function buildOverview(data) {
   const { workspaces, tasks, findings, bridgeState } = overviewState(data);
+  const setupState = desktopSetupState(data);
+  const postSetup = setupState.firstRequestObserved;
   const root = document.createElement('div');
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
   if (taskCard) root.appendChild(taskCard);
-  const setupChecklist = createDesktopSetupChecklist(desktopSetupState(data));
+  const setupChecklist = createDesktopSetupChecklist(setupState);
   if (setupChecklist) root.appendChild(setupChecklist);
   root.appendChild(connectionHero(bridgeState));
 
-  root.appendChild(homeAnalyticsShell(analyticsTaskBoundary(tasks)));
+  if (postSetup) root.appendChild(homeAnalyticsShell(analyticsTaskBoundary(tasks)));
 
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
   grid.appendChild(workspaceSummaryCard(workspaces, findings));
-  grid.appendChild(recentTasksCard(tasks));
+  if (postSetup) grid.appendChild(recentTasksCard(tasks));
   root.appendChild(grid);
   return root;
 }
@@ -191,7 +213,7 @@ function connectionHero(state) {
       <h2 class="overview-title">${esc(state.title)}</h2>
       <p class="overview-description">${esc(state.description)}</p>
     </div>
-    <a class="buttonlike secondary compact-button" href="${routeMetadata('connection').href}">View connection</a>`;
+    <a class="buttonlike secondary compact-button" href="${routeMetadata('settings/connection').href}">View connection</a>`;
   return hero;
 }
 

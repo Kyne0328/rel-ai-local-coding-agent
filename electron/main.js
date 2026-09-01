@@ -532,7 +532,7 @@ async function launchConfiguredDesktop(options = {}) {
       recoveryWindowManager.show();
       return status;
     }
-    if (!options.background) await showDashboardWindow(options.firstRun ? '#connection' : '');
+    if (!options.background) await showDashboardWindow(options.firstRun ? '#settings/connection' : '');
     else recoveryWindowManager.hide();
     return currentStatus;
   } catch (error) {

@@ -56,7 +56,9 @@ assert.match(wizardHtml, /<small>\/ MCP<\/small>/, 'setup wizard branding should
 assert.match(wizardHtml, /OpenAI Secure MCP Tunnel/);
 assert.match(wizardHtml, /id="tunnelIdInput"/);
 assert.match(wizardHtml, /id="connectorNameInput"/);
-assert.match(wizardHtml, /Support project on GitHub/i);
+assert.doesNotMatch(wizardHtml, /Support project on GitHub|supportProject/i);
+assert.match(wizardHtml, /Connect this computer to OpenAI/i);
+assert.match(wizardHtml, /Before you start/i);
 assert.match(wizardHtml, /id="tunnelApiKeyInput"/);
 assert.match(wizardHtml, /id="portInput"/);
 assert.match(wizardHtml, /id="connectBtn"/);
@@ -79,7 +81,8 @@ assert.match(statusHtml, /id="localHealthCard"/);
 assert.match(statusHtml, /id="publicHealthCard"/);
 assert.match(statusHtml, /id="serverToggleBtn"/);
 assert.match(statusHtml, /id="restartAppBtn"/);
-assert.match(statusHtml, /id="notificationToggleBtn"/);
+assert.doesNotMatch(statusHtml, /notificationToggleBtn|Desktop notifications/);
+assert.doesNotMatch(statusHtml, /Connect to ChatGPT|guide-list/, 'Recovery must not duplicate the normal ChatGPT setup guide.');
 assert.match(statusHtml, /id="errorTitle"/);
 assert.match(statusHtml, /Recent app logs/);
 assert.match(statusJs, /currentStatus\.tunnelId/);
@@ -94,7 +97,7 @@ assert.match(statusJs, /Local MCP:/);
 assert.match(statusJs, /safeDiagnosticText/);
 assert.match(statusJs, /Task activity:/);
 assert.match(statusJs, /setActionError/);
-assert.match(statusJs, /desktop notification setting could not be saved/i);
+assert.doesNotMatch(statusJs, /notificationToggleBtn|desktop notification setting could not be saved/i);
 assert.doesNotMatch(statusJs, /updateUI\(\{\s*error:[\s\S]{0,160}tunnelStatus:\s*'failed'/, 'recovery action failures must not falsify the tunnel connection state');
 assert.doesNotMatch(statusJs, /currentStatus\.mcpUrl|approval token|ngrok|gateway/i);
 
@@ -125,6 +128,8 @@ assert.match(desktopConnection, /OpenAI Secure MCP Tunnel/);
 assert.match(desktopConnection, /Runtime API key/);
 assert.match(desktopConnection, /saved key is encrypted on this computer\. Rel\.AI does not show it again/i);
 assert.match(desktopConnection, /Save connection settings/);
+assert.match(desktopConnection, /Use a different OpenAI account or workspace/);
+assert.match(desktopConnection, /update the existing Rel\.AI connector/);
 assert.doesNotMatch(desktopConnection, /ngrok|gateway|pairing|approval token/i);
 
 for (const file of ['secure-tunnel-runtime.js','tunnel-recovery-supervisor.js','tunnel-credentials.js','service-runtime.js','desktop-settings.js']) assert.ok(electronPackage.build.files.includes(file));

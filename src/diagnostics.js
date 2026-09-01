@@ -349,7 +349,7 @@ function recommendationForHealth(finding, code) {
 function actionFromGuidance(code) {
   const guidance = errorGuidance(code);
   if ([ERROR_CODES.SECURE_TUNNEL_FAILED, ERROR_CODES.PUBLIC_ENDPOINT_FAILED, ERROR_CODES.TUNNEL_CONNECTION_INTERRUPTED].includes(code)) {
-    return { kind: 'restart_connection', label: 'Retry now', href: guidance.href || '#connection' };
+    return { kind: 'restart_connection', label: 'Retry now', href: guidance.href || '#settings/connection' };
   }
   return { label: guidance.actionLabel, href: guidance.href || '#diagnostics' };
 }
