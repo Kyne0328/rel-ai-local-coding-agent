@@ -147,7 +147,7 @@ function buildOverview(data) {
   return root;
 }
 
-function resolveBridgeState({ findings, connectionState }) {
+export function resolveBridgeState({ findings = [], connectionState }) {
   const connection = connectionSummary(connectionState);
   if (connection.tone !== 'ok') {
     return {
@@ -157,12 +157,20 @@ function resolveBridgeState({ findings, connectionState }) {
       description: connection.message
     };
   }
-  if (findings.length) {
+  if (findings.some(item => item?.severity === 'error')) {
     return {
       tone: 'bad',
       kicker: 'Needs attention',
       title: 'Rel.AI is connected, but a problem needs attention.',
       description: 'Rel.AI can connect to ChatGPT, but one or more issues should be resolved before automated changes.'
+    };
+  }
+  if (findings.some(item => item?.severity === 'warning')) {
+    return {
+      tone: 'warn',
+      kicker: 'Connected with warning',
+      title: 'Rel.AI is connected and ready.',
+      description: 'Automated changes are available. Review the warning when convenient.'
     };
   }
   return {
@@ -521,7 +529,7 @@ function statusLabel(status) {
 
 export function overviewWorkspaceStatus(workspace = {}, findings = []) {
   const alias = String(workspace.alias || '');
-  if (alias && findings.some(finding => finding?.workspace === alias)) return 'needs attention';
+  if (alias && findings.some(finding => finding?.workspace === alias && finding?.severity === 'error')) return 'needs attention';
   if (workspace.operational?.exists === false) return 'unavailable';
   if (workspace.operational?.currentActivity || workspace.sessionPolicy?.sessionActive) return 'active';
   return 'ready';

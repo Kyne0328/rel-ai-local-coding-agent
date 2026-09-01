@@ -91,10 +91,19 @@ try {
     newText: 'after'
   });
   assert.equal(editCreated.response.status, 200, JSON.stringify(editCreated.body));
-  assert.equal(editCreated.body.result?.resultType, 'complete', 'relai_edit must return a completed CallToolResult instead of a task handle');
-  assert.equal(editCreated.body.result?.taskId, undefined, 'relai_edit must not require task polling');
-  assert.equal(editCreated.body.result?.isError, false, JSON.stringify(editCreated.body));
-  assert.equal(editCreated.body.result?.structuredContent?.ok, true, JSON.stringify(editCreated.body));
+  assert.equal(editCreated.body.result?.resultType, 'task', 'task-capable clients must receive a recoverable task handle for relai_edit');
+  assert.ok(editCreated.body.result?.taskId, 'recoverable relai_edit must expose its native task ID');
+  let completedEditTask = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const polled = await taskRequest(client, 3000 + attempt, 'tasks/get', editCreated.body.result.taskId);
+    assert.equal(polled.response.status, 200, JSON.stringify(polled.body));
+    if (['completed', 'failed', 'cancelled'].includes(polled.body.result?.status)) {
+      completedEditTask = polled.body.result;
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  assert.equal(completedEditTask?.status, 'completed', JSON.stringify(completedEditTask));
   assert.equal(fs.readFileSync(path.join(workspaceDir, 'edit-target.txt'), 'utf8'), 'after\n');
   const postEditStatus = await callTool(client, 420, 'relai_work', { action: 'status', work_id: logicalTaskId }, {});
   assert.equal(postEditStatus.response.status, 200, JSON.stringify(postEditStatus.body));
@@ -107,7 +116,7 @@ try {
   assert.equal(fallback.body.result?.structuredContent?.exitCode, 0);
   assert.equal(fallback.body.result?.structuredContent?.work_id, logicalTaskId);
 
-  const taskCapableExec = await invokeEligible(client, 5, logicalTaskId, 1000);
+  const taskCapableExec = await invokeEligible(client, 5, logicalTaskId, 100);
   assert.equal(taskCapableExec.response.status, 200, JSON.stringify(taskCapableExec.body));
   assert.equal(taskCapableExec.body.result?.resultType, 'task', 'a capable modern client must receive a task handle for long eligible work');
   assert.ok(taskCapableExec.body.result?.taskId);

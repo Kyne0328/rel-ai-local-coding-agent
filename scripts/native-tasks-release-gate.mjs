@@ -33,7 +33,8 @@ const SERIAL_RELEASE_GATE_CHECK_IDS = Object.freeze([
   'process_cancellation',
   'stdio_discovery',
   'http_discovery',
-  'http_authentication'
+  'http_authentication',
+  'current_surface_without_tasks'
 ]);
 const SERIAL_CHECK_IDS = new Set(SERIAL_RELEASE_GATE_CHECK_IDS);
 

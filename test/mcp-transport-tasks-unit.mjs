@@ -90,12 +90,22 @@ try {
     name: 'relai_edit',
     arguments: { work_id: 'work-session', path: 'README.md', oldText: 'before', newText: 'after' }
   }, tasksCapabilities);
-  assert.equal(isTransportTaskRequestCandidate(config, editTaskCandidate), false, 'relai_edit must remain an ordinary tools/call operation instead of host-managed native Tasks');
+  assert.equal(isTransportTaskRequestCandidate(config, editTaskCandidate), true, 'ordinary relai_edit must use recoverable long-call execution');
   const editChecksTaskCandidate = request(98, 'tools/call', {
     name: 'relai_edit',
     arguments: { work_id: 'work-session', path: 'README.md', oldText: 'before', newText: 'after', runChecks: true }
   }, tasksCapabilities);
   assert.equal(isTransportTaskRequestCandidate(config, editChecksTaskCandidate), true, 'relai_edit with post-checks must use recoverable long-call execution');
+  const editWithoutTasks = await handleTransportTaskRequest(config, request(94, 'tools/call', {
+    name: 'relai_edit',
+    arguments: { workspace: 'app', work_id: 'edit-no-tasks', path: 'README.md', oldText: 'before', newText: 'after' }
+  }, {}), {
+    principal: owner,
+    transportType: 'streamable-http',
+    synchronousFallbackGraceMs: 0,
+    executeToolResult: async () => ({ isError: false, structuredContent: { ok: true, changed: true } })
+  });
+  assert.equal(editWithoutTasks.body.result?.structuredContent?.status, 'running', 'ordinary edits must detach safely when the client does not advertise Tasks');
   for (const candidate of [
     request(97, 'tools/call', { name: 'relai_search', arguments: { action: 'semantic', work_id: 'work-session', query: 'target' } }, tasksCapabilities),
     request(96, 'tools/call', { name: 'relai_inspect', arguments: { action: 'architecture', work_id: 'work-session' } }, tasksCapabilities),

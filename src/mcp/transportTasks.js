@@ -133,7 +133,6 @@ function shouldInterceptTool(definition, args = {}) {
   // Eligibility is intentionally broader than current client support. Interception
   // keeps short bounded calls synchronous and detaches only calls that do not fit
   // the safe response window when the client has not advertised Native Tasks.
-  if (definition?.name === 'relai_edit' && args?.runChecks !== true) return false;
   return definition?.behavior?.executionClass === 'native_task_eligible'
     && definition?.behavior?.longRunning === true
     && !catalogApprovalRequirement(definition.name, args || {});

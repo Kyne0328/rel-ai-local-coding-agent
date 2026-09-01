@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
@@ -6,6 +7,30 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { availablePort } from './helpers/available-port.mjs';
 import { activeToolCount } from './helpers/tool-surface.mjs';
+import { overviewWorkspaceStatus, resolveBridgeState } from '../src/ui/features/home/index.js';
+
+const readyConnectionState = {
+  localService: { status: 'running' },
+  publicEndpoint: { status: 'available' },
+  chatgptReadiness: { status: 'ready' },
+  mcpClient: { status: 'idle' },
+  dashboardUpdates: { status: 'live' }
+};
+const warningState = resolveBridgeState({
+  findings: [{ severity: 'warning', code: 'audit_stale', message: 'Audit activity is stale.' }],
+  connectionState: readyConnectionState
+});
+assert.equal(warningState.tone, 'warn', 'warning-only health findings must stay non-blocking');
+assert.equal(warningState.kicker, 'Connected with warning');
+assert.doesNotMatch(warningState.description, /before automated changes/i);
+const errorState = resolveBridgeState({
+  findings: [{ severity: 'error', code: 'workspace_unavailable', message: 'Workspace is unavailable.' }],
+  connectionState: readyConnectionState
+});
+assert.equal(errorState.tone, 'bad', 'error health findings must still block readiness');
+assert.equal(errorState.kicker, 'Needs attention');
+assert.equal(overviewWorkspaceStatus({ alias: 'app' }, [{ workspace: 'app', severity: 'warning' }]), 'ready');
+assert.equal(overviewWorkspaceStatus({ alias: 'app' }, [{ workspace: 'app', severity: 'error' }]), 'needs attention');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
