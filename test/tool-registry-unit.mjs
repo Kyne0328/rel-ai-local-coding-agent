@@ -104,6 +104,10 @@ assert.match(publicSearchInputSchema?.properties?.maxFiles?.description || '', /
 assert.match(publicWorkSchema?.properties?.maxBytes?.description || '', /Action usage: status\./, 'flat discovery must identify action-specific optional fields');
 const publicValidateInputSchema = publicSchemas.find(item => item.name === 'relai_validate')?.inputSchema;
 assert.equal(publicValidateInputSchema?.properties?.timeoutMs?.anyOf, undefined, 'relai_validate root timeoutMs schema must collapse bounded action variants instead of advertising a redundant union');
+const publicReadSchema = publicSchemas.find(item => item.name === 'relai_read');
+assert.equal(publicReadSchema?.inputSchema?.properties?.asResource?.type, 'boolean', 'relai_read discovery must expose private artifact transfer mode');
+assert.match(publicReadSchema?.inputSchema?.properties?.asResource?.description || '', /resource_link.*transfer or download/i, 'relai_read discovery must explain artifact transfer mode');
+assert.match(publicReadSchema?.description || '', /asResource:true.*transferred or downloaded/i, 'relai_read tool guidance must direct whole-file transfer to artifact resources');
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
 assert.equal(publicSearchSchema?.properties?.neuralEmbeddings, undefined, 'action-specific result fields must stay out of lightweight MCP discovery');
 assert.equal(publicSearchSchema?.properties?.originalBytes, undefined, 'compaction metadata must stay out of lightweight MCP discovery');
@@ -116,6 +120,12 @@ for (const field of ['command', 'executable', 'argv', 'input', 'cwd', 'env', 'ti
 }
 const publicEditSchema = publicSchemas.find(item => item.name === 'relai_edit');
 assert.match(publicEditSchema?.inputSchema?.properties?.content?.description || '', /Complete replacement content/i, 'public edit discovery must retain complete-file guidance');
+assert.equal(publicEditSchema?.inputSchema?.properties?.content?.type, 'string', 'plain content must remain a text-only edit form');
+assert.deepEqual(publicEditSchema?._meta?.['openai/fileParams'], ['file'], 'ChatGPT discovery must advertise the dedicated native file parameter');
+assert.deepEqual(publicEditSchema?.inputSchema?.properties?.file?.required, ['download_url', 'file_id'], 'native file references require only the OpenAI download URL and opaque file ID');
+for (const field of ['download_url', 'file_id', 'mime_type', 'file_name']) {
+  assert.ok(publicEditSchema?.inputSchema?.properties?.file?.properties?.[field], `native file schema must declare ${field}`);
+}
 assert.match(publicEditSchema?.inputSchema?.properties?.stage?.description || '', /only when the client transport cannot carry/i, 'public edit discovery must explain staged mode as a transport fallback');
 const publicProcessSchema = publicSchemas.find(item => item.name === 'relai_process');
 assert.match(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /shell syntax.*Action usage: start/i, 'public process discovery must retain shell guidance and action ownership');
@@ -144,7 +154,7 @@ assert.match(processSchema.inputSchema.properties.executable.description, /shell
 assert.match(processSchema.inputSchema.properties.argv.description, /without shell parsing/i);
 assert.match(processSchema.inputSchema.properties.input.description, /without closing the persistent stdin stream/i);
 const editSchema = schemaByName.get('relai_edit');
-assert.equal(editSchema.inputSchema.oneOf?.length, 9, 'relai_edit executable schema must retain all canonical edit-form variants');
+assert.equal(editSchema.inputSchema.oneOf?.length, 10, 'relai_edit executable schema must retain all canonical edit-form variants');
 assert.match(editSchema.description, /symbolEdit/i);
 assert.deepEqual(editSchema.inputSchema.properties.symbolEdit.properties.action.enum, ['replace', 'insert_before', 'insert_after']);
 assert.match(editSchema.description, /oldText\/newText/i);
@@ -167,6 +177,7 @@ await invalid('relai_process', { action: 'start', work_id: 'work', command: 'npm
 await valid('relai_process', { action: 'read', work_id: 'work', processId: 'p', includeMetadata: false });
 await invalid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'ignored' });
 await invalid('relai_work', { action: 'status', title: 'ignored' });
+await valid('relai_read', { work_id: 'work', paths: ['dist/report.zip'], asResource: true });
 await valid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', maxFiles: 200, maxResults: 1000 });
 await valid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });
 await invalid('relai_search', { action: 'text', work_id: 'work', pattern: 'needle', queries: ['haystack'] });
@@ -194,6 +205,10 @@ await valid('relai_edit', { work_id: 'work', semantic: { action: 'rename', path:
 await valid('relai_edit', { work_id: 'work', symbolEdit: { action: 'replace', symbol: 'renderApp', content: 'function renderApp() {}' } });
 await invalid('relai_edit', { work_id: 'work', symbolEdit: { action: 'replace', symbol: 'renderApp', content: 'function renderApp() {}' }, path: 'src/index.js', content: 'conflict' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n' });
+await valid('relai_edit', { work_id: 'work', path: 'artifact.bin', file: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test', mime_type: 'application/octet-stream', file_name: 'artifact.bin' } });
+await invalid('relai_edit', { work_id: 'work', path: 'artifact.bin', content: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test' } });
+await invalid('relai_edit', { work_id: 'work', path: 'artifact.bin', file: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test' }, stage: 'start' });
+await invalid('relai_edit', { work_id: 'work', path: 'artifact.bin', file: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test' }, semantic: { action: 'rename', path: 'src/index.js', line: 1, column: 1, newName: 'renamed' } });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', oldText: 'before', newText: 'after' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', replacements: [{ oldText: 'before', newText: 'after' }] });
 await valid('relai_edit', { work_id: 'work', updateText: '*** Begin Patch\n*** End Patch' });
@@ -228,12 +243,14 @@ await publicValid('relai_exec', { work_id: 'work', command: 'node -v', executabl
 await publicValid('relai_edit', { work_id: 'work', symbolEdit: { action: 'insert_before', symbol: 'renderApp', content: '// before' } });
 await publicValid('relai_edit', { work_id: 'work', path: 'README.md' });
 await publicValid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', oldText: 'before', newText: 'after' });
+await publicValid('relai_edit', { work_id: 'work', path: 'artifact.bin', file: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test', mime_type: 'application/octet-stream', file_name: 'artifact.bin' } });
 
 // Discovery still rejects universally invalid shapes: unknown fields, missing
 // universal task/action identity, and wrong primitive types.
 await publicInvalid('relai_search', { action: 'text', pattern: 'needle' });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', unknown: true });
 await publicInvalid('relai_edit', { work_id: 'work', content: 42 });
+await publicInvalid('relai_edit', { work_id: 'work', path: 'artifact.bin', content: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test' } });
 
 // Internal/direct invocation gets the same canonical validation before a handler runs.
 await validateExecutableOperationInput(OP.SEARCH_TEXT, { workspace: 'repo', work_id: 'work', pattern: 'needle', maxFiles: 200 });

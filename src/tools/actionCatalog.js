@@ -9,7 +9,7 @@ import {
 } from './actionDefinitions.js';
 import { ACTION_REGISTRY } from './actionRegistry.js';
 
-const TOOL_SURFACE_VERSION = 58;
+const TOOL_SURFACE_VERSION = 60;
 
 const TOOL_ACTION_CATALOG = Object.freeze(buildCatalog());
 const ACTION_BY_KEY = new Map(TOOL_ACTION_CATALOG.map(entry => [catalogKey(entry.publicTool, entry.action), entry]));

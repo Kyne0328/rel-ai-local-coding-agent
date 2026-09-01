@@ -24,6 +24,7 @@ import { discoverSkills, readDiscoveredSkill } from './skillDiscovery.js';
 import { discoverRepositoryTopology } from "./workflow/topology.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
 import { readOutputSpill } from './outputSpill.js';
+import { createArtifactResourceLink } from './artifactResources.js';
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
@@ -113,6 +114,7 @@ function relaiRead(workspace, config, args = {}, context = {}) {
 }
 
 async function relaiReadAsync(workspace, config, args = {}, context = {}) {
+  if (args.asResource === true) return readArtifactLink(workspace, config, args, context);
   if (args.outputRef) return readSpilledOutput(workspace, config, args, context);
   if (args.skill) {
     if ((Array.isArray(args.paths) && args.paths.length) || (Array.isArray(args.ranges) && args.ranges.length)) {
@@ -140,6 +142,37 @@ async function relaiReadAsync(workspace, config, args = {}, context = {}) {
     readOptions(request, requested, index)
   ));
   return collectReadResults(workspace, results);
+}
+
+async function readArtifactLink(workspace, config, args, context) {
+  if (args.skill || args.outputRef || (Array.isArray(args.ranges) && args.ranges.length) || args.startLine != null || args.endLine != null) {
+    throw new Error('relai_read asResource cannot be combined with skill, outputRef, ranges, startLine, or endLine.');
+  }
+  if (!Array.isArray(args.paths) || args.paths.length !== 1) {
+    throw new Error('relai_read asResource requires exactly one file in paths.');
+  }
+  const artifact = await createArtifactResourceLink(workspace, config, args.paths[0], {
+    workId: context.taskId || args.work_id,
+    principal: context.principal
+  });
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    items: [{
+      type: 'artifact',
+      path: artifact.path,
+      sha256: artifact.sha256,
+      bytes: artifact.bytes,
+      mimeType: artifact.mimeType,
+      name: artifact.name,
+      expiresAt: artifact.expiresAt,
+      resourceUri: artifact.resourceLink.uri
+    }],
+    resourceLink: artifact.resourceLink,
+    skipped: [],
+    requestedCount: 1,
+    returnedCount: 1
+  };
 }
 
 async function readSpilledOutput(workspace, config, args, context) {

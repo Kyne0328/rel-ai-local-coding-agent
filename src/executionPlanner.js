@@ -536,8 +536,8 @@ async function _handleSingleEdit(workspace, config, args) {
 
 async function planEdit(workspace, config, args, context = {}) {
   assertSupportedEditForm(args);
-  if (args.content && typeof args.content === 'object' && !Array.isArray(args.content)) {
-    const result = await importNativeArtifact(workspace, config, { ...args, file: args.content });
+  if (args.file && typeof args.file === 'object' && !Array.isArray(args.file)) {
+    const result = await importNativeArtifact(workspace, config, args);
     return attachPost(result, await runPostActions(workspace, config, args, result.changedFiles));
   }
   if (args.semantic && typeof args.semantic === 'object') {
@@ -570,7 +570,7 @@ async function planEdit(workspace, config, args, context = {}) {
   return _handleSingleEdit(workspace, config, args);
 }
 
-const EDIT_FORM_GUIDANCE = 'Use exactly one form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { symbolEdit:{ action, symbol, content, path? } } for an indexed structural symbol edit, { path, content } for a complete file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
+const EDIT_FORM_GUIDANCE = 'Use exactly one form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { symbolEdit:{ action, symbol, content, path? } } for an indexed structural symbol edit, { path, content } for a complete text file, { path, file } for a native ChatGPT file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
 
 function assertSupportedEditForm(args = {}) {
   const has = (field) => Object.hasOwn(args, field);
@@ -581,17 +581,18 @@ function assertSupportedEditForm(args = {}) {
   const hasBatch = has('edits');
   const hasPatch = has('updateText');
   const hasContent = has('content');
+  const hasFile = has('file');
   const hasExact = ['oldText', 'newText', 'replacements', 'occurrence'].some(has);
 
   if (hasEnv) {
-    if (hasStage || hasSemantic || hasSymbol || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+    if (hasStage || hasSemantic || hasSymbol || hasBatch || hasPatch || hasContent || hasFile || hasExact || has('writeId')) {
       throw new Error(`relai_edit envAction cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
     }
     return;
   }
 
   if (hasStage) {
-    if (hasSemantic || hasSymbol || hasBatch || hasExact || has('envAction')) {
+    if (hasSemantic || hasSymbol || hasBatch || hasFile || hasExact || has('envAction')) {
       throw new Error(`relai_edit staged operations cannot be combined with exact, batch, or environment fields. ${EDIT_FORM_GUIDANCE}`);
     }
     const stage = String(args.stage).trim().toLowerCase();
@@ -612,7 +613,7 @@ function assertSupportedEditForm(args = {}) {
     throw new Error(`relai_edit envAction must be a non-empty supported action. ${EDIT_FORM_GUIDANCE}`);
   }
   if (hasSemantic) {
-    if (hasSymbol || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+    if (hasSymbol || hasBatch || hasPatch || hasContent || hasFile || hasExact || has('writeId')) {
       throw new Error(`relai_edit semantic rename cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
     }
     if (!args.semantic || typeof args.semantic !== 'object' || Array.isArray(args.semantic) || args.semantic.action !== 'rename') {
@@ -621,7 +622,7 @@ function assertSupportedEditForm(args = {}) {
     return;
   }
   if (hasSymbol) {
-    if (hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+    if (hasBatch || hasPatch || hasContent || hasFile || hasExact || has('writeId')) {
       throw new Error(`relai_edit symbolEdit cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
     }
     if (!args.symbolEdit || typeof args.symbolEdit !== 'object' || Array.isArray(args.symbolEdit)) {
@@ -633,7 +634,7 @@ function assertSupportedEditForm(args = {}) {
     throw new Error(`relai_edit writeId is valid only with stage. ${EDIT_FORM_GUIDANCE}`);
   }
 
-  const selected = [hasBatch, hasPatch, hasContent, hasExact].filter(Boolean).length;
+  const selected = [hasBatch, hasPatch, hasContent, hasFile, hasExact].filter(Boolean).length;
   if (selected > 1) {
     throw new Error(`relai_edit received ambiguous, conflicting primary edit forms. ${EDIT_FORM_GUIDANCE}`);
   }
@@ -644,7 +645,7 @@ function assertSupportedEditForm(args = {}) {
   if (!String(args.path || '').trim()) {
     throw new Error(`relai_edit path is required for complete content and exact replacement forms. ${EDIT_FORM_GUIDANCE}`);
   }
-  if (hasContent) return;
+  if (hasContent || hasFile) return;
 
   const hasOldText = has('oldText');
   const hasNewText = has('newText');

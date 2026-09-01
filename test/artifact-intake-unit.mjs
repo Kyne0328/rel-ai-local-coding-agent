@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { importNativeArtifact, normalizeReference, validateDownloadUrl } from '../src/artifactIntake.js';
+import { planEdit } from '../src/executionPlanner.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-artifact-intake-'));
 const repo = path.join(root, 'repo');
@@ -48,6 +49,19 @@ try {
   assert.match(imported.sha256, /^[a-f0-9]{64}$/);
   assert.deepEqual([...fs.readFileSync(path.join(repo, 'public', 'asset.bin'))], [1, 2, 3, 4, 5]);
 
+  const throughEdit = await planEdit(workspace, config, {
+    path: 'public/via-edit.bin',
+    file: {
+      download_url: file.download_url,
+      file_id: file.file_id,
+      file_name: file.file_name,
+      mime_type: file.mime_type
+    }
+  });
+  assert.equal(throughEdit.changed, true);
+  assert.equal(throughEdit.bytes, 5);
+  assert.deepEqual([...fs.readFileSync(path.join(repo, 'public', 'via-edit.bin'))], [1, 2, 3, 4, 5]);
+
   await assert.rejects(
     () => importNativeArtifact(workspace, config, { file, path: 'public/asset.bin' }),
     /already exists/i,
@@ -64,7 +78,7 @@ try {
   );
   assert.equal(fs.existsSync(path.join(repo, 'public', 'wrong-size.bin')), false);
 
-  console.log('Native ChatGPT artifact validation, dry-run, streamed import, size checks, and no-overwrite tests passed.');
+  console.log('Native ChatGPT artifact validation, relai_edit routing, streamed import, size checks, and no-overwrite tests passed.');
 } finally {
   globalThis.fetch = originalFetch;
   fs.rmSync(root, { recursive: true, force: true });

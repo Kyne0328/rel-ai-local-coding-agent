@@ -1,4 +1,4 @@
-import { McpServer, fromJsonSchema } from '@modelcontextprotocol/server';
+import { McpServer, ResourceTemplate, fromJsonSchema } from '@modelcontextprotocol/server';
 import { readConfig } from './config.js';
 import { createRelaiRequestStateCodec, SERVER_INSTANCE_ID, toolContext } from './mcp/context.js';
 import {
@@ -13,6 +13,7 @@ import { packageMetadata as pkg } from './packageMetadata.js';
 import { listResources, readResource, resourceCacheHint } from './resources.js';
 import { getPublicToolSchemas, getToolSurfaceManifest } from './tools/schema.js';
 import { LOCAL_DEVELOPER_MODE } from './mcp/localDeveloperMode.js';
+import { ARTIFACT_RESOURCE_TEMPLATE } from './artifactResources.js';
 
 const MCP_SERVER_INFO = Object.freeze({
   name: pkg.name,
@@ -78,6 +79,18 @@ function createRelaiMcpServer(options = {}) {
       cacheHint: resourceCacheHint(resource.uri)
     }, async uri => readResource(uri.href));
   }
+  server.registerResource(
+    'Rel.AI Artifact',
+    new ResourceTemplate(ARTIFACT_RESOURCE_TEMPLATE, { list: undefined }),
+    {
+      description: 'Private task-scoped workspace artifact returned by relai_read asResource.',
+      mimeType: 'application/octet-stream',
+      cacheHint: { ttlMs: 0, cacheScope: 'private' }
+    },
+    async (uri, _variables, context) => readResource(uri.href, {
+      principal: options.principal || context?.http?.authInfo
+    })
+  );
   return server;
 }
 

@@ -9,6 +9,7 @@ const MAX_TOOL_TEXT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_TEXT_BYTES ||
 
 function toolResult(payload, isError, meta) {
   const imageContent = toolImageContent(payload);
+  const resourceLinkContent = toolResourceLinkContent(payload);
   const structuredPayload = imageContent ? withoutImageData(payload) : payload;
   const serialized = JSON.stringify(structuredPayload);
   const bytes = Buffer.byteLength(serialized, 'utf8');
@@ -23,7 +24,8 @@ function toolResult(payload, isError, meta) {
   return {
     content: [
       { type: 'text', text: truncateUtf8Head(text, MAX_TOOL_TEXT_BYTES) },
-      ...(imageContent ? [imageContent] : [])
+      ...(imageContent ? [imageContent] : []),
+      ...(resourceLinkContent ? [resourceLinkContent] : [])
     ],
     structuredContent,
     isError: Boolean(isError),
@@ -38,6 +40,22 @@ function toolImageContent(payload) {
   const mimeType = typeof image.mimeType === 'string' ? image.mimeType : '';
   if (!data || !/^image\/[A-Za-z0-9.+-]+$/.test(mimeType)) return null;
   return { type: 'image', data, mimeType };
+}
+
+function toolResourceLinkContent(payload) {
+  const link = payload?.resourceLink;
+  if (!link || typeof link !== 'object' || Array.isArray(link)) return null;
+  const uri = typeof link.uri === 'string' ? link.uri : '';
+  const name = typeof link.name === 'string' ? link.name : '';
+  if (!uri || !name) return null;
+  return {
+    type: 'resource_link',
+    uri,
+    name,
+    ...(typeof link.description === 'string' && link.description ? { description: link.description } : {}),
+    ...(typeof link.mimeType === 'string' && link.mimeType ? { mimeType: link.mimeType } : {}),
+    ...(Number.isSafeInteger(link.size) && link.size >= 0 ? { size: link.size } : {})
+  };
 }
 
 function withoutImageData(payload) {

@@ -129,7 +129,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_read', title: 'Read Repository',
-    description: 'Use when exact file content, ranges, directories, one discovered skill, or a task-scoped outputRef from truncated relai_exec output is known and needed. Do not use for discovery across unknown locations.'
+    description: 'Use when exact file content, ranges, directories, one discovered skill, or a task-scoped outputRef from truncated relai_exec output is known and needed. Use asResource:true with one exact file path when the file itself must be transferred or downloaded instead of read as text. Do not use for discovery across unknown locations.'
   },
   {
     name: 'relai_search', title: 'Search Repository',
@@ -143,7 +143,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_edit', title: 'Edit Repository',
-    description: 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Use semantic for language-server-authoritative rename, symbolEdit for indexed structural symbol replacement/insertion, oldText/newText for localized changes, content for complete-file replacement, edits for an atomic structured batch, or updateText for patch-shaped changes. Keep a repository-wide patch-shaped change in one logical updateText patch when the transport permits it. Rel.AI automatically handles large complete-file writes; use explicit staged mode only when a client transport cannot carry the intended payload in one request.',
+    description: 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Use semantic for language-server-authoritative rename, symbolEdit for indexed structural symbol replacement/insertion, oldText/newText for localized changes, content for complete-file replacement, file for a native ChatGPT file import, edits for an atomic structured batch, or updateText for patch-shaped changes. Keep a repository-wide patch-shaped change in one logical updateText patch when the transport permits it. Rel.AI automatically handles large complete-file writes; use explicit staged mode only when a client transport cannot carry the intended payload in one request.',
     dashboard: { capabilities: ['edit'] }
   },
   {

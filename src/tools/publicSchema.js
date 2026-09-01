@@ -1,4 +1,7 @@
 const PUBLIC_INPUT_DESCRIPTIONS = Object.freeze({
+  relai_read: new Set([
+    'properties.asResource.description'
+  ]),
   relai_edit: new Set([
     'description',
     'properties.workspace.description',
@@ -8,6 +11,7 @@ const PUBLIC_INPUT_DESCRIPTIONS = Object.freeze({
     'properties.occurrence.description',
     'properties.replacements.description',
     'properties.content.description',
+    'properties.file.description',
     'properties.expectedSha256.description',
     'properties.updateText.description',
     'properties.envAction.description',

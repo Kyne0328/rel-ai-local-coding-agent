@@ -32,7 +32,8 @@ function buildPublicToolSchema(definition) {
   const uiMetadata = toolUiMetadata(schema.name);
   const meta = Object.freeze({
     securitySchemes: LOCAL_DEVELOPER_SECURITY_SCHEMES,
-    ...(uiMetadata || {})
+    ...(uiMetadata || {}),
+    ...(schema.name === 'relai_edit' ? { 'openai/fileParams': ['file'] } : {})
   });
   return {
     ...schema,
