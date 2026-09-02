@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 
 import { listResources } from '../src/resources.js';
-import { getMcpToolSchemas } from '../src/tools/schema.js';
+import { getPublicToolSchemas } from '../src/tools/schema.js';
 
-const tools = getMcpToolSchemas();
+const tools = getPublicToolSchemas();
 const work = tools.find(tool => tool.name === 'relai_work');
 const iframeTools = tools.filter(tool => tool._meta?.ui?.resourceUri || tool._meta?.['openai/outputTemplate']);
 
