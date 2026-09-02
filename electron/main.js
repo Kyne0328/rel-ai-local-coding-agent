@@ -164,9 +164,10 @@ const serviceProcessClient = createServiceProcessClient({
     if (isQuitting || !currentStatus.serverRunning) return;
     setStatus(desktopStatusFailure(
       ERROR_CODES.LOCAL_SERVICE_START_FAILED,
-      `Local service process exited unexpectedly with code ${code}.`,
+      `Local service process exited unexpectedly with code ${code}. Rel.AI is restarting the connection.`,
       { serverRunning: false, tunnelStatus: 'failed' }
     ));
+    void launchConfiguredDesktop({ restart: true, background: true });
   }
 });
 runtimeLogs.onChange(change => serviceProcessClient.updateContext({ runtimeLogChange: change }));

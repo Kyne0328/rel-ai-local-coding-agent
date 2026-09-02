@@ -153,6 +153,7 @@ assert.match(main, /await showDashboardWindow\(''\)/, 'first-run tunnel completi
 assert.match(main, /app\.relaunch\(\)/, 'desktop recovery must provide a full application relaunch escape hatch');
 assert.match(main, /taskActivityBlockReason\(toolActivityRuntime\.getStatus\(\), 'restarting Rel\.AI'\)/, 'full app restart must remain guarded while Rel.AI work is active');
 assert.match(main, /onReady:\s*hydrateRecoveryWindow/, 'recovery reloads must rehydrate from authoritative desktop state');
+assert.match(main, /onExit:\s*\(\{ code \}\) => \{[\s\S]*!currentStatus\.serverRunning[\s\S]*launchConfiguredDesktop\(\{ restart: true, background: true \}\)/, 'an unexpected healthy local-service exit must restart the full connection in the background instead of leaving the dashboard reconnecting forever');
 assert.match(main, /runtimeLogs\.snapshot\(\{\s*limit:\s*100\s*\}\)\.entries[\s\S]{0,120}recoveryWindowManager\.sendLog\(entry\)/, 'recovery reloads must restore the bounded recent diagnostic log tail');
 assert.doesNotMatch(main, /waitForLocalService|setTimeout\(poll,\s*20\)/, 'local service readiness must not use a 20ms polling loop');
 assert.match(main, /options\.firstRun \|\| options\.background[\s\S]{0,80}\? await pendingStart[\s\S]{0,80}: await serviceRuntime\.waitUntilListening\(0\)/, 'foreground startup must follow authoritative local readiness instead of opening Recovery on a shorter UI-only timeout');
