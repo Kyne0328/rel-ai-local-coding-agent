@@ -117,6 +117,7 @@ function openArtifactClaims(config, token) {
   try {
     const encoded = Buffer.from(token, 'base64url');
     if (encoded.length < 29) throw new Error('short token');
+    if (encoded.toString('base64url') !== token) throw new Error('non-canonical token');
     const iv = encoded.subarray(0, 12);
     const tag = encoded.subarray(12, 28);
     const encrypted = encoded.subarray(28);

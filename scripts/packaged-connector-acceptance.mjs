@@ -166,7 +166,7 @@ try {
     oldText: 'packaged connector acceptance\n',
     newText: 'packaged connector acceptance verified\n',
     returnDiff: true
-  });
+  }, { expectNativeTask: true });
   assert.equal(edited.changed, true);
   assert.ok(edited.changedFiles?.includes('acceptance.txt'));
   assert.equal(fs.readFileSync(path.join(workspace, 'acceptance.txt'), 'utf8'), 'packaged connector acceptance verified\n');

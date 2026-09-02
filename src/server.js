@@ -43,24 +43,26 @@ async function main() {
   process.once('SIGINT', () => { void cleanup().finally(() => process.exit(0)); });
   process.once('SIGTERM', () => { void cleanup().finally(() => process.exit(0)); });
   process.once('beforeExit', () => { void cleanup(); });
-  try {
-    return await serveStdio(
-      () => createRelaiMcpServer({
-        transportType: 'stdio',
-        nativeTasks: true,
-        principal
-      }),
-      {
-        legacy: 'reject',
-        transport,
-        onerror(error) {
-          console.error(`[rel-ai-mcp] MCP stdio error: ${error instanceof Error ? error.message : String(error)}`);
-        }
+  const handle = serveStdio(
+    () => createRelaiMcpServer({
+      transportType: 'stdio',
+      nativeTasks: true,
+      principal
+    }),
+    {
+      legacy: 'reject',
+      transport,
+      onerror(error) {
+        console.error(`[rel-ai-mcp] MCP stdio error: ${error instanceof Error ? error.message : String(error)}`);
       }
-    );
-  } finally {
-    await cleanup();
-  }
+    }
+  );
+  const sdkOnClose = transport.onclose;
+  transport.onclose = () => {
+    sdkOnClose?.();
+    void cleanup();
+  };
+  return handle;
 }
 
 export { main, SERVER_INSTANCE_ID };
