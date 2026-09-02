@@ -96,7 +96,7 @@ function _connect() {
     closeSource();
     if (_stopped) return;
     _retryCount += 1;
-    emitState('reconnecting');
+    emitState('reconnecting', { recoveryProbe: true });
     const delay = Math.min(15000, 750 * (2 ** Math.min(_retryCount - 1, 4)));
     clearReconnect();
     _reconnectTimer = window.setTimeout(() => {

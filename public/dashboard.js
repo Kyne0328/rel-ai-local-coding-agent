@@ -193,7 +193,16 @@ function lazySection(loadModule, mount) {
 function renderRouteFailure(element, error) {
   const message = error instanceof Error ? error.message : String(error || 'The page could not be loaded.');
   element.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Page unavailable</span><h2>This page could not load.</h2><p>${escapeHtml(message)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-route-retry>Retry page</button><a class="buttonlike secondary" href="#diagnostics">Open Troubleshooting</a></div></div></div>`;
-  element.querySelector('[data-route-retry]')?.addEventListener('click', () => rerender({ preserveView: false }));
+  element.querySelector('[data-route-retry]')?.addEventListener('click', retryRouteFailure);
+}
+
+function retryRouteFailure() {
+  const desktop = window.relaiDesktop;
+  if (typeof desktop?.reloadDashboard === 'function') {
+    void desktop.reloadDashboard(window.location.hash || '#home').catch(debugError);
+    return;
+  }
+  window.location.reload();
 }
 
 function settingsSubPage() {
@@ -515,7 +524,7 @@ async function updateLiveView(data) {
 
 function liveStateChange(detail) {
   const catchUpRequired = detail.state === 'live' && liveCatchUpRequired(getStore().live, detail);
-  const reconnectStarted = surface === 'desktop' && detail.state === 'reconnecting' && _liveState !== 'reconnecting';
+  const reconnectProbeRequired = surface === 'desktop' && detail.state === 'reconnecting' && detail.recoveryProbe === true;
   _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
   const projected = withConnectionState(getStore(), _liveState);
@@ -523,7 +532,7 @@ function liveStateChange(detail) {
   const data = getStore();
   renderConnectionStatus();
   if (_routerReady && currentRoutePath() === 'settings/connection') void syncLiveView(data);
-  if (reconnectStarted) void doRefresh({ source: 'sse-reconnect-probe', quietFailure: true, render: false });
+  if (reconnectProbeRequired) void doRefresh({ source: 'sse-reconnect-probe', quietFailure: true, render: false });
   if (catchUpRequired) void doRefresh({ source: 'sse-catch-up' });
 }
 
