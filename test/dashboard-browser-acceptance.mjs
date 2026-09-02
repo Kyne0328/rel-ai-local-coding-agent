@@ -116,7 +116,7 @@ try {
   assert.equal(result.taskInteraction.dialog, true);
   assert.ok(result.taskInteraction.detailText.length > 100);
   assert.equal(result.taskInteraction.workSessionId, true);
-  assert.ok(result.taskInteraction.eventLinks > 0);
+  assert.ok(result.taskInteraction.eventLinks > 0, JSON.stringify(result.taskInteraction));
   assert.notEqual(result.keyboard.afterFocus.tag, 'BODY');
   assert.equal(result.activityInteraction.expanded, true);
   assert.equal(result.activityInteraction.copyButton, true);

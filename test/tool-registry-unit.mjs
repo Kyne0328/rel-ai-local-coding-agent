@@ -34,9 +34,15 @@ assert.equal(getToolDefinitions(config).length, TOOL_NAMES.length);
 const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
 const mcpSchemas = getMcpToolSchemas(config);
+const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
 assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact model-facing tool surface');
-assert.equal(mcpSchemas.length, 12, 'native status presentation must not add app-only helper tools');
-assert.equal(mcpSchemas.some(item => item.name.startsWith('relai_app_')), false, 'no app-only status helper may be registered');
+assert.equal(mcpSchemas.length, 14, 'approval transport adds one render tool and one app-only decision helper');
+assert.ok(mcpSchemas.some(item => item.name === 'relai_approval'), 'approval render tool must be registered');
+assert.deepEqual(
+  mcpSchemas.filter(item => item.name.startsWith('relai_app_')).map(item => item.name),
+  ['relai_app_approval_decide'],
+  'only the approval decision helper may be app-only'
+);
 const schemaBytes = bytes(publicSchemas);
 assert.ok(schemaBytes > 0, 'unified discovery schema must serialize to a non-empty payload');
 assert.deepEqual(
@@ -81,7 +87,7 @@ for (const schema of publicSchemas) {
     assert.equal(schema.inputSchema[keyword], undefined, `${schema.name} discovery must not use root ${keyword}`);
   }
   assert.equal(schema.inputSchema.additionalProperties, false, `${schema.name} discovery must reject unknown fields`);
-  assert.deepEqual(schema.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, `${schema.name} must use local developer-mode read-only presentation hints`);
+  assert.deepEqual(schema.annotations, schemaByName.get(schema.name)?.annotations, `${schema.name} must preserve truthful canonical annotations`);
   assert.deepEqual(schema._meta?.securitySchemes, [{ type: 'noauth' }], `${schema.name} must advertise local noauth through ChatGPT compatibility metadata`);
   assert.equal(schema._meta?.ui, undefined, `${schema.name} must stay iframe-free`);
   assert.equal(schema._meta?.['openai/outputTemplate'], undefined, `${schema.name} must not attach a ChatGPT output template`);
@@ -143,7 +149,6 @@ for (const removed of removedDirectNames) {
   assert.equal(publicSchemas.some(tool => tool.name === removed), false, `${removed} must not be discovered`);
 }
 
-const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
 const publicSchemaByName = new Map(publicSchemas.map(schema => [schema.name, schema]));
 assert.deepEqual(schemaByName.get('relai_work').inputSchema.properties.action.enum, ['begin', 'status', 'finish', 'cancel']);
 const processSchema = schemaByName.get('relai_process');

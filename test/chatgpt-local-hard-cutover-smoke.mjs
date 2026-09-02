@@ -39,7 +39,7 @@ fs.writeFileSync(configPath, JSON.stringify({
   workspaces: { repo: { path: root } }
 }, null, 2));
 
-const client = startMcpClient({ root, configPath });
+const client = startMcpClient({ root, configPath, timeoutMs: 15_000 });
 try {
   client.initialize(1);
   const discovery = await client.waitFor(1);
@@ -48,9 +48,13 @@ try {
   client.send(2, 'tools/list');
   const listed = await client.waitFor(2);
   assert.equal(listed.result?.tools?.length, activeMcpToolCount);
-  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')), [], 'hard cutover must leave no app-only helper tools');
-  assert.ok(listed.result.tools.every(tool => tool._meta?.ui === undefined && tool._meta?.['openai/outputTemplate'] === undefined),
-    'hard cutover keeps the canonical tool surface iframe-free while native invocation labels provide status');
+  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool.name), ['relai_app_approval_decide']);
+  const listedByName = new Map(listed.result.tools.map(tool => [tool.name, tool]));
+  for (const tool of listed.result.tools.filter(tool => getToolSurfaceManifest({ workspaces: {} }).tools.some(item => item.name === tool.name))) {
+    assert.equal(tool._meta?.ui, undefined, `${tool.name} must keep the canonical tool surface iframe-free`);
+    assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must not attach a ChatGPT output template`);
+  }
+  assert.equal(listedByName.get('relai_approval')?._meta?.ui?.resourceUri, 'ui://relai/approval/v1.html');
   assert.ok(listed.result.tools.every(tool => tool.outputSchema));
   assert.ok(removedTools.every(name => listed.result.tools.every(tool => tool.name !== name)));
 
@@ -74,7 +78,7 @@ try {
   requestId += 1;
 
   client.call(requestId, 'relai_validate', {
-    action: 'checks', workspace: 'repo', work_id: task.work_id, check: 'node -e "process.exit(1)"'
+    action: 'checks', workspace: 'repo', work_id: task.work_id, check: 'node -e "process.exit(1)"', timeoutMs: 1000
   });
   const failedCheck = await client.waitFor(requestId);
   assert.equal(failedCheck.result.isError, true);

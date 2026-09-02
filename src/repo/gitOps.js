@@ -654,7 +654,7 @@ function assertPlainBranchName(branch) {
   }
 }
 
-async function relaiGitPush(workspace, config, args = {}) {
+async function resolveGitPushTarget(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const remote = await resolvePublishRemote(workspace, config, args.remote || "origin");
   const branch = String(args.branch || await currentGitBranch(workspace, config)).trim();
@@ -662,8 +662,21 @@ async function relaiGitPush(workspace, config, args = {}) {
   // git push treats this argument as a refspec: ":main" deletes the remote branch and
   // "+HEAD:main" force-pushes over it. Accept a plain branch name only.
   assertPlainBranchName(branch);
+  const head = await resolveCommitHead(workspace, config);
+  if (!head) throw new Error('relai_publish action "push" could not resolve the current HEAD commit.');
+  return {
+    workspace: workspace.alias,
+    remote,
+    branch,
+    head,
+    setUpstream: Boolean(args.setUpstream)
+  };
+}
+
+async function relaiGitPush(workspace, config, args = {}) {
+  const target = await resolveGitPushTarget(workspace, config, args);
+  const { remote, branch, setUpstream } = target;
   const dryRun = Boolean(args.dryRun);
-  const setUpstream = Boolean(args.setUpstream);
   const pushArgs = ["push", ...(dryRun ? ["--dry-run"] : []), ...(setUpstream ? ["--set-upstream"] : []), remote, branch];
   const push = await runProcess("git", pushArgs, {
     cwd: workspace.path,
@@ -700,4 +713,4 @@ async function relaiGitDraftPr(workspace, config, args = {}) {
   };
 }
 
-export { workspaceGitStatus, workspaceDirtyPaths, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership, assertPatchUpdateSafe, ensureGitRepo, inspectPatchPaths };
+export { workspaceGitStatus, workspaceDirtyPaths, relaiGitCommit, relaiGitPush, relaiGitDraftPr, resolveGitPushTarget, classifyStatusOwnership, assertPatchUpdateSafe, ensureGitRepo, inspectPatchPaths };

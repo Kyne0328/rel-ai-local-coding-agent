@@ -99,18 +99,17 @@ try {
   const listedToolBytes = Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools }));
   assert.ok(listedToolBytes > 0, 'HTTP tools/list must serialize to a non-empty response');
   const names = listed.body.result.tools.map(tool => tool.name);
-  const publicNames = listed.body.result.tools.filter(tool => !tool.name.startsWith('relai_app_')).map(tool => tool.name);
+  const publicNames = listed.body.result.tools.filter(tool => activeToolNames.includes(tool.name)).map(tool => tool.name);
   assert.deepEqual(publicNames, activeToolNames, 'HTTP discovery must retain the canonical 12-tool model surface');
   const listedByName = new Map(listed.body.result.tools.map(tool => [tool.name, tool]));
   for (const name of activeToolNames) {
-    assert.deepEqual(listedByName.get(name)?.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, `${name} must present as read-only in local developer mode`);
     assert.deepEqual(listedByName.get(name)?._meta?.securitySchemes, [{ type: 'noauth' }], `${name} must advertise noauth through ChatGPT compatibility metadata`);
+    assert.equal(listedByName.get(name)?._meta?.ui, undefined, `${name} must stay iframe-free`);
+    assert.equal(listedByName.get(name)?._meta?.['openai/outputTemplate'], undefined, `${name} must not attach a ChatGPT output template`);
   }
-  assert.equal(names.some(name => name.startsWith('relai_app_')), false, 'native status presentation must not require app-only helper tools');
-  for (const tool of listed.body.result.tools) {
-    assert.equal(tool._meta?.ui, undefined, `${tool.name} must stay iframe-free`);
-    assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must not attach a ChatGPT output template`);
-  }
+  assert.deepEqual(listedByName.get('relai_publish')?.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
+  assert.equal(listedByName.get('relai_approval')?._meta?.ui?.resourceUri, 'ui://relai/approval/v1.html');
+  assert.deepEqual(listedByName.get('relai_app_approval_decide')?._meta?.ui?.visibility, ['app']);
   for (const expected of activeToolNames) assert.ok(names.includes(expected), `${expected} missing`);
   for (const legacy of ['relai_begin_work', 'relai_process_start', 'relai_run_checks', 'relai_git_push']) {
     assert.equal(names.includes(legacy), false, `${legacy} must not be exposed by the unified surface`);
@@ -273,7 +272,7 @@ try {
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));
-  assert.equal(resources.body.result.resources.some(item => String(item.uri || '').startsWith('ui://relai/')), false, 'resource discovery must not advertise a Rel.AI iframe component');
+  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/approval/v1.html'), 'resource discovery must advertise the focused approval component');
   assert.equal(resources.body.result._meta?.['io.modelcontextprotocol/cache']?.cacheScope || resources.body.result.cacheScope || 'private', 'private');
 
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });

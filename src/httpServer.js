@@ -8,6 +8,7 @@ import { isDashboardAuthorized } from "./http/auth.js";
 import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleReleaseNotes, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
+import { handleApiApprovalDecision, handleApiApprovals } from './http/dashboardApprovals.js';
 import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, sendMcpTransportError, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
@@ -250,6 +251,7 @@ const GET_ROUTES = {
   "/api/connection": { auth: authDashboard, handler: handleConnection },
   "/api/dashboard/v10": { auth: authDashboard, handler: handleDashboardV10 },
   "/api/tasks/session": { auth: authDashboard, handler: handleTaskSession },
+  "/api/approvals": { auth: authDashboard, handler: handleApiApprovals },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
   "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
@@ -278,7 +280,8 @@ const POST_ROUTES = {
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
   "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks },
-  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop }
+  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop },
+  "/api/approvals/decide": { auth: authDashboard, handler: handleApiApprovalDecision }
 };
 
 export { resolveHttpRequestTimeoutMs, startHttpServer };

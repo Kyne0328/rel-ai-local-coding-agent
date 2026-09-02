@@ -17,7 +17,7 @@ import { electronPlatformSpec, normalizeElectronArch, normalizeElectronPlatform 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseManifest = JSON.parse(fs.readFileSync(path.join(root, 'release-manifest.json'), 'utf8'));
 const { applicationVersion, protocolVersion: mcpProtocolVersion, toolSurfaceVersion, toolCount } = releaseManifest;
-const mcpToolCount = toolCount;
+const mcpToolCount = toolCount + 2;
 const platform = normalizeElectronPlatform(process.env.REL_AI_TARGET_PLATFORM || process.platform);
 const targetArch = normalizeElectronArch(process.env.REL_AI_TARGET_ARCH || process.arch);
 const platformSpec = electronPlatformSpec(platform, targetArch);
@@ -117,22 +117,22 @@ try {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
   }
   assert.equal(toolNames.has('relai_native_tasks_probe'), false);
-  assert.deepEqual(tools.result.tools.filter(tool => tool.name.startsWith('relai_app_')), [], 'packaged surface must contain no app-only helper tools');
-  for (const tool of tools.result.tools) {
-    assert.deepEqual(tool.annotations, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-  }
+  assert.deepEqual(tools.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool.name), ['relai_app_approval_decide']);
   const toolByName = new Map(tools.result.tools.map(tool => [tool.name, tool]));
-  for (const tool of tools.result.tools) {
+  for (const tool of tools.result.tools.filter(tool => toolNames.has(tool.name) && !['relai_approval', 'relai_app_approval_decide'].includes(tool.name))) {
     assert.equal(tool._meta?.ui, undefined, `${tool.name} must stay iframe-free in the packaged connector`);
     assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must not attach a ChatGPT output template`);
   }
+  assert.deepEqual(toolByName.get('relai_publish')?.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
+  assert.equal(toolByName.get('relai_approval')?._meta?.ui?.resourceUri, 'ui://relai/approval/v1.html');
+  assert.deepEqual(toolByName.get('relai_app_approval_decide')?._meta?.ui?.visibility, ['app']);
   assert.equal(toolByName.get('relai_validate')?.execution, undefined);
   assert.equal(toolByName.get('relai_exec')?.execution, undefined);
   assert.equal(toolByName.get('relai_process')?.execution, undefined);
   const resourcesList = await mcp(primarySession, 12, 'resources/list', {});
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
-  assert.equal(resourcesList.result?.resources?.some(item => String(item.uri || '').startsWith('ui://relai/')), false);
+  assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'ui://relai/approval/v1.html'));
   const surface = await readResource(primarySession, 13, 'relai://server/tool-surface');
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);

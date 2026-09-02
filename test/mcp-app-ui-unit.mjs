@@ -3,16 +3,21 @@ import { ToolSchema } from '@modelcontextprotocol/core';
 
 import { toolUiMetadata } from '../src/mcp/appUi.js';
 import { openAiConversationId, toolContext } from '../src/mcp/context.js';
-import { LOCAL_DEVELOPER_SECURITY_SCHEMES, LOCAL_DEVELOPER_TOOL_ANNOTATIONS } from '../src/mcp/localDeveloperMode.js';
+import { LOCAL_DEVELOPER_SECURITY_SCHEMES } from '../src/mcp/localDeveloperMode.js';
+import { APPROVAL_DECISION_TOOL, APPROVAL_RENDER_TOOL, APPROVAL_UI_URI, approvalAppHtml } from '../src/mcp/approvalApp.js';
 import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from '../src/mcp/serverInstructions.js';
-import { getMcpToolSchemas, getPublicToolSchemas } from '../src/tools/schema.js';
+import { getMcpToolSchemas, getPublicToolSchemas, getToolSchemas } from '../src/tools/schema.js';
 
 const publicSchemas = getPublicToolSchemas();
 const mcpSchemas = getMcpToolSchemas();
+const canonicalByName = new Map(getToolSchemas().map(schema => [schema.name, schema]));
+const mcpByName = new Map(mcpSchemas.map(schema => [schema.name, schema]));
 
-assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact 12-tool model surface');
-assert.equal(mcpSchemas.length, 12, 'native status presentation must not add helper tools');
-assert.equal(mcpSchemas.some(schema => schema.name.startsWith('relai_app_')), false, 'no app-only status helper may be registered');
+assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact 12-tool canonical surface');
+assert.equal(mcpSchemas.length, 14, 'approval transport adds one render tool and one app-only decision helper');
+assert.deepEqual(mcpSchemas.filter(schema => schema.name.startsWith('relai_app_')).map(schema => schema.name), [APPROVAL_DECISION_TOOL]);
+assert.equal(mcpByName.get(APPROVAL_RENDER_TOOL)?._meta?.ui?.resourceUri, APPROVAL_UI_URI);
+assert.deepEqual(mcpByName.get(APPROVAL_DECISION_TOOL)?._meta?.ui?.visibility, ['app']);
 for (const schema of mcpSchemas) assert.equal(ToolSchema.safeParse(schema).success, true, `${schema.name} must remain a valid MCP tool descriptor`);
 
 const invocationLabels = new Map([
@@ -31,7 +36,7 @@ const invocationLabels = new Map([
 ]);
 
 for (const schema of publicSchemas) {
-  assert.deepEqual(schema.annotations, LOCAL_DEVELOPER_TOOL_ANNOTATIONS, `${schema.name} must present as read-only to the local ChatGPT connector`);
+  assert.deepEqual(schema.annotations, canonicalByName.get(schema.name)?.annotations, `${schema.name} must preserve truthful canonical annotations`);
   assert.deepEqual(schema._meta?.securitySchemes, LOCAL_DEVELOPER_SECURITY_SCHEMES, `${schema.name} must advertise noauth compatibility metadata`);
   const expected = invocationLabels.get(schema.name);
   assert.deepEqual([
@@ -47,6 +52,10 @@ for (const schema of publicSchemas) {
   assert.ok(expected.every(label => label.length <= 64));
 }
 
+assert.deepEqual(mcpByName.get('relai_publish')?.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
+assert.match(approvalAppHtml(), /Push to/);
+assert.match(approvalAppHtml(), new RegExp(APPROVAL_DECISION_TOOL));
+
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /brief normal assistant progress messages/i, 'server instructions must preserve visible progress around tool use');
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /Native tool invocation labels are supplemental status only and must not replace those progress messages/i);
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /do not expose private chain-of-thought/i);
@@ -55,4 +64,4 @@ const openAiEnvelope = { 'openai/session': 'chat-session-regression' };
 assert.equal(openAiConversationId(openAiEnvelope), 'chat-session-regression');
 assert.equal(toolContext({ mcpReq: { id: 42, _meta: openAiEnvelope, envelope: {} } }).conversationId, 'chat-session-regression');
 
-console.log('Native ChatGPT status labels coexist with user-visible progress without mounting a Rel.AI iframe.');
+console.log('Canonical tools keep native status labels; the focused approval flow alone mounts an MCP App control.');

@@ -512,7 +512,18 @@ async function exerciseNavigationControls(win, failures) {
   const results = [];
   for (const scenario of scenarios) {
     if (scenario.opener) {
-      await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(scenario.opener)})?.click()`);
+      const openerTarget = await win.webContents.executeJavaScript(`(() => {
+        const opener = document.querySelector(${JSON.stringify(scenario.opener)});
+        if (!opener || opener.parentElement?.open === true) return null;
+        opener.scrollIntoView({ block: 'center', inline: 'center' });
+        const rect = opener.getBoundingClientRect();
+        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+      })()`);
+      if (openerTarget) {
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: openerTarget.x, y: openerTarget.y });
+        win.webContents.sendInputEvent({ type: 'mouseDown', x: openerTarget.x, y: openerTarget.y, button: 'left', clickCount: 1 });
+        win.webContents.sendInputEvent({ type: 'mouseUp', x: openerTarget.x, y: openerTarget.y, button: 'left', clickCount: 1 });
+      }
       await waitFor(win, `document.querySelector(${JSON.stringify(scenario.opener)})?.parentElement?.open === true`);
     }
     const hitTarget = await win.webContents.executeJavaScript(`(() => {

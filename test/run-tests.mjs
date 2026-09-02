@@ -20,6 +20,7 @@ const files = [
   'toast-unit.mjs',
   'secure-tunnel-packaging-contract-unit.mjs',
   'authorization-policy-unit.mjs',
+  'approval-broker-unit.mjs',
   'connector-result-contract-unit.mjs',
   'repeat-call-guard-unit.mjs',
   'desktop-lifecycle-unit.mjs',

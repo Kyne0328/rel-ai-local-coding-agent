@@ -174,7 +174,12 @@ try {
 } finally {
   if (client) await client.close().catch(() => {});
   await stopHttpTestServer(child);
-  fs.rmSync(stateDir, { recursive: true, force: true });
+  fs.rmSync(stateDir, {
+    recursive: true,
+    force: true,
+    maxRetries: process.platform === 'win32' ? 20 : 2,
+    retryDelay: 100
+  });
 }
 
 console.log('MCP 2026-07-28 synchronous tool execution and Tasks protocol routing passed.');

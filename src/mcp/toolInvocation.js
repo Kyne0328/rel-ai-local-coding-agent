@@ -11,8 +11,10 @@ async function invokeRelaiTool(options = {}) {
       const approval = await requireApprovalIfNeeded(
         name,
         args,
+        options.context || {},
         options.approvalContext,
-        options.requestStateCodec
+        options.requestStateCodec,
+        options.config
       );
       if (approval) return approval;
     }

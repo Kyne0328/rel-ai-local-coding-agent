@@ -231,7 +231,7 @@ try {
     startManagedProcess(workspace, config, {
       executable: process.execPath,
       argv: [exitScript],
-      startupWaitMs: 500,
+      startupWaitMs: 5000,
       label: 'startup-failure',
       kind: 'service',
       purpose: 'Exercise startup failure cleanup.'

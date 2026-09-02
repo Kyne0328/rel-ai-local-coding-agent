@@ -1,4 +1,4 @@
-import { fetchJson } from '../../api.js';
+import { fetchJson, postJson } from '../../api.js';
 import { closeDrawer, openDrawer, updateDrawer } from '../../components/drawer.js';
 import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
@@ -14,6 +14,8 @@ import { taskEntityView, workSessionStateView } from '../../task-identity.js';
 
 const SESSION_PAGE_SIZE = 50;
 const TASK_SESSION_URL = '/api/tasks/session';
+const APPROVALS_URL = '/api/approvals';
+const APPROVAL_DECISION_URL = '/api/approvals/decide';
 const DETAIL_FILE_PREVIEW = 12;
 const DETAIL_EVENT_PREVIEW = 8;
 const visibleCounts = new Map();
@@ -42,7 +44,8 @@ export function mountTasks(container, data = {}) {
         ${workspaceMenuHtml(data.config?.workspaces || [], workspace, { id: 'sessionsWorkspaceMenu' })}
         <span class="feature-count">${esc(sessionCountLabel(sessions, workspace))}</span>
       </div>
-    </div>`;
+    </div>
+    <div data-pending-approvals></div>`;
 
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
@@ -66,6 +69,7 @@ export function mountTasks(container, data = {}) {
   container.appendChild(root);
   bindWorkspaceMenus(root);
   bindCopyActions(root);
+  void refreshPendingApprovals(root);
   maybeOpenRequestedSession();
 }
 
@@ -89,8 +93,58 @@ export function updateTaskSessions(container, data = {}) {
   const body = current.querySelector('.task-list');
   if (body) reconcileSessionRows(body, sessions, scopeKey);
   refreshOpenSession(data);
+  void refreshPendingApprovals(current);
   maybeOpenRequestedSession();
   return true;
+}
+
+async function refreshPendingApprovals(root) {
+  const host = root.querySelector('[data-pending-approvals]');
+  if (!host) return;
+  const response = await fetchJson(APPROVALS_URL, { cache: 'no-store' });
+  const approvals = response?.ok === true && Array.isArray(response.approvals) ? response.approvals : [];
+  host.innerHTML = approvals.map(approvalCardHtml).join('');
+  host.onclick = event => {
+    const button = event.target.closest('[data-approval-decision]');
+    if (!button) return;
+    void decideDashboardApproval(button, root);
+  };
+}
+
+function approvalCardHtml(approval) {
+  const target = [approval.remote, approval.branch].filter(Boolean).join('/');
+  const title = approval.operation === 'push' ? 'Push ready' : 'Approval required';
+  const approveLabel = approval.operation === 'push' && approval.remote ? `Push to ${approval.remote}` : 'Approve';
+  return `<section class="card" data-approval-card="${esc(approval.approvalId)}">
+    <div class="card-head"><div><h3>${esc(title)}</h3><p>${esc(approval.message || 'Confirm this Rel.AI operation.')}</p></div></div>
+    <div class="card-body">
+      <div class="task-detail-grid">
+        ${target ? `<div><span>Target</span><strong>${esc(target)}</strong></div>` : ''}
+        ${approval.head ? `<div><span>Commit</span><code>${esc(String(approval.head).slice(0, 12))}</code></div>` : ''}
+        ${approval.workspace ? `<div><span>Project</span><strong>${esc(approval.workspace)}</strong></div>` : ''}
+      </div>
+      <div class="section-head-actions">
+        <button class="section-action" type="button" data-approval-decision="approve" data-approval-id="${esc(approval.approvalId)}">${esc(approveLabel)}</button>
+        <button class="section-action" type="button" data-approval-decision="cancel" data-approval-id="${esc(approval.approvalId)}">Cancel</button>
+      </div>
+    </div>
+  </section>`;
+}
+
+async function decideDashboardApproval(button, root) {
+  const approvalId = String(button.dataset.approvalId || '').trim();
+  if (!approvalId) return;
+  const card = button.closest('[data-approval-card]');
+  for (const control of card?.querySelectorAll('button') || []) control.disabled = true;
+  const approved = button.dataset.approvalDecision === 'approve';
+  const result = await postJson(APPROVAL_DECISION_URL, { approvalId, approved });
+  if (result?.ok === false && result?.cancelled !== true) {
+    toast(result.error || 'Rel.AI could not complete this approval.', { variant: 'error' });
+    for (const control of card?.querySelectorAll('button') || []) control.disabled = false;
+    return;
+  }
+  toast(approved ? 'Operation approved.' : 'Operation cancelled.');
+  await refreshPendingApprovals(root);
 }
 
 function syncSessionWorkspaceMenu(current, workspaces, selected) {
@@ -603,7 +657,8 @@ function fileList(files) {
 }
 
 function taskTraceSection(trace, fallbackEvents, session) {
-  const events = Array.isArray(trace?.entries) ? trace.entries : fallbackEvents;
+  const traceEvents = Array.isArray(trace?.entries) ? trace.entries : [];
+  const events = traceEvents.length ? traceEvents : fallbackEvents;
   if (!events.length) return '';
   const ordered = orderSessionEvents(events);
   const visible = ordered.slice(0, DETAIL_EVENT_PREVIEW);
