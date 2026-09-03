@@ -14,16 +14,6 @@ import { listResources, readResource, resourceCacheHint } from './resources.js';
 import { getPublicToolSchemas, getToolSurfaceManifest } from './tools/schema.js';
 import { LOCAL_DEVELOPER_MODE } from './mcp/localDeveloperMode.js';
 import { ARTIFACT_RESOURCE_TEMPLATE } from './artifactResources.js';
-import {
-  APPROVAL_DECISION_SCHEMA,
-  APPROVAL_DECISION_TOOL,
-  APPROVAL_RENDER_SCHEMA,
-  APPROVAL_RENDER_TOOL,
-  APPROVAL_UI_URI,
-  approvalAppHtml
-} from './mcp/approvalApp.js';
-import { decidePendingApproval, readPendingApproval } from './mcp/approvalBroker.js';
-import { toolResult } from './mcp/results.js';
 
 const MCP_SERVER_INFO = Object.freeze({
   name: pkg.name,
@@ -82,7 +72,6 @@ function createRelaiMcpServer(options = {}) {
   });
 
   for (const definition of definitions) registerTool(server, config, definition, requestStateCodec, options);
-  registerApprovalTools(server, config, requestStateCodec, options);
   for (const resource of listResources(config).resources) {
     server.registerResource(resource.name, resource.uri, {
       description: resource.description,
@@ -90,18 +79,6 @@ function createRelaiMcpServer(options = {}) {
       cacheHint: resourceCacheHint(resource.uri)
     }, async uri => readResource(uri.href));
   }
-  server.registerResource(
-    'Rel.AI Approval',
-    APPROVAL_UI_URI,
-    {
-      description: 'Focused confirmation control for a pending Rel.AI approval request.',
-      mimeType: 'text/html;profile=mcp-app',
-      cacheHint: { ttlMs: 30000, cacheScope: 'private' }
-    },
-    async uri => ({
-      contents: [{ uri: uri.href, mimeType: 'text/html;profile=mcp-app', text: approvalAppHtml() }]
-    })
-  );
   server.registerResource(
     'Rel.AI Artifact',
     new ResourceTemplate(ARTIFACT_RESOURCE_TEMPLATE, { list: undefined }),
@@ -128,30 +105,6 @@ function registerTool(server, config, definition, requestStateCodec, options) {
       approvalContext: context,
       requestStateCodec,
       validateOutput: output => validateToolOutput(config, definition.name, args || {}, output)
-    });
-  });
-}
-
-function registerApprovalTools(server, config, requestStateCodec, options) {
-  server.registerTool(APPROVAL_RENDER_TOOL, toolRegistration(APPROVAL_RENDER_SCHEMA), async (args, context) => {
-    const normalized = toolContext(context, options);
-    const approval = readPendingApproval(args?.approvalId, normalized.principal);
-    return approval
-      ? toolResult({ ok: true, ...approval })
-      : toolResult({ ok: false, errorCode: 'APPROVAL_NOT_FOUND', error: 'This approval is no longer available.' }, true);
-  });
-
-  server.registerTool(APPROVAL_DECISION_TOOL, toolRegistration(APPROVAL_DECISION_SCHEMA), async (args, context) => {
-    const normalized = toolContext(context, options);
-    const { callTool } = await import('./tools.js');
-    return decidePendingApproval({
-      approvalId: args?.approvalId,
-      approved: args?.approved === true,
-      context: normalized,
-      rawContext: context,
-      codec: requestStateCodec,
-      config,
-      execute: (name, pendingArgs, pendingContext) => callTool(name, pendingArgs, pendingContext)
     });
   });
 }

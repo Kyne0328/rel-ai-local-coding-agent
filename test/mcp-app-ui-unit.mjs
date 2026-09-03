@@ -4,7 +4,6 @@ import { ToolSchema } from '@modelcontextprotocol/core';
 import { toolUiMetadata } from '../src/mcp/appUi.js';
 import { openAiConversationId, toolContext } from '../src/mcp/context.js';
 import { LOCAL_DEVELOPER_SECURITY_SCHEMES } from '../src/mcp/localDeveloperMode.js';
-import { APPROVAL_DECISION_TOOL, APPROVAL_RENDER_TOOL, APPROVAL_UI_URI, approvalAppHtml } from '../src/mcp/approvalApp.js';
 import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from '../src/mcp/serverInstructions.js';
 import { getMcpToolSchemas, getPublicToolSchemas, getToolSchemas } from '../src/tools/schema.js';
 
@@ -14,10 +13,8 @@ const canonicalByName = new Map(getToolSchemas().map(schema => [schema.name, sch
 const mcpByName = new Map(mcpSchemas.map(schema => [schema.name, schema]));
 
 assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact 12-tool canonical surface');
-assert.equal(mcpSchemas.length, 14, 'approval transport adds one render tool and one app-only decision helper');
-assert.deepEqual(mcpSchemas.filter(schema => schema.name.startsWith('relai_app_')).map(schema => schema.name), [APPROVAL_DECISION_TOOL]);
-assert.equal(mcpByName.get(APPROVAL_RENDER_TOOL)?._meta?.ui?.resourceUri, APPROVAL_UI_URI);
-assert.deepEqual(mcpByName.get(APPROVAL_DECISION_TOOL)?._meta?.ui?.visibility, ['app']);
+assert.equal(mcpSchemas.length, 12, 'MCP discovery must not add an approval-card tool surface');
+assert.deepEqual(mcpSchemas.filter(schema => schema.name.startsWith('relai_app_')).map(schema => schema.name), []);
 for (const schema of mcpSchemas) assert.equal(ToolSchema.safeParse(schema).success, true, `${schema.name} must remain a valid MCP tool descriptor`);
 
 const invocationLabels = new Map([
@@ -53,8 +50,6 @@ for (const schema of publicSchemas) {
 }
 
 assert.deepEqual(mcpByName.get('relai_publish')?.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
-assert.match(approvalAppHtml(), /Push to/);
-assert.match(approvalAppHtml(), new RegExp(APPROVAL_DECISION_TOOL));
 
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /brief normal assistant progress messages/i, 'server instructions must preserve visible progress around tool use');
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /Native tool invocation labels are supplemental status only and must not replace those progress messages/i);
@@ -64,4 +59,4 @@ const openAiEnvelope = { 'openai/session': 'chat-session-regression' };
 assert.equal(openAiConversationId(openAiEnvelope), 'chat-session-regression');
 assert.equal(toolContext({ mcpReq: { id: 42, _meta: openAiEnvelope, envelope: {} } }).conversationId, 'chat-session-regression');
 
-console.log('Canonical tools keep native status labels; the focused approval flow alone mounts an MCP App control.');
+console.log('Canonical tools keep native status labels without mounting an MCP approval card.');

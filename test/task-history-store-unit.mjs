@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
+import { clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
 import { writeSession } from '../src/taskHistoryStorage.js';
 import { principalFingerprint } from '../src/mcp/principal.js';
 import { assertKnownTask } from '../src/tools/task.js';
@@ -67,6 +67,19 @@ try {
     ts: new Date(base + 302000).toISOString(), tool: 'work.finish', completionKnown: true,
     relatedTaskIds: ['exact-task'], taskSummary: 'Must remain separate.'
   }));
+  recordTaskHistoryEvent(config, currentEvent('connector-timeout-fix', {
+    ts: new Date(base + 302500).toISOString(), tool: 'work.finish', completionKnown: true,
+    taskSummary: 'Fixed connector timeout recovery without changing unrelated behavior.', changedFiles: ['src/connector.js']
+  }));
+  for (let index = 0; index < 85; index += 1) {
+    recordTaskHistoryEvent(config, currentEvent(`other-workspace-${String(index).padStart(2, '0')}`, {
+      workspace: 'other-workspace',
+      ts: new Date(base + 400000 + index * 1000).toISOString(),
+      tool: 'work.finish',
+      completionKnown: true,
+      taskSummary: `Completed unrelated other-workspace task ${index}.`
+    }));
+  }
   recordTaskHistoryEvent(config, currentEvent('atomic-completion', {
     ts: new Date(base + 303000).toISOString(), tool: 'validate.checks', validationStatus: 'passed',
     completionKnown: true, completionSource: 'relai_validate:checks', taskSummary: 'Validated atomically.', changedFiles: ['src/atomic.js']
@@ -168,6 +181,10 @@ try {
   assert.equal(exact.calls, 2);
   assert.equal(exact.status, 'completed');
   assert.equal(exact.summary, 'Completed exactly.');
+  const relatedEpisodes = readRelevantTaskEpisodes(config, 'repo', 'Investigate connector timeout recovery', { limit: 3, scanLimit: 80 });
+  assert.equal(relatedEpisodes[0].outcome, 'Fixed connector timeout recovery without changing unrelated behavior.', 'newer tasks from another workspace must not consume this workspace scan window');
+  assert.deepEqual(relatedEpisodes[0].changes, ['src/connector.js']);
+  assert.deepEqual(readRelevantTaskEpisodes(config, 'other-workspace', 'connector timeout recovery'), [], 'episodic retrieval must remain workspace-local');
   assert.equal(sessions.some(session => session.id === 'separate-task'), true, 'relatedTaskIds must not merge distinct task IDs');
   const atomic = sessions.find(session => session.id === 'atomic-completion');
   assert.equal(atomic.validation, 'passed');

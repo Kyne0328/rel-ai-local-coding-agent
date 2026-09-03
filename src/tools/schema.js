@@ -3,7 +3,6 @@ import { executableInputSchema } from './executableSchema.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
 import { compactPublicInputSchema } from './publicSchema.js';
 import { toolUiMetadata } from '../mcp/appUi.js';
-import { approvalMcpToolSchemas } from '../mcp/approvalApp.js';
 import { LOCAL_DEVELOPER_SECURITY_SCHEMES } from '../mcp/localDeveloperMode.js';
 const toolDefinitions = getCatalogToolDefinitions();
 const catalogToolByName = new Map(getCatalogTools().map(tool => [tool.definition.name, tool]));
@@ -14,7 +13,7 @@ const PUBLIC_DISCOVERY_OUTPUT_FIELDS = Object.freeze(['ok', 'workspace', 'work_i
 // on every stateless request defeats that cache and adds tens of milliseconds.
 const toolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildToolSchema(definition))));
 const publicToolSchemas = Object.freeze(toolDefinitions.map(definition => Object.freeze(buildPublicToolSchema(definition))));
-const mcpToolSchemas = Object.freeze([...publicToolSchemas, ...approvalMcpToolSchemas()]);
+const mcpToolSchemas = publicToolSchemas;
 
 function getToolSchemas() {
   return toolSchemas;

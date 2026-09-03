@@ -24,7 +24,7 @@ function startTask(workspace, args = {}) {
     title: String(args.title || context.title || '').trim() || undefined,
     objective: String(args.objective || context.objective || '').trim() || undefined,
     intent: classifyTaskIntent(args.objective || context.objective),
-    nextAction: 'Use the bootstrap context for the first action, then use each returned workflow recommendation as the default calibration. Pass this work_id on every work-scoped Rel.AI call; hard runtime errors remain authoritative.'
+    nextAction: 'Use the bootstrap context for the first action, then use each returned workflow recommendation as the default calibration. Pass this work_id on every work-scoped Rel.AI call. If host context is compacted or reconnected, relai_work status restores compact task state; hard runtime errors remain authoritative.'
   };
 }
 
@@ -81,7 +81,8 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
   const duplicateCompletion = toolName === OP.WORK_FINISH && value?.duplicate === true;
   const duplicateCancellation = toolName === OP.WORK_CANCEL && value?.duplicate === true;
   const taskId = activity?.taskId || requestedTaskId || '';
-  const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === OP.WORK_BEGIN));
+  const taskHistoryEligible = toolName !== OP.WORK_STATUS
+    && Boolean(taskId && (requestedTaskId || toolName === OP.WORK_BEGIN));
   return {
     taskId,
     scopeId: activity?.scopeId || '',

@@ -147,7 +147,7 @@ npm run electron:size:windows
 npm run electron:size:linux
 ```
 
-Electron runtime resources are fail-closed against packaging drift. Runtime roots listed by the root package (`src/`, `bin/`, `public/`, and `skills/`) are copied as complete trees instead of extension allowlists. `.codex-plugin/`, `examples/`, and `types/` are the explicit non-Electron package roots. `test/electron-launcher-smoke.mjs` requires every runtime root to have an Electron resource mapping, and `scripts/verify-packaged-app.mjs` recursively compares the built artifact's file list and SHA-256 content with source. Adding a new root runtime directory therefore fails verification until it is packaged or deliberately classified as non-Electron.
+Electron runtime resources are fail-closed against packaging drift. Runtime roots listed by the root package (`src/`, `bin/`, `public/`, and `skills/`) are copied as complete trees instead of extension allowlists. `examples/` and `types/` are the explicit non-Electron package roots. `test/electron-launcher-smoke.mjs` requires every runtime root to have an Electron resource mapping, and `scripts/verify-packaged-app.mjs` recursively compares the built artifact's file list and SHA-256 content with source. Adding a new root runtime directory therefore fails verification until it is packaged or deliberately classified as non-Electron.
 
 ## Release validation
 

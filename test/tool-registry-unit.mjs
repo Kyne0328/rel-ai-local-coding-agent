@@ -36,12 +36,12 @@ const publicSchemas = getPublicToolSchemas(config);
 const mcpSchemas = getMcpToolSchemas(config);
 const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
 assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact model-facing tool surface');
-assert.equal(mcpSchemas.length, 14, 'approval transport adds one render tool and one app-only decision helper');
-assert.ok(mcpSchemas.some(item => item.name === 'relai_approval'), 'approval render tool must be registered');
+assert.equal(mcpSchemas.length, 12, 'MCP discovery must match the compact model-facing tool surface');
+assert.equal(mcpSchemas.some(item => item.name === 'relai_approval'), false, 'removed approval render tool must stay absent');
 assert.deepEqual(
   mcpSchemas.filter(item => item.name.startsWith('relai_app_')).map(item => item.name),
-  ['relai_app_approval_decide'],
-  'only the approval decision helper may be app-only'
+  [],
+  'removed approval app helpers must stay absent'
 );
 const schemaBytes = bytes(publicSchemas);
 assert.ok(schemaBytes > 0, 'unified discovery schema must serialize to a non-empty payload');

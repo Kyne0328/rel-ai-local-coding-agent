@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { repoSnapshot, relaiReadAsync } from '../src/localRepoBridge.js';
-import { discoverSkills, readDiscoveredSkill } from '../src/skillDiscovery.js';
+import { discoverSkills, readDiscoveredSkill, selectRelevantSkills } from '../src/skillDiscovery.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-skill-discovery-'));
 const repo = path.join(root, 'repo');
@@ -24,11 +24,17 @@ try {
   writeSkill(path.join(repo, '.agents', 'skills'), 'release', 'release-check', 'Project release checks.', 'Use the project release workflow.');
   writeSkill(userRoot, 'release-user', 'release-check', 'User fallback release checks.', 'User version.');
   writeSkill(userRoot, 'review', 'code-review', 'Review repository changes.', 'Read only.');
+  writeSkill(userRoot, 'debug', 'debug-runtime', 'Debug runtime failures and timeout problems.', 'Trace the failure.');
+  writeSkill(userRoot, 'general', 'general-helper', 'General guidance and repository assistance.', 'Generic help.');
 
   const discovered = discoverSkills(workspace, { userRoot });
-  assert.deepEqual(discovered.map(item => item.name), ['code-review', 'release-check']);
+  assert.deepEqual(discovered.map(item => item.name), ['code-review', 'debug-runtime', 'general-helper', 'release-check']);
   assert.equal(discovered.find(item => item.name === 'release-check').source, 'project', 'project skills must override user skills with the same name');
   assert.equal(discovered.find(item => item.name === 'code-review').path, 'user:code-review', 'user skill discovery must not disclose the home path');
+  const suggested = selectRelevantSkills(discovered, 'Fix the runtime timeout and debug the failing connection.', { limit: 10 });
+  assert.equal(suggested[0].name, 'debug-runtime', 'task wording should rank the most relevant discovered skill first');
+  assert.match(suggested[0].reason, /runtime|debug|timeout/i);
+  assert.equal(suggested.some(item => item.name === 'general-helper'), false, 'common function words must not make an unrelated skill relevant');
 
   const userSkill = readDiscoveredSkill(workspace, 'code-review', { userRoot });
   assert.match(userSkill.content, /Read only/);

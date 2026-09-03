@@ -19,7 +19,8 @@ import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } from '../taskIntegrity.js';
-import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { selectRelevantSkills } from '../skillDiscovery.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 import { createReviewCheckpoint, replayReviewCheckpoint } from '../reviewCheckpoints.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
@@ -34,7 +35,15 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
     includeFiles: bootstrapMode === 'full',
     instructionPath: args.instructionPath
   });
-  const bootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
+  const taskQuery = [task.objective, task.title].filter(Boolean).join(' ');
+  const suggestedSkills = selectRelevantSkills(snapshot.skills, taskQuery, { limit: 3 });
+  const relatedTasks = readRelevantTaskEpisodes(config, workspace.alias, taskQuery, { excludeTaskId: task.work_id, limit: 3 });
+  const baseBootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
+  const bootstrap = {
+    ...baseBootstrap,
+    ...(suggestedSkills.length ? { suggestedSkills } : {}),
+    ...(relatedTasks.length ? { relatedTasks } : {})
+  };
   if (bootstrapMode === 'full') {
     let cachedIntelligence = null;
     try {

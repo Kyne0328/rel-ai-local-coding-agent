@@ -7,6 +7,7 @@ import { DEFAULT_TASK_STALE_MS } from './taskTiming.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isCurrentTaskEvent, timestampMs } from './taskEvents.js';
 import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
+import { matchingRelevanceTerms, relevanceTerms } from './context/relevance.js';
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
 const TASK_HISTORY_FLUSH_MS = 75;
@@ -221,6 +222,53 @@ function readTaskHistory(config, activity = {}, options = {}) {
     .sort((left, right) => eventTime(right) - eventTime(left))
     .slice(0, limit)
     .map(publicSession);
+}
+
+function readRelevantTaskEpisodes(config, workspace, query, options = {}) {
+  const workspaceAlias = String(workspace?.alias || workspace || '').trim();
+  const queryTerms = relevanceTerms(query);
+  if (!workspaceAlias || !queryTerms.length) return [];
+  const excludeTaskId = cleanTaskId(options.excludeTaskId);
+  const limit = clamp(options.limit || 3, 1, 5);
+  const scanLimit = clamp(options.scanLimit || 80, limit, MAX_SESSIONS);
+  return readTaskHistory(config, {}, { limit: MAX_SESSIONS })
+    .filter(session => String(session.workspace || '') === workspaceAlias)
+    .slice(0, scanLimit)
+    .map((session, index) => ({ session, index, score: taskEpisodeScore(session, workspaceAlias, queryTerms, excludeTaskId) }))
+    .filter(item => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, limit)
+    .map(item => compactTaskEpisode(item.session));
+}
+
+function taskEpisodeScore(session, workspaceAlias, queryTerms, excludeTaskId) {
+  if (!session || String(session.workspace || '') !== workspaceAlias) return 0;
+  if (excludeTaskId && cleanTaskId(session.id) === excludeTaskId) return 0;
+  if (session.status !== 'completed' || session.completionKnown !== true) return 0;
+  const primary = matchingRelevanceTerms(queryTerms, `${session.objective || ''} ${session.title || ''}`);
+  const secondary = matchingRelevanceTerms(queryTerms, `${session.resultSummary || ''} ${session.summary || ''} ${(session.changedFiles || []).join(' ')}`);
+  return (primary.length * 3) + secondary.length;
+}
+
+function compactTaskEpisode(session) {
+  const changes = uniqueStrings(session.changedFiles).slice(0, 8);
+  const goal = compactText(session.objective || session.title, 300);
+  const outcome = compactText(session.resultSummary || session.summary, 600);
+  return {
+    ...(goal ? { goal } : {}),
+    ...(outcome ? { outcome } : {}),
+    ...(changes.length ? { changes } : {}),
+    ...(String(session.validation || '').trim() ? { validation: String(session.validation).trim() } : {})
+  };
+}
+
+function uniqueStrings(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map(value => String(value || '').trim()).filter(Boolean))];
+}
+
+function compactText(value, limit) {
+  const text = String(value || '').trim();
+  return text.length > limit ? `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…` : text;
 }
 
 function hasExplicitCompletionEvidence(session = {}) {
@@ -596,4 +644,4 @@ function emptySession(id) {
   };
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };

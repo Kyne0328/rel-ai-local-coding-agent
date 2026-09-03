@@ -30,6 +30,7 @@ import { observeRepeatCall } from './repeatCallGuard.js';
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
 const WORKFLOW_PASSIVE_OPERATIONS = new Set([
+  OP.WORK_STATUS,
   OP.SNAPSHOT,
   OP.READ,
   OP.SEARCH_TEXT,
@@ -123,6 +124,7 @@ async function callTool(name, args = {}, context = {}) {
       taskId: requestedTaskId,
       createTask: operationName === OP.WORK_BEGIN,
       trackTask: context?.trackTaskActivity !== false
+        && operationName !== OP.WORK_STATUS
         && !duplicateTerminalCancellation
         && !terminalTaskReference
         && (operationName === OP.WORK_BEGIN || Boolean(requestedTaskId)),

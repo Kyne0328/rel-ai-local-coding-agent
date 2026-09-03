@@ -8,7 +8,7 @@ import { assertInstalledElectronDependencies } from '../scripts/electron-package
 import { platformReleaseArtifactNames, releaseArtifactNames } from '../scripts/release-artifacts.mjs';
 import { nativeReleaseComponents } from '../scripts/generate-sbom.mjs';
 import { assertDisposableReleaseRunner, findPreviousReleaseAsset, parseStableVersion, verifyDownloadedAssetBytes } from '../scripts/validate-installed-release.mjs';
-import { RELEASE_CHANGE_FILES, VERSION_JSON_FILES } from '../scripts/release-surfaces.mjs';
+import { RELEASE_CHANGE_FILES } from '../scripts/release-surfaces.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -85,7 +85,6 @@ function verifyNodePtyNativeGuard() {
 }
 
 function verifyReleaseSurfaces() {
-  assert.ok(VERSION_JSON_FILES.includes('.codex-plugin/plugin.json'), 'plugin metadata must participate in release version checks');
   assert.ok(RELEASE_CHANGE_FILES.includes('release-manifest.json'), 'release finalization must accept generated release metadata');
   assert.ok(RELEASE_CHANGE_FILES.includes('CHANGELOG.md'), 'release finalization must accept changelog updates');
 }

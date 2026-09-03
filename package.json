@@ -7,8 +7,6 @@
   "type": "module",
   "license": "Apache-2.0",
   "files": [
-    ".codex-plugin/",
-    ".mcp.json",
     "skills/",
     "bin/",
     "src/",
@@ -134,7 +132,6 @@
     "chatgpt",
     "chatgpt-web",
     "coding-agent",
-    "codex",
     "git",
     "pull-request"
   ],
@@ -142,10 +139,10 @@
     "name": "Kyne",
     "url": "https://github.com/Kyne0328"
   },
-  "homepage": "https://github.com/Kyne0328/rel-ai-mcp",
+  "homepage": "https://github.com/Kyne0328/rel-ai-local-coding-agent",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Kyne0328/rel-ai-mcp.git"
+    "url": "git+https://github.com/Kyne0328/rel-ai-local-coding-agent.git"
   },
   "devDependencies": {
     "@electron/asar": "^4.2.1",

@@ -37,15 +37,13 @@ assert.doesNotMatch(html, /https:\/\/platform\.openai\.com\/settings\/organizati
 assert.doesNotMatch(html, /wizard-chatgpt-path|What you will choose in ChatGPT next/i, 'Future ChatGPT configuration belongs after the tunnel is running.');
 assert.ok(html.indexOf('data-open-openai="tunnels"') < html.indexOf('id="tunnelIdInput"'), 'Tunnel source action must immediately precede its destination field.');
 assert.ok(html.indexOf('data-open-openai="apiKeys"') < html.indexOf('id="tunnelApiKeyInput"'), 'API-key source action must immediately precede its destination field.');
-for (const id of ['connectorNameInput', 'tunnelIdInput', 'tunnelApiKeyInput', 'portInput']) assert.match(html, new RegExp(`label for="${id}"`));
-for (const id of ['connectorNameError', 'tunnelIdError', 'runtimeKeyError', 'portError']) assert.match(html, new RegExp(`id="${id}"[^>]*role="alert"`));
+for (const id of ['tunnelIdInput', 'tunnelApiKeyInput', 'portInput']) assert.match(html, new RegExp(`label for="${id}"`));
+for (const id of ['tunnelIdError', 'runtimeKeyError', 'portError']) assert.match(html, new RegExp(`id="${id}"[^>]*role="alert"`));
 assert.doesNotMatch(html, /Support project on GitHub|supportProject/);
-assert.match(html, /id="connectorNameInput"/);
-assert.match(html, /Rel\.AI MCP - Computer name/);
+assert.doesNotMatch(html, /ChatGPT connector name|Name this computer's ChatGPT connector/);
 assert.doesNotMatch(html, /Cloudflare|Rel\.AI Cloud|ngrok|Direct connection|pairing code|approval token|Rel\.AI account/i);
 
 assert.match(js, /validTunnelId/);
-assert.match(js, /validConnectorName/);
 assert.match(js, /\^tunnel_/);
 assert.match(js, /validRuntimeKey/);
 assert.match(js, /validPort/);
@@ -53,7 +51,7 @@ assert.match(js, /setFieldError/);
 assert.match(js, /aria-invalid/);
 assert.match(js, /\.focus\(\)/);
 assert.match(js, /openOpenAISetup\(destination\)/);
-assert.match(js, /wizardDone\(\{ connectorName, tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
+assert.match(js, /wizardDone\(\{ tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
 assert.match(js, /tunnelStatus !== 'running'/);
 assert.match(js, /getRecoveryConfig/);
 assert.match(js, /Stored securely\. Leave blank to keep it\./);

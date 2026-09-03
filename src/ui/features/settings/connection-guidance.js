@@ -9,9 +9,9 @@ export function chatGptFirstPrompt(workspaceAlias = 'myapp') {
   return `Use Rel.AI MCP with project "${alias.replaceAll('"', '\\"')}". Look through its files and folders and summarize the project structure. Do not change any files yet.`;
 }
 
-export function chatGptGuideSteps({ mode = 'create', tunnelId = '', connectorName = 'Rel.AI MCP' } = {}) {
+export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
   const tunnel = String(tunnelId || '').trim();
-  const name = String(connectorName || 'Rel.AI MCP').trim() || 'Rel.AI MCP';
+  const name = 'Rel.AI MCP';
   if (mode === 'reconnect') {
     return [
       'Keep Rel.AI running. Confirm that the Secure MCP Tunnel shows Connected on the Connection page.',
@@ -35,28 +35,27 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '', connectorNam
 export function createChatGptSetupGuide(options = {}) {
   const mode = options.mode === 'reconnect' ? 'reconnect' : 'create';
   const tunnelId = String(options.tunnelId || '').trim();
-  const connectorName = String(options.connectorName || 'Rel.AI MCP').trim() || 'Rel.AI MCP';
   const guide = document.createElement(options.compact ? 'div' : 'section');
   guide.className = `chatgpt-setup-guide ${options.compact ? 'compact' : ''}`.trim();
   const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Finish ChatGPT setup';
-  const steps = chatGptGuideSteps({ mode, tunnelId, connectorName });
+  const steps = chatGptGuideSteps({ mode, tunnelId });
   const firstPrompt = options.includeFirstPrompt === false
     ? ''
     : `<div class="chatgpt-first-prompt"><span>First test request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
   guide.innerHTML = `
     <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI keeps the local connection private.</span></div>
-    ${mode === 'create' ? connectorHandoffHtml(tunnelId, connectorName) : ''}
+    ${mode === 'create' ? connectorHandoffHtml(tunnelId) : ''}
     <ol>${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
     ${firstPrompt}`;
   if (mode === 'create') bindConnectorHandoff(guide);
   return guide;
 }
 
-function connectorHandoffHtml(tunnelId, connectorName) {
+function connectorHandoffHtml(tunnelId) {
   return `
     <section class="chatgpt-connector-handoff" aria-label="ChatGPT connector setup">
       <dl class="chatgpt-connector-values">
-        <dt>Name</dt><dd>${escapeHtml(connectorName)}</dd>
+        <dt>Name</dt><dd>Rel.AI MCP</dd>
         <dt>Connection</dt><dd>Tunnel</dd>
         <dt>Tunnel</dt><dd class="mono">${escapeHtml(tunnelId || 'Select this computer’s tunnel')}</dd>
         <dt>Authentication</dt><dd>No authentication</dd>

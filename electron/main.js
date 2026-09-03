@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, utilityProcess } from 'electron';
 import electronUpdater from 'electron-updater';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importResourceModule } from './resource-path.js';
@@ -351,12 +350,10 @@ async function setKeepAwake(enabled) {
 
 function getRecoveryConfig() {
   const settings = currentDesktopSettings();
-  const defaultConnectorName = `Rel.AI MCP - ${String(os.hostname() || 'This computer').trim().slice(0, 60)}`;
   return {
     ok: true,
     port: settings.port,
     tunnelId: settings.tunnelId,
-    connectorName: settings.connectorName || defaultConnectorName,
     tunnelApiKeyConfigured: settings.tunnelApiKeyConfigured
   };
 }

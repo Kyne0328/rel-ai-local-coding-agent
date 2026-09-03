@@ -26,25 +26,9 @@
       </div>
 
       <div class="wizard-cloud-card wizard-security-card">
-        <section class="wizard-value-step" aria-labelledby="connectorNameStepTitle">
-          <div class="wizard-value-step-head">
-            <span class="wizard-step-number" aria-hidden="true">1</span>
-            <div>
-              <strong id="connectorNameStepTitle">Name this computer's ChatGPT connector</strong>
-              <p>Use a different name on each computer so you can choose the correct Rel.AI connection in ChatGPT.</p>
-            </div>
-          </div>
-          <div class="wizard-field-group">
-            <label for="connectorNameInput"><span>ChatGPT connector name</span></label>
-            <input id="connectorNameInput" type="text" maxlength="80" autocomplete="off" spellcheck="false" aria-describedby="connectorNameHelp connectorNameError" aria-invalid="false" required />
-            <p class="wizard-field-help" id="connectorNameHelp">Recommended format: <code>Rel.AI MCP - Computer name</code>. Use this exact name when you create the connector in ChatGPT.</p>
-            <p class="wizard-field-error" id="connectorNameError" role="alert" hidden></p>
-          </div>
-        </section>
-
         <section class="wizard-value-step" aria-labelledby="tunnelStepTitle">
           <div class="wizard-value-step-head">
-            <span class="wizard-step-number" aria-hidden="true">2</span>
+            <span class="wizard-step-number" aria-hidden="true">1</span>
             <div>
               <strong id="tunnelStepTitle">Create your Secure MCP Tunnel</strong>
               <p>Set the tunnel to the OpenAI organization and ChatGPT workspace where you will use Rel.AI.</p>
@@ -71,7 +55,7 @@
 
         <section class="wizard-value-step" aria-labelledby="runtimeKeyStepTitle">
           <div class="wizard-value-step-head">
-            <span class="wizard-step-number" aria-hidden="true">3</span>
+            <span class="wizard-step-number" aria-hidden="true">2</span>
             <div>
               <strong id="runtimeKeyStepTitle">Create a runtime API key</strong>
               <p>Create it in the same OpenAI organization as your tunnel, then copy it while OpenAI still shows it.</p>

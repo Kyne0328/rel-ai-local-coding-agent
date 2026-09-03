@@ -592,8 +592,7 @@ function desktopSetupState(data = {}) {
     firstRequestObserved: hasObservedMcpToolCall(mcpConnection),
     connectionMode: 'secure_tunnel',
     workspaceAlias: workspaces[0]?.alias || 'myapp',
-    tunnelId: String(data.desktopStatus?.tunnelId || data.connection?.tunnelId || ''),
-    connectorName: String(data.connectorName || 'Rel.AI MCP')
+    tunnelId: String(data.desktopStatus?.tunnelId || data.connection?.tunnelId || '')
   };
 }
 

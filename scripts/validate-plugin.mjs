@@ -7,64 +7,18 @@ const ALLOWED_SKILL_FRONTMATTER_FIELDS = new Set(['name', 'description']);
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_SKILL_NAME_LENGTH = 64;
 
-const ALLOWED_MANIFEST_FIELDS = new Set([
-  'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords',
-  'skills', 'mcpServers', 'interface'
-]);
-
-function validatePlugin(root, options = {}) {
+function validatePlugin(root) {
   const errors = [];
   const packageJson = readJson(path.join(root, 'package.json'), errors, 'package.json');
-  const manifest = readJson(path.join(root, '.codex-plugin', 'plugin.json'), errors, '.codex-plugin/plugin.json');
-  const mcp = readJson(path.join(root, '.mcp.json'), errors, '.mcp.json');
+  const skills = validateSkills(root, './skills/', errors);
 
-  for (const field of Object.keys(manifest || {})) {
-    if (!ALLOWED_MANIFEST_FIELDS.has(field)) errors.push(`Unsupported plugin manifest field: ${field}`);
-  }
-  for (const field of ['name', 'version', 'description', 'author', 'skills', 'mcpServers', 'interface']) {
-    if (manifest?.[field] == null || manifest[field] === '') errors.push(`Plugin manifest is missing ${field}.`);
-  }
-  if (manifest?.name !== packageJson?.name) errors.push('Plugin manifest name must equal package.json name.');
-  if (options.requireDirectoryName !== false && manifest?.name !== path.basename(path.resolve(root))) {
-    errors.push('Plugin directory name must equal the plugin manifest name.');
-  }
-  if (manifest?.version !== packageJson?.version) errors.push('Plugin manifest version must equal package.json version.');
-  if (!manifest?.author?.name) errors.push('Plugin author.name is required.');
-  if (!manifest?.interface?.displayName || !manifest?.interface?.shortDescription) {
-    errors.push('Plugin interface displayName and shortDescription are required.');
-  }
-
-  validateRelativePath(root, manifest?.skills, 'skills', errors, true);
-  validateRelativePath(root, manifest?.mcpServers, 'mcpServers', errors, false);
-  const servers = validateMcpConfig(root, mcp, errors);
-  const skills = validateSkills(root, manifest?.skills, errors);
-
-  if (errors.length) throw new Error(`Plugin validation failed:\n- ${errors.join('\n- ')}`);
+  if (errors.length) throw new Error(`Skill package validation failed:\n- ${errors.join('\n- ')}`);
   return {
     ok: true,
-    name: manifest.name,
-    version: manifest.version,
-    mcpServer: Object.keys(servers)[0],
+    name: packageJson?.name,
+    version: packageJson?.version,
     skills
   };
-}
-
-function validateMcpConfig(root, mcp, errors) {
-  const servers = mcp?.mcpServers;
-  if (!servers || typeof servers !== 'object' || Array.isArray(servers) || Object.keys(servers).length !== 1) {
-    errors.push('.mcp.json must define exactly one mcpServers entry.');
-  }
-  for (const [name, server] of Object.entries(servers || {})) {
-    if (!server || typeof server !== 'object' || Array.isArray(server)) errors.push(`MCP server ${name} must be an object.`);
-    if (typeof server?.command !== 'string' || !server.command) errors.push(`MCP server ${name} requires command.`);
-    if (!Array.isArray(server?.args) || !server.args.length || server.args.some(value => typeof value !== 'string')) {
-      errors.push(`MCP server ${name} requires a non-empty string args array.`);
-    }
-    if (server?.cwd !== '.') errors.push(`MCP server ${name} must use the plugin root as cwd.`);
-    const entry = String(server?.args?.[0] || '');
-    if (entry.startsWith('./') && !fs.existsSync(path.join(root, entry))) errors.push(`MCP entrypoint does not exist: ${entry}`);
-  }
-  return servers || {};
 }
 
 function validateSkills(root, skillsPath, errors) {
@@ -120,20 +74,6 @@ function validateSkills(root, skillsPath, errors) {
   if (!workflow.includes('references/workflows.md')) errors.push('Core SKILL.md must link references/workflows.md.');
   if (!workflow.includes('references/safety.md')) errors.push('Core SKILL.md must link references/safety.md.');
   return skills.sort();
-}
-
-function validateRelativePath(root, value, field, errors, directory) {
-  if (typeof value !== 'string' || !value.startsWith('./')) {
-    errors.push(`Plugin ${field} must be a relative path beginning with ./`);
-    return;
-  }
-  const target = path.resolve(root, value);
-  if (!target.startsWith(`${path.resolve(root)}${path.sep}`) && target !== path.resolve(root)) {
-    errors.push(`Plugin ${field} escapes the plugin root.`);
-    return;
-  }
-  if (!fs.existsSync(target)) errors.push(`Plugin ${field} path does not exist: ${value}`);
-  else if (directory && !fs.statSync(target).isDirectory()) errors.push(`Plugin ${field} must reference a directory.`);
 }
 
 function parseOpenAiAgentMetadata(source, errors, label) {

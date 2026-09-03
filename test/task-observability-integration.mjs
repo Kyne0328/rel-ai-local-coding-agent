@@ -29,6 +29,9 @@ const configPath = path.join(sandbox, 'config.json');
 fs.mkdirSync(workspacePath, { recursive: true });
 fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ name: 'fixture' }, null, 2));
 fs.writeFileSync(path.join(workspacePath, 'src.txt'), 'session activity model\n');
+const skillDir = path.join(workspacePath, '.agents', 'skills', 'session-review');
+fs.mkdirSync(skillDir, { recursive: true });
+fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: session-review\ndescription: Review session activity persistence.\n---\n\nReview persisted session behavior.\n');
 execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore' });
 execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
 execFileSync('git', ['config', 'user.name', 'RelAI Test'], { cwd: workspacePath });
@@ -62,11 +65,20 @@ try {
   }, { ...context, requestId: 'request-2' });
   assert.equal(read.ok, true);
 
+  const status = await callTool('relai_work', {
+    action: 'status',
+    workspace: 'repo',
+    work_id: started.work_id
+  }, { ...context, requestId: 'request-3' });
+  assert.equal(status.task?.current?.tool, 'relai_read', 'status must observe rather than overwrite the preceding task activity');
+  assert.equal(status.task?.recentEvidence?.at(-1)?.tool, 'relai_read', 'status recovery must include persisted recent task activity');
+  assert.match(status.task?.recentEvidence?.at(-1)?.summary || '', /Read/i);
+
   await callTool('relai_work', { action: 'finish',
     workspace: 'repo',
     work_id: started.work_id,
     summary: 'Inspected and verified session activity persistence.'
-  }, { ...context, requestId: 'request-3' });
+  }, { ...context, requestId: 'request-4' });
 
   const historyConfig = { stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') };
   const session = await readCompletedSession(historyConfig, started.work_id);
@@ -86,6 +98,22 @@ try {
   assert.equal(session.events.find(event => event.tool?.name === 'relai_read')?.result?.affectedItemCount, 2);
   assert.equal(session.events.at(-1)?.status, 'succeeded');
   assert.match(session.events[0]?.summary, /Started logical task/);
+
+  await flushTaskHistoryPersistence();
+  const contextual = await callTool('relai_work', {
+    action: 'begin',
+    workspace: 'repo',
+    title: 'Review session persistence',
+    objective: 'Review canonical session activity persistence.'
+  }, { ...context, requestId: 'request-5' });
+  assert.equal(contextual.bootstrap?.suggestedSkills?.[0]?.name, 'session-review', 'relai_work begin must expose the relevant discovered skill');
+  assert.match(contextual.bootstrap?.relatedTasks?.[0]?.outcome || '', /Inspected and verified session activity persistence/i, 'relai_work begin must expose relevant completed task context');
+  await callTool('relai_work', {
+    action: 'finish',
+    workspace: 'repo',
+    work_id: contextual.work_id,
+    summary: 'Verified contextual bootstrap retrieval.'
+  }, { ...context, requestId: 'request-6' });
 } finally {
   await flushAuditWrites();
   await flushTaskHistoryPersistence();

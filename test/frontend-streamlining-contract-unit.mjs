@@ -40,7 +40,7 @@ assert.equal(normalizeRouteKey('usage?workspace=app&range=7d'), 'usage?workspace
 assert.equal(normalizeRouteKey('usage?range=custom&start=2026-08-01&end=2026-08-16'), 'usage?range=custom&start=2026-08-01&end=2026-08-16');
 assert.equal(normalizeRouteKey('usage?range=invalid&start=nope'), 'usage');
 
-const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456', connectorName: 'Rel.AI MCP - Test PC' }).join(' ');
+const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456' }).join(' ');
 assert.match(createSteps, /Open ChatGPT connector setup/i);
 assert.doesNotMatch(createSteps, /API key|Name, Description, Organizations/i, 'ChatGPT handoff must not repeat completed tunnel setup.');
 assert.match(createSteps, /Connection to Tunnel/i);
@@ -51,7 +51,7 @@ assert.match(createSteps, /Manage/i);
 assert.match(createSteps, /relai-mcp\.png/i);
 assert.match(createSteps, /tunnel_example123456/i);
 assert.match(createSteps, /ChatGPT/i);
-assert.match(createSteps, /Rel\.AI MCP - Test PC/i);
+assert.match(createSteps, /Rel\.AI MCP/i);
 assert.equal(CHATGPT_CONNECTOR_CREATE_URL, 'https://chatgpt.com/plugins#settings/Connectors?create-connector=true');
 assert.equal(RELAI_CONNECTOR_ICON_URL, '/assets/favicon.png');
 assert.equal(RELAI_CONNECTOR_ICON_FILENAME, 'relai-mcp.png');
@@ -64,9 +64,9 @@ assert.equal(hasObservedMcpConnection({ activityStatus: 'no_requests' }), false,
 assert.equal(hasObservedMcpConnection({ lastRequestAt: '2026-08-16T12:00:00.000Z', activityStatus: 'recent' }), true, 'tool scanning or another MCP request proves the ChatGPT connector exists');
 assert.equal(hasObservedMcpToolCall({ lastRequestMethod: 'tools/list' }), false, 'scanning tools must not count as the first Rel.AI tool request');
 assert.equal(hasObservedMcpToolCall({ recentEvents: [{ method: 'tools/call' }] }), true, 'a tools/call request completes the first-request onboarding step');
-const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456', connectorName: 'Rel.AI MCP - Test PC' }).join(' ');
+const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456' }).join(' ');
 assert.match(reconnectSteps, /changed ChatGPT accounts or workspaces/i);
-assert.match(reconnectSteps, /Rel\.AI MCP - Test PC.*already exists.*instead of creating a duplicate/i);
+assert.match(reconnectSteps, /Rel\.AI MCP.*already exists.*instead of creating a duplicate/i);
 assert.match(reconnectSteps, /does not exist.*create it once/i);
 assert.match(reconnectSteps, /Connection to Tunnel/i);
 assert.match(reconnectSteps, /Authentication to No authentication/i);

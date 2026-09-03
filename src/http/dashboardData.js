@@ -120,7 +120,6 @@ function buildDashboardConnectionProjection(_config, options = {}, mcpOverride =
   const mcpConnection = mcpOverride || mcpConnectionManager.snapshot();
   return {
     connection: connectionSummary,
-    connectorName: String(profile.connectorName || 'Rel.AI MCP'),
     connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
     mcpConnection,
     mcpAuthentication: readMcpAuthenticationStatus(mcpConnection, {

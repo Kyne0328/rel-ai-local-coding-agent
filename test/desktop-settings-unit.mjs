@@ -23,7 +23,6 @@ try {
     ok: true,
     port: 3333,
     tunnelId: 'tunnel_example123456',
-    connectorName: 'Rel.AI MCP',
     tunnelApiKey: '',
     tunnelApiKeyConfigured: true,
     notificationsEnabled: true,
@@ -48,7 +47,7 @@ try {
     notificationsEnabled: false
   }, runtimeActions);
   assert.equal(result.ok, true);
-  assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123', connectorName: 'Rel.AI MCP' });
+  assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123' });
   assert.equal(storedApiKey, 'sk-runtime-replacement-123456');
   assert.equal(notificationsEnabled, false);
   assert.equal(restarts, 1);
@@ -96,7 +95,7 @@ try {
     }),
     /restart failed.*restored/i
   );
-  assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123', connectorName: 'Rel.AI MCP' }, 'failed reconnect must restore launcher config');
+  assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123' }, 'failed reconnect must restore launcher config');
   assert.equal(storedApiKey, 'sk-runtime-tunnel-only-123456', 'failed full reconnect must restore the previous encrypted key');
   assert.equal(notificationsEnabled, false, 'failed reconnect must restore notification preferences');
   assert.equal(failingRestarts, 2, 'rollback must restart the restored configuration');

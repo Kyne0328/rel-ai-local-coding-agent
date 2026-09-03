@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
-  "homepage": "https://github.com/Kyne0328/rel-ai-mcp",
+  "homepage": "https://github.com/Kyne0328/rel-ai-local-coding-agent",
   "author": {
     "name": "Kyne",
     "email": "Kyne0328@users.noreply.github.com",

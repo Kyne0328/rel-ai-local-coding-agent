@@ -75,7 +75,10 @@ try {
   assert.equal(unsupported.structuredContent?.remote, 'origin');
   assert.equal(unsupported.structuredContent?.branch, 'main');
   assert.equal(unsupported.structuredContent?.head, target.head);
-  assert.equal(unsupported.structuredContent?.recovery?.renderTool, 'relai_approval');
+  assert.equal(unsupported.structuredContent?.recovery?.mode, 'dashboard');
+  assert.equal(unsupported.structuredContent?.recovery?.dashboardPath, '/#tasks');
+  assert.equal(Object.hasOwn(unsupported.structuredContent?.recovery || {}, 'renderTool'), false);
+  assert.match(unsupported.structuredContent?.nextAction || '', /dashboard Tasks page/i);
   assert.match(unsupported.structuredContent?.approvalId || '', /^approval_/);
 
   let executed = 0;

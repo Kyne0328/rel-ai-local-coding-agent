@@ -37,11 +37,11 @@ try {
   const tar = spawnSync('tar', ['-xzf', artifact, '-C', extractDir], { encoding: 'utf8', timeout: 120_000 });
   assert.equal(tar.status, 0, tar.stderr || tar.stdout);
   const builtRoot = path.join(extractDir, 'package');
-  const builtValidation = validatePlugin(builtRoot, { requireDirectoryName: false });
+  const builtValidation = validatePlugin(builtRoot);
   assert.deepEqual(builtValidation.skills, expectedSkills);
 
   const expected = [
-    '.codex-plugin/plugin.json', '.mcp.json', 'skills/PROVENANCE.md',
+    'skills/PROVENANCE.md',
     ...expectedSkills.flatMap(skill => [`skills/${skill}/SKILL.md`, `skills/${skill}/agents/openai.yaml`]),
     'skills/rel-ai-workflow/references/workflows.md', 'skills/rel-ai-workflow/references/safety.md',
     'src/mcp/appUi.js', 'src/mcp/localDeveloperMode.js',
@@ -58,11 +58,7 @@ try {
 
   fs.mkdirSync(path.dirname(installDir), { recursive: true });
   fs.cpSync(builtRoot, installDir, { recursive: true });
-  assert.deepEqual(validatePlugin(installDir).skills, expectedSkills, 'installed plugin skills must validate');
-  const mcp = JSON.parse(fs.readFileSync(path.join(installDir, '.mcp.json'), 'utf8'));
-  assert.deepEqual(mcp.mcpServers['rel-ai-mcp'], {
-    command: 'node', args: ['./bin/rel-ai-mcp.js'], cwd: '.'
-  });
+  assert.deepEqual(validatePlugin(installDir).skills, expectedSkills, 'installed package skills must validate');
   const check = spawnSync(process.execPath, ['--check', path.join(installDir, 'bin', 'rel-ai-mcp.js')], { encoding: 'utf8' });
   assert.equal(check.status, 0, check.stderr || check.stdout);
 
@@ -124,7 +120,7 @@ try {
 
   fs.rmSync(installDir, { recursive: true, force: true });
   assert.equal(fs.existsSync(installDir), false, 'plugin removal must remove the complete unit');
-  console.log(`Plugin artifact ${path.basename(artifact)} validated, installed, exercised, and removed.`);
+  console.log(`Package artifact ${path.basename(artifact)} validated, installed, exercised, and removed.`);
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

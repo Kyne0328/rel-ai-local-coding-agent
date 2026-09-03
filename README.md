@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><strong>Download Rel.AI</strong></a>
+  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/releases"><strong>Download Rel.AI</strong></a>
   · <a href="docs/ONE_CLICK_SETUP.md">Set up</a>
   · <a href="docs/CONNECTING_TO_CHATGPT.md">Connect ChatGPT</a>
   · <a href="#how-relai-works">How it works</a>
@@ -18,10 +18,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
-  <a href="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/pages.yml"><img src="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/pages.yml/badge.svg" alt="Deploy Website to GitHub Pages status" /></a>
-  <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-mcp?display_name=tag&style=flat-square" alt="Latest Rel.AI MCP release" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-mcp?style=flat-square" alt="Apache License 2.0" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/pages.yml"><img src="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/pages.yml/badge.svg" alt="Deploy Website to GitHub Pages status" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-local-coding-agent?display_name=tag&style=flat-square" alt="Latest Rel.AI MCP release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-local-coding-agent?style=flat-square" alt="Apache License 2.0" /></a>
   <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square" alt="Windows, macOS, and Linux" />
   <img src="https://img.shields.io/badge/MCP-2026--07--28-7c3aed?style=flat-square" alt="MCP 2026-07-28" />
 </p>
@@ -36,7 +36,7 @@
 > **Use Rel.AI MCP only on repositories, systems, and services you own or are authorized to access.** Rel.AI can read and modify files, execute project commands, and perform Git actions when requested. You are responsible for complying with applicable third-party terms, policies, and laws. The project authors and maintainers are not responsible for consequences resulting from misuse. Use at your own risk.
 
 > [!IMPORTANT]
-> **Official release binaries are built and published by this repository's GitHub Actions release workflow from the source commit used for the release.** The release workflow also produces SHA-256 checksums and GitHub build-provenance and SBOM attestations for supported artifacts, so releases can be checked against the public source and CI/CD pipeline. You can also use DeepWiki to explore and ask questions about the codebase: [Ask DeepWiki](https://deepwiki.com/Kyne0328/rel-ai-mcp) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Kyne0328/rel-ai-mcp)
+> **Official release binaries are built and published by this repository's GitHub Actions release workflow from the source commit used for the release.** The release workflow also produces SHA-256 checksums and GitHub build-provenance and SBOM attestations for supported artifacts, so releases can be checked against the public source and CI/CD pipeline. You can also use DeepWiki to explore and ask questions about the codebase: [Ask DeepWiki](https://deepwiki.com/Kyne0328/rel-ai-local-coding-agent) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Kyne0328/rel-ai-local-coding-agent)
 
 Rel.AI MCP is a **local coding agent bridge for ChatGPT Web**. You keep the normal ChatGPT conversation, while Rel.AI gives that conversation controlled access to repositories you choose on your own computer.
 
@@ -106,7 +106,7 @@ Editing code does not automatically commit, push, reset, clean, or rewrite repos
 
 Rel.AI currently uses one supported ChatGPT connection: **OpenAI Secure MCP Tunnel**.
 
-1. **Download Rel.AI MCP** from the [GitHub Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Desktop packages are built for Windows, macOS, and Linux.
+1. **Download Rel.AI MCP** from the [GitHub Releases page](https://github.com/Kyne0328/rel-ai-local-coding-agent/releases). Desktop packages are built for Windows, macOS, and Linux.
 2. **Create an OpenAI Secure MCP Tunnel** for the computer running Rel.AI and create the runtime API key required by the tunnel.
 3. **Open Rel.AI and finish first-run setup.** Enter the tunnel ID and runtime API key. Rel.AI stores the runtime key with Electron `safeStorage` and manages the bundled tunnel client.
 4. **Add a workspace.** Choose a repository folder and assign a short alias such as `myapp`.
@@ -358,7 +358,7 @@ No. Rel.AI does not bypass ChatGPT plan limits. It uses the ChatGPT app/tool pat
 
 ### Which operating systems are supported?
 
-The desktop release pipeline targets **Windows, macOS, and Linux**. Check the [latest GitHub release](https://github.com/Kyne0328/rel-ai-mcp/releases) for currently published installers and packages.
+The desktop release pipeline targets **Windows, macOS, and Linux**. Check the [latest GitHub release](https://github.com/Kyne0328/rel-ai-local-coding-agent/releases) for currently published installers and packages.
 
 ### What happens if the tunnel disconnects during a task?
 
@@ -428,7 +428,7 @@ For connection or repository-work problems:
 
 1. Check **Diagnostics** in the Rel.AI desktop app.
 2. Review [One-click setup](docs/ONE_CLICK_SETUP.md) and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md).
-3. If the problem is reproducible, [open a GitHub issue](https://github.com/Kyne0328/rel-ai-mcp/issues) with the smallest safe reproduction and sanitized diagnostics.
+3. If the problem is reproducible, [open a GitHub issue](https://github.com/Kyne0328/rel-ai-local-coding-agent/issues) with the smallest safe reproduction and sanitized diagnostics.
 
 Never include tunnel runtime API keys, local bearer credentials, repository secrets, private keys, or other sensitive credentials in a public issue.
 

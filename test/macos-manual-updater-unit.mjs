@@ -16,8 +16,8 @@ function tempRoot() {
 
 function releaseFixture(version, arch, bytes, overrides = {}) {
   const assetName = `Rel.AI-MCP-${version}-mac-${arch}.dmg`;
-  const assetUrl = `https://github.com/Kyne0328/rel-ai-mcp/releases/download/${version}/${assetName}`;
-  const checksumUrl = `https://github.com/Kyne0328/rel-ai-mcp/releases/download/${version}/${CHECKSUM_ASSET_NAME}`;
+  const assetUrl = `https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/${version}/${assetName}`;
+  const checksumUrl = `https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/${version}/${CHECKSUM_ASSET_NAME}`;
   return {
     assetName,
     assetUrl,

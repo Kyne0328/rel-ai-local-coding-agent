@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { matchingRelevanceTerms, relevanceTerms } from './context/relevance.js';
 
 const MAX_SKILLS = 100;
 const MAX_SKILL_FILE_BYTES = 512 * 1024;
@@ -28,6 +29,35 @@ function readDiscoveredSkill(workspace, name, options = {}) {
     truncated: returned.length < source.length,
     securityBoundary: SKILL_SECURITY_BOUNDARY
   };
+}
+
+function selectRelevantSkills(skills, taskText, options = {}) {
+  const queryTerms = relevanceTerms(taskText);
+  if (!queryTerms.length || !Array.isArray(skills)) return [];
+  const limit = clampNumber(options.limit, 1, 10, 3);
+  return skills
+    .map((skill, index) => {
+      const name = String(skill?.name || '').trim();
+      if (!name) return null;
+      const nameMatches = matchingRelevanceTerms(queryTerms, name);
+      const descriptionMatches = matchingRelevanceTerms(queryTerms, skill?.description);
+      const matches = [...new Set([...nameMatches, ...descriptionMatches])];
+      if (!matches.length) return null;
+      return {
+        index,
+        score: (nameMatches.length * 3) + descriptionMatches.length + (skill?.source === 'project' ? 0.25 : 0),
+        value: {
+          name,
+          source: String(skill?.source || '').trim() || undefined,
+          path: String(skill?.path || '').trim() || undefined,
+          reason: `Matches task terms: ${matches.slice(0, 3).join(', ')}`
+        }
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, limit)
+    .map(item => item.value);
 }
 
 function skillRecords(workspace, options = {}) {
@@ -116,4 +146,4 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.floor(number)));
 }
 
-export { SKILL_SECURITY_BOUNDARY, discoverSkills, readDiscoveredSkill };
+export { SKILL_SECURITY_BOUNDARY, discoverSkills, readDiscoveredSkill, selectRelevantSkills };

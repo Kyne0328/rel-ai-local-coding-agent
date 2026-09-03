@@ -56,7 +56,7 @@ assert.match(wizardHtml, /<small>\/ MCP<\/small>/, 'setup wizard branding should
 
 assert.match(wizardHtml, /OpenAI Secure MCP Tunnel/);
 assert.match(wizardHtml, /id="tunnelIdInput"/);
-assert.match(wizardHtml, /id="connectorNameInput"/);
+assert.doesNotMatch(wizardHtml, /ChatGPT connector name|Name this computer's ChatGPT connector/);
 assert.doesNotMatch(wizardHtml, /Support project on GitHub|supportProject/i);
 assert.match(wizardHtml, /Connect this computer to OpenAI/i);
 assert.match(wizardHtml, /Before you start/i);
@@ -70,7 +70,7 @@ assert.match(wizardHtml, /restricted API key/i);
 assert.match(wizardHtml, /encrypted by your operating system/i);
 assert.doesNotMatch(wizardHtml, /ngrok|Cloudflare|Rel\.AI Cloud|approval token|pairing code|Direct connection/i);
 assert.match(wizardJs, /validTunnelId/);
-assert.match(wizardJs, /wizardDone\(\{ connectorName, tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
+assert.match(wizardJs, /wizardDone\(\{ tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
 assert.match(wizardJs, /getRecoveryConfig/);
 assert.match(wizardJs, /openOpenAISetup\(destination\)/);
 assert.doesNotMatch(wizardJs, /ngrok|gateway|approvalToken|connectionMode/i);

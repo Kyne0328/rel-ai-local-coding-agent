@@ -89,11 +89,10 @@ async function requestApproval({ name, args, requirement, context, rawContext, c
     ...(prepared.push || {}),
     approvalId,
     recovery: {
-      mode: 'mcp_app_or_dashboard',
-      renderTool: 'relai_approval',
-      dashboardPath: `/#tasks?approval=${encodeURIComponent(approvalId)}`
+      mode: 'dashboard',
+      dashboardPath: '/#tasks'
     },
-    nextAction: `Call relai_approval with approvalId ${approvalId} to show the in-chat approval control. The same approval is also available in the Rel.AI dashboard.`
+    nextAction: 'Open the Rel.AI dashboard Tasks page to approve or cancel this operation.'
   }, true);
 }
 

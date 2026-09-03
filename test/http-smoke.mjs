@@ -108,8 +108,8 @@ try {
     assert.equal(listedByName.get(name)?._meta?.['openai/outputTemplate'], undefined, `${name} must not attach a ChatGPT output template`);
   }
   assert.deepEqual(listedByName.get('relai_publish')?.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
-  assert.equal(listedByName.get('relai_approval')?._meta?.ui?.resourceUri, 'ui://relai/approval/v1.html');
-  assert.deepEqual(listedByName.get('relai_app_approval_decide')?._meta?.ui?.visibility, ['app']);
+  assert.equal(listedByName.has('relai_approval'), false);
+  assert.equal(listedByName.has('relai_app_approval_decide'), false);
   for (const expected of activeToolNames) assert.ok(names.includes(expected), `${expected} missing`);
   for (const legacy of ['relai_begin_work', 'relai_process_start', 'relai_run_checks', 'relai_git_push']) {
     assert.equal(names.includes(legacy), false, `${legacy} must not be exposed by the unified surface`);
@@ -272,7 +272,7 @@ try {
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));
-  assert.ok(resources.body.result.resources.some(item => item.uri === 'ui://relai/approval/v1.html'), 'resource discovery must advertise the focused approval component');
+  assert.equal(resources.body.result.resources.some(item => item.uri === 'ui://relai/approval/v1.html'), false, 'resource discovery must not advertise the removed approval card');
   assert.equal(resources.body.result._meta?.['io.modelcontextprotocol/cache']?.cacheScope || resources.body.result.cacheScope || 'private', 'private');
 
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });

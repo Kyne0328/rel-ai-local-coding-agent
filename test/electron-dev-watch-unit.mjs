@@ -13,7 +13,6 @@ const mainSource = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8
 assert.match(String(manifest.scripts['electron:dev:watch'] || ''), /electron-dev-watch\.mjs/, 'the package must expose the source dev watcher');
 assert.match(String(manifest.scripts['electron:dev:watch:isolated'] || ''), /electron-dev-watch\.mjs.*--isolated/, 'the package must expose the isolated source dev watcher');
 assert.deepEqual([...watchRoots], ['electron', 'src', 'public', 'bin']);
-assert.equal(shouldRestartForPath('electron', 'codex-bridge.js'), true);
 assert.equal(shouldRestartForPath('src', 'ui/features/settings/application.js'), true);
 assert.equal(shouldRestartForPath('src', 'ui/styles/app.css'), true);
 assert.equal(shouldRestartForPath('public', 'app.js'), true);

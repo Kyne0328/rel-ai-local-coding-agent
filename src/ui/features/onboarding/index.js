@@ -123,7 +123,6 @@ function renderSetupStep(item, index, currentId, options = {}) {
       compact: true,
       mode: 'create',
       tunnelId: options.tunnelId,
-      connectorName: options.connectorName,
       includeFirstPrompt: false
     });
     guide.classList.add('desktop-chatgpt-guide');

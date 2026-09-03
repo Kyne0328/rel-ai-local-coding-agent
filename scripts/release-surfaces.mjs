@@ -2,8 +2,7 @@ const VERSION_JSON_FILES = Object.freeze([
   'package.json',
   'package-lock.json',
   'electron/package.json',
-  'electron/package-lock.json',
-  '.codex-plugin/plugin.json'
+  'electron/package-lock.json'
 ]);
 
 const RELEASE_CHANGE_FILES = Object.freeze([

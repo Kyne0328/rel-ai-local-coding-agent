@@ -5,7 +5,7 @@ import { panel } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 import { supportPolicyView } from './desktop-update-policy.js';
 
-const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-mcp/releases';
+const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases';
 let removeUpdateListener = null;
 
 export function applicationUpdatesPanel() {

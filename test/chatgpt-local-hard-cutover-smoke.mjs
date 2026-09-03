@@ -48,13 +48,13 @@ try {
   client.send(2, 'tools/list');
   const listed = await client.waitFor(2);
   assert.equal(listed.result?.tools?.length, activeMcpToolCount);
-  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool.name), ['relai_app_approval_decide']);
+  assert.deepEqual(listed.result.tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool.name), []);
   const listedByName = new Map(listed.result.tools.map(tool => [tool.name, tool]));
   for (const tool of listed.result.tools.filter(tool => getToolSurfaceManifest({ workspaces: {} }).tools.some(item => item.name === tool.name))) {
     assert.equal(tool._meta?.ui, undefined, `${tool.name} must keep the canonical tool surface iframe-free`);
     assert.equal(tool._meta?.['openai/outputTemplate'], undefined, `${tool.name} must not attach a ChatGPT output template`);
   }
-  assert.equal(listedByName.get('relai_approval')?._meta?.ui?.resourceUri, 'ui://relai/approval/v1.html');
+  assert.equal(listedByName.has('relai_approval'), false);
   assert.ok(listed.result.tools.every(tool => tool.outputSchema));
   assert.ok(removedTools.every(name => listed.result.tools.every(tool => tool.name !== name)));
 

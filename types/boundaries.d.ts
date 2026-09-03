@@ -226,7 +226,6 @@ export interface ToolResult extends Record<string, unknown> {
 export interface LauncherConfigInput {
   port?: number | string;
   tunnelId?: string;
-  connectorName?: string;
   tunnelApiKey?: string;
   token?: string;
 }
@@ -234,7 +233,6 @@ export interface LauncherConfigInput {
 export interface LauncherConfig {
   port: number;
   tunnelId: string;
-  connectorName: string;
   token: string;
 }
 

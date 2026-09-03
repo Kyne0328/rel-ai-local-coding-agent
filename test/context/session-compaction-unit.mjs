@@ -8,6 +8,12 @@ const session = compactSessionSummary({
   status: 'waiting',
   changedFiles: ['src/connector.js'],
   validationStatus: 'passed',
+  summary: 'Kept the connector alive after idle recovery.',
+  currentStage: 'Verification',
+  currentActivity: 'Ran focused connector tests.',
+  lastTool: 'relai_validate',
+  lastOutcome: 'succeeded',
+  workflowEvidence: [{ kind: 'check', outcome: 'passed', sourceTool: 'relai_validate', commandId: 'test:connector', paths: ['src/connector.js'], command: 'secret-bearing command must not enter recovery' }],
   events: [{ stdout: 'raw log output must not enter summary' }],
   workflow: {
     completion: { hardReady: true, blockers: [], recommendations: [] },
@@ -18,7 +24,11 @@ assert.equal(session.goal, 'Fix connector timeout without changing unrelated beh
 assert.deepEqual(session.changes, ['src/connector.js']);
 assert.equal(session.validation, 'passed');
 assert.equal(session.status, 'waiting');
+assert.equal(session.summary, 'Kept the connector alive after idle recovery.');
+assert.equal(session.current.stage, 'Verification');
+assert.equal(session.recentEvidence[0].check, 'test:connector');
 assert.doesNotMatch(JSON.stringify(session), /raw log output/);
+assert.doesNotMatch(JSON.stringify(session), /secret-bearing command/);
 
 const internal = {
   version: 1,

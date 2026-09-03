@@ -18,11 +18,6 @@ function validRuntimeKey(value) {
   return key.length >= 12 && !/\s/.test(key);
 }
 
-function validConnectorName(value) {
-  const name = String(value || '').trim();
-  return name.length >= 3 && name.length <= 80 && !/[\r\n\0]/.test(name);
-}
-
 function clearFieldError(inputId, errorId) {
   const input = $(inputId);
   const error = $(errorId);
@@ -45,7 +40,6 @@ function setFieldError(inputId, errorId, message) {
 }
 
 function clearValidationErrors() {
-  clearFieldError('connectorNameInput', 'connectorNameError');
   clearFieldError('tunnelIdInput', 'tunnelIdError');
   clearFieldError('tunnelApiKeyInput', 'runtimeKeyError');
   clearFieldError('portInput', 'portError');
@@ -63,17 +57,12 @@ async function openOpenAISetup(button) {
 }
 
 async function connect() {
-  const connectorName = $('connectorNameInput').value.trim();
   const tunnelId = $('tunnelIdInput').value.trim();
   const tunnelApiKey = $('tunnelApiKeyInput').value.trim();
   const runtimeKeyConfigured = $('tunnelApiKeyInput').dataset.configured === '1';
   const port = Number($('portInput').value);
   setError();
   clearValidationErrors();
-  if (!validConnectorName(connectorName)) {
-    setFieldError('connectorNameInput', 'connectorNameError', 'Enter a connector name from 3 to 80 characters.');
-    return;
-  }
   if (!validTunnelId(tunnelId)) {
     setFieldError('tunnelIdInput', 'tunnelIdError', 'Paste a valid Secure MCP Tunnel ID beginning with tunnel_.');
     return;
@@ -95,7 +84,7 @@ async function connect() {
   button.disabled = true;
   button.textContent = 'Connecting…';
   try {
-    const result = await window.electronAPI.wizardDone({ connectorName, tunnelId, tunnelApiKey, port, restart: recoveryMode });
+    const result = await window.electronAPI.wizardDone({ tunnelId, tunnelApiKey, port, restart: recoveryMode });
     if (!result?.ok || !result?.status?.serverRunning || result.status.tunnelStatus !== 'running') {
       throw new Error(result?.status?.error || 'The ChatGPT connection did not become ready.');
     }
@@ -109,7 +98,6 @@ async function connect() {
 async function loadExistingSettings() {
   try {
     const config = await window.electronAPI.getRecoveryConfig();
-    if (config?.connectorName) $('connectorNameInput').value = config.connectorName;
     if (config?.port) $('portInput').value = String(config.port);
     if (config?.tunnelId) $('tunnelIdInput').value = config.tunnelId;
     if (config?.tunnelApiKeyConfigured) {
@@ -136,7 +124,7 @@ $('runtimeKeyToggle').addEventListener('click', () => {
 });
 $('cancelWizardBtn').addEventListener('click', () => window.electronAPI.closeWizard());
 document.querySelectorAll('[data-open-openai]').forEach(button => button.addEventListener('click', () => openOpenAISetup(button)));
-for (const [inputId, errorId] of [['connectorNameInput', 'connectorNameError'], ['tunnelIdInput', 'tunnelIdError'], ['tunnelApiKeyInput', 'runtimeKeyError'], ['portInput', 'portError']]) {
+for (const [inputId, errorId] of [['tunnelIdInput', 'tunnelIdError'], ['tunnelApiKeyInput', 'runtimeKeyError'], ['portInput', 'portError']]) {
   $(inputId).addEventListener('input', () => clearFieldError(inputId, errorId));
 }
 void loadExistingSettings();

@@ -35,8 +35,8 @@ for (const variant of variants) {
     const byName = new Map(tools.map(tool => [tool.name, tool]));
     assert.deepEqual(names, activeMcpToolNames);
     assert.deepEqual(tools.filter(tool => activeToolNames.includes(tool.name)).map(tool => tool.name), activeToolNames);
-    assert.equal(byName.get('relai_approval')?._meta?.ui?.resourceUri, 'ui://relai/approval/v1.html');
-    assert.deepEqual(tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool._meta?.ui?.visibility), [['app']]);
+    assert.equal(byName.has('relai_approval'), false);
+    assert.deepEqual(tools.filter(tool => tool.name.startsWith('relai_app_')).map(tool => tool.name), []);
     const readSchema = byName.get('relai_read')?.inputSchema;
     assert.ok(readSchema?.properties?.paths, 'raw MCP discovery must expose relai_read paths');
     assert.ok(readSchema?.properties?.ranges, 'raw MCP discovery must expose relai_read ranges');

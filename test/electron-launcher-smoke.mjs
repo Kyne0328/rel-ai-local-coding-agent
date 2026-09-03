@@ -113,7 +113,7 @@ try {
   assert.equal(hasExistingConfig(), false);
   saveLauncherConfig({ port: 3333, tunnelId: 'tunnel_12345678', token: 'local-token-value' });
   assert.equal(hasExistingConfig(), true);
-  assert.deepEqual(readGuiConfig(), { port: 3333, tunnelId: 'tunnel_12345678', token: 'local-token-value', connectorName: 'Rel.AI MCP' });
+  assert.deepEqual(readGuiConfig(), { port: 3333, tunnelId: 'tunnel_12345678', token: 'local-token-value' });
 
   const env = fs.readFileSync(path.join(stateDir, '.env'), 'utf8');
   assert.match(env, /REL_AI_MCP_PORT/);
@@ -124,7 +124,7 @@ try {
   const profile = JSON.parse(fs.readFileSync(path.join(stateDir, 'connection.json'), 'utf8'));
   assert.equal(profile.tunnelId, 'tunnel_12345678');
   assert.equal(profile.tunnelProvider, 'openai-secure-mcp');
-  assert.equal(profile.connectorName, 'Rel.AI MCP');
+  assert.equal(Object.hasOwn(profile, 'connector' + 'Name'), false);
   assert.equal(profile.host, '127.0.0.1');
   assert.equal('publicUrl' in profile, false);
   assert.equal('connectionMode' in profile, false);

@@ -26,7 +26,6 @@ function copyFixture() {
     'package-lock.json',
     'CHANGELOG.md',
     'release-manifest.json',
-    '.codex-plugin/plugin.json',
     'electron/package.json',
     'electron/package-lock.json',
     'electron/build/installer-icon.ico',
@@ -97,7 +96,6 @@ function verifyReleaseBump() {
   assert.equal(readJson('package-lock.json').packages[''].version, '0.99.0');
   assert.equal(readJson('electron/package.json').version, '0.99.0');
   assert.equal(readJson('electron/package-lock.json').packages[''].version, '0.99.0');
-  assert.equal(readJson('.codex-plugin/plugin.json').version, '0.99.0');
   assert.equal(readJson('release-manifest.json').applicationVersion, '0.99.0');
   assert.match(fs.readFileSync(changelogPath, 'utf8'), /^## \[0\.99\.0\] — 2099-01-02/m);
 }
@@ -113,7 +111,7 @@ function verifyPackageContracts() {
     email: 'Kyne0328@users.noreply.github.com',
     url: 'https://github.com/Kyne0328'
   });
-  assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
+  assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-local-coding-agent');
   assert.deepEqual(electronLockRoot.dependencies || {}, electronPackage.dependencies || {}, 'Electron runtime dependencies must stay synchronized with the lockfile');
   assert.deepEqual(electronLockRoot.devDependencies || {}, electronPackage.devDependencies || {}, 'Electron development dependencies must stay synchronized with the lockfile');
   assert.equal(rootPackage.allowScripts?.['node-pty@1.1.0'], true, 'root installs must explicitly approve the pinned node-pty native build under npm 12');
