@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.27.4] — 2026-09-03
+
+### Background reliability and dashboard performance
+- **Recover automatically when the desktop local-service process exits unexpectedly.** A healthy running desktop now restarts the configured Rel.AI connection in the background after an unexpected service exit instead of leaving the dashboard stuck in a reconnecting state until the user opens or restarts the app.
+- **Keep background task and connection state current without paying the cost of hidden-window rendering.** The dashboard keeps its lightweight live event stream connected while minimized or backgrounded, ingests state updates without remounting or rerendering hidden views, coalesces deferred UI work, and performs an authoritative catch-up only when continuity was actually lost.
+- **Make hidden Activity history work bounded and recoverable.** Normal dashboard requests can continue pausing timeout accounting while hidden, but Activity history loads keep a real background timeout so they cannot remain pending for an entire minimized period; hidden failures are retried when the dashboard becomes visible and hidden live-entry rendering is deferred until then.
+
+### Runtime, setup, and connector simplification
+- **Remove the unused Codex/plugin installation path.** Rel.AI no longer ships `.codex-plugin` or `.mcp.json` integration metadata, Codex-specific package keywords/docs, or plugin-manifest validation; the packaged skill validator now validates the actual bundled Rel.AI skills directly.
+- **Remove per-computer ChatGPT connector naming from setup.** The desktop wizard now asks only for the Secure MCP Tunnel and runtime key, uses the canonical `Rel.AI MCP` connector name in ChatGPT guidance, and stops persisting a connector-name field that no longer changes runtime behavior.
+- **Remove the nonfunctional in-chat approval card surface.** MCP discovery no longer registers the approval render/decision tools or approval HTML resource; pending protected operations point to the Rel.AI Tasks dashboard for approval, keeping discovery on the canonical 12-tool surface instead of exposing two extra app-only helpers.
+- **Align repository metadata with the renamed public repository.** Package metadata, release/download links, CI badges, DeepWiki links, development docs, and update/support URLs now point to `rel-ai-local-coding-agent`.
+
+### Task continuity and context quality
+- **Use the current task objective to suggest useful local skills and prior completed work.** `relai_work begin` can include up to three relevant discovered skills and up to three related completed task episodes from the same workspace, using compact lexical relevance rather than loading unrelated history.
+- **Preserve useful recovery context after compaction or reconnects.** Compact task status now retains the task summary, current stage/activity/tool outcome, and a bounded tail of recent activity or workflow evidence so a resumed session can recover what just happened without replaying the full task history.
+- **Keep `relai_work status` observational.** Status reads no longer create task-activity/history noise, preventing recovery/status checks from inflating task history or appearing as work performed by the task itself.
+
+### Connector refresh and validation
+- **Require a one-time ChatGPT connector refresh for 0.27.4.** This release removes the approval-card MCP helper tools/resources from connector discovery. Existing installations show the standard refresh notice so ChatGPT reloads the current 12-tool surface; fresh installations remain exempt.
+- **Expand regression coverage for the release changes.** Tests cover automatic background service restart, hidden dashboard/SSE continuity, bounded hidden Activity history requests and visible retry, passive status behavior, related-task and skill suggestions, compact recovery context, connector-name removal, skill-package validation, and the approval-card hard cutover.
+
+Bump root/electron/status UI/lockfiles/release manifest to 0.27.4.
+
 ## [0.27.3] — 2026-09-01
 
 ### ChatGPT file transfer and tool behavior

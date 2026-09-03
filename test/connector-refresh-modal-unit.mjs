@@ -18,7 +18,7 @@ function memoryStorage(initial = {}) {
   };
 }
 
-assert.deepEqual([...CONNECTOR_REFRESH_VERSIONS], ['0.26.0', '0.27.0', '0.27.1', '0.27.3']);
+assert.deepEqual([...CONNECTOR_REFRESH_VERSIONS], ['0.26.0', '0.27.0', '0.27.1', '0.27.3', '0.27.4']);
 
 const freshInstallStorage = memoryStorage();
 assert.equal(prepareConnectorRefreshNotice({
@@ -86,6 +86,17 @@ const v0273Notice = prepareConnectorRefreshNotice({
 assert.ok(v0273Notice, 'updating into 0.27.3 must require the one-time connector refresh notice');
 assert.match(v0273Notice.description, /0\.27\.3 changed the connector details or tool definitions/i);
 assert.equal(prepareConnectorRefreshNotice({ currentVersion: '0.27.3', previousVersion: '', firstLaunch: true, updated: false }, memoryStorage()), null, 'fresh 0.27.3 installs must not receive an unnecessary connector refresh notice');
+
+const v0274Storage = memoryStorage();
+const v0274Notice = prepareConnectorRefreshNotice({
+  currentVersion: '0.27.4',
+  previousVersion: '0.27.3',
+  firstLaunch: false,
+  updated: true
+}, v0274Storage);
+assert.ok(v0274Notice, 'updating into 0.27.4 must require the one-time connector refresh notice');
+assert.match(v0274Notice.description, /0\.27\.4 changed the connector details or tool definitions/i);
+assert.equal(prepareConnectorRefreshNotice({ currentVersion: '0.27.4', previousVersion: '', firstLaunch: true, updated: false }, memoryStorage()), null, 'fresh 0.27.4 installs must not receive an unnecessary connector refresh notice');
 
 assert.equal(prepareConnectorRefreshNotice({ currentVersion: '0.25.1', previousVersion: '0.25.0', updated: true }, memoryStorage()), null, 'releases without a public schema refresh must stay silent');
 
