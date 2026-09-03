@@ -14,13 +14,21 @@
 - **Remove the nonfunctional in-chat approval card surface.** MCP discovery no longer registers the approval render/decision tools or approval HTML resource; pending protected operations point to the Rel.AI Tasks dashboard for approval, keeping discovery on the canonical 12-tool surface instead of exposing two extra app-only helpers.
 - **Align repository metadata with the renamed public repository.** Package metadata, release/download links, CI badges, DeepWiki links, development docs, and update/support URLs now point to `rel-ai-local-coding-agent`.
 
+### Local memory, continuity, and procedural learning
+- **Add private long-term knowledge for all projects or one project.** Rel.AI now stores user-managed knowledge locally in SQLite/FTS5, retrieves only compact relevant entries, and exposes Memory & learning settings for adding, removing, scoping, disabling, or clearing saved knowledge.
+- **Carry useful context across sessions without pretending to own ChatGPT transcripts.** `relai_work begin` can accept a bounded host context capsule, while task start and status can recover compact same-conversation history, relevant completed work from other projects, saved knowledge, and verified procedures under one strict bootstrap budget.
+- **Learn reusable procedures only from completed, validated repository work.** Successful task evidence creates local procedure candidates, repeated independent successes can verify them, and users can explicitly trust or reject candidates before verified procedures are suggested for later work.
+- **Promote verified procedures into reusable local skills with provenance.** Skill creation reuses the canonical skill validator, records local provenance, refuses accidental overwrites, and now gives distinct procedures deterministic names even when their readable titles collide.
+- **Keep model-facing continuity private and bounded.** Automatic bootstrap excludes raw command output, credentials, source bodies, internal work IDs, repository fingerprints, and cross-project paths; exact serialized-size accounting now guarantees the configured byte limit is not exceeded.
+- **Keep the public MCP surface compact.** The model-facing tool count remains 12 while the tool-surface revision advances to 61 for the optional `relai_work begin` context capsule and current schemas.
+
 ### Task continuity and context quality
 - **Use the current task objective to suggest useful local skills and prior completed work.** `relai_work begin` can include up to three relevant discovered skills and up to three related completed task episodes from the same workspace, using compact lexical relevance rather than loading unrelated history.
 - **Preserve useful recovery context after compaction or reconnects.** Compact task status now retains the task summary, current stage/activity/tool outcome, and a bounded tail of recent activity or workflow evidence so a resumed session can recover what just happened without replaying the full task history.
 - **Keep `relai_work status` observational.** Status reads no longer create task-activity/history noise, preventing recovery/status checks from inflating task history or appearing as work performed by the task itself.
 
 ### Connector refresh and validation
-- **Require a one-time ChatGPT connector refresh for 0.27.4.** This release removes the approval-card MCP helper tools/resources from connector discovery. Existing installations show the standard refresh notice so ChatGPT reloads the current 12-tool surface; fresh installations remain exempt.
+- **Require a one-time ChatGPT connector refresh for 0.27.4.** This release removes the approval-card MCP helper tools/resources and advances the `relai_work begin` schema for bounded host context while keeping the model-facing surface at 12 tools. Existing installations show the standard refresh notice so ChatGPT reloads the current tool definitions; fresh installations remain exempt.
 - **Expand regression coverage for the release changes.** Tests cover automatic background service restart, hidden dashboard/SSE continuity, bounded hidden Activity history requests and visible retry, passive status behavior, related-task and skill suggestions, compact recovery context, connector-name removal, skill-package validation, and the approval-card hard cutover.
 
 Bump root/electron/status UI/lockfiles/release manifest to 0.27.4.

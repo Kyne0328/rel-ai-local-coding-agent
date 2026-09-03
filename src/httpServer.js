@@ -9,6 +9,7 @@ import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handle
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
 import { handleApiApprovalDecision, handleApiApprovals } from './http/dashboardApprovals.js';
+import { handleApiKnowledge, handleApiKnowledgeAction } from './http/dashboardKnowledge.js';
 import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, sendMcpTransportError, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
@@ -254,6 +255,7 @@ const GET_ROUTES = {
   "/api/approvals": { auth: authDashboard, handler: handleApiApprovals },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
+  "/api/knowledge": { auth: authDashboard, handler: handleApiKnowledge },
   "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
   "/api/workspace/preflight": { auth: authDashboard, handler: handleWorkspacePreflight },
   "/events": { auth: authDashboard, handler: handleEvents }
@@ -277,6 +279,7 @@ const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
   "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },
+  "/api/knowledge": { auth: authDashboard, handler: handleApiKnowledgeAction },
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
   "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks },

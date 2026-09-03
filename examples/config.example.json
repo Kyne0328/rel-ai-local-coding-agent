@@ -7,6 +7,11 @@
     "staleHours": 24,
     "enableStateExport": true
   },
+  "knowledge": {
+    "enabled": true,
+    "proceduralLearning": true,
+    "maxBootstrapBytes": 4096
+  },
   "release": {
     "minimumReadinessScore": 80,
     "requireHttpToken": true

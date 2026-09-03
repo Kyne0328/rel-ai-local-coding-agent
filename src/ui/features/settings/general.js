@@ -1,6 +1,7 @@
 import { header, panel, field } from './shared.js';
 import { getUiPreferences, setThemePreference } from '../../preferences.js';
 import { desktopNotificationsPanel } from './desktop-notifications.js';
+import { knowledgePanel } from './knowledge.js';
 
 export function mountGeneral(container) {
   container.innerHTML = '<div class="settings-loading">Loading general settings…</div>';
@@ -14,12 +15,13 @@ async function loadAndRender(container) {
     : null;
 
   container.innerHTML = '';
-  container.appendChild(header('General', 'Change appearance and desktop notifications.'));
+  container.appendChild(header('General', 'Change appearance, desktop notifications, and local memory.'));
 
   const appearance = panel('Appearance');
   renderAppearanceSettings(appearance.body);
   container.appendChild(appearance.el);
   container.appendChild(desktopNotificationsPanel(notifications?.preferences).el);
+  container.appendChild(await knowledgePanel());
 }
 
 function renderAppearanceSettings(body) {

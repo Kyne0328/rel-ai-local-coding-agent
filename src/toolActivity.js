@@ -392,6 +392,7 @@ function createToolActivityTracker(options = {}) {
     const explicitTitle = String(details.title || '').trim();
     const resumedTitle = String(resumed?.title || '').trim();
     const objective = sanitizeDisplayText(details.objective || resumed?.objective, 500);
+    const contextSummary = sanitizeDisplayText(details.contextSummary || resumed?.contextSummary, 3000);
     const calls = Math.max(0, Number(resumed?.toolCallCount ?? resumed?.calls ?? 0));
     const failures = Math.max(0, Number(resumed?.failedToolCallCount ?? resumed?.failures ?? 0));
     const successes = Math.max(0, Number(resumed?.successfulToolCallCount ?? Math.max(0, calls - failures)));
@@ -411,6 +412,7 @@ function createToolActivityTracker(options = {}) {
       }),
       titleSource: explicitTitle ? 'explicit' : resumedTitle ? 'resume' : objective ? 'objective' : String(details.internalOperation || '') === OP.WORK_BEGIN ? 'fallback' : 'operation',
       objective,
+      contextSummary,
       intent: resumed?.intent || classifyTaskIntent(objective),
       correlation: mergeCorrelation(resumed?.correlation || {}, details.correlation, details.workspace || resumed?.workspace),
       principalFingerprint: String(details.principalFingerprint || resumed?.principalFingerprint || ''),
@@ -555,6 +557,7 @@ function createToolActivityTracker(options = {}) {
       id: task.id,
       title: task.title,
       objective: task.objective,
+      contextSummary: task.contextSummary,
       intent: task.intent,
       status,
       resumeStatus,
@@ -606,6 +609,7 @@ function createToolActivityTracker(options = {}) {
       id: task.id,
       title: task.title,
       objective: task.objective,
+      contextSummary: task.contextSummary,
       intent: task.intent,
       status,
       progress: completeProgress('Task completed'),
@@ -704,6 +708,7 @@ function createToolActivityTracker(options = {}) {
       scopeId: task.scopeId,
       title: task.title,
       objective: task.objective,
+      contextSummary: task.contextSummary,
       intent: task.intent,
       status: task.status,
       state: task.activeCalls > 0 ? 'working' : 'waiting',

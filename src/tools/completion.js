@@ -1,6 +1,7 @@
 import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
-import { readTaskHistorySession } from '../taskHistoryStore.js';
+import { readTaskHistorySession, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { learnFromCompletedTask } from '../knowledgeStore.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { workspaceDirtyPaths } from '../repo/gitOps.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
@@ -120,6 +121,7 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
   const validationStatus = String(options.validationStatus || 'passed');
   const residualChangedFiles = await workspaceDirtyPaths(workspace, config, changedFiles);
   const residualState = residualChangedFiles.length ? 'preserved_uncommitted' : 'clean';
+  const learningSession = readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false }) || {};
   const completion = requestCurrentTaskCompletion({
     summary,
     validationStatus,
@@ -129,8 +131,7 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
     residualChangedFiles,
     residualState
   });
-  clearSessionPolicy(config, workspace.alias, taskId);
-  return {
+  const result = {
     ok: true,
     workspace: workspace.alias,
     work_id: completion.taskId,
@@ -148,6 +149,10 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
     residualState,
     message: completionMessage(completionSource, completion.duplicate === true, residualChangedFiles)
   };
+  try { learnFromCompletedTask(config, workspace, learningSession, result); }
+  catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] procedural learning:', error); }
+  clearSessionPolicy(config, workspace.alias, taskId);
+  return result;
 }
 
 async function finalizeValidationResult(config, workspace, validationResult, summary) {

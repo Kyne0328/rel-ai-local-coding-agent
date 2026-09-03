@@ -1,4 +1,4 @@
-function compactSessionSummary(session = {}) {
+function compactSessionSummary(session = {}, options = {}) {
   const workflow = session.workflow && typeof session.workflow === 'object' ? session.workflow : {};
   const changedFiles = unique(session.changedFiles || workflow.boundary?.changedFiles);
   const blockers = unique(workflow.completion?.blockers);
@@ -17,9 +17,11 @@ function compactSessionSummary(session = {}) {
     summary: summary || undefined,
     changes: changedFiles.length ? changedFiles : undefined,
     validation: compactValidation(session, workflow),
+    hostContextSummary: String(session.contextSummary || '').trim() || undefined,
     current,
     recentEvidence: recentEvidence.length ? recentEvidence : undefined,
     remaining: remaining.length ? remaining : undefined,
+    continuity: options.continuity && Object.keys(options.continuity).length ? options.continuity : undefined,
     status: String(session.status || '').trim() || undefined
   });
 }

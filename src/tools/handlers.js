@@ -21,9 +21,10 @@ import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { selectRelevantSkills } from '../skillDiscovery.js';
+import { buildTaskContinuity } from '../context/taskContinuity.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 import { createReviewCheckpoint, replayReviewCheckpoint } from '../reviewCheckpoints.js';
-const startTaskHandler = inWorkspace(async (workspace, config, args) => {
+const startTaskHandler = inWorkspace(async (workspace, config, args, context) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
   if (bootstrapMode === 'none') {
@@ -36,13 +37,22 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
     instructionPath: args.instructionPath
   });
   const taskQuery = [task.objective, task.title].filter(Boolean).join(' ');
+  const hostContextSummary = String(args.contextSummary || '').trim().slice(0, 3000);
   const suggestedSkills = selectRelevantSkills(snapshot.skills, taskQuery, { limit: 3 });
   const relatedTasks = readRelevantTaskEpisodes(config, workspace.alias, taskQuery, { excludeTaskId: task.work_id, limit: 3 });
+  const continuity = buildTaskContinuity(config, {
+    workspace: workspace.alias,
+    query: taskQuery,
+    excludeTaskId: task.work_id,
+    conversationId: context?.conversationId
+  });
   const baseBootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
   const bootstrap = {
     ...baseBootstrap,
     ...(suggestedSkills.length ? { suggestedSkills } : {}),
-    ...(relatedTasks.length ? { relatedTasks } : {})
+    ...(relatedTasks.length ? { relatedTasks } : {}),
+    ...(hostContextSummary ? { hostContextSummary } : {}),
+    ...continuity
   };
   if (bootstrapMode === 'full') {
     let cachedIntelligence = null;

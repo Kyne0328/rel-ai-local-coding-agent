@@ -17,6 +17,7 @@ import { fallbackExecutionStatus } from '../mcp/fallbackExecutions.js';
 import { authorizedWorkspaceAliases } from '../mcp/authorizationPolicy.js';
 import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { compactSessionSummary } from '../context/session-compactor.js';
+import { buildTaskContinuity } from '../context/taskContinuity.js';
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
@@ -61,10 +62,21 @@ async function relaiStatus(config, args = {}, context = {}) {
   }
   const { getToolNames, getToolGroups, getToolSurfaceManifest } = toolSchema;
   const taskActivity = typeof context.getTaskActivity === 'function' ? context.getTaskActivity() : getToolActivity();
+  const taskSession = args.work_id ? readTaskHistorySessionRecord(config, args.work_id, { reconcileInactive: false }) : null;
+  const taskQuery = taskSession ? [taskSession.objective, taskSession.title].filter(Boolean).join(' ') : '';
+  const taskContinuity = taskSession && taskQuery
+    ? buildTaskContinuity(config, {
+        workspace: taskSession.workspace,
+        query: taskQuery,
+        excludeTaskId: args.work_id,
+        conversationId: taskSession.correlation?.conversationId
+      })
+    : {};
   const compatibility = runtimeCompatibility(config, {
     workspace: args.workspace,
     activeTaskCount: taskActivity.activeTaskCount
-  });  return {
+  });
+  return {
     ok: true,
     version: getVersion(),
     runtime: compatibility.runtime,
@@ -76,7 +88,7 @@ async function relaiStatus(config, args = {}, context = {}) {
     ...(localDiagnostics ? { scripts: sortedKeys(scripts), ci } : {}),
     workspace: selectedWorkspace,
     ...(args.work_id ? { work_id: String(args.work_id) } : {}),
-    ...(args.work_id ? { task: compactSessionSummary(readTaskHistorySessionRecord(config, args.work_id, { reconcileInactive: false }) || {}) } : {}),
+    ...(args.work_id ? { task: compactSessionSummary(taskSession || {}, { continuity: taskContinuity }) } : {}),
     ...(backgroundOperation ? { backgroundOperation } : {}),
     workspaceCount: workspaceAliases.length,
     workspaceAliases

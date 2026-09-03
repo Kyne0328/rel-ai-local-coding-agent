@@ -531,6 +531,7 @@ function sanitizeTaskRecord(record) {
   for (const [key, limit] of Object.entries({
     title: MAX_TITLE_LENGTH,
     objective: MAX_OBJECTIVE_LENGTH,
+    contextSummary: 3000,
     currentStage: MAX_SUMMARY_LENGTH,
     currentActivity: MAX_SUMMARY_LENGTH,
     summary: 2000,

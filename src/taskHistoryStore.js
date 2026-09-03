@@ -241,6 +241,42 @@ function readRelevantTaskEpisodes(config, workspace, query, options = {}) {
     .map(item => compactTaskEpisode(item.session));
 }
 
+function readCrossWorkspaceTaskEpisodes(config, workspace, query, options = {}) {
+  const workspaceAlias = String(workspace?.alias || workspace || '').trim();
+  const queryTerms = relevanceTerms(query);
+  if (!queryTerms.length) return [];
+  const excludeTaskId = cleanTaskId(options.excludeTaskId);
+  const limit = clamp(options.limit || 2, 1, 4);
+  return readTaskHistory(config, {}, { limit: MAX_SESSIONS })
+    .map((session, index) => ({ session, index, score: crossWorkspaceEpisodeScore(session, workspaceAlias, queryTerms, excludeTaskId) }))
+    .filter(item => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, limit)
+    .map(item => compactPortableTaskEpisode(item.session));
+}
+
+function readConversationContinuity(config, conversationId, options = {}) {
+  const id = String(conversationId || '').trim();
+  if (!id) return [];
+  const excludeTaskId = cleanTaskId(options.excludeTaskId);
+  const limit = clamp(options.limit || 3, 1, 5);
+  return readTaskHistory(config, {}, { limit: MAX_SESSIONS })
+    .filter(session => String(session?.correlation?.conversationId || '') === id)
+    .filter(session => !excludeTaskId || cleanTaskId(session.id) !== excludeTaskId)
+    .filter(session => session.status === 'completed' && session.completionKnown === true)
+    .slice(0, limit)
+    .map(compactPortableTaskEpisode);
+}
+
+function crossWorkspaceEpisodeScore(session, workspaceAlias, queryTerms, excludeTaskId) {
+  if (!session || (workspaceAlias && String(session.workspace || '') === workspaceAlias)) return 0;
+  if (excludeTaskId && cleanTaskId(session.id) === excludeTaskId) return 0;
+  if (session.status !== 'completed' || session.completionKnown !== true) return 0;
+  const primary = matchingRelevanceTerms(queryTerms, `${session.objective || ''} ${session.title || ''}`);
+  const secondary = matchingRelevanceTerms(queryTerms, `${session.resultSummary || ''} ${session.summary || ''}`);
+  return (primary.length * 3) + secondary.length;
+}
+
 function taskEpisodeScore(session, workspaceAlias, queryTerms, excludeTaskId) {
   if (!session || String(session.workspace || '') !== workspaceAlias) return 0;
   if (excludeTaskId && cleanTaskId(session.id) === excludeTaskId) return 0;
@@ -259,6 +295,17 @@ function compactTaskEpisode(session) {
     ...(outcome ? { outcome } : {}),
     ...(changes.length ? { changes } : {}),
     ...(String(session.validation || '').trim() ? { validation: String(session.validation).trim() } : {})
+  };
+}
+
+function compactPortableTaskEpisode(session) {
+  const goal = compactText(session.objective || session.title, 260);
+  const outcome = compactText(session.resultSummary || session.summary, 520);
+  const validation = String(session.validation || '').trim();
+  return {
+    ...(goal ? { goal } : {}),
+    ...(outcome ? { outcome } : {}),
+    ...(validation ? { validation } : {})
   };
 }
 
@@ -644,4 +691,4 @@ function emptySession(id) {
   };
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readConversationContinuity, readCrossWorkspaceTaskEpisodes, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };

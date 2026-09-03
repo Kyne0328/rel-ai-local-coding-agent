@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { MAX_SKILL_DESCRIPTION_LENGTH, MAX_SKILL_NAME_LENGTH, MIN_SKILL_DESCRIPTION_LENGTH, SKILL_NAME_PATTERN } from '../src/skillValidation.js';
 
 // Bundled OpenAI skills intentionally use the minimal name/description frontmatter profile.
 const ALLOWED_SKILL_FRONTMATTER_FIELDS = new Set(['name', 'description']);
-const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MAX_SKILL_NAME_LENGTH = 64;
 
 function validatePlugin(root) {
   const errors = [];
@@ -52,7 +51,7 @@ function validateSkills(root, skillsPath, errors) {
     if (!SKILL_NAME_PATTERN.test(name)) {
       errors.push(`${label} name must use lowercase letters, numbers, and single hyphens with no leading or trailing hyphen.`);
     }
-    if (description.length < 40 || description.length > 500) errors.push(`${label} description must be 40-500 characters.`);
+    if (description.length < MIN_SKILL_DESCRIPTION_LENGTH || description.length > MAX_SKILL_DESCRIPTION_LENGTH) errors.push(`${label} description must be ${MIN_SKILL_DESCRIPTION_LENGTH}-${MAX_SKILL_DESCRIPTION_LENGTH} characters.`);
     const agentLabel = `skills/${directory}/agents/openai.yaml`;
     const agentPath = path.join(rootForSkill, 'agents', 'openai.yaml');
     const agent = parseOpenAiAgentMetadata(readText(agentPath, errors, agentLabel), errors, agentLabel);

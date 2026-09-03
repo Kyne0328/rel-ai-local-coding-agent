@@ -85,6 +85,21 @@
 .settings-validation-row { @apply flex min-w-0 items-center justify-between gap-3 border-b px-3 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
 .settings-validation-row > div { @apply grid min-w-0 gap-0.5; }
 .settings-validation-row > div span { @apply text-[12px]; overflow-wrap: anywhere; color: var(--ui-text-secondary); }
+.settings-memory-content { @apply grid gap-3; }
+.settings-inline-summary { @apply flex flex-wrap gap-2; }
+.settings-inline-summary span { @apply rounded-md px-2 py-1 text-[11px]; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); }
+.settings-inline-form { @apply grid gap-2; grid-template-columns: minmax(220px,1fr) auto minmax(140px,.45fr) auto; }
+.settings-inline-form input, .settings-inline-form select { @apply min-w-0; }
+.settings-memory-section, .settings-memory-list { @apply grid gap-2; }
+.settings-memory-section > strong { @apply text-[12px]; }
+.settings-memory-row { @apply flex min-w-0 items-start justify-between gap-3 rounded-lg px-3 py-2.5; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.settings-memory-row > div:first-child { @apply grid min-w-0 gap-1; }
+.settings-memory-row span { @apply text-[12px]; overflow-wrap: anywhere; }
+.settings-memory-row small { @apply text-[11px] leading-4; color: var(--ui-text-secondary); overflow-wrap: anywhere; }
+.settings-disclosure { @apply overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); }
+.settings-disclosure > summary { @apply cursor-pointer px-3 py-2.5 text-[12px] font-semibold; }
+.settings-disclosure[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
+.settings-disclosure .settings-memory-list { @apply p-3; }
 .settings-advanced { @apply max-w-5xl; }
 
 .appearance-preview { @apply grid gap-3 rounded-xl p-3; grid-template-columns: repeat(2,minmax(0,1fr)); background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
@@ -124,7 +139,8 @@
 @media (max-width: 520px) {
   .appearance-preview, .settings-fact-grid, .desktop-lifecycle-facts { grid-template-columns: 1fr; }
   .settings-fact-grid > div, .desktop-lifecycle-facts > div { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
-  .settings-validation-row, .application-update-summary { @apply flex-col items-start; }
+  .settings-validation-row, .application-update-summary, .settings-memory-row { @apply flex-col items-start; }
+  .settings-inline-form { grid-template-columns: 1fr; }
   .about-detail-value { @apply w-full text-left; }
   .settings-save-row { @apply flex-col items-stretch; }
   .settings-save-actions { @apply justify-end; }
