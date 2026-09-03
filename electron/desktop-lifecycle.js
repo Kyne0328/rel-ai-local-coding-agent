@@ -2,6 +2,8 @@
 
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { importResourceModule } from './resource-path.js';
 
 const { readJsonFileAsync, writeJsonAtomicAsync } = await importResourceModule('src/durableState.js');
@@ -15,31 +17,41 @@ function createDesktopLifecycleManager(options = {}) {
     execPath = process.execPath,
     now = () => new Date().toISOString(),
     onLog = () => {},
-    errorCodes = {}
+    errorCodes = {},
+    connectorRevision = readConnectorRevision(app)
   } = options;
   if (!app || typeof app.getVersion !== 'function') throw new TypeError('Electron app is required.');
   const statePath = path.join(safeUserDataPath(app), 'desktop-lifecycle.json');
   const loginItemIdentity = { path: execPath, args: ['--background'] };
   const startupSupport = detectStartupSupport({ app, platform, env });
+  const currentConnectorRevision = cleanText(connectorRevision, 240);
   const codes = {
     unsupported: errorCodes.STARTUP_SETTING_NOT_SUPPORTED || 'startup_setting_not_supported',
     failed: errorCodes.STARTUP_SETTING_FAILED || 'startup_setting_failed',
     state: errorCodes.LIFECYCLE_STATE_FAILED || 'lifecycle_state_failed'
   };
   let launchId = '';
-  let status = baseStatus(app, startupSupport);
+  let status = baseStatus(app, startupSupport, currentConnectorRevision);
 
   async function start() {
     const previous = await readState();
     const currentVersion = cleanVersion(app.getVersion());
+    const previousConnectorRevision = cleanText(previous.connectorRevision, 240);
+    const updated = Boolean(previous.version && previous.version !== currentVersion);
+    const connectorRefreshRequired = Boolean(previous.version && currentConnectorRevision && (
+      previousConnectorRevision
+        ? previousConnectorRevision !== currentConnectorRevision
+        : updated
+    ));
     const launchAtLogin = readLaunchAtLogin();
     launchId = crypto.randomUUID();
     status = {
-      ...baseStatus(app, startupSupport),
+      ...baseStatus(app, startupSupport, currentConnectorRevision),
       currentVersion,
       previousVersion: previous.version && previous.version !== currentVersion ? cleanVersion(previous.version) : '',
       firstLaunch: !previous.version,
-      updated: Boolean(previous.version && previous.version !== currentVersion),
+      updated,
+      connectorRefreshRequired,
       recoveredAfterUncleanShutdown: previous.running === true,
       launchCount: Math.max(0, Number(previous.launchCount || 0)) + 1,
       launchedAt: now(),
@@ -149,6 +161,7 @@ function createDesktopLifecycleManager(options = {}) {
   function persistedState(running, lastCleanExitAt = status.lastCleanExitAt) {
     return {
       version: status.currentVersion,
+      connectorRevision: status.connectorRevision,
       running,
       launchId,
       launchCount: status.launchCount,
@@ -180,12 +193,14 @@ function createDesktopLifecycleManager(options = {}) {
   return { start, markCleanShutdown, getStatus, setLaunchAtLogin, setKeepAwake };
 }
 
-function baseStatus(app, support) {
+function baseStatus(app, support, connectorRevision = '') {
   return {
     currentVersion: cleanVersion(app.getVersion()),
     previousVersion: '',
     firstLaunch: false,
     updated: false,
+    connectorRevision: cleanText(connectorRevision, 240),
+    connectorRefreshRequired: false,
     recoveredAfterUncleanShutdown: false,
     launchCount: 0,
     launchedAt: '',
@@ -194,6 +209,32 @@ function baseStatus(app, support) {
     keepAwake: false,
     openedAtLogin: false
   };
+}
+
+function readConnectorRevision(app) {
+  const currentVersion = cleanVersion(app?.getVersion?.());
+  const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const candidates = [];
+  if (app?.isPackaged && typeof process.resourcesPath === 'string' && process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'release-manifest.json'));
+  }
+  candidates.push(path.join(moduleRoot, 'release-manifest.json'));
+  for (const manifestPath of candidates) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (cleanVersion(manifest.applicationVersion) !== currentVersion) continue;
+      const manifestHash = cleanText(manifest.manifestHash, 80);
+      if (!manifestHash) continue;
+      return [
+        cleanText(manifest.protocolVersion, 40),
+        Number(manifest.toolSurfaceVersion || 0),
+        Number(manifest.toolCount || 0),
+        manifestHash,
+        Number(manifest.schemaVersion || 0)
+      ].join(':');
+    } catch {}
+  }
+  return '';
 }
 
 function detectStartupSupport({ app, platform, env }) {

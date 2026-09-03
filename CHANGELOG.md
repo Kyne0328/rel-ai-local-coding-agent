@@ -29,6 +29,7 @@
 
 ### Connector refresh and validation
 - **Require a one-time ChatGPT connector refresh for 0.27.4.** This release removes the approval-card MCP helper tools/resources and advances the `relai_work begin` schema for bounded host context while keeping the model-facing surface at 12 tools. Existing installations show the standard refresh notice so ChatGPT reloads the current tool definitions; fresh installations remain exempt.
+- **Detect future connector refreshes automatically.** Rel.AI now persists a connector revision derived from the release manifest's protocol, tool-surface version, tool count, manifest hash, and schema version. Updates prompt for a ChatGPT connector refresh only when that public connector contract changes, eliminating the hand-maintained refresh-version list while keeping app-only updates silent.
 - **Expand regression coverage for the release changes.** Tests cover automatic background service restart, hidden dashboard/SSE continuity, bounded hidden Activity history requests and visible retry, passive status behavior, related-task and skill suggestions, compact recovery context, connector-name removal, skill-package validation, and the approval-card hard cutover.
 
 Bump root/electron/status UI/lockfiles/release manifest to 0.27.4.

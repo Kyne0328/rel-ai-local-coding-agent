@@ -1,6 +1,5 @@
 import { openModal } from './components/modal.js';
 
-const CONNECTOR_REFRESH_VERSIONS = new Set(['0.26.0', '0.27.0', '0.27.1', '0.27.3', '0.27.4']);
 const DISMISS_DELAY_MS = 5000;
 const STORAGE_PREFIX = 'relai_connector_refresh';
 const REFRESH_STEPS = Object.freeze([
@@ -13,24 +12,26 @@ const REFRESH_STEPS = Object.freeze([
 
 function prepareConnectorRefreshNotice(lifecycle = {}, storage) {
   const currentVersion = cleanVersion(lifecycle.currentVersion);
-  if (!CONNECTOR_REFRESH_VERSIONS.has(currentVersion)) return null;
+  const connectorRevision = cleanRevision(lifecycle.connectorRevision) || currentVersion;
+  if (!connectorRevision) return null;
 
-  const acknowledgedKey = storageKey('acknowledged', currentVersion);
-  const pendingKey = storageKey('pending', currentVersion);
+  const acknowledgedKey = storageKey('acknowledged', connectorRevision);
+  const pendingKey = storageKey('pending', connectorRevision);
   if (readStorage(storage, acknowledgedKey) === '1') {
     removeStorage(storage, pendingKey);
     return null;
   }
 
   const previousVersion = cleanVersion(lifecycle.previousVersion);
-  const updatedIntoRelease = lifecycle.updated === true && previousVersion && previousVersion !== currentVersion;
-  if (updatedIntoRelease) writeStorage(storage, pendingKey, '1');
-  const pending = updatedIntoRelease || readStorage(storage, pendingKey) === '1';
+  const connectorChanged = lifecycle.connectorRefreshRequired === true;
+  if (connectorChanged) writeStorage(storage, pendingKey, '1');
+  const pending = connectorChanged || readStorage(storage, pendingKey) === '1';
   if (!pending) return null;
 
   return {
     currentVersion,
     previousVersion,
+    connectorRevision,
     acknowledgedKey,
     pendingKey,
     title: 'Refresh Rel.AI MCP in ChatGPT',
@@ -160,8 +161,11 @@ function cleanVersion(value) {
   return String(value || '').trim().replace(/^v/i, '').slice(0, 80);
 }
 
+function cleanRevision(value) {
+  return String(value || '').trim().slice(0, 240);
+}
+
 export {
-  CONNECTOR_REFRESH_VERSIONS,
   DISMISS_DELAY_MS,
   REFRESH_STEPS,
   acknowledgeConnectorRefreshNotice,
