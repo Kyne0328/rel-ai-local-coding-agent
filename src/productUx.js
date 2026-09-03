@@ -219,7 +219,7 @@ function stateExport(config, args = {}) {
   const maxFiles = clampNumber(args.maxFiles || 2000, 1, 20000);
   const files = [];
   walkState(stateDir, stateDir, files, maxFiles, clampNumber(args.maxFileBytes || 1024 * 1024, 1000, 10 * 1024 * 1024));
-  const payload = { version: 1, exportedAt: new Date().toISOString(), stateDir, files };
+  const payload = { version: 2, exportedAt: new Date().toISOString(), stateDir, files };
   if (args.outputPath) {
     const out = writableJsonPath(args.outputPath, "outputPath");
     fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -250,7 +250,7 @@ function stateImport(config, args = {}) {
     fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
     const realParent = fs.realpathSync(parent);
     if (!realParent.startsWith(stateBase)) throw new Error(`Unsafe state path: ${relative}`);
-    fs.writeFileSync(path.join(realParent, path.basename(relative)), item.content, { mode: 0o600 });
+    fs.writeFileSync(path.join(realParent, path.basename(relative)), decodeStateFile(item), { mode: 0o600 });
     written.push(relative);
   }
   return { ok: true, stateDir, writtenCount: written.length, written: written.slice(0, 200) };
@@ -285,9 +285,24 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
       const stat = fs.statSync(full);
       if (stat.size > maxFileBytes) continue;
       const relative = path.relative(root, full).replaceAll(path.win32.sep, "/");
-      files.push({ path: relative, modifiedAt: stat.mtime.toISOString(), content: fs.readFileSync(full, "utf8") });
+      const bytes = fs.readFileSync(full);
+      const text = bytes.toString("utf8");
+      const utf8 = Buffer.from(text, "utf8").equals(bytes);
+      files.push(utf8
+        ? { path: relative, modifiedAt: stat.mtime.toISOString(), content: text }
+        : { path: relative, modifiedAt: stat.mtime.toISOString(), encoding: "base64", content: bytes.toString("base64") });
     }
   }
+}
+
+function decodeStateFile(item) {
+  const encoding = String(item?.encoding || "utf8").trim().toLowerCase();
+  if (encoding === "utf8") return String(item.content || "");
+  if (encoding !== "base64") throw new Error(`Unsupported state file encoding: ${encoding}`);
+  const content = String(item.content || "");
+  const decoded = Buffer.from(content, "base64");
+  if (decoded.toString("base64") !== content) throw new Error(`Invalid base64 state content for ${item.path || "unknown file"}.`);
+  return decoded;
 }
 
 function clampNumber(value, min, max) {

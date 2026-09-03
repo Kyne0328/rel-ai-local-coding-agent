@@ -1,6 +1,6 @@
 
 
-import { redactCommandForAudit } from "../bridge/exec.js";
+import { redactCommandForAudit } from '../commandDisplay.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 function describeToolOperation(name, args = {}) {

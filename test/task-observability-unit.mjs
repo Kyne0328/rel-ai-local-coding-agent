@@ -35,6 +35,24 @@ assert.equal(readCompleted.progress.percentage, 100);
 assert.equal(readCompleted.result.affectedItemCount, 3);
 assert.match(readCompleted.summary, /Read 3 repository items/);
 
+const exactCommand = 'Write-Host "one  two"\nGet-ChildItem';
+const execCompleted = buildToolActivityDetails('exec', { command: exactCommand }, { exitCode: 0 }, null, { phase: 'complete' });
+assert.equal(execCompleted.command, exactCommand, 'exec activity must retain the command text shown to the user');
+const execEvent = createActivityEvent({
+  eventId: 'exec-command-1',
+  taskId: 'task-command-1',
+  status: 'succeeded',
+  ...execCompleted
+});
+assert.equal(execEvent.command, exactCommand, 'activity events must retain the visible exec command');
+
+const secretCommand = buildToolActivityDetails('exec', { command: 'npm test --token super-secret OPENAI_API_KEY=also-secret' }, { exitCode: 0 }, null, { phase: 'complete' });
+assert.doesNotMatch(secretCommand.command, /super-secret|also-secret/);
+assert.match(secretCommand.command, /\[REDACTED\]/);
+
+const directCommand = buildToolActivityDetails('exec', { executable: 'pwsh', argv: ['-Command', 'Write-Host "a b"'] }, { exitCode: 0 }, null, { phase: 'complete' });
+assert.equal(directCommand.command, '"pwsh" "-Command" "Write-Host \\"a b\\""');
+
 const failed = buildToolActivityDetails('exec', { command: 'npm test' }, null, { code: 'WORKSPACE_UNAVAILABLE', message: 'Workspace path was unavailable.', retryable: true }, { phase: 'complete' });
 assert.equal(failed.status, 'failed');
 assert.equal(failed.error.retryable, true);

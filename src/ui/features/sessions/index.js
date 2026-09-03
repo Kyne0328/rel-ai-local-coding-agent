@@ -7,7 +7,6 @@ import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getRouteParams, getWorkspaceFilter, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
-import { taskProgressHtml } from '../../components/task-progress.js';
 import { eventTimestampMs, eventTimestampValue, terminalTaskTimestamp, terminalTaskTimestampValue } from '../../../taskEvents.js';
 import { buildTaskSemanticProgress, classifyTaskChangedFiles } from '../../../taskSemanticProgress.js';
 import { taskEntityView, workSessionStateView } from '../../task-identity.js';
@@ -216,13 +215,16 @@ function sessionCountLabel(sessions, workspace) {
 
 function bindCopyActions(root) {
   root.addEventListener('click', event => {
-    const button = event.target.closest('[data-copy-value]');
+    const button = event.target.closest('[data-copy-value], [data-copy-command]');
     if (!button) return;
     event.preventDefault();
     event.stopPropagation();
-    const value = button.dataset.copyValue || '';
+    const isCommand = button.hasAttribute('data-copy-command');
+    const value = isCommand
+      ? decodeURIComponent(button.dataset.copyCommand || '')
+      : button.dataset.copyValue || '';
     void copyText(value)
-      .then(() => toast('Identifier copied.', { variant: 'success' }))
+      .then(() => toast(isCommand ? 'Command copied.' : 'Identifier copied.', { variant: 'success' }))
       .catch(error => toast(error instanceof Error ? error.message : String(error), { variant: 'error' }));
   });
 }
@@ -310,7 +312,6 @@ function sessionRow(session) {
   const operation = semantic.currentActivity || session.currentActivity || session.operation || operationForTool(session.lastTool);
   const description = sessionDescription(session, live, operation, semantic);
   const facts = sessionFacts(session, live, semantic);
-  const progress = live && session.progress ? taskProgressHtml(session.progress, session.status, { compact: true }) : '';
 
   return `
     <button class="task-row" type="button" data-task-id="${esc(id)}" data-session-fingerprint="${esc(sessionFingerprint(session))}">
@@ -319,7 +320,6 @@ function sessionRow(session) {
         <strong>${esc(session.title || operation)}</strong>
         <span class="task-row-description">${esc(session.workspace || 'project')} · ${esc(description)}</span>
         ${facts ? `<span class="task-row-facts">${esc(facts)}</span>` : ''}
-        ${progress}
       </span>
       <span class="task-row-time">${timingHtml(session, live)}</span>
       <span aria-hidden="true">›</span>
@@ -342,12 +342,12 @@ function sessionFacts(session, live, semantic = semanticProgressFor(session)) {
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
   const state = workSessionStateView(session);
   const completed = state.status === 'completed';
-  facts.push(`${toolCalls} action${toolCalls === 1 ? '' : 's'}`);
-  facts.push(`${fileCounts.product} product file${fileCounts.product === 1 ? '' : 's'}`);
+  facts.push(`${toolCalls} tool call${toolCalls === 1 ? '' : 's'}`);
+  facts.push(`${fileCounts.product} project file${fileCounts.product === 1 ? '' : 's'}`);
   if (fileCounts.support > 0) facts.push(`${fileCounts.support} support artifact${fileCounts.support === 1 ? '' : 's'}`);
   if (failures > 0) facts.push(completed
-    ? `${failures} recovered failed action${failures === 1 ? '' : 's'}`
-    : `${failures} failed action${failures === 1 ? '' : 's'}`);
+    ? `${failures} recovered failed tool call${failures === 1 ? '' : 's'}`
+    : `${failures} failed tool call${failures === 1 ? '' : 's'}`);
   if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('checks failed');
   if (session.status === 'waiting_for_approval') facts.push('approval required');
   if (session.status === 'blocked') facts.push(state.label.toLowerCase());
@@ -438,7 +438,7 @@ function buildSessionDetail(session) {
   const identities = taskEntityView(session);
   const state = workSessionStateView(session);
   const live = isOngoingSession(session);
-  const semantic = semanticProgressFor(session);
+  const semantic = semanticProgressFor(session, { includeCommands: true });
   const fileCounts = semanticFileCounts(session, semantic);
   const operationValue = session.operation || operationForTool(session.lastTool) || '—';
   const currentTitle = live ? (semantic.currentStage || state.label) : state.label;
@@ -451,12 +451,11 @@ function buildSessionDetail(session) {
       <div><span class="overview-kicker">Task</span><h2>${esc(session.title || operationValue)}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
       ${statusPill(state.label, state.pillClass)}
     </header>
-    ${live && session.progress ? taskProgressHtml(session.progress, session.status) : ''}
     <div class="task-detail-current${sessionNeedsAttention(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
     <div class="task-detail-grid task-detail-facts">
       ${detail('Project', session.workspace || '—')}
       ${durationDetail(session, live)}
-      ${detail('Actions', session.toolCallCount ?? session.calls ?? 0)}
+      ${detail('Tool calls', session.toolCallCount ?? session.calls ?? 0)}
       ${detail('Project files', fileCounts.product)}
       ${fileCounts.support > 0 ? detail('Support artifacts', fileCounts.support) : ''}
     </div>
@@ -482,7 +481,10 @@ function refreshOpenSession(data = {}) {
   const next = mergeSessionDetail(_openSessionDetail, summary, data);
   const fingerprint = sessionDetailFingerprint(next);
   if (fingerprint === _openSessionFingerprint) return;
+  const technicalOpen = document.querySelector('.session-detail-drawer .task-detail-technical')?.open === true;
   const { title, content } = buildSessionDetail(next);
+  const technical = content.querySelector('.task-detail-technical');
+  if (technical) technical.open = technicalOpen;
   if (!updateDrawer({ title, content })) {
     clearOpenSessionState();
     return;
@@ -530,6 +532,7 @@ function sessionDetailFingerprint(session) {
       activityEventId(event),
       event.status || '',
       event.summary || '',
+      event.command || '',
       eventTimestampValue(event)
     ]),
     Number(session.trace?.count || session.trace?.entries?.length || 0),
@@ -579,7 +582,7 @@ function attentionSection(session) {
   if (!sessionNeedsAttention(session)) return '';
   const items = [];
   const failures = Number(session.failures || session.failedToolCallCount || 0);
-  if (failures) items.push(`${failures} action${failures === 1 ? '' : 's'} failed`);
+  if (failures) items.push(`${failures} tool call${failures === 1 ? '' : 's'} failed`);
   if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Checks failed');
   if (session.status === 'blocked') items.push(session.endReason || workSessionStateView(session).label);
   if (session.status === 'failed') items.push(session.endReason || 'The task ended with an unresolved problem');
@@ -595,8 +598,8 @@ function failureHistorySection(session) {
   const failures = Number(session.failures || session.failedToolCallCount || 0);
   if (!failures || sessionNeedsAttention(session)) return '';
   const completed = workSessionStateView(session).status === 'completed';
-  const callLabel = `${failures} action${failures === 1 ? '' : 's'}`;
-  const title = completed ? 'Recovered during task' : 'Earlier failed actions';
+  const callLabel = `${failures} tool call${failures === 1 ? '' : 's'}`;
+  const title = completed ? 'Recovered during task' : 'Earlier failed tool calls';
   const copy = completed
     ? `${callLabel} failed earlier, but the task later completed. The failures remain visible in Activity.`
     : `${callLabel} failed earlier. They remain visible in Activity and do not change the task's current status.`;
@@ -607,18 +610,24 @@ function technicalDetailsSection(session, identities, state, operationValue, eve
   const workflow = workflowTechnicalHtml(session);
   return `<details class="task-detail-technical">
     <summary>Technical details</summary>
-    <div class="task-detail-grid">
-      ${identifierDetail('Work session ID', identities.logicalTaskId || sessionIdentifier(session) || '—')}
-      ${identities.processId ? identifierDetail('Process ID', identities.processId) : ''}
-      ${session.correlation?.requestId ? identifierDetail('Request ID', session.correlation.requestId) : ''}
-      ${session.correlation?.traceId ? identifierDetail('Trace ID', session.correlation.traceId) : ''}
-      ${session.correlation?.conversationId ? identifierDetail('Conversation ID', session.correlation.conversationId) : ''}
-      ${detail('State', state.label)}
-      ${detail('Last operation', operationValue)}
-      ${detail('Validation', session.validation || 'not run')}
-      ${detail('End reason', session.endReason || (state.terminal ? 'completed' : 'still open'))}
-      ${detail('Completion confirmed', session.completionKnown ? 'Yes' : 'No')}
-    </div>
+    <section class="task-detail-section">
+      <div class="task-detail-heading"><h3>Identifiers</h3></div>
+      <div class="task-detail-grid">
+        ${identifierDetail('Work session ID', identities.logicalTaskId || sessionIdentifier(session) || '—')}
+        ${identities.processId ? identifierDetail('Process ID', identities.processId) : ''}
+        ${session.correlation?.conversationId ? identifierDetail('Conversation ID', session.correlation.conversationId) : ''}
+      </div>
+    </section>
+    <section class="task-detail-section">
+      <div class="task-detail-heading"><h3>Runtime</h3></div>
+      <div class="task-detail-grid">
+        ${detail('State', state.label)}
+        ${detail('Last operation', operationValue)}
+        ${detail('Validation', session.validation || 'not run')}
+        ${detail('End reason', session.endReason || (state.terminal ? 'completed' : 'still open'))}
+        ${detail('Completion confirmed', session.completionKnown ? 'Yes' : 'No')}
+      </div>
+    </section>
     ${workflow}
     ${currentOperations(session)}
     ${taskTraceSection(session.trace, events, session)}
@@ -724,10 +733,10 @@ function sessionListTimestampValue(session = {}) {
   return terminalTaskTimestampValue(session);
 }
 
-function semanticProgressFor(session = {}) {
-  if (Array.isArray(session.events)) return buildTaskSemanticProgress(session);
+function semanticProgressFor(session = {}, options = {}) {
+  if (Array.isArray(session.events) && session.events.length) return buildTaskSemanticProgress(session, options);
   if (session.semanticProgress && typeof session.semanticProgress === 'object') return session.semanticProgress;
-  return buildTaskSemanticProgress(session);
+  return buildTaskSemanticProgress(session, options);
 }
 
 function semanticFileCounts(session = {}, semantic = semanticProgressFor(session)) {
@@ -745,9 +754,19 @@ function taskMilestonesSection(semantic = {}) {
   const milestones = Array.isArray(semantic.milestones) ? semantic.milestones : [];
   if (!milestones.length) return '';
   return `<section class="task-detail-section">
-    <div class="task-detail-heading"><h3>Progress</h3><span>${milestones.length}</span></div>
-    <ol class="task-milestone-list">${milestones.map(item => `
-      <li><span class="task-milestone-state">${item.status === 'failed' ? 'Issue' : 'Done'}</span><span><strong>${esc(item.label || 'Task progress')}</strong>${item.detail ? `<small>${esc(item.detail)}</small>` : ''}</span></li>`).join('')}</ol>
+    <div class="task-detail-heading"><h3>Key activity</h3><span>${milestones.length}</span></div>
+    <ul class="task-milestone-list">${milestones.map(item => {
+      const context = [item.tool, item.action].filter(Boolean).join(' · ');
+      const command = String(item.command || '');
+      return `<li>
+        ${item.status === 'failed' ? '<span class="task-milestone-state">Issue</span>' : '<span aria-hidden="true"></span>'}
+        <span><strong>${esc(item.label || 'Task activity')}</strong>
+          ${item.detail ? `<small>${esc(item.detail)}</small>` : ''}
+          ${context ? `<small>${esc(context)}</small>` : ''}
+          ${command ? `<div class="process-output-block"><div class="section-head-actions"><span class="muted">Command</span><button type="button" class="secondary compact-button" data-copy-command="${esc(encodeURIComponent(command))}" aria-label="Copy command">Copy command</button></div><pre tabindex="0"><code>${esc(command)}</code></pre></div>` : ''}
+        </span>
+      </li>`;
+    }).join('')}</ul>
   </section>`;
 }
 

@@ -11,6 +11,7 @@ import { runSpan } from '../telemetry.js';
 import { isReusableDependencyPath } from '../reusableDependencies.js';
 import { createCollectionPathFilter, isPathInside } from '../safety.js';
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } from '../repo/gitStatus.js';
+import { directCommandDisplay, redactCommandForAudit } from '../commandDisplay.js';
 import { clampNumber } from './limits.js';
 const WHERE_EXE = String.raw`C:\Windows\System32\where.exe`;
 const MAX_CHANGED_FILES = 200;
@@ -75,10 +76,6 @@ function normalizeDirectInput(value, operationName = 'relai_exec') {
   return value;
 }
 
-function directCommandSummary(executable, argv) {
-  return [executable, ...argv].map(value => JSON.stringify(String(value))).join(' ');
-}
-
 function normalizeExecutionInvocation(args = {}, operationName = 'relai_exec') {
   const command = typeof args.command === 'string' ? args.command.trim() : '';
   const executable = typeof args.executable === 'string' ? args.executable.trim() : '';
@@ -93,7 +90,7 @@ function normalizeExecutionInvocation(args = {}, operationName = 'relai_exec') {
   }
   const argv = executable ? normalizeDirectArgv(args.argv, operationName) : [];
   const input = executable ? normalizeDirectInput(args.input, operationName) : undefined;
-  const displayCommand = command || directCommandSummary(executable, argv);
+  const displayCommand = command || directCommandDisplay(executable, argv);
   const execution = command ? resolveShellProcess(command) : resolveDirectProcess(executable, argv);
   return {
     command,
@@ -193,25 +190,6 @@ function resolveShell() {
   const executable = preferred && fs.existsSync(preferred) ? preferred : '/bin/sh';
   cachedShell = { executable, label: path.basename(executable), args: command => ['-lc', command] };
   return cachedShell;
-}
-
-function redactCommandForAudit(value) {
-  let text = String(value || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
-  text = text
-    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [REDACTED]')
-    .replace(/(--(?:token|password|passwd|secret|api[-_]?key|auth[-_]?token|authtoken))(?:=|\s+)("[^"]*"|'[^']*'|\S+)/gi, '$1 [REDACTED]')
-    .replace(/\b((?:token|password|passwd|secret|api[-_]?key|auth[-_]?token|authtoken)[A-Za-z0-9_-]*)\s*=\s*("[^"]*"|'[^']*'|\S+)/gi, '$1=[REDACTED]')
-    .replace(/(https?:\/\/[^\s:@/]+:)[^\s@/]+@/gi, '$1[REDACTED]@');
-  const maxChars = 180;
-  if (text.length <= maxChars) return text;
-  const marker = '[REDACTED]';
-  let clipped = `${text.slice(0, maxChars - 1)}…`;
-  if (text.includes(marker) && !clipped.includes(marker)) {
-    const suffix = `… ${marker}`;
-    const prefixLength = Math.max(0, maxChars - suffix.length);
-    clipped = `${text.slice(0, prefixLength)}${suffix}`;
-  }
-  return clipped;
 }
 
 async function readGitStatusMap(workspace, config) {

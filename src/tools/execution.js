@@ -36,6 +36,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
           taskId,
           requestHeaders: context?.requestHeaders || {},
           mcp: context?.mcp || {},
+          conversationId: context?.conversationId,
           signal: context?.signal,
           principal: context?.principal,
           nativeTaskId: context?.nativeTaskId,

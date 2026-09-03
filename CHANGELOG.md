@@ -27,6 +27,12 @@
 - **Preserve useful recovery context after compaction or reconnects.** Compact task status now retains the task summary, current stage/activity/tool outcome, and a bounded tail of recent activity or workflow evidence so a resumed session can recover what just happened without replaying the full task history.
 - **Keep `relai_work status` observational.** Status reads no longer create task-activity/history noise, preventing recovery/status checks from inflating task history or appearing as work performed by the task itself.
 
+### Task activity and observability UX
+- **Replace fake task progress with truthful activity history.** Task details no longer present per-tool percentages or repeated `Done` badges as if Rel.AI had a real task checklist; the drawer now uses a neutral Key activity history and labels counts as tool calls and project files.
+- **Make similar tool calls distinguishable without opening technical details.** Key activity entries show the public Rel.AI tool family and action, while command executions display the recorded command inline with a copy action so users can see exactly what ran.
+- **Preserve readable command text while protecting credentials.** Exec activity retains command whitespace and line breaks for display, direct executable/argument calls use a deterministic quoted representation, and obvious tokens, passwords, authorization values, cookies, private keys, and credential environment variables are redacted before display.
+- **Keep technical task details stable during live updates.** Incoming activity no longer collapses an open Technical details disclosure, and unstable per-call request/trace identifiers are no longer presented as durable task identifiers.
+
 ### Connector refresh and validation
 - **Require a one-time ChatGPT connector refresh for 0.27.4.** This release removes the approval-card MCP helper tools/resources and advances the `relai_work begin` schema for bounded host context while keeping the model-facing surface at 12 tools. Existing installations show the standard refresh notice so ChatGPT reloads the current tool definitions; fresh installations remain exempt.
 - **Detect future connector refreshes automatically.** Rel.AI now persists a connector revision derived from the release manifest's protocol, tool-surface version, tool count, manifest hash, and schema version. Updates prompt for a ChatGPT connector refresh only when that public connector contract changes, eliminating the hand-maintained refresh-version list while keeping app-only updates silent.

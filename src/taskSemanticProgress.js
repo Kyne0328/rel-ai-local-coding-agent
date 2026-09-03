@@ -88,8 +88,27 @@ function commandTarget(text, pattern) {
   return normalizePath(match?.[1] || '');
 }
 
+function milestoneTool(event = {}) {
+  const raw = String(event?.metadata?.publicTool || event?.tool?.name || event?.tool || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('relai_')) return raw;
+  const internal = String(event?.metadata?.internalOperation || raw).trim();
+  const root = internal.split(/[._]/)[0];
+  return root ? `relai_${root}` : raw;
+}
+
+function milestoneAction(event = {}) {
+  const explicit = String(event?.metadata?.publicAction || '').trim();
+  if (explicit) return explicit;
+  const internal = String(event?.metadata?.internalOperation || event?.tool?.name || event?.tool || '').trim();
+  const separator = internal.indexOf('.');
+  return separator >= 0 ? internal.slice(separator + 1) : '';
+}
+
 function milestone(key, label, stage, event, details = {}) {
   const path = normalizePath(details.path || eventPath(event));
+  const tool = milestoneTool(event);
+  const action = milestoneAction(event);
   return {
     key,
     label,
@@ -97,63 +116,70 @@ function milestone(key, label, stage, event, details = {}) {
     status: details.status || eventStatus(event),
     at: eventTimestampMs(event),
     ...(path ? { path, detail: details.detail || basename(path) } : details.detail ? { detail: details.detail } : {}),
+    ...(tool ? { tool } : {}),
+    ...(action ? { action } : {}),
+    ...(details.command ? { command: details.command } : {}),
     kind: details.kind || key.split(':')[0]
   };
 }
 
-function semanticExecMilestone(event, text) {
+function semanticExecMilestone(event, text, options = {}) {
   const normalized = String(text || '').replaceAll('\\', '/');
   const nativePath = commandTarget(normalized, /([A-Za-z]:\/[^\s'";]+\.(?:so|dylib|dll|exe)|\/[^\s'";]+\.(?:so|dylib|dll|exe))/i);
   const apkPath = commandTarget(normalized, /([A-Za-z]:\/[^\s'";]+\.apk|\/[^\s'";]+\.apk)/i);
 
+  const command = options.includeCommands ? String(event.command || '') : '';
+  const withCommand = details => command ? { ...details, command } : details;
+
   if (/\b(?:apktool(?:\.jar)?|apktool\.jar)\b[\s\S]{0,220}\s(?:d|decode)(?:\s|$)/i.test(normalized)
     || /\bjadx(?:\.bat|\.exe)?\b[\s\S]{0,220}(?:\s-d\s|\s--output-dir\s)/i.test(normalized)) {
-    return milestone('artifact:decompile', 'Decompiled application artifact', 'Analyzing decompiled application', event, {
+    return milestone('artifact:decompile', 'Decompiled application artifact', 'Analyzing decompiled application', event, withCommand({
       path: apkPath,
       kind: 'artifact'
-    });
+    }));
   }
   if (/\b(?:apktool(?:\.jar)?|apktool\.jar)\b[\s\S]{0,220}\s(?:b|build)(?:\s|$)/i.test(normalized)) {
-    return milestone('build:apk', 'Rebuilt APK', 'Building modified application', event, { path: apkPath, kind: 'build' });
+    return milestone('build:apk', 'Rebuilt APK', 'Building modified application', event, withCommand({ path: apkPath, kind: 'build' }));
   }
   if (/\b(?:apksigner|jarsigner)(?:\.exe)?\b/i.test(normalized)) {
-    return milestone('sign:apk', 'Signed rebuilt APK', 'Preparing rebuilt application', event, { path: apkPath, kind: 'sign' });
+    return milestone('sign:apk', 'Signed rebuilt APK', 'Preparing rebuilt application', event, withCommand({ path: apkPath, kind: 'sign' }));
   }
   if (NATIVE_BINARY_PATTERN.test(normalized)
     && /\b(?:readallbytes|strings|objdump|readelf|readobj|llvm-readobj|llvm-readelf|dumpbin)\b/i.test(normalized)) {
-    return milestone(`inspect:native:${basename(nativePath) || 'binary'}`, 'Inspected native binary', 'Analyzing native implementation', event, {
+    return milestone(`inspect:native:${basename(nativePath) || 'binary'}`, 'Inspected native binary', 'Analyzing native implementation', event, withCommand({
       path: nativePath,
       kind: 'inspect'
-    });
+    }));
   }
   if (/\b(?:where(?:\.exe)?|get-command|command\s+-v)\b/i.test(normalized)) {
-    return milestone('tooling:availability', 'Checked local analysis tooling', 'Preparing analysis tooling', event, { kind: 'tooling' });
+    return milestone('tooling:availability', 'Checked local analysis tooling', 'Preparing analysis tooling', event, withCommand({ kind: 'tooling' }));
   }
   if (/\b(?:curl|wget|invoke-webrequest|downloadfile|start-bitstransfer)\b/i.test(normalized)) {
     const changed = classifyTaskChangedFiles(eventChangedFiles(event));
     if (changed.supportArtifactCount > 0 || /(?:\/|\\)(?:tools?|tooling)(?:\/|\\)/i.test(normalized)) {
-      return milestone('tooling:prepared', 'Prepared task tooling', 'Preparing analysis tooling', event, {
+      return milestone('tooling:prepared', 'Prepared task tooling', 'Preparing analysis tooling', event, withCommand({
         path: changed.supportArtifacts[0],
         kind: 'tooling'
-      });
+      }));
     }
   }
   if (/\b(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:build|compile)\b|\b(?:gradle|gradlew|mvn|dotnet)\b[\s\S]{0,100}\b(?:build|assemble|package|publish)\b/i.test(normalized)) {
-    return milestone('build:project', 'Built project output', 'Building changes', event, { kind: 'build' });
+    return milestone('build:project', 'Built project output', 'Building changes', event, withCommand({ kind: 'build' }));
   }
   if (/\b(?:npm|pnpm|yarn)\s+(?:run\s+)?test\b|\b(?:pytest|vitest|jest|go\s+test|cargo\s+test)\b|\b(?:gradle|gradlew|mvn|dotnet)\b[\s\S]{0,100}\btest\b/i.test(normalized)) {
-    return milestone('validation:tests', 'Ran project tests', 'Validating changes', event, { kind: 'validation' });
+    return milestone('validation:tests', 'Ran project tests', 'Validating changes', event, withCommand({ kind: 'validation' }));
   }
   if (APK_PATTERN.test(normalized) && /\b(?:7z|unzip|expand-archive)\b/i.test(normalized)) {
-    return milestone('artifact:extract', 'Extracted application artifact', 'Inspecting application contents', event, {
+    return milestone('artifact:extract', 'Extracted application artifact', 'Inspecting application contents', event, withCommand({
       path: apkPath,
       kind: 'artifact'
-    });
+    }));
   }
-  return null;
+  const eventKey = event.id || event.eventId || event.tool?.invocationId || event.invocationId || eventTimestampMs(event);
+  return milestone(`exec:${eventKey || 'command'}`, 'Ran project command', 'Running project command', event, withCommand({ kind: 'exec' }));
 }
 
-function semanticMilestoneForEvent(event = {}) {
+function semanticMilestoneForEvent(event = {}, options = {}) {
   const status = eventStatus(event);
   if (!['running', 'succeeded', 'success', 'completed', 'complete', 'failed'].includes(status)) return null;
   const tool = eventTool(event);
@@ -179,7 +205,7 @@ function semanticMilestoneForEvent(event = {}) {
 
   if (/(?:^|[._])edit$|changes[._]?(?:restore|reset|tidy_run)/.test(tool)) {
     if (changed.productChangedFileCount > 0) {
-      const label = changed.productChangedFileCount === 1 ? 'Updated product file' : `Updated ${changed.productChangedFileCount} product files`;
+      const label = changed.productChangedFileCount === 1 ? 'Updated project file' : `Updated ${changed.productChangedFileCount} project files`;
       return milestone(`edit:${changed.productFiles[0] || 'product'}`, label, 'Reviewing applied changes', event, {
         path: changed.productFiles[0] || path,
         kind: 'edit'
@@ -194,7 +220,10 @@ function semanticMilestoneForEvent(event = {}) {
     return milestone(`edit:${path || 'repository'}`, 'Applied repository changes', 'Reviewing applied changes', event, { path, kind: 'edit' });
   }
 
-  if (/(?:^|[._])exec$/.test(tool)) return semanticExecMilestone(event, text);
+  if (/(?:^|[._])exec$/.test(tool)) {
+    const commandText = [event.command, text].filter(Boolean).join(' ');
+    return semanticExecMilestone(event, commandText, options);
+  }
 
   if (/snapshot/.test(tool)) return milestone('inspect:inventory', 'Inventoried project structure', 'Inspecting project structure', event, { kind: 'inspect' });
   if (/inspect/.test(tool)) return milestone(`inspect:relationships:${path || 'repository'}`, 'Inspected code relationships', 'Analyzing implementation', event, { path, kind: 'inspect' });
@@ -214,14 +243,14 @@ function meaningfulFallback(value) {
   return text.length <= 240 ? text : `${text.slice(0, 239).trimEnd()}…`;
 }
 
-function buildTaskSemanticProgress(task = {}) {
+function buildTaskSemanticProgress(task = {}, options = {}) {
   const events = [...(Array.isArray(task.events) ? task.events : [])].sort((left, right) => eventTimestampMs(left) - eventTimestampMs(right));
   const completedByKey = new Map();
   let latestMeaningful = null;
   let latestRunning = null;
 
   for (const event of events) {
-    const item = semanticMilestoneForEvent(event);
+    const item = semanticMilestoneForEvent(event, options);
     if (!item) continue;
     latestMeaningful = item;
     if (item.status === 'running') {

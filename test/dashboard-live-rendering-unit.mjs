@@ -81,9 +81,9 @@ function exerciseRuntimeLogDelta(runtime, change) {
 }
 
 assert.match(dashboard, /module\.updateSystemLiveState\(root, currentSection\(\), data\)/);
-assert.match(dashboard, /connection: systemSection\('connection'\)/);
-assert.doesNotMatch(dashboard, /settings\/connection/);
-assert.match(system, /updateConnectorLiveState\(content, dashboardState\)/);
+assert.match(dashboard, /settings: lazySection\(\(\) => import\('\.\/ui\/features\/settings\/index\.js'\)/, 'Connection settings must stay under the canonical Settings route');
+assert.doesNotMatch(dashboard, /\bconnection:\s*systemSection\(/, 'Connection must not return as a standalone system route');
+assert.match(dashboard, /import\('\.\/ui\/features\/settings\/connector\.js'\)/, 'Connection live updates must load through the Settings connector feature');
 assert.match(connector, /export function updateConnectorLiveState/);
 assert.match(connector, /replaceRegion\(page,\s*'\.connection-summary-card'/);
 assert.match(connector, /replaceRegion\(page,\s*'\.connection-layer-disclosure'/);
@@ -151,14 +151,31 @@ assert.match(sessions, /data-session-fingerprint/, 'session rows must carry sema
 assert.match(functionSource(sessions, 'timingHtml'), /data-clock-relative/, 'ended and inactive task rows must show relative age instead of total duration');
 assert.match(functionSource(sessions, 'updateTaskSessions'), /syncSessionWorkspaceMenu\(current, data\.config\?\.workspaces \|\| \[\], workspace\)/, 'task live updates must keep the project filter synchronized with current configuration');
 assert.match(functionSource(sessions, 'updateTaskSessions'), /refreshOpenSession\(data\)/, 'live task updates must refresh an already-open task detail drawer');
-assert.match(functionSource(sessions, 'refreshOpenSession'), /updateDrawer/, 'open task details must update in place without reopening the drawer');
+const refreshOpenSessionSource = functionSource(sessions, 'refreshOpenSession');
+assert.match(refreshOpenSessionSource, /task-detail-technical/, 'live task detail refreshes must preserve the technical disclosure state');
+assert.match(refreshOpenSessionSource, /\.open\s*===\s*true/, 'live task detail refreshes must read the current disclosure state before rebuilding content');
+assert.match(refreshOpenSessionSource, /technical\.open\s*=\s*technicalOpen/, 'live task detail refreshes must restore the technical disclosure state');
+assert.match(refreshOpenSessionSource, /updateDrawer/, 'open task details must update in place without reopening the drawer');
+const technicalDetailsSource = functionSource(sessions, 'technicalDetailsSection');
+assert.match(technicalDetailsSource, /<h3>Identifiers<\/h3>/, 'session diagnostics must group task identifiers separately from runtime state');
+assert.match(technicalDetailsSource, /<h3>Runtime<\/h3>/, 'session diagnostics must group runtime state separately from identifiers');
+assert.doesNotMatch(technicalDetailsSource, /Request ID/, 'session diagnostics must not present the client protocol request ID as a task identifier');
+assert.doesNotMatch(technicalDetailsSource, /Trace ID/, 'session diagnostics must not present per-call trace IDs as stable task identifiers');
 assert.match(drawer, /export function updateDrawer/, 'shared drawers must support in-place content refreshes');
 const sessionFactsSource = functionSource(sessions, 'sessionFacts');
 assert.match(sessionFactsSource, /toolCallCount/, 'session rows must show their tool-call count');
-assert.match(sessionFactsSource, /(?:tool call|action)/, 'session rows must label action counts');
-assert.match(sessionFactsSource, /file.*edited/, 'session rows must show their edited-file count');
+assert.match(sessionFactsSource, /tool call/, 'session rows must label tool-call counts accurately');
+assert.match(sessionFactsSource, /project file/, 'session rows must label project-file counts without product terminology');
 assert.doesNotMatch(sessionFactsSource, /risk/, 'session row facts must not surface workflow risk labels');
 assert.doesNotMatch(functionSource(sessions, 'workflowTechnicalHtml'), /risk/, 'session details must not surface workflow risk labels');
+assert.doesNotMatch(sessions, /taskProgressHtml/, 'Sessions must not present per-tool progress as whole-task completion');
+const milestoneSource = functionSource(sessions, 'taskMilestonesSection');
+assert.match(milestoneSource, /Key activity/, 'session history must be presented as activity, not a fake checklist');
+assert.doesNotMatch(milestoneSource, />Done</, 'successful activity must not be stamped as checklist completion');
+assert.match(milestoneSource, /item\.tool/, 'visible activity must identify the public tool family');
+assert.match(milestoneSource, /item\.action/, 'visible activity must distinguish actions within the same tool');
+assert.match(milestoneSource, /data-copy-command/, 'visible command activity must support copying the recorded command');
+assert.match(milestoneSource, /<pre[^>]*><code>/, 'visible command activity must render command text without opening Technical details');
 assert.doesNotMatch(functionSource(sessions, 'updateTaskSessions'), /mountTasks\(detached|sessions-history-card[^\n]*replaceWith/, 'session live updates must not rebuild or replace the complete history card');
 assert.match(processes, /export function updateProcessesLiveState/);
 assert.match(functionSource(processes, 'updateProcessesLiveState'), /syncProcessClockText/, 'Process list equality must ignore live elapsed text changes');

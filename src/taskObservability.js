@@ -1,5 +1,6 @@
 
 import * as crypto from 'node:crypto';
+import { commandDisplayForInvocation, redactCommandForDisplay } from './commandDisplay.js';
 import { TERMINAL_TASK_STATUSES, normalizeHistoricalTaskStatus } from './taskState.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
 const TASK_MODEL_VERSION = 3;
@@ -104,6 +105,7 @@ function buildToolActivityDetails(name, args = {}, value = null, error = null, o
   const result = resultForTool(name, args, value, ok, normalizedError);
   const summary = summaryForTool(name, args, value, normalizedError, operation, result);
   const progress = progressForTool(name, args, value, ok, options.phase);
+  const command = name === OP.EXEC ? commandDisplayForInvocation(args) : '';
   const status = normalizedError ? errorStatus(normalizedError) : options.phase === 'running' ? 'running' : ok ? 'succeeded' : 'failed';
   return {
     category,
@@ -119,6 +121,7 @@ function buildToolActivityDetails(name, args = {}, value = null, error = null, o
     result,
     error: normalizedError,
     progress,
+    ...(command ? { command } : {}),
     metadata: sanitizeActivityMetadata({
       ...(options.metadata || {}),
       pathCount: pathCount(args),
@@ -299,6 +302,7 @@ function createActivityEvent(details = {}) {
     ...(details.target && Object.values(details.target).some(Boolean) ? { target: compactObject(details.target) } : {}),
     ...(details.result && Object.values(details.result).some(value => value !== undefined && value !== '') ? { result: compactObject(details.result) } : {}),
     ...(details.error ? { error: normalizeActivityError(details.error) } : {}),
+    ...(details.command ? { command: redactCommandForDisplay(details.command) } : {}),
     metadata: sanitizeActivityMetadata(details.metadata || {}) || {}
   };
 }
@@ -491,6 +495,7 @@ function sanitizeActivityEventRecord(event) {
   if (value.error != null) value.error = typeof value.error === 'object'
     ? normalizeActivityError(value.error)
     : sanitizeDisplayText(value.error, MAX_SUMMARY_LENGTH);
+  if (value.command != null) value.command = redactCommandForDisplay(value.command);
   if (value.tool && typeof value.tool === 'object') value.tool = sanitizeStructuredValue(value.tool, 0);
   if (value.target && typeof value.target === 'object') value.target = sanitizeStructuredValue(value.target, 0);
   if (value.result && typeof value.result === 'object') value.result = sanitizeStructuredValue(value.result, 0);
@@ -520,6 +525,7 @@ function buildSafeActivityProjection(record) {
     target: event.target || (event.path ? { workspaceRelativePath: sanitizeDisplayText(event.path, MAX_METADATA_STRING) } : undefined),
     result: event.result,
     error: event.error,
+    command: event.command,
     metadata: event.metadata
   };
 }

@@ -125,9 +125,10 @@ function normalizeSkillName(value) {
 
 function unquote(value) {
   const text = String(value || '').trim();
-  if (text.length >= 2 && ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'")))) {
-    return text.slice(1, -1).trim();
+  if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
+    try { return JSON.parse(text).trim(); } catch { return text.slice(1, -1).trim(); }
   }
+  if (text.length >= 2 && text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1).trim();
   return text;
 }
 

@@ -66,6 +66,46 @@ assert.deepEqual(task.milestones.map(item => item.label), [
 ]);
 assert.equal(task.milestones.some(item => /repository status|powershell/i.test(`${item.label} ${item.detail || ''}`)), false);
 
+const projectEdit = semanticMilestoneForEvent({
+  timestamp: '2026-08-29T12:02:00.000Z',
+  status: 'succeeded',
+  tool: { name: 'edit' },
+  metadata: { changedFiles: ['src/app.js'], internalOperation: 'edit' }
+});
+assert.equal(projectEdit?.label, 'Updated project file');
+assert.equal(projectEdit?.tool, 'relai_edit');
+
+const relationshipInspection = semanticMilestoneForEvent({
+  timestamp: '2026-08-29T12:03:00.000Z',
+  status: 'succeeded',
+  tool: { name: 'inspect.references' },
+  metadata: { internalOperation: 'inspect.references', publicAction: 'references' }
+});
+assert.equal(relationshipInspection?.tool, 'relai_inspect');
+assert.equal(relationshipInspection?.action, 'references');
+
+const genericCommand = 'Write-Host "one  two"\nGet-ChildItem';
+const commandWithoutDetails = semanticMilestoneForEvent({
+  eventId: 'exec-generic',
+  timestamp: '2026-08-29T12:04:00.000Z',
+  status: 'succeeded',
+  tool: { name: 'exec' },
+  command: genericCommand,
+  summary: 'Ran repository command. Exit code 0.'
+});
+assert.equal(commandWithoutDetails?.label, 'Ran project command');
+assert.equal(Object.hasOwn(commandWithoutDetails || {}, 'command'), false, 'compact semantic summaries must omit command text');
+const commandWithDetails = semanticMilestoneForEvent({
+  eventId: 'exec-generic',
+  timestamp: '2026-08-29T12:04:00.000Z',
+  status: 'succeeded',
+  tool: { name: 'exec' },
+  command: genericCommand,
+  summary: 'Ran repository command. Exit code 0.'
+}, { includeCommands: true });
+assert.equal(commandWithDetails?.command, genericCommand, 'detail semantics must expose the recorded command');
+assert.equal(commandWithDetails?.tool, 'relai_exec');
+
 const projected = summarizeDashboardTask({
   taskId: 'task-semantic',
   status: 'planning',

@@ -70,6 +70,7 @@ const files = [
   'process-pty-unit.mjs',
   'review-checkpoints-unit.mjs',
   'skill-discovery-unit.mjs',
+  'knowledge-continuity-unit.mjs',
   'context/session-compaction-unit.mjs',
   'artifact-intake-unit.mjs',
   'artifact-resource-unit.mjs',
