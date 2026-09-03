@@ -204,7 +204,7 @@ function buildActivity() {
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Action</th><th scope="col" class="activity-workspace-column">Project</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-task"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Action</th><th scope="col" class="activity-task-column">Task</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
   queueMicrotask(() => renderActivityFilterBar(root));
   return root;
@@ -580,7 +580,7 @@ function activityLoadingRows() {
     <tr class="activity-skeleton-row" aria-hidden="true">
       <td class="activity-time-column"><span class="activity-skeleton activity-skeleton-time"></span></td>
       <td class="activity-tool-column"><span class="activity-skeleton activity-skeleton-tool"></span></td>
-      <td class="activity-workspace-column"><span class="activity-skeleton activity-skeleton-workspace"></span></td>
+      <td class="activity-task-column"><span class="activity-skeleton activity-skeleton-task"></span></td>
       <td class="activity-status-column"><span class="activity-skeleton activity-skeleton-status"></span></td>
       <td class="activity-message-column activity-message-cell">
         <span class="activity-message-mobile-meta">
@@ -603,6 +603,9 @@ function renderActivityRow(entry) {
   const tool = toolName(entry);
   const action = activityDisplayAction(entry);
   const title = entry.title || entry.operation || '';
+  const session = activitySessionView(entry, _sessionIndex);
+  const taskMeta = [session.workspace, session.shortId].filter(Boolean).join(' · ');
+  const mobileTask = [session.title, session.workspace].filter(Boolean).join(' · ');
   const relativeTime = timeAgo(timestamp) || '—';
   const row = document.createElement('tr');
   const eventId = activityEventId(entry);
@@ -610,9 +613,10 @@ function renderActivityRow(entry) {
   row.innerHTML = `
     <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</td>
     <td class="activity-tool-column truncate" title="${esc(tool)}">${esc(action)}</td>
-    <td class="activity-workspace-column truncate">${esc(entry.workspace || '—')}</td>
+    <td class="activity-task-column"><span class="activity-task-title" title="${esc(session.title)}">${esc(session.title)}</span>${taskMeta ? `<span class="activity-task-meta">${esc(taskMeta)}</span>` : ''}</td>
     <td class="activity-status-column">${pillHtml(status)}</td>
     <td class="activity-message-column activity-message-cell">
+      <span class="activity-message-mobile-task" title="${esc(mobileTask)}">${esc(mobileTask)}</span>
       <span class="activity-message-mobile-meta">${pillHtml(status)}<span class="activity-message-mobile-action">${esc(action)}</span><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</span></span>
       <span class="activity-message-copy">${esc(message)}</span>
       ${title && title !== action ? `<span class="activity-message-title">${esc(title)}</span>` : ''}

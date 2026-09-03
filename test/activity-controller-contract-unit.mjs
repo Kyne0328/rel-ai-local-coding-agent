@@ -40,6 +40,7 @@ assert.match(dashboard, /if \(!updated\) return false;/, 'the dashboard must res
 assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*min-width:/s, 'messages need an explicit readable minimum width');
 assert.match(activityCss, /\.activity-col-message\s*\{[^}]*width:\s*\d+(?:\.\d+)?%/s, 'fixed-layout Activity tables must give Message an explicit share of the row');
 assert.doesNotMatch(activityCss, /\.activity-col-message\s*\{[^}]*width:\s*auto/s, 'Message must not rely on fixed-table auto width when Workspace is hidden');
-assert.match(activityCss, /@media\s*\(max-width:[^)]+\)[\s\S]*\.activity-workspace-column[\s\S]*display:\s*none/s, 'a narrower layout must let Workspace yield space to messages');
+assert.match(activityCss, /@media\s*\(max-width:\s*760px\)[\s\S]*\.activity-task-column[\s\S]*display:\s*none/s, 'a narrow layout may fold Task into the message cell');
+assert.match(activityCss, /@media\s*\(max-width:\s*760px\)[\s\S]*\.activity-message-mobile-task[\s\S]*block/s, 'task attribution must remain visible after the task column is hidden');
 
 console.log('Activity controller contract test passed.');

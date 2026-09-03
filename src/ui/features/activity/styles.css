@@ -6,16 +6,20 @@
 
 .activity-table { width: 100%; min-width: 0; table-layout: fixed; }
 .activity-col-time { width: 9%; }
-.activity-col-tool { width: 19%; }
-.activity-col-workspace { width: 15%; }
+.activity-col-tool { width: 17%; }
+.activity-col-task { width: 20%; }
 .activity-col-status { width: 11%; }
-.activity-col-message { width: 36%; }
+.activity-col-message { width: 33%; }
 .activity-col-action { width: 10%; }
 .activity-time-column { @apply whitespace-nowrap; }
-.activity-tool-column, .activity-workspace-column, .activity-message-column { min-width: 0; overflow: hidden; }
+.activity-tool-column, .activity-task-column, .activity-message-column { min-width: 0; overflow: hidden; }
+.activity-task-column { @apply align-middle; }
+.activity-task-title { @apply block truncate text-[12px] font-semibold; color: var(--ui-text-primary); }
+.activity-task-meta { @apply mt-0.5 block truncate text-[10px]; color: var(--ui-text-tertiary); }
 .activity-message-cell { @apply min-w-0; }
 .activity-message-copy { display: -webkit-box; width: 100%; max-width: 100%; min-width: 12ch; overflow: hidden; color: var(--ui-text-primary); font-size: 12px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .activity-message-title { @apply mt-0.5 block truncate text-[11px]; color: var(--ui-text-tertiary); }
+.activity-message-mobile-task { display: none; min-width: 0; }
 .activity-message-mobile-meta { display: none; min-width: 0; align-items: center; gap: 6px; }
 .activity-message-mobile-action { @apply min-w-0 truncate text-[11px]; color: var(--ui-text-secondary); }
 .activity-message-mobile-time { @apply whitespace-nowrap text-[11px]; color: var(--ui-text-tertiary); }
@@ -27,7 +31,7 @@
 .activity-skeleton { display: block; height: 10px; max-width: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--ui-surface-secondary), var(--ui-surface-raised), var(--ui-surface-secondary)); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
 .activity-skeleton-time { width: 52px; }
 .activity-skeleton-tool { width: 72%; }
-.activity-skeleton-workspace { width: 68%; }
+.activity-skeleton-task { width: 82%; }
 .activity-skeleton-status { width: 58px; height: 22px; }
 .activity-skeleton-message { width: 88%; }
 .activity-skeleton-message-short { width: 64%; }
@@ -53,25 +57,25 @@
 }
 
 @media (max-width: 980px) {
-  .activity-table .activity-col-workspace,
-  .activity-table .activity-workspace-column { display: none; }
-  .activity-col-time { width: 12%; }
-  .activity-col-tool { width: 23%; }
-  .activity-col-status { width: 14%; }
-  .activity-col-message { width: 39%; }
-  .activity-col-action { width: 12%; }
+  .activity-col-time { width: 11%; }
+  .activity-col-tool { width: 18%; }
+  .activity-col-task { width: 22%; }
+  .activity-col-status { width: 13%; }
+  .activity-col-message { width: 26%; }
+  .activity-col-action { width: 10%; }
 }
 @media (max-width: 760px) {
   .activity-table { min-width: 0; }
   .activity-table .activity-col-tool,
-  .activity-table .activity-col-workspace,
+  .activity-table .activity-col-task,
   .activity-table .activity-col-status,
   .activity-table .activity-tool-column,
-  .activity-table .activity-workspace-column,
+  .activity-table .activity-task-column,
   .activity-table .activity-status-column { display: none; }
   .activity-col-time { width: 16%; }
   .activity-col-message { width: 64%; }
   .activity-col-action { width: 20%; }
+  .activity-message-mobile-task { @apply mb-1 block truncate text-[11px] font-semibold; color: var(--ui-text-primary); }
   .activity-message-mobile-meta { display: flex; }
   .activity-message-cell { @apply py-2; }
   .activity-message-copy { @apply mt-1; }
