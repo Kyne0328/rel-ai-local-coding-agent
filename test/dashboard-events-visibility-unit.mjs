@@ -63,18 +63,17 @@ try {
 
   documentStub.visibilityState = 'hidden';
   for (const listener of visibilityListeners) listener();
-  assert.equal(sources[0].closed, true, 'hiding the dashboard must close its live event stream');
+  assert.equal(sources[0].closed, false, 'hiding the dashboard must keep the lightweight live event stream connected');
 
   events.startSSE();
-  assert.equal(sources.length, 1, 'hidden dashboards must not reopen the live event stream');
+  assert.equal(sources.length, 1, 'hidden dashboards must not duplicate the existing live event stream');
 
   documentStub.visibilityState = 'visible';
   for (const listener of visibilityListeners) listener();
-  assert.equal(sources.length, 2, 'showing the dashboard must reconnect through the existing catch-up flow');
-  assert.equal(sources[1].closed, false);
+  assert.equal(sources.length, 1, 'showing the dashboard must reuse the live stream when continuity was preserved');
 
   events.stopSSE({ emit: false });
-  assert.equal(sources[1].closed, true, 'stopping dashboard events must close the resumed stream');
+  assert.equal(sources[0].closed, true, 'stopping dashboard events must close the live stream');
 
   documentStub.visibilityState = 'hidden';
   globalThis.fetch = (_url, options = {}) => new Promise((_resolve, reject) => {
@@ -101,6 +100,22 @@ try {
   assert.equal(timedOut.errorCode, 'dashboard_unavailable');
   assert.match(timedOut.error, /timed out/i,
     'a request that remains stalled after restore must still honor its foreground timeout');
+
+  documentStub.visibilityState = 'hidden';
+  let backgroundRequestSettled = false;
+  const boundedBackgroundRequest = api.fetchJson('/slow-activity-history', {
+    timeout: 80,
+    pauseTimeoutWhenHidden: false
+  }).then(result => {
+    backgroundRequestSettled = true;
+    return result;
+  });
+  await new Promise(resolve => setTimeout(resolve, 120));
+  assert.equal(backgroundRequestSettled, true,
+    'background-bounded requests must not remain suspended until the dashboard is reopened');
+  const backgroundTimeout = await boundedBackgroundRequest;
+  assert.equal(backgroundTimeout.ok, false);
+  assert.match(backgroundTimeout.error, /timed out/i);
 } finally {
   if (originalDocument === undefined) delete globalThis.document; else globalThis.document = originalDocument;
   if (originalEventSource === undefined) delete globalThis.EventSource; else globalThis.EventSource = originalEventSource;

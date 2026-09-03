@@ -47,6 +47,8 @@ let _clockListenerBound = false;
 let _filterOptions = { workspaces: [], tools: [] };
 let _sessionIndex = new Map();
 let _sessionIndexRevision = 0;
+let _historyRenderPending = false;
+let _historyRetryPending = false;
 
 export function mountActivity(container, data = {}) {
   const token = ++_mountToken;
@@ -76,6 +78,8 @@ export function mountActivity(container, data = {}) {
   _entriesRevision = 0;
   _renderedTableKey = '';
   _nextExpiryAt = Number.POSITIVE_INFINITY;
+  _historyRenderPending = false;
+  _historyRetryPending = false;
   bindClockListener();
   container.innerHTML = '';
   container.appendChild(buildActivity());
@@ -84,11 +88,28 @@ export function mountActivity(container, data = {}) {
 }
 
 export function updateActivityLiveState(data = {}) {
+  const visible = document.visibilityState === 'visible';
+  let deferredChanged = false;
+  if (visible && _historyRetryPending) {
+    _historyRetryPending = false;
+    _historyRenderPending = false;
+    _historyLoading = true;
+    _loadError = '';
+    renderFilteredTable();
+    void loadLogs(_mountToken, { mode: 'replace' });
+    deferredChanged = true;
+  } else if (visible && _historyRenderPending) {
+    _historyRenderPending = false;
+    updateFilterOptions();
+    renderFilteredTable({ rebuildFilterBar: true });
+    maybeOpenRequestedEvent();
+    deferredChanged = true;
+  }
   const sessionsChanged = updateSessionIndex(data.tasks || []);
   const liveEntries = Array.isArray(data.auditTail?.entries) ? data.auditTail.entries : [];
   const entriesChanged = mergeEntries(liveEntries);
-  if (sessionsChanged && !entriesChanged) renderFilteredTable({ rebuildFilterBar: true });
-  return sessionsChanged || entriesChanged;
+  if (sessionsChanged && !entriesChanged && !deferredChanged) renderFilteredTable({ rebuildFilterBar: true });
+  return sessionsChanged || entriesChanged || deferredChanged;
 }
 
 function updateSessionIndex(tasks = []) {
@@ -142,6 +163,10 @@ export function mergeEntries(entries) {
   if (!merged.changed) return false;
   _allEntries = merged.entries;
   _entriesRevision += 1;
+  if (document.visibilityState !== 'visible') {
+    _historyRenderPending = true;
+    return true;
+  }
   updateFilterOptions();
   renderFilteredTable();
   maybeOpenRequestedEvent();
@@ -350,7 +375,7 @@ function clearActivityFilters() {
 async function loadLogs(token, options = {}) {
   const mode = options.mode === 'merge' ? 'merge' : 'replace';
   try {
-    const data = await fetchJson('/api/logs?limit=500');
+    const data = await fetchJson('/api/logs?limit=500', { pauseTimeoutWhenHidden: false });
     if (token !== _mountToken) return false;
     const parsed = parseActivityHistoryResponse(data);
     if (!parsed.ok) throw new Error(parsed.error);
@@ -369,6 +394,11 @@ async function loadLogs(token, options = {}) {
     }
     _historyLoading = false;
     _loadError = '';
+    _historyRetryPending = false;
+    if (document.visibilityState !== 'visible') {
+      _historyRenderPending = true;
+      return true;
+    }
     updateFilterOptions();
     renderFilteredTable();
     maybeOpenRequestedEvent();
@@ -382,6 +412,11 @@ async function loadLogs(token, options = {}) {
       _allEntries = mergeActivityEntries([], _liveEntriesSinceLoad).entries;
       _entriesRevision += 1;
       _liveEntriesSinceLoad = [];
+      if (document.visibilityState !== 'visible') {
+        _historyRenderPending = true;
+        _historyRetryPending = true;
+        return false;
+      }
       updateFilterOptions();
       renderFilteredTable();
     } else {

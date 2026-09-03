@@ -52,19 +52,13 @@ export function isLive() {
 }
 
 function _handleVisibilityChange() {
-  if (_stopped) return;
-  if (document.visibilityState !== 'visible') {
-    closeSource();
-    clearReconnect();
-    return;
-  }
-  if (_es) return;
+  if (_stopped || document.visibilityState !== 'visible' || _es) return;
   _retryCount = 0;
   _connect();
 }
 
 function _connect() {
-  if (_stopped || _es || document.visibilityState !== 'visible') return;
+  if (_stopped || _es) return;
   const generation = ++_generation;
   emitState(_retryCount ? 'reconnecting' : 'connecting');
   const source = new EventSource('/events', { withCredentials: true });

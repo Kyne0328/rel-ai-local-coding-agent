@@ -35,10 +35,10 @@ function timeoutFor(timeout) {
   return Number.isFinite(timeout) ? timeout : 8000;
 }
 
-function startVisibleRequestTimeout(controller, timeoutMs) {
+function startVisibleRequestTimeout(controller, timeoutMs, pauseTimeoutWhenHidden = true) {
   if (!(timeoutMs > 0)) return () => {};
   const documentRef = globalThis.document;
-  if (!documentRef?.addEventListener || !documentRef?.removeEventListener) {
+  if (pauseTimeoutWhenHidden === false || !documentRef?.addEventListener || !documentRef?.removeEventListener) {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     return () => clearTimeout(timer);
   }
@@ -131,15 +131,16 @@ function requestError(err, timeoutMs) {
 export async function fetchJson(url, opts = {}) {
   // timeout (ms): overrides the 8s default; 0 or negative disables the abort timer
   // entirely. The native folder picker blocks on user input and must not be killed
-  // mid-prompt, so it passes timeout: 0.
-  const { timeout, ...fetchOpts } = opts;
+  // mid-prompt, so it passes timeout: 0. Most requests pause timeout accounting while
+  // hidden; callers that must not remain pending in the background can opt out.
+  const { timeout, pauseTimeoutWhenHidden = true, ...fetchOpts } = opts;
   const cacheKey = cacheKeyFor(url, fetchOpts);
   const cached = cachedValue(cacheKey);
   if (cached) return cached;
 
   const timeoutMs = timeoutFor(timeout);
   const ctrl = new AbortController();
-  const clearRequestTimeout = startVisibleRequestTimeout(ctrl, timeoutMs);
+  const clearRequestTimeout = startVisibleRequestTimeout(ctrl, timeoutMs, pauseTimeoutWhenHidden);
 
   try {
     const res = await fetch(url, {

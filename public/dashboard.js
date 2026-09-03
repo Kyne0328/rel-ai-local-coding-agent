@@ -45,6 +45,9 @@ let _renderFrame = 0;
 let _renderWaiters = [];
 let _deferredViewRender = false;
 let _recoveryNoticeTimer = null;
+let _hiddenViewDirty = false;
+let _hiddenCatchUpRequired = false;
+let _hiddenRecoveryRequired = false;
 const AUTO_RECOVERY_DELAYS_MS = [0, 600, 1600];
 const MAX_REFRESH_LIVE_EVENTS = 500;
 
@@ -136,6 +139,7 @@ async function boot() {
     if (event.target instanceof HTMLSelectElement) flushDeferredViewRender({ ignoreFocusedSelect: true });
   }, true);
   window.addEventListener('relai:dropdown-closed', flushDeferredViewRender);
+  document.addEventListener('visibilitychange', () => { void handleDashboardVisibility(); });
   initEvents(liveOnEvent, liveStateChange);
   startSSE();
   checkOnboarding();
@@ -225,6 +229,10 @@ function applyDesktopStatus(status) {
   if (!status) return;
   const projected = withConnectionState({ ...getStore(), desktopStatus: status }, _liveState);
   patchLocalConnection({ desktopStatus: status, connectionState: projected.connectionState });
+  if (dashboardHidden()) {
+    _hiddenViewDirty = true;
+    return;
+  }
   const data = getStore();
   updateShell(data);
   if (_routerReady) void syncLiveView(data);
@@ -451,21 +459,59 @@ function replayLiveEventsDuringRefresh() {
   }
 }
 
+function dashboardHidden() {
+  return document.visibilityState !== 'visible';
+}
+
+async function handleDashboardVisibility() {
+  if (dashboardHidden()) return;
+  const recoveryRequired = _hiddenRecoveryRequired;
+  const catchUpRequired = _hiddenCatchUpRequired;
+  const viewDirty = _hiddenViewDirty;
+  _hiddenRecoveryRequired = false;
+  _hiddenCatchUpRequired = false;
+  _hiddenViewDirty = false;
+
+  if (recoveryRequired) {
+    await recoverDashboard({ source: 'visibility-live-recovery', render: true });
+    return;
+  }
+  if (catchUpRequired) {
+    await doRefresh({ source: 'visibility-catch-up' });
+    return;
+  }
+  const data = getStore();
+  if (viewDirty) updateShell(data);
+  if (!_routerReady) activateRouter();
+  await syncLiveView(data);
+}
+
 async function liveOnEvent(event) {
   if (!event?.type || !event.data) return;
   if (event.type === 'dashboard.error') {
     debugError(new Error(event.data.error || 'A live dashboard update failed.'));
+    if (dashboardHidden()) {
+      _hiddenRecoveryRequired = true;
+      _hiddenViewDirty = true;
+      return;
+    }
     await recoverDashboard({ source: 'live-event-recovery', render: true });
     return;
   }
   if (event.data.ok === false) return;
   bufferLiveEventDuringRefresh(event);
-  window.dispatchEvent(new CustomEvent('relai:diagnostics-live', { detail: event }));
   const applied = applyLiveEvent(event.type, event.data);
   if (!applied.accepted) return;
+  if (event.type !== 'diagnostics.updated') {
+    const projected = withConnectionState(applied.state, _liveState);
+    patchLocalConnection({ connectionState: projected.connectionState });
+  }
+  if (dashboardHidden()) {
+    _hiddenViewDirty = true;
+    return;
+  }
+  window.dispatchEvent(new CustomEvent('relai:diagnostics-live', { detail: event }));
   if (event.type === 'diagnostics.updated') return;
-  const projected = withConnectionState(applied.state, _liveState);
-  patchLocalConnection({ connectionState: projected.connectionState });
   const data = getStore();
   updateShell(data);
   if (!_routerReady) activateRouter();
@@ -524,11 +570,19 @@ async function updateLiveView(data) {
 
 function liveStateChange(detail) {
   const catchUpRequired = detail.state === 'live' && liveCatchUpRequired(getStore().live, detail);
-  const reconnectProbeRequired = surface === 'desktop' && detail.state === 'reconnecting' && detail.recoveryProbe === true;
+  const reconnectProbeRequired = surface === 'desktop'
+    && detail.state === 'reconnecting'
+    && detail.recoveryProbe === true
+    && _liveState !== 'reconnecting';
   _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
   const projected = withConnectionState(getStore(), _liveState);
   patchLocalConnection({ connectionState: projected.connectionState });
+  if (dashboardHidden()) {
+    _hiddenViewDirty = true;
+    if (reconnectProbeRequired || catchUpRequired) _hiddenCatchUpRequired = true;
+    return;
+  }
   const data = getStore();
   renderConnectionStatus();
   if (_routerReady && currentRoutePath() === 'settings/connection') void syncLiveView(data);

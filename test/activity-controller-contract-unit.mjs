@@ -13,6 +13,9 @@ assert.match(activity, /from '\.\/model\.js'/, 'Activity must use its pure data 
 assert.match(activity, /_allEntries = \[\]/, 'mounting Activity must discard stale module history');
 assert.match(activity, /_liveEntriesSinceLoad = \[\]/, 'live entries received during history loading must be tracked');
 assert.match(activity, /parseActivityHistoryResponse\(data\)/, 'structured fetch errors must be interpreted explicitly');
+assert.match(activity, /pauseTimeoutWhenHidden:\s*false/, 'Activity history must not suspend its request timeout for the entire minimized period');
+assert.match(activity, /_historyRenderPending/, 'Activity must defer hidden history rendering until the dashboard is visible');
+assert.match(activity, /_historyRetryPending/, 'Activity must retry a history load that failed while hidden after the visible view catches up');
 assert.match(activity, /replaceActivityHistory\(parsed\.entries\)/, 'stored history must be treated as an authoritative snapshot');
 assert.match(activity, /_pausedEntries/, 'paused snapshots must be buffered');
 assert.match(activity, /async function resumeLiveActivity/, 'resuming must reconcile buffered and stored history');
@@ -29,6 +32,10 @@ assert.match(activity, /activityActionLabel\(entry\)/, 'row actions must have di
 assert.match(activity, /activity-message-copy">\$\{esc\(message\)\}<\/span>/, 'message text must be rendered before optional title metadata');
 assert.match(activity, /activity-message-title/, 'event titles may be shown separately without obscuring messages');
 assert.match(dashboard, /return module\.updateActivityLiveState\(data\);/, 'the dashboard must delegate live Activity updates to the feature controller');
+assert.match(dashboard, /function dashboardHidden\(\)/, 'the dashboard must distinguish state ingestion from hidden-window rendering');
+assert.match(dashboard, /_hiddenViewDirty/, 'hidden live events must coalesce into one deferred visible render');
+assert.match(dashboard, /function applyDesktopStatus[\s\S]*dashboardHidden\(\)[\s\S]*return;/, 'desktop status pushes must not render while the dashboard is hidden');
+assert.match(dashboard, /visibility-catch-up/, 'stream discontinuity while hidden must use authoritative catch-up only when needed');
 assert.match(dashboard, /if \(!updated\) return false;/, 'the dashboard must respect Activity no-op updates');
 assert.match(activityCss, /\.activity-message-copy\s*\{[^}]*min-width:/s, 'messages need an explicit readable minimum width');
 assert.match(activityCss, /\.activity-col-message\s*\{[^}]*width:\s*\d+(?:\.\d+)?%/s, 'fixed-layout Activity tables must give Message an explicit share of the row');
