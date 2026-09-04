@@ -203,7 +203,7 @@ try {
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
-  fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: process.platform === 'win32' ? 20 : 5, retryDelay: 100 });
 }
 
 console.log('Atomic validation resolves relevant races internally and ignores unrelated concurrent task changes.');

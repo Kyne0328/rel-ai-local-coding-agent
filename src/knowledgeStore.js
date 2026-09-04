@@ -7,6 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { statePath } from './stateLayout.js';
 import { relevanceTerms } from './context/relevance.js';
 import { skillMarkdown, validateSkillIdentity } from './skillValidation.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
 const KNOWLEDGE_SCHEMA_VERSION = 1;
 const DEFAULT_BOOTSTRAP_BYTES = 4096;
@@ -239,10 +240,11 @@ function learnFromCompletedTask(config, workspace, session = {}, completion = {}
   const checks = [...new Set(evidence.map(item => clean(item?.commandId || item?.command, 180)).filter(Boolean))].slice(-4);
   const changedFiles = [...new Set((completion.changedFiles || session.changedFiles || []).map(value => clean(value, 240)).filter(Boolean))].slice(0, 20);
   if (!changedFiles.length && !checks.length && !failures.length) return null;
+  const signatureOperations = operationSequence.filter(operation => operation !== OP.VALIDATE_CHECKS);
   const signatureInput = {
     intent: clean(session.intent || session.workflow?.intent, 40),
     taskTerms: procedureTaskTerms(session),
-    operations: operationSequence,
+    operations: signatureOperations,
     failures,
     extensions: [...new Set(changedFiles.map(file => path.extname(file).toLowerCase()).filter(Boolean))].sort(),
     checks: checks.map(normalizeSignatureText)

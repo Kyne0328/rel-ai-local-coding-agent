@@ -47,7 +47,7 @@
     "verify:node-pty": "node scripts/verify-node-pty-runtime.mjs",
     "verify:color-tokens": "node scripts/generate-color-tokens.mjs --check",
     "generate:sbom": "node scripts/generate-sbom.mjs",
-    "audit:production": "npm audit --omit=dev --audit-level=high && cd electron && npm audit --omit=dev --audit-level=high",
+    "audit:production": "node scripts/audit-production.mjs",
     "audit:packaging": "node scripts/audit-packaging.mjs",
     "validate:plugin": "node scripts/validate-plugin.mjs",
     "test:plugin": "node test/plugin-package-unit.mjs",
