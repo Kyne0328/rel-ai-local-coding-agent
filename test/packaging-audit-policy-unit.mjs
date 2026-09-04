@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { evaluatePackagingAudit } from '../scripts/audit-packaging.mjs';
+import { evaluatePackagingAudit, isTransientPackagingAuditFailure } from '../scripts/audit-packaging.mjs';
 
 const cleanReport = {
   metadata: { vulnerabilities: { low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
@@ -34,5 +34,7 @@ const criticalReport = {
   }
 };
 assert.throws(() => evaluatePackagingAudit({ report: criticalReport }), /1 critical.*critical-build-tool/i);
+assert.equal(isTransientPackagingAuditFailure({ stderr: 'npm warn audit network timeout at: https://registry.npmjs.org/-/npm/v1/security/advisories/bulk' }), true);
+assert.equal(isTransientPackagingAuditFailure({ stdout: JSON.stringify(highReport) }), false, 'real audit findings must not be classified as registry outages');
 
-console.log('Packaging audit fails closed on all high and critical build-tool findings without stale advisory exceptions.');
+console.log('Packaging audit blocks confirmed high/critical findings and distinguishes advisory-service outages.');

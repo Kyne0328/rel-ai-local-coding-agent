@@ -25,8 +25,8 @@ Do not introduce pnpm, Yarn, a second root lockfile, or manual lockfile edits. U
 
 ## Security gates
 
-- `npm run audit:production` must pass.
-- `npm run audit:packaging` records release-tool advisories separately.
+- `npm run audit:production` blocks confirmed high-severity runtime findings; npm advisory-service outages are reported but are not build failures.
+- `npm run audit:packaging` blocks confirmed high/critical release-tool findings; advisory-service outages are reported separately.
 - `npm run knip:dependencies` rejects undeclared or unused direct dependencies.
 - CI installs with lockfiles and does not accept floating Electron, MCP SDK, or updater versions.
 

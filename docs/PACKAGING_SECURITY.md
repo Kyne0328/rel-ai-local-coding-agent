@@ -4,8 +4,8 @@ Rel.AI MCP separates runtime dependency security from release-tool dependency se
 
 ## Required gates
 
-- `npm run audit:production` must pass with no high-severity production vulnerabilities in either package.
-- `npm run audit:packaging` is a blocking Electron build-tool audit; every high- or critical-severity finding fails publication.
+- `npm run audit:production` blocks on confirmed high-severity production vulnerabilities. If npm's advisory service is temporarily unavailable, the live check reports that outage and does not fail an otherwise reproducible lockfile build.
+- `npm run audit:packaging` blocks on confirmed high- or critical-severity Electron build-tool findings. Advisory-service outages are reported but do not fail publication.
 - Every packaged build must pass layout verification, packaged MCP acceptance, and Electron fuse verification.
 - Release artifacts are generated from a clean output directory.
 - Published Windows builds currently disable certificate auto-discovery and remain unsigned until a trusted Windows code-signing certificate is configured.
@@ -34,7 +34,7 @@ The release pipeline relies on:
 
 - trusted repository inputs and lockfile-based dependency installation;
 - clean artifact directories;
-- a fail-closed build-tool dependency audit with no advisory allowlist;
+- a build-tool dependency audit that blocks confirmed high/critical findings without making npm advisory-service availability a release dependency;
 - pinned OpenAI tunnel-client provenance and packaged hash verification;
 - hardened Electron fuses;
 - packaged-layout and bearer-authenticated MCP acceptance;

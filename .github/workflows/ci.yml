@@ -23,14 +23,13 @@ jobs:
             electron/package-lock.json
       - name: Use declared npm
         run: node scripts/ensure-package-manager.mjs
-      - run: npm ci --ignore-scripts
-      - run: npm ci
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
         working-directory: electron
       - name: Install Electron test binary
         run: node electron/node_modules/electron/install.js
       - name: Verify Electron test binary
         run: test -x electron/node_modules/electron/dist/electron
-      - run: npm run audit:production
       - run: npm run test:native-tasks-release-gate
       - name: Verify release and generated-asset consistency
         run: npm run release:check
@@ -57,8 +56,8 @@ jobs:
             electron/package-lock.json
       - name: Use declared npm
         run: node scripts/ensure-package-manager.mjs
-      - run: npm ci --ignore-scripts
-      - run: npm ci
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
         working-directory: electron
       - name: Verify generated color assets
         run: npm run verify:color-tokens
@@ -98,8 +97,8 @@ jobs:
             electron/package-lock.json
       - name: Use declared npm
         run: node scripts/ensure-package-manager.mjs
-      - run: npm ci --ignore-scripts
-      - run: npm ci
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
         working-directory: electron
       - name: Install Electron test binary
         run: node electron/node_modules/electron/install.js

@@ -14,7 +14,7 @@ npm run audit:packaging
 npm run benchmark:observability
 ```
 
-`release:check` is the authoritative finalized-release metadata gate. It verifies every synchronized version surface, the current changelog entry, release manifest, generated color assets, and current public tool-manifest metadata. `test:all` handles normal development validation without duplicating finalized release metadata checks. CI and packaging use Node.js 24.
+`release:check` is the authoritative finalized-release metadata gate. It verifies every synchronized version surface, the current changelog entry, release manifest, generated color assets, and current public tool-manifest metadata. `test:all` handles normal development validation without duplicating finalized release metadata checks. CI and packaging use Node.js 24. Live npm audits block confirmed high/critical findings, but a temporary npm advisory-service outage is reported rather than turning an otherwise reproducible release into a false failure.
 
 When working through Rel.AI itself, use the task-aware validation and diff tools so the evidence remains associated with the current work session.
 
