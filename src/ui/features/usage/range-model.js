@@ -65,6 +65,7 @@ export function normalizeUsageSnapshot(snapshot, requestedMonth = '') {
   return {
     source: snapshot.source === 'local' ? 'local' : 'cloud',
     month,
+    privacy: normalizePrivacy(snapshot.privacy),
     totals: normalizeTotals(snapshot.totals),
     tools: normalizeBreakdown(snapshot.tools, 'tool'),
     devices: normalizeBreakdown(snapshot.devices, 'device'),
@@ -170,6 +171,21 @@ export function workspaceOptions(models) {
   }
   for (const model of models || []) for (const row of model.workspaces) if (row.workspace && !map.has(row.workspace)) map.set(row.workspace, new Map());
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([workspace, devices]) => ({ workspace, devices: [...devices.entries()].map(([deviceId, displayName]) => ({ deviceId, displayName })) }));
+}
+
+function normalizePrivacy(value) {
+  const telemetry = value?.externalTelemetry && typeof value.externalTelemetry === 'object'
+    ? value.externalTelemetry
+    : {};
+  const retentionDays = Number(value?.retentionDays || 0);
+  return {
+    retentionDays: Number.isFinite(retentionDays) && retentionDays > 0 ? Math.floor(retentionDays) : 0,
+    externalTelemetry: {
+      enabled: telemetry.enabled === true,
+      endpointConfigured: telemetry.endpointConfigured === true,
+      sampleRatio: optionalNumber(telemetry.sampleRatio, 1, 'privacy.externalTelemetry.sampleRatio')
+    }
+  };
 }
 
 function normalizeTotals(value) {

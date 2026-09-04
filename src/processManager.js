@@ -471,7 +471,7 @@ async function drainLogWrites(config, record) {
 
 function readManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
-  assertProcessAccess(config, record, args, context);
+  assertProcessAccess(config, record, args, context, { requireSession: false });
   const maxBytes = clampNumber(args.maxBytes, 1000, 1024 * 1024, 65536);
   const revision = processMetadataRevision(record);
   const includeMetadata = args.includeMetadata !== false
@@ -540,7 +540,7 @@ async function writeManagedProcess(config, args = {}, context = {}) {
 
 async function stopManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
-  assertProcessAccess(config, record, args, context);
+  assertProcessAccess(config, record, args, context, { requireSession: false });
   const duplicate = TERMINAL_STATUSES.has(record.status);
   if (!duplicate) {
     await stopRecordInternal(config, record, {
@@ -601,7 +601,7 @@ function listManagedProcesses(config, args = {}, context = {}) {
   const includeTerminal = args.includeTerminal === true || explicitTerminalStatus;
   const activeOnly = args.activeOnly !== false && !includeTerminal;
   const items = [...processes.values()]
-    .filter(item => canAccessProcess(config, item, args, context))
+    .filter(item => canAccessProcess(config, item, args, context, { requireSession: false }))
     .filter(item => !requestedWorkspace || workspaceMatches(item, requestedWorkspace))
     .filter(item => !status || item.status === status)
     .filter(item => !activeOnly || ACTIVE_STATUSES.has(item.status) || item.status === 'orphaned')
@@ -612,7 +612,7 @@ function listManagedProcesses(config, args = {}, context = {}) {
   return { ok: true, processes: items, count: items.length };
 }
 
-function assertProcessAccess(config, record, args = {}, context = {}) {
+function assertProcessAccess(config, record, args = {}, context = {}, options = {}) {
   if (trustedLocalContext(args, context)) return;
   const actualPrincipalKey = principalKeyForContext(context);
   if ((!record.principalKey && context.connector === true)
@@ -628,15 +628,17 @@ function assertProcessAccess(config, record, args = {}, context = {}) {
     throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process access requires a workspace-bound logical task.');
   }
 
-  const workSessionId = String(context.taskId || args.work_id || '').trim();
-  if (String(record.workSessionId || '').trim() !== workSessionId) {
-    throw taskError('PROCESS_SESSION_MISMATCH', 'Managed process belongs to a different work session.');
+  if (options.requireSession !== false) {
+    const workSessionId = String(context.taskId || args.work_id || '').trim();
+    if (String(record.workSessionId || '').trim() !== workSessionId) {
+      throw taskError('PROCESS_SESSION_MISMATCH', 'Managed process belongs to a different work session.');
+    }
   }
 }
 
-function canAccessProcess(config, record, args, context) {
+function canAccessProcess(config, record, args, context, options = {}) {
   try {
-    assertProcessAccess(config, record, args, context);
+    assertProcessAccess(config, record, args, context, options);
     return true;
   } catch {
     return false;

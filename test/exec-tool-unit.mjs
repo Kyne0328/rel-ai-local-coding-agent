@@ -234,6 +234,16 @@ try {
     /not found for this work_id/i,
     'outputRef must not be readable from a different work session'
   );
+  await assert.rejects(
+    () => callTool('relai_read', {
+      workspace: 'app',
+      outputRef: large.stdoutOutputRef,
+      maxBytes: 50000,
+      guidanceMode: 'none'
+    }, context),
+    /requires an active work_id/i,
+    'making ordinary reads task-optional must not weaken task-private outputRef ownership'
+  );
   await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: otherTask.work_id, reason: 'Spill ownership regression complete.' }, context);
 
   const timedOut = await execCall({

@@ -4,6 +4,7 @@ import { statePath } from './stateLayout.js';
 import { writeTextAtomicAsync } from './durableState.js';
 import { failureCategoryFromCode, normalizeFailureCategory } from './analyticsFailureCategory.js';
 import { classifyAnalyticsOutcome, reliabilityCountersForOutcome } from './analyticsOutcome.js';
+import { telemetryStatus } from './telemetry.js';
 
 const SCHEMA_VERSION = 2;
 const LEGACY_SCHEMA_VERSION = 1;
@@ -13,8 +14,11 @@ const LOCAL_DEVICE_ID = 'local-device';
 const LOCAL_DEVICE_NAME = 'This device';
 const ANALYTICS_FLUSH_DELAY_MS = 250;
 const ANALYTICS_FLUSH_MAX_WAIT_MS = 1000;
+const LOCAL_ANALYTICS_RETENTION_DAYS = 180;
+const RETENTION_PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const documentCache = new Map();
 const writeStates = new Map();
+const retentionPruneTimes = new Map();
 
 function recordLocalToolOutcome(config = {}, event = {}) {
   try {
@@ -62,6 +66,7 @@ function recordLocalToolOutcome(config = {}, event = {}) {
       if (workspace) incrementWorkspaceFailureCategory(hourly.workspaceFailureCategories, workspace, category);
     }
     scheduleDocumentWrite(config, document);
+    scheduleRetentionPrune(config);
     return true;
   } catch {
     return false;
@@ -70,15 +75,15 @@ function recordLocalToolOutcome(config = {}, event = {}) {
 
 function readLocalUsageSnapshot(config = {}, requestedMonth = '') {
   const month = normalizeMonth(requestedMonth) || monthKey(new Date());
-  return projectLocalUsageSnapshot(month, readDocument(config, month));
+  return projectLocalUsageSnapshot(config, month, readDocument(config, month));
 }
 
 async function readLocalUsageSnapshotAsync(config = {}, requestedMonth = '') {
   const month = normalizeMonth(requestedMonth) || monthKey(new Date());
-  return projectLocalUsageSnapshot(month, await readDocumentFresh(config, month));
+  return projectLocalUsageSnapshot(config, month, await readDocumentFresh(config, month));
 }
 
-function projectLocalUsageSnapshot(month, document) {
+function projectLocalUsageSnapshot(config, month, document) {
   const activeDays = new Set(document.hours.map(row => row.hour.slice(0, 10))).size;
   const totals = {
     ...aggregateDto(document.totals),
@@ -87,9 +92,18 @@ function projectLocalUsageSnapshot(month, document) {
     resultBytes: 0,
     activeDays
   };
+  const externalTelemetry = telemetryStatus(config);
   return {
     source: 'local',
     month,
+    privacy: {
+      retentionDays: LOCAL_ANALYTICS_RETENTION_DAYS,
+      externalTelemetry: {
+        enabled: externalTelemetry.enabled === true,
+        endpointConfigured: externalTelemetry.endpointConfigured === true,
+        sampleRatio: number(externalTelemetry.sampleRatio)
+      }
+    },
     totals,
     tools: document.tools.map(row => ({ tool: row.tool, ...aggregateDto(row) })),
     devices: [{ deviceId: LOCAL_DEVICE_ID, displayName: LOCAL_DEVICE_NAME, ...aggregateDto(document.totals) }],
@@ -266,6 +280,96 @@ async function flushLocalAnalytics(config = null) {
   return { ok: failed === 0 && pending === 0, failed, pending };
 }
 
+function scheduleRetentionPrune(config = {}) {
+  const directory = statePath(config, 'analytics', 'local');
+  const now = Date.now();
+  if (now - Number(retentionPruneTimes.get(directory) || 0) < RETENTION_PRUNE_INTERVAL_MS) return false;
+  retentionPruneTimes.set(directory, now);
+  const timer = setTimeout(() => {
+    void pruneLocalAnalytics(config).catch(error => {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] local analytics retention prune:', error);
+    });
+  }, 0);
+  timer.unref?.();
+  return true;
+}
+
+async function pruneLocalAnalytics(config = {}, options = {}) {
+  const directory = statePath(config, 'analytics', 'local');
+  const retentionDays = Math.max(1, Math.floor(Number(options.retentionDays || LOCAL_ANALYTICS_RETENTION_DAYS)));
+  const now = options.now instanceof Date ? options.now : new Date(options.now == null ? Date.now() : options.now);
+  const nowMs = Number.isFinite(now.getTime()) ? now.getTime() : Date.now();
+  const cutoffMs = nowMs - retentionDays * 24 * 60 * 60 * 1000;
+  let entries;
+  try {
+    entries = await fs.promises.readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return { ok: true, removedFiles: 0, removedBytes: 0 };
+    throw error;
+  }
+  let removedFiles = 0;
+  let removedBytes = 0;
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^\d{4}-\d{2}\.json$/.test(entry.name)) continue;
+    const month = entry.name.slice(0, 7);
+    if (monthEndMs(month) >= cutoffMs) continue;
+    const file = path.join(directory, entry.name);
+    const state = writeStates.get(file);
+    if (state?.writing || (state && state.persistedVersion < state.version)) continue;
+    try {
+      const stat = await fs.promises.stat(file);
+      await fs.promises.rm(file, { force: true });
+      writeStates.delete(file);
+      documentCache.delete(file);
+      removedFiles += 1;
+      removedBytes += Math.max(0, Number(stat.size || 0));
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  return { ok: true, removedFiles, removedBytes };
+}
+
+async function clearLocalAnalytics(config = {}) {
+  const directory = statePath(config, 'analytics', 'local');
+  const prefix = `${directory}${path.sep}`;
+  const states = [...writeStates.entries()].filter(([file]) => file.startsWith(prefix));
+  for (const [file, state] of states) {
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    state.version = state.persistedVersion;
+    await state.promise.catch(() => false);
+    if (state.timer) clearTimeout(state.timer);
+    writeStates.delete(file);
+    documentCache.delete(file);
+  }
+  for (const file of [...documentCache.keys()]) if (file.startsWith(prefix)) documentCache.delete(file);
+  retentionPruneTimes.delete(directory);
+
+  let entries = [];
+  try { entries = await fs.promises.readdir(directory, { withFileTypes: true }); } catch {}
+  let removedFiles = 0;
+  let removedBytes = 0;
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    removedFiles += 1;
+    try { removedBytes += Math.max(0, Number((await fs.promises.stat(path.join(directory, entry.name))).size || 0)); } catch {}
+  }
+  await fs.promises.rm(directory, { recursive: true, force: true });
+  return { ok: true, removedFiles, removedBytes };
+}
+
+function monthEndMs(month) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || ''));
+  if (!match) return Number.POSITIVE_INFINITY;
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  if (monthIndex < 0 || monthIndex > 11) return Number.POSITIVE_INFINITY;
+  return Date.UTC(year, monthIndex + 1, 1) - 1;
+}
+
 function analyticsPath(config, month) {
   return statePath(config, 'analytics', 'local', `${month}.json`);
 }
@@ -366,4 +470,12 @@ function monthKey(date) { return `${date.getUTCFullYear()}-${String(date.getUTCM
 function hourKey(date) { return `${monthKey(date)}-${String(date.getUTCDate()).padStart(2, '0')}T${String(date.getUTCHours()).padStart(2, '0')}`; }
 function normalizeMonth(value) { const text = String(value || '').trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(text) ? text : ''; }
 
-export { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot, readLocalUsageSnapshotAsync };
+export {
+  LOCAL_ANALYTICS_RETENTION_DAYS,
+  clearLocalAnalytics,
+  flushLocalAnalytics,
+  pruneLocalAnalytics,
+  recordLocalToolOutcome,
+  readLocalUsageSnapshot,
+  readLocalUsageSnapshotAsync
+};

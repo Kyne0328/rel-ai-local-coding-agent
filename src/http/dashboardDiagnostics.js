@@ -7,6 +7,7 @@ import * as connection from "../connectionProfile.js";
 import { deriveConnectionState, ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 import { buildDiagnosticReport } from "../diagnostics.js";
 import { taskHistoryPersistenceSnapshot } from '../taskHistoryStore.js';
+import { clearLocalAnalytics } from '../localAnalytics.js';
 import { activeLogicalTaskCount } from '../taskState.js';
 import { readJsonBody, sendJson } from "./io.js";
 
@@ -50,8 +51,8 @@ function handleApiDiagnostics(ctx) {
 async function handleApiDiagnosticsReset(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const target = String(payload.target || '').trim();
-  if (payload.confirm !== true || !['history', 'runtime_logs', 'all'].includes(target)) {
-    sendJson(ctx.res, 400, errorPayload(ERROR_CODES.REQUEST_INVALID, 'Diagnostic reset requires confirm=true and target history, runtime_logs, or all.'));
+  if (payload.confirm !== true || !['history', 'runtime_logs', 'analytics', 'all'].includes(target)) {
+    sendJson(ctx.res, 400, errorPayload(ERROR_CODES.REQUEST_INVALID, 'Diagnostic reset requires confirm=true and target history, runtime_logs, analytics, or all.'));
     return;
   }
   if (target === 'all' && String(payload.confirmation || '').trim() !== 'RESET') {
@@ -61,9 +62,10 @@ async function handleApiDiagnosticsReset(ctx) {
 
   const activity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
   const activeTasks = activeLogicalTaskCount(activity);
-  if ((target === 'history' || target === 'all') && activeTasks > 0) {
+  if ((target === 'history' || target === 'analytics' || target === 'all') && activeTasks > 0) {
     const noun = activeTasks === 1 ? 'task is' : 'tasks are';
-    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, `Cannot clear session and activity history while ${activeTasks} Rel.AI ${noun} still active.`));
+    const data = target === 'analytics' ? 'analytics' : 'session and activity history';
+    sendJson(ctx.res, 409, errorPayload(ERROR_CODES.STATE_RESET_FAILED, `Cannot clear ${data} while ${activeTasks} Rel.AI ${noun} still active.`));
     return;
   }
 
@@ -72,9 +74,10 @@ async function handleApiDiagnosticsReset(ctx) {
     return;
   }
 
-  const result = { ok: true, target, history: null, runtimeLogs: null };
+  const result = { ok: true, target, history: null, runtimeLogs: null, analytics: null };
   if (target === 'history' || target === 'all') result.history = await clearHistory(ctx);
   if (target === 'runtime_logs' || target === 'all') result.runtimeLogs = await ctx.options.clearRuntimeLogs();
+  if (target === 'analytics') result.analytics = await clearLocalAnalytics(readConfig());
   result.message = resetMessage(target);
   sendJson(ctx.res, 200, result);
 }
@@ -96,6 +99,7 @@ async function clearHistory(ctx) {
 function resetMessage(target) {
   if (target === 'history') return 'Session and activity history cleared.';
   if (target === 'runtime_logs') return 'Persistent service log cleared.';
+  if (target === 'analytics') return 'Local analytics cleared.';
   return 'Session, activity, and service logs cleared.';
 }
 

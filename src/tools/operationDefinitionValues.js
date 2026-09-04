@@ -23,7 +23,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Compact repository overview: file tree, manifests, detected checks, and project hints.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"includeFiles":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'repoSnapshot',
-    behavior: {"audit":"snapshot"},
+    behavior: {"audit":"snapshot","taskScope":"optional"},
   },
   {
     name: OP.READ,
@@ -31,7 +31,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Batch-read files or directory summaries, load one discovered project/user skill by name, retrieve one task-scoped outputRef returned by a truncated relai_exec result, or return one exact file as a private MCP resource_link for transfer/download. Ordinary hidden and Git-ignored files can be read when explicitly targeted; snapshot exclusions are not direct-access restrictions. Secret-bearing paths remain blocked. Use asResource:true with exactly one paths entry for whole-file transfer; startLine/endLine and ranges remain text-only. guidanceMode accepts full, compact, or none.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":100},"outputRef":{"type":"string","pattern":"^spill_[A-Za-z0-9_-]{20,80}$"},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"ranges":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":1000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":100},"skill":{"type":"string","minLength":1,"maxLength":80},"guidanceMode":{"type":"string","enum":["full","compact","none"]},"asResource":{"type":"boolean","description":"Return exactly one paths file as a private MCP resource_link for transfer or download instead of text content."}},"required":["workspace"],"anyOf":[{"required":["paths"]},{"required":["ranges"]},{"required":["skill"]},{"required":["outputRef"]}],"additionalProperties":false},
     handlerName: 'read',
-    behavior: {"audit":"read"},
+    behavior: {"audit":"read","taskScope":"optional"},
   },
   {
     name: OP.SEARCH_TEXT,
@@ -39,6 +39,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Search tracked and untracked workspace files. Pass pattern for one search or queries for up to four independent searches that Rel.AI fans out inside one tool call. Auto mode is the default: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Compact and context modes remain explicit deterministic overrides.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"pattern":{"type":"string","minLength":1,"maxLength":1000},"queries":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":4},"glob":{"type":"string","maxLength":256},"fixed":{"type":"boolean"},"ignoreCase":{"type":"boolean"},"maxResults":{"type":"number","minimum":1,"maximum":1000},"mode":{"type":"string","enum":["auto","compact","context"]},"contextBefore":{"type":"number","minimum":0,"maximum":100},"contextAfter":{"type":"number","minimum":0,"maximum":100},"groupByFile":{"type":"boolean"},"mergeOverlaps":{"type":"boolean"},"maxFiles":{"type":"number","minimum":1,"maximum":200},"maxRangesPerFile":{"type":"number","minimum":1,"maximum":100},"maxRangeLines":{"type":"number","minimum":1,"maximum":1000},"maxBytes":{"type":"number","minimum":1000,"maximum":393216}},"required":["workspace"],"oneOf":[{"required":["pattern"],"not":{"required":["queries"]}},{"required":["queries"],"not":{"required":["pattern"]}}],"additionalProperties":false},
     handlerName: 'search',
+    behavior: {"taskScope":"optional"},
   },
   {
     name: OP.INSPECT,
@@ -47,7 +48,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","definition","references","hover","implementation","related","impact","trace","diagnostics","architecture"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"path":{"type":"string","minLength":1,"maxLength":1000},"line":{"type":"number","minimum":1,"maximum":10000000},"column":{"type":"number","minimum":1,"maximum":10000000},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
     handlerName: 'codeInspect',
     groups: ["audit"],
-    behavior: {"longRunning":true},
+    behavior: {"longRunning":true,"taskScope":"optional"},
   },
   {
     name: OP.EXEC,
@@ -71,6 +72,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read process state and new stdout/stderr ranges using independent byte cursors.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"processId":{"type":"string","minLength":1,"maxLength":200},"stdoutOffset":{"type":"number","minimum":0},"stderrOffset":{"type":"number","minimum":0},"maxBytes":{"type":"number","minimum":1000,"maximum":1048576},"includeMetadata":{"type":"boolean"},"metadataRevision":{"type":"string","minLength":1,"maxLength":100}},"required":["processId"],"additionalProperties":false},
     handlerName: 'processRead',
+    behavior: {"taskScope":"optional"},
   },
   {
     name: OP.PROCESS_WRITE,
@@ -86,7 +88,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Stop a managed process and its process tree, then return final state and recent output.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"processId":{"type":"string","minLength":1,"maxLength":200},"graceMs":{"type":"number","minimum":0,"maximum":30000}},"required":["processId"],"additionalProperties":false},
     handlerName: 'processStop',
-    behavior: {"audit":"exec"},
+    behavior: {"audit":"exec","taskScope":"optional"},
   },
   {
     name: OP.PROCESS_LIST,
@@ -94,6 +96,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "List active managed processes by default. Set includeTerminal:true to include recent exited, failed, or stopped records.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"status":{"type":"string","enum":["starting","running","stopping","exited","failed","stopped","orphaned"]},"activeOnly":{"type":"boolean"},"includeTerminal":{"type":"boolean"},"limit":{"type":"number","minimum":1,"maximum":500}},"required":[],"additionalProperties":false},
     handlerName: 'processList',
+    behavior: {"taskScope":"optional"},
   },
   {
     name: OP.UI,
@@ -109,7 +112,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Rank local source files with persistent Tree-sitter structure, code-graph, Zoekt when available, FTS5 lexical, path, and symbol signals. Pass query for one search or queries for up to four independent searches that Rel.AI fans out inside one tool call. No neural model is used and no source text leaves the machine.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"queries":{"type":"array","items":{"type":"string","minLength":1,"maxLength":2000},"minItems":1,"maxItems":4},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"maxBytes":{"type":"number","minimum":1000,"maximum":393216},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace"],"oneOf":[{"required":["query"],"not":{"required":["queries"]}},{"required":["queries"],"not":{"required":["query"]}}],"additionalProperties":false},
     handlerName: 'semanticSearch',
-    behavior: {"longRunning":true},
+    behavior: {"longRunning":true,"taskScope":"optional"},
   },
   {
     name: OP.VALIDATE_DIAGNOSTICS,
@@ -150,7 +153,7 @@ const OPERATION_DEFINITION_VALUES = [
     description: "Read-only. Check one configured local Rel.AI route such as /health or /dashboard and return reachability, HTTP status, final URL, response byte count, title, and bounded diagnostics. The route must be a local path.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"route":{"type":"string","minLength":1},"timeoutMs":{"type":"number","minimum":1000,"maximum":600000}},"required":["workspace","route"],"additionalProperties":false},
     handlerName: 'httpProbe',
-    behavior: {"longRunning":true},
+    behavior: {"longRunning":true,"taskScope":"optional"},
   },
   {
     name: OP.CHANGES_DIFF,
@@ -159,7 +162,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"staged":{"type":"boolean"},"path":{"type":"string"},"redactSensitive":{"type":"boolean"},"scope":{"type":"string","enum":["task","workspace"]},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'diff',
     groups: ["audit"],
-    behavior: {"summary":"diff"},
+    behavior: {"summary":"diff","taskScope":"optional"},
   },
   {
     name: OP.CHANGES_CHECKPOINT,
@@ -177,6 +180,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"checkpointId":{"type":"string","minLength":24,"maxLength":180,"pattern":"^review_[A-Za-z0-9_-]+$"}},"required":["workspace","checkpointId"],"additionalProperties":false},
     handlerName: 'reviewReplay',
     groups: ["audit"],
+    behavior: {"taskScope":"optional"},
   },
   {
     name: OP.CHANGES_RESTORE,
@@ -185,7 +189,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100}},"required":["workspace","paths"],"additionalProperties":false},
     handlerName: 'restorePaths',
     groups: ["cleanup"],
-    behavior: {"cache":"paths","concurrencyScope":"workspace"},
+    behavior: {"cache":"paths","concurrencyScope":"workspace","taskScope":"optional"},
   },
   {
     name: OP.CHANGES_RESET,
@@ -194,7 +198,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"confirmation":{"type":"string","enum":["RESET","RESET_AND_CLEAN"]},"removeUntracked":{"type":"boolean"}},"required":["workspace","confirmation"],"additionalProperties":false},
     handlerName: 'resetWorkspace',
     groups: ["cleanup"],
-    behavior: {"cache":"workspace","concurrencyScope":"workspace"},
+    behavior: {"cache":"workspace","concurrencyScope":"workspace","taskScope":"optional"},
     dashboard: {"requiresApproval":true}
   },
   {
@@ -208,11 +212,11 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: OP.PUBLISH_COMMIT,
     title: "Record Commit",
-    description: "Record a commit with an explicit message. Logical-task commits stay scoped to current task ownership by default; addAll:true explicitly selects all current visible workspace changes, including earlier, parallel-task, and ambient changes, and requires publish approval. Do not combine addAll:true with paths. Sensitive paths require sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }; every staged sensitive path must be listed.",
+    description: "Record a local commit with an explicit message. With work_id and no explicit scope, commit only current task-owned paths and refuse ambiguous shared ownership. paths:[...] explicitly selects exactly those changed paths and may cross earlier, parallel-task, or ambient ownership without a second approval prompt. Without a usable work_id, require paths:[...] or addAll:true. addAll:true explicitly selects all current visible workspace changes. Do not combine addAll:true with paths. Sensitive paths still require sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }; every staged sensitive path must be listed.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string","minLength":1,"maxLength":4000},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
     handlerName: 'gitCommit',
     groups: ["git"],
-    behavior: {"concurrencyScope":"workspace"},
+    behavior: {"concurrencyScope":"workspace","taskScope":"optional"},
   },
   {
     name: OP.PUBLISH_PUSH,
@@ -221,7 +225,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string","minLength":1,"maxLength":200},"branch":{"type":"string","minLength":1,"maxLength":500},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":240000}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'gitPush',
     groups: ["git"],
-    behavior: {"concurrencyScope":"workspace"},
+    behavior: {"concurrencyScope":"workspace","taskScope":"optional"},
   },
   {
     name: OP.PUBLISH_DRAFT_PR,
@@ -230,6 +234,7 @@ const OPERATION_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"base":{"type":"string"},"head":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'gitDraftPr',
     groups: ["git","audit"],
+    behavior: {"taskScope":"optional"},
   },
   {
     name: OP.EDIT,

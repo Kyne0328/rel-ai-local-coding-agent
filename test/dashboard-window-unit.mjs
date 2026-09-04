@@ -283,6 +283,13 @@ try {
   assert.notEqual(linuxNoTrayWindow.hidden, true, 'Linux must not hide the only reachable window when tray creation failed');
   await linuxNoTrayManager.close();
 
+  const quitOnCloseManager = createDashboardWindowManager({ ...dependencies, platform: 'win32', canHideOnClose: () => false });
+  const quitOnCloseWindow = await quitOnCloseManager.open();
+  assert.deepEqual(quitOnCloseManager.requestClose(), { ok: true });
+  assert.equal(appQuitCount, 2, 'the user close preference must be able to quit Rel.AI on Windows');
+  assert.notEqual(quitOnCloseWindow.hidden, true, 'quit-on-close must not hide the dashboard first');
+  await quitOnCloseManager.close();
+
   assert.deepEqual(
     restoreDashboardBounds({ x: 0, y: 0, width: 1240, height: 820 }, fakeScreen),
     defaultDashboardBounds(fakeScreen),

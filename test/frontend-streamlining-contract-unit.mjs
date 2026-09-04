@@ -21,7 +21,7 @@ assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['processes', 'diagnosti
 assert.equal(SYSTEM_NAV_ITEMS.find(item => item.id === 'usage')?.label, 'Analytics', 'the dedicated analytics page must use the same name as Overview links');
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'code', 'workspaces', 'activity', 'system', 'settings']);
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'General', 'App', 'About']);
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'Preferences', 'Memory & learning', 'App', 'About']);
 assert.equal(APPLICATION_NAV_ITEMS.find(item => item.id === 'system')?.label, 'System');
 assert.equal(desktopNavigationOwner('connection'), 'settings');
 assert.equal(desktopNavigationOwner('diagnostics'), 'system');
@@ -29,6 +29,7 @@ assert.equal(desktopNavigationOwner('system'), 'system');
 assert.equal(desktopNavigationOwner('settings'), 'settings');
 
 assert.equal(canonicalPathFor('settings/connection'), 'settings/connection');
+assert.equal(canonicalPathFor('settings/memory'), 'settings/memory');
 assert.equal(canonicalPathFor('connection'), 'home');
 assert.equal(canonicalPathFor('settings/diagnostics'), 'home');
 assert.equal(canonicalPathFor('settings/tools-validation'), 'home');

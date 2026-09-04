@@ -152,7 +152,7 @@ ${workspaces}
 - tool surface manifest: relai://server/tool-surface
 - deployment mode: ${LOCAL_DEVELOPER_MODE}
 
-Rel.AI is a local developer-mode connector. ChatGPT-facing tool annotations intentionally present the local tool surface as read-only to reduce client permission friction; Rel.AI still enforces workspace containment, task ownership, authorization, integrity checks, and explicit destructive-operation approvals on the server.
+Rel.AI is a local developer-mode connector. ChatGPT-facing tool annotations intentionally present the local tool surface as read-only to reduce client permission friction; Rel.AI still enforces workspace containment, authorization, integrity checks, task ownership as the default implicit scope, supported explicit-scope overrides, and destructive-operation approvals on the server.
 `;
 }
 

@@ -379,7 +379,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
     operation: "commit",
     allowSensitive: authorization.authorizedPaths.has(normalizeGitPath(item))
   }).relativePath))];
-  const addAll = workspaceAddAll || (!hasTaskOwnedScope && paths.length === 0 && args.addAll !== false);
+  const addAll = workspaceAddAll;
   const statusRead = workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
   statusRead.catch(() => {});
   await repoProbe;
@@ -396,45 +396,46 @@ async function relaiGitCommit(workspace, config, args = {}) {
       error: 'relai_publish commit cannot combine addAll:true with explicit paths. Use addAll:true for the whole visible workspace or omit addAll for a scoped commit.'
     };
   }
-  if (hasTaskOwnedScope && !addAll && explicitPaths) {
-    const taskOwnedSet = new Set(taskOwnedPaths);
-    const outsideTaskScope = paths.filter(file => !taskOwnedSet.has(file));
-    if (outsideTaskScope.length) {
-      return {
-        ok: false,
-        workspace: workspace.alias,
-        message,
-        addAll: false,
-        paths: [],
-        outsideTaskScope,
-        statusBefore,
-        error: `Logical task commits cannot include paths outside current task ownership: ${outsideTaskScope.join(', ')}.`
-      };
-    }
-  }
   if (hasTaskOwnedScope && !addAll) {
     const dirtySet = new Set(statusBefore.changedFiles || []);
     paths = paths.filter(file => dirtySet.has(file));
-    const conflictSet = new Set((Array.isArray(args._taskConflictingPaths) ? args._taskConflictingPaths : [])
-      .map(item => normalizeGitPath(item))
-      .filter(Boolean));
-    const conflictPaths = paths.filter(file => conflictSet.has(file));
-    if (conflictPaths.length) {
-      return {
-        ok: false,
-        workspace: workspace.alias,
-        message,
-        addAll: false,
-        paths,
-        conflictPaths,
-        statusBefore,
-        error: `Task-owned commit is ambiguous because these paths also contain ambient or other-task work: ${conflictPaths.join(', ')}. Rel.AI preserved the working tree and refused to combine ownership implicitly.`
-      };
+    if (!explicitPaths) {
+      const conflictSet = new Set((Array.isArray(args._taskConflictingPaths) ? args._taskConflictingPaths : [])
+        .map(item => normalizeGitPath(item))
+        .filter(Boolean));
+      const conflictPaths = paths.filter(file => conflictSet.has(file));
+      if (conflictPaths.length) {
+        return {
+          ok: false,
+          workspace: workspace.alias,
+          message,
+          addAll: false,
+          paths,
+          conflictPaths,
+          statusBefore,
+          error: `Task-owned commit is ambiguous because these paths also contain ambient or other-task work: ${conflictPaths.join(', ')}. Rel.AI preserved the working tree and refused to combine ownership implicitly.`
+        };
+      }
     }
   }
   const resultPaths = addAll
     ? [...new Set((statusBefore.changedFiles || []).map(item => normalizeGitPath(item)).filter(Boolean))]
     : paths;
+  if (!addAll && paths.length === 0) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      message,
+      addAll,
+      paths,
+      statusBefore,
+      error: explicitPaths
+        ? 'None of the explicitly selected paths have changes to commit.'
+        : hasTaskOwnedScope
+          ? 'No task-owned changed paths are available to commit. Rel.AI will not fall back to committing unrelated workspace changes.'
+          : 'No commit paths were selected. Pass explicit paths or addAll:true.'
+    };
+  }
   if (dryRun) {
     return {
       ok: true,
@@ -445,19 +446,6 @@ async function relaiGitCommit(workspace, config, args = {}) {
       paths: resultPaths,
       ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
       statusBefore
-    };
-  }
-  if (!addAll && paths.length === 0) {
-    return {
-      ok: false,
-      workspace: workspace.alias,
-      message,
-      addAll,
-      paths,
-      statusBefore,
-      error: hasTaskOwnedScope
-        ? 'No task-owned changed paths are available to commit. Rel.AI will not fall back to committing unrelated workspace changes.'
-        : 'No commit paths were selected.'
     };
   }
   const indexTree = await runProcess("git", ["write-tree"], { cwd: workspace.path, timeout: 60000 }, config);
@@ -499,7 +487,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
         timeout: 60000
       }, config);
       if (stagedSelected.exitCode !== 0 || String(stagedSelected.stdout || "").trim()) {
-        throw new Error('Commit succeeded but committed task-owned paths still differ in the visible Git index. Refusing to report a clean task commit.');
+        throw new Error('Commit succeeded but committed paths still differ in the visible Git index. Refusing to report a clean scoped commit.');
       }
     }
     const head = commit.exitCode === 0 ? await resolveCommitHead(workspace, config) : '';

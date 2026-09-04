@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, utilityProcess } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerMonitor, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, utilityProcess } from 'electron';
 import electronUpdater from 'electron-updater';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,7 @@ import { createRecoveryWindowManager } from './recovery-window.js';
 import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
 import { createDiagnosticFiles } from './diagnostic-files.js';
 import { readDesktopSettings, saveDesktopSettings } from './desktop-settings.js';
+import { createDesktopLocalDataManager } from './desktop-local-data.js';
 import { createAppUpdater } from './app-updater.js';
 import { createUpdateSupportPolicy } from './update-support-policy.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
@@ -133,7 +134,7 @@ const dashboardWindowManager = createDashboardWindowManager({
   shell,
   app, dialog, screen,
   iconPath: APP_ICON_PATH,
-  canHideOnClose: () => desktopTray?.isAvailable() === true,
+  canHideOnClose: () => desktopTray?.isAvailable() === true && desktopLifecycle.getStatus().keepRunningOnClose !== false,
   getConnection: buildDashboardConnection,
   isQuitting: () => isQuitting,
   onError: error => setStatus({ error: formatError(error), errorCode: ERROR_CODES.UNKNOWN }),
@@ -233,10 +234,17 @@ tunnelRecoverySupervisor = createTunnelRecoverySupervisor({
 });
 const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
+const desktopLocalData = createDesktopLocalDataManager({
+  getConfig: () => configModule.readConfig(),
+  getServiceLogPath: () => diagnosticFiles.serviceLogPath(),
+  getTaskActivity: toolActivityRuntime.getStatus,
+  openPath: folder => shell.openPath(folder)
+});
 appUpdater = createAppUpdater({ app, autoUpdater, getTaskActivity: toolActivityRuntime.getStatus,
   onStatusChange: pushUpdateStatus, onLog: (message, options) => runtimeLogs.append(message, options),
   onBeforeInstall: () => shutdownCoordinator.prepare('update_install'),
   openUpdateFile: file => shell.openPath(file),
+  shouldAutoDownload: () => desktopLifecycle.getStatus().autoDownloadUpdates === true,
   errorCodes: ERROR_CODES });
 updateSupportPolicy = createUpdateSupportPolicy({
   app,
@@ -263,7 +271,10 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('browser-window-created', (_event, win) => taskbarCompletionBadge.apply(win));
-  app.on('browser-window-focus', () => taskbarCompletionBadge.clear());
+  app.on('browser-window-focus', () => {
+    taskbarCompletionBadge.clear();
+    void appUpdater?.discoverUpdate?.();
+  });
   app.on('second-instance', () => {
     const setupWindow = setupWindowManager.getWindow();
     if (setupWindow) {
@@ -292,9 +303,11 @@ if (!gotLock) {
       desktopLifecycle.start()
     ]);
     toolActivityRuntime.setKeepAwakeEnabled(lifecycleStatus.keepAwake === true);
+    serviceProcessClient.updateContext({ reducedBackgroundWork: lifecycleStatus.reducedBackgroundWork === true });
     desktopTray.setup();
     if (hasExistingConfig()) void launchConfiguredDesktop({ background: lifecycleStatus.openedAtLogin });
     else setupWindowManager.create();
+    powerMonitor.on('resume', () => { void appUpdater?.discoverUpdate?.({ force: true }); });
     setImmediate(() => {
       appUpdater.start();
       updateSupportPolicy.start();
@@ -313,7 +326,7 @@ if (process.platform !== 'win32') {
   process.once('SIGTERM', () => { void quitApplication(); });
 }
 
-app.on('window-all-closed', () => {}); // Keep the tray app alive after windows close.
+app.on('window-all-closed', () => {}); // Tray mode intentionally keeps Rel.AI alive after its dashboard closes.
 
 function configuredProcessEnvironmentAllow() {
   try {
@@ -349,6 +362,18 @@ function updateDesktopSettings(settings) {
 async function setKeepAwake(enabled) {
   const result = await desktopLifecycle.setKeepAwake(enabled);
   toolActivityRuntime.setKeepAwakeEnabled(result?.status?.keepAwake === true);
+  return result;
+}
+
+async function setAppPreferences(patch = {}) {
+  const result = await desktopLifecycle.setPreferences(patch);
+  if (result?.ok === false) return result;
+  if (Object.hasOwn(patch, 'reducedBackgroundWork')) {
+    serviceProcessClient.updateContext({ reducedBackgroundWork: result.status?.reducedBackgroundWork === true });
+  }
+  if (patch.autoDownloadUpdates === true && appUpdater?.getStatus()?.state === 'available') {
+    void downloadApplicationUpdate();
+  }
   return result;
 }
 
@@ -613,6 +638,10 @@ registerIpcHandlers({
   getLifecycleStatus: desktopLifecycle.getStatus,
   setLaunchAtLogin: desktopLifecycle.setLaunchAtLogin,
   setKeepAwake,
+  setAppPreferences,
+  getLocalDataUsage: desktopLocalData.getUsage,
+  clearTemporaryLocalData: desktopLocalData.clearTemporary,
+  openLocalDataFolder: desktopLocalData.openDataFolder,
   getCurrentStatus: () => currentStatus,
   getNotificationsEnabled: () => desktopNotifications.getPreferences().enabled,
   setNotificationsEnabled: desktopNotifications.setEnabled,

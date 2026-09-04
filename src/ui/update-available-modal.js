@@ -59,41 +59,56 @@ function supportPolicyModalView(policy) {
     description: `Rel.AI MCP v${minimumVersion || 'a newer version'} or newer is recommended.`
   };
 }
+function availableUpdateModalView(status = {}) {
+  if (String(status.state || '') !== 'available') return null;
+  const version = cleanVersion(status.availableVersion);
+  if (!version) return null;
+  return {
+    key: `available:${version}`,
+    state: 'available',
+    blocking: false,
+    allowLater: true,
+    title: 'Update available',
+    description: `Rel.AI MCP v${version} is available.`,
+    detail: 'Download it now or keep working. Rel.AI will remind you on a later launch if you choose Later.'
+  };
+}
+
 
 function initUpdateAvailableModal(options = {}) {
   const bridge = options.bridge || window.relaiDesktop;
   if (!bridge?.getUpdateStatus) return () => {};
 
   const shownPolicyKeys = new Set();
+  const shownUpdateKeys = new Set();
   let latestStatus = null;
   let removeUpdateListener = null;
-  let activePolicyKey = '';
-  let policyContent = null;
+  let activeModalKey = '';
+  let modalContent = null;
 
   function consider(status) {
     latestStatus = status || latestStatus;
     const policyView = supportPolicyModalView(latestStatus?.supportPolicy);
     if (policyView) {
       if (updateActionInProgress(latestStatus)) {
-        if (activePolicyKey) {
-          activePolicyKey = '';
-          policyContent = null;
-          closeModal();
-        }
+        closeActiveModal();
         return;
       }
       const acknowledged = shownPolicyKeys.has(policyView.key);
-      if (policyView.blocking || !acknowledged || activePolicyKey === policyView.key) {
+      if (policyView.blocking || !acknowledged || activeModalKey === policyView.key) {
         if (!policyView.blocking) shownPolicyKeys.add(policyView.key);
-        showOrUpdateSupportPolicyModal(policyView, latestStatus);
+        showOrUpdateModal(policyView, latestStatus);
       }
       return;
     }
-    if (activePolicyKey) {
-      activePolicyKey = '';
-      policyContent = null;
-      closeModal();
+
+    const updateView = availableUpdateModalView(latestStatus);
+    if (updateView && (!shownUpdateKeys.has(updateView.key) || activeModalKey === updateView.key)) {
+      shownUpdateKeys.add(updateView.key);
+      showOrUpdateModal(updateView, latestStatus);
+      return;
     }
+    closeActiveModal();
   }
 
   if (typeof bridge.onUpdateStatus === 'function') {
@@ -104,37 +119,44 @@ function initUpdateAvailableModal(options = {}) {
     consider(status);
   }).catch(() => {});
 
-  function showOrUpdateSupportPolicyModal(view, status) {
-    if (activePolicyKey !== view.key || !policyContent?.isConnected) {
-      activePolicyKey = view.key;
-      policyContent = document.createElement('div');
-      renderSupportPolicyContent(policyContent, view, status);
+  function showOrUpdateModal(view, status) {
+    if (activeModalKey !== view.key || !modalContent?.isConnected) {
+      activeModalKey = view.key;
+      modalContent = document.createElement('div');
+      renderModalContent(modalContent, view, status);
       openModal({
         title: view.title,
-        content: policyContent,
+        content: modalContent,
         size: 'compact',
         escDisabled: view.blocking,
         onClose: () => {
-          activePolicyKey = '';
-          policyContent = null;
+          activeModalKey = '';
+          modalContent = null;
         }
       });
       return;
     }
     const title = document.getElementById('__relai-modal-title');
     if (title) title.textContent = view.title;
-    renderSupportPolicyContent(policyContent, view, status);
+    renderModalContent(modalContent, view, status);
   }
 
-  function renderSupportPolicyContent(content, view, status) {
+  function closeActiveModal() {
+    if (!activeModalKey) return;
+    activeModalKey = '';
+    modalContent = null;
+    closeModal();
+  }
+
+  function renderModalContent(content, view, status) {
     content.replaceChildren();
     const description = document.createElement('p');
     description.textContent = view.description;
     const detail = document.createElement('p');
     detail.className = 'muted';
-    detail.textContent = view.blocking
+    detail.textContent = view.detail || (view.blocking
       ? 'You can still use the dashboard and update controls, but Rel.AI cannot work with ChatGPT until a supported version is installed.'
-      : 'You can update now or continue. Rel.AI will show this notice again on a later launch until you update.';
+      : 'You can update now or continue. Rel.AI will show this notice again on a later launch until you update.');
     const actions = document.createElement('div');
     actions.className = 'modal-actions';
     const action = supportUpdateAction(status);
@@ -227,4 +249,4 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Application update action failed.');
 }
 
-export { initUpdateAvailableModal, supportPolicyModalView };
+export { availableUpdateModalView, initUpdateAvailableModal, supportPolicyModalView };

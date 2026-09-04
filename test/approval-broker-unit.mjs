@@ -10,6 +10,7 @@ import {
   APPROVAL_TTL_MS,
   approvalDigest,
   decidePendingApproval,
+  decidePendingApprovalFromDashboard,
   requestApproval,
   samePushTarget,
   supportsNativeApproval
@@ -101,6 +102,33 @@ try {
   });
   assert.equal(declinedReuse.structuredContent?.errorCode, 'APPROVAL_GRANT_CONSUMED');
   assert.equal(executed, 0);
+
+  const dashboardCodec = fakeCodec();
+  const dashboardPending = await startApproval({ codec: dashboardCodec, capabilities: {} });
+  let dashboardExecution = null;
+  const dashboardApproved = await decidePendingApprovalFromDashboard({
+    approvalId: dashboardPending.structuredContent.approvalId,
+    approved: true,
+    config,
+    codec: dashboardCodec,
+    execute: async (name, args, context) => {
+      dashboardExecution = { name, args, context };
+      return { ok: true, executed: true };
+    }
+  });
+  assert.equal(dashboardApproved.ok, true, 'dashboard approval must execute the stored operation exactly once');
+  assert.equal(dashboardExecution?.name, 'relai_publish');
+  assert.deepEqual(dashboardExecution?.args, baseArgs);
+  assert.equal(dashboardExecution?.context?.publicHttpOnly, true);
+  assert.deepEqual(dashboardExecution?.context?.principal, principal);
+  const dashboardReplay = await decidePendingApprovalFromDashboard({
+    approvalId: dashboardPending.structuredContent.approvalId,
+    approved: true,
+    config,
+    codec: dashboardCodec,
+    execute: async () => ({ ok: true })
+  });
+  assert.equal(dashboardReplay.errorCode, 'APPROVAL_GRANT_CONSUMED', 'dashboard approval must remain single-use');
 
   const principalCodec = fakeCodec();
   const principalPending = await startApproval({ codec: principalCodec, capabilities: {} });

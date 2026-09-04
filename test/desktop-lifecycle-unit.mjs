@@ -41,6 +41,9 @@ assert.equal(firstStatus.launchCount, 1);
 assert.equal(firstStatus.launchAtLogin.supported, true);
 assert.equal(firstStatus.launchAtLogin.enabled, false);
 assert.equal(firstStatus.keepAwake, false);
+assert.equal(firstStatus.keepRunningOnClose, true, 'closing the dashboard must keep tray mode by default');
+assert.equal(firstStatus.autoDownloadUpdates, false, 'updates must keep manual download as the safe default');
+assert.equal(firstStatus.reducedBackgroundWork, false, 'normal background preparation must remain the default');
 assert.equal(first.setLaunchAtLogin(true).ok, true);
 assert.equal(first.getStatus().launchAtLogin.enabled, true);
 assert.deepEqual(loginReadSettings, { path: process.execPath, args: ['--background'] }, 'login-item readback must identify the same executable and background args used during registration');
@@ -51,6 +54,16 @@ assert.deepEqual(loginSettings, {
   args: ['--background']
 });
 assert.equal((await first.setKeepAwake(true)).status.keepAwake, true);
+const preferenceUpdate = await first.setPreferences({
+  keepRunningOnClose: false,
+  autoDownloadUpdates: true,
+  reducedBackgroundWork: true
+});
+assert.equal(preferenceUpdate.ok, true);
+assert.equal(preferenceUpdate.status.keepRunningOnClose, false);
+assert.equal(preferenceUpdate.status.autoDownloadUpdates, true);
+assert.equal(preferenceUpdate.status.reducedBackgroundWork, true);
+assert.equal((await first.setPreferences({ autoDownloadUpdates: 'yes' })).ok, false, 'app preferences must reject non-boolean values');
 const cleanStatus = await first.markCleanShutdown();
 assert.equal((await first.markCleanShutdown()).lastCleanExitAt, cleanStatus.lastCleanExitAt);
 
@@ -62,6 +75,9 @@ assert.equal(secondStatus.connectorRefreshRequired, false);
 assert.equal(secondStatus.recoveredAfterUncleanShutdown, false);
 assert.equal(secondStatus.launchCount, 2);
 assert.equal(secondStatus.keepAwake, true, 'keep-awake preference must persist across desktop restarts');
+assert.equal(secondStatus.keepRunningOnClose, false, 'close behavior must persist across desktop restarts');
+assert.equal(secondStatus.autoDownloadUpdates, true, 'automatic download preference must persist across desktop restarts');
+assert.equal(secondStatus.reducedBackgroundWork, true, 'reduced background work must persist across desktop restarts');
 assert.equal((await second.setKeepAwake(false)).status.keepAwake, false);
 await second.markCleanShutdown();
 

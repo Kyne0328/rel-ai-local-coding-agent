@@ -1,3 +1,7 @@
+import { postJson } from '../../api.js';
+import { runButtonAction } from '../../action-state.js';
+import { confirmAction } from '../../components/confirm-dialog.js';
+import { toast } from '../../components/toast.js';
 import { getRouteParams, getWorkspaceFilter, replaceRouteParams } from '../../router.js';
 import { esc as escapeHtml } from '../../utils.js';
 import { ANALYTICS_RANGES, analyticsBounds, normalizeUsageSnapshot, workspaceOptions } from './range-model.js';
@@ -44,6 +48,7 @@ export async function mountUsage(container) {
           <button type="button" class="secondary" data-usage-refresh>Refresh</button>
         </div>
       </div>
+      <div data-usage-privacy></div>
       <div class="sr-only" data-usage-status role="status" aria-live="polite" aria-atomic="true"></div>
       <div class="usage-content" data-usage-content></div>
     </section>`;
@@ -59,6 +64,7 @@ export async function mountUsage(container) {
     startInput: root.querySelector('[data-usage-start]'),
     endInput: root.querySelector('[data-usage-end]'),
     refreshButton: root.querySelector('[data-usage-refresh]'),
+    privacy: root.querySelector('[data-usage-privacy]'),
     status: root.querySelector('[data-usage-status]'),
     content: root.querySelector('[data-usage-content]')
   };
@@ -142,13 +148,14 @@ async function loadUsage(controls, options = {}) {
   }
   try {
     const workspace = getWorkspaceFilter();
-    const { models, current, previous } = await loadAnalyticsData({
+    const { models, current, previous, privacy } = await loadAnalyticsData({
       desktop: window.relaiDesktop,
       bounds,
       workspace
     });
     if (!active(root, generation)) return;
     syncWorkspaceControl(controls.workspaceSelect, models, workspace);
+    renderPrivacy(controls, privacy);
     renderUsage(content, { bounds, current, previous });
     status.textContent = `Analytics updated for ${bounds.label}.`;
   } catch (error) {
@@ -176,6 +183,54 @@ export function buildUsageModel(snapshot, requestedMonth = '') {
 
 export function currentUsageMonth(now = new Date()) {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function renderPrivacy(controls, privacy = {}) {
+  const target = controls.privacy;
+  if (!target) return;
+  const retentionDays = Math.max(0, Number(privacy?.retentionDays || 0));
+  const telemetry = privacy?.externalTelemetry || {};
+  const retention = retentionDays
+    ? `Aggregate local analytics are retained for about ${Math.floor(retentionDays)} days.`
+    : 'Aggregate local analytics are retained locally.';
+  const telemetryCopy = telemetry.enabled === true
+    ? `External developer telemetry is on at a ${Math.round(Number(telemetry.sampleRatio || 0) * 100)}% sample rate. Operational traces can include tool names, project aliases, task IDs, client/runtime information, timings, and summarized commands. Prompts, file contents, command output, and raw exception messages are not exported.`
+    : telemetry.endpointConfigured === true
+      ? 'External developer telemetry is off. An OTLP endpoint is configured, but the telemetry switch is disabled, so Rel.AI does not export traces.'
+      : 'External developer telemetry is off. No OTLP trace endpoint is active.';
+  target.innerHTML = `
+    <section class="card usage-privacy-card" aria-label="Analytics privacy">
+      <div class="card-body usage-privacy-body">
+        <div class="usage-privacy-copy">
+          <strong>Data & privacy</strong>
+          <span>${escapeHtml(retention)} Prompts, file paths, command output, action results, and raw errors are not stored in local analytics.</span>
+          <span>${escapeHtml(telemetryCopy)}</span>
+        </div>
+        <button type="button" class="secondary danger" data-usage-clear>Clear analytics</button>
+      </div>
+    </section>`;
+  const button = target.querySelector('[data-usage-clear]');
+  if (button) button.onclick = () => clearAnalytics(controls, button);
+}
+
+async function clearAnalytics(controls, button) {
+  const confirmed = await confirmAction({
+    title: 'Clear analytics',
+    message: 'Clear local analytics history?',
+    detail: 'This removes aggregate action, reliability, timing, project, and failure-category history. Project files, task history, memory, settings, and external telemetry configuration are not changed.',
+    confirmLabel: 'Clear analytics',
+    danger: true
+  });
+  if (!confirmed) return;
+  const result = await runButtonAction(button, {
+    idleText: 'Clear analytics', loadingText: 'Clearing…', successText: 'Cleared', errorText: 'Clear failed'
+  }, () => postJson('/api/diagnostics/reset', { target: 'analytics', confirm: true }));
+  if (!result?.ok) {
+    toast(result?.error || 'Local analytics could not be cleared.', { variant: 'error' });
+    return;
+  }
+  toast(result.message || 'Local analytics cleared.', { variant: 'success' });
+  await loadUsage(controls);
 }
 
 function syncWorkspaceControl(select, models, workspace) {

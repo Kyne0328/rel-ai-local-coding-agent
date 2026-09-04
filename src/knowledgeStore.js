@@ -9,7 +9,7 @@ import { relevanceTerms } from './context/relevance.js';
 import { skillMarkdown, validateSkillIdentity } from './skillValidation.js';
 import { OPERATION_IDS as OP } from './tools/operationIds.js';
 
-const KNOWLEDGE_SCHEMA_VERSION = 1;
+const KNOWLEDGE_SCHEMA_VERSION = 2;
 const DEFAULT_BOOTSTRAP_BYTES = 4096;
 const MAX_ITEM_CONTENT = 4000;
 const MAX_PROCEDURE_STEPS = 12;
@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS procedures(
   last_workspace TEXT NOT NULL DEFAULT '',
   last_work_id TEXT NOT NULL DEFAULT '',
   evidence_json TEXT NOT NULL DEFAULT '[]',
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  last_failed_at TEXT NOT NULL DEFAULT '',
+  last_repository_fingerprint TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 ) STRICT;
@@ -68,8 +71,17 @@ CREATE TABLE IF NOT EXISTS procedure_runs(
   work_id TEXT NOT NULL,
   workspace TEXT NOT NULL,
   validation_status TEXT NOT NULL,
+  repository_fingerprint TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL,
   PRIMARY KEY(procedure_id, work_id)
+) WITHOUT ROWID, STRICT;
+CREATE TABLE IF NOT EXISTS validation_affinity(
+  workspace TEXT NOT NULL,
+  path_prefix TEXT NOT NULL,
+  command TEXT NOT NULL,
+  success_count INTEGER NOT NULL DEFAULT 1,
+  last_seen_at TEXT NOT NULL,
+  PRIMARY KEY(workspace, path_prefix, command)
 ) WITHOUT ROWID, STRICT;
 CREATE INDEX IF NOT EXISTS knowledge_scope_idx ON knowledge_items(status, scope, workspace, updated_at DESC);
 CREATE INDEX IF NOT EXISTS procedure_status_idx ON procedures(status, success_count DESC, updated_at DESC);
@@ -113,7 +125,20 @@ function ensureKnowledgeSchema(db) {
   const current = Number(metaValue(db, 'schema_version', 0));
   if (current > KNOWLEDGE_SCHEMA_VERSION) throw new Error(`Knowledge schema ${current} is newer than supported schema ${KNOWLEDGE_SCHEMA_VERSION}.`);
   db.exec(SCHEMA_SQL);
+  if (current < 2) migrateKnowledgeSchemaV2(db);
   setMeta(db, 'schema_version', KNOWLEDGE_SCHEMA_VERSION);
+}
+
+function migrateKnowledgeSchemaV2(db) {
+  addColumnIfMissing(db, 'procedures', 'failure_count', "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, 'procedures', 'last_failed_at', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'procedures', 'last_repository_fingerprint', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'procedure_runs', 'repository_fingerprint', "TEXT NOT NULL DEFAULT ''");
+}
+
+function addColumnIfMissing(db, table, column, definition) {
+  const columns = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(row => String(row.name || '')));
+  if (!columns.has(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 function addKnowledgeItem(config, input = {}) {
@@ -153,9 +178,16 @@ function deleteKnowledgeItem(config, id) {
 }
 
 function clearKnowledge(config) {
+  const current = openKnowledgeDatabase(config, { readonly: true });
+  const procedures = current
+    ? current.prepare('SELECT * FROM procedures').all().map(procedureRecord)
+    : [];
+  try { current?.close(); } catch {}
+  for (const procedure of procedures) removeManagedProcedureSkills(config, procedure);
+
   const db = openKnowledgeDatabase(config);
   try {
-    db.exec('DELETE FROM knowledge_fts; DELETE FROM knowledge_items; DELETE FROM procedure_fts; DELETE FROM procedure_runs; DELETE FROM procedures;');
+    db.exec('DELETE FROM knowledge_fts; DELETE FROM knowledge_items; DELETE FROM procedure_fts; DELETE FROM procedure_runs; DELETE FROM procedures; DELETE FROM validation_affinity;');
     return { ok: true, cleared: true };
   } finally { db.close(); }
 }
@@ -188,7 +220,7 @@ function searchKnowledge(config, query, options = {}) {
     const rows = db.prepare(`SELECT k.*, bm25(knowledge_fts) AS rank
       FROM knowledge_fts JOIN knowledge_items k ON k.id=knowledge_fts.id
       WHERE knowledge_fts MATCH ? AND k.status='active' AND (k.scope='global' OR k.workspace=?)
-      ORDER BY rank ASC, k.updated_at DESC LIMIT ?`).all(fts, workspace, Math.max(limit * 3, limit));
+      ORDER BY CASE WHEN k.scope='workspace' THEN 0 ELSE 1 END, k.confidence DESC, rank ASC, k.updated_at DESC LIMIT ?`).all(fts, workspace, Math.max(limit * 3, limit));
     return boundSerialized(rows.map(compactKnowledgeForBootstrap), clamp(options.maxBytes, 512, 8192, Math.floor(settings.maxBootstrapBytes / 2)), limit);
   } finally { db.close(); }
 }
@@ -214,14 +246,22 @@ function searchVerifiedProcedures(config, query, options = {}) {
   const db = openKnowledgeDatabase(config, { readonly: true });
   if (!db) return [];
   try {
+    const workspace = clean(options.workspace, 120);
     const limit = clamp(options.limit, 1, 5, 3);
     const fts = terms.map(ftsToken).filter(Boolean).join(' OR ');
     if (!fts) return [];
-    const rows = db.prepare(`SELECT p.*, bm25(procedure_fts) AS rank
-      FROM procedure_fts JOIN procedures p ON p.id=procedure_fts.id
-      WHERE procedure_fts MATCH ? AND p.status='verified'
-      ORDER BY rank ASC, p.success_count DESC, p.updated_at DESC LIMIT ?`).all(fts, Math.max(limit * 3, limit));
-    return boundSerialized(rows.map(compactProcedureForBootstrap), clamp(options.maxBytes, 700, 8192, Math.floor(settings.maxBootstrapBytes / 2)), limit);
+    const rows = workspace
+      ? db.prepare(`SELECT p.*, bm25(procedure_fts) AS rank
+          FROM procedure_fts JOIN procedures p ON p.id=procedure_fts.id
+          WHERE procedure_fts MATCH ? AND p.status='verified' AND (p.last_workspace=? OR p.workspace_count>=2)
+          ORDER BY rank ASC, p.workspace_count DESC, p.success_count DESC, p.updated_at DESC LIMIT ?`)
+        .all(fts, workspace, Math.max(limit * 3, limit))
+      : db.prepare(`SELECT p.*, bm25(procedure_fts) AS rank
+          FROM procedure_fts JOIN procedures p ON p.id=procedure_fts.id
+          WHERE procedure_fts MATCH ? AND p.status='verified' AND p.workspace_count>=2
+          ORDER BY rank ASC, p.success_count DESC, p.updated_at DESC LIMIT ?`)
+        .all(fts, Math.max(limit * 3, limit));
+    return boundSerialized(rows.map(compactProcedureForBootstrap), clamp(options.maxBytes, 700, 8192, Math.max(1024, Math.floor(settings.maxBootstrapBytes / 2))), limit);
   } finally { db.close(); }
 }
 
@@ -233,92 +273,247 @@ function learnFromCompletedTask(config, workspace, session = {}, completion = {}
   const taskId = clean(completion.work_id || session.id || session.taskId, 200);
   if (!taskId) return null;
   const evidence = Array.isArray(session.workflowEvidence) ? session.workflowEvidence : [];
-  const events = Array.isArray(session.events) ? session.events : [];
-  const operationSequence = procedureOperations(events);
+  const operationSequence = procedureOperations(Array.isArray(session.events) ? session.events : []);
   if (operationSequence.length < 2) return null;
   const failures = [...new Set(evidence.map(item => clean(item?.failureSignature, 128)).filter(Boolean))].slice(0, 4);
-  const checks = [...new Set(evidence.map(item => clean(item?.commandId || item?.command, 180)).filter(Boolean))].slice(-4);
+  const checks = procedureChecks(evidence);
   const changedFiles = [...new Set((completion.changedFiles || session.changedFiles || []).map(value => clean(value, 240)).filter(Boolean))].slice(0, 20);
   if (!changedFiles.length && !checks.length && !failures.length) return null;
-  const signatureOperations = operationSequence.filter(operation => operation !== OP.VALIDATE_CHECKS);
-  const signatureInput = {
-    intent: clean(session.intent || session.workflow?.intent, 40),
-    taskTerms: procedureTaskTerms(session),
-    operations: signatureOperations,
-    failures,
-    extensions: [...new Set(changedFiles.map(file => path.extname(file).toLowerCase()).filter(Boolean))].sort(),
-    checks: checks.map(normalizeSignatureText)
-  };
-  const signature = crypto.createHash('sha256').update(JSON.stringify(signatureInput)).digest('hex');
-  const triggerText = compactTrigger(session, failures, changedFiles);
-  const name = procedureName(session, signature);
-  const description = procedureDescription(session, operationSequence);
-  const steps = operationSequence.map(operationStep).slice(0, MAX_PROCEDURE_STEPS);
+  if (changedFiles.length && validationStatus !== 'passed') return null;
+
+  const workspaceAlias = clean(workspace?.alias || workspace, 120);
+  const repositoryFingerprint = clean(completion.validationFingerprint || latestRepositoryFingerprint(evidence), 200);
+  const review = reviewProceduralLesson(session, completion, operationSequence, changedFiles, checks, failures);
+  const signature = procedureSignature(session, operationSequence, changedFiles, checks);
   const now = new Date().toISOString();
   const db = openKnowledgeDatabase(config);
+  let learned;
   try {
-    const existing = db.prepare('SELECT * FROM procedures WHERE signature=?').get(signature);
-    let id = existing?.id ? String(existing.id) : `proc_${crypto.randomUUID()}`;
+    const exact = db.prepare('SELECT * FROM procedures WHERE signature=?').get(signature);
+    const existing = exact || findProcedureByEvidence(db, signature, workspaceAlias, session, changedFiles, checks, ['superseded']);
+    const id = existing?.id ? String(existing.id) : `proc_${crypto.randomUUID()}`;
     if (!existing) {
-      db.prepare(`INSERT INTO procedures(id, signature, name, description, trigger_text, steps_json, status, success_count, workspace_count, last_workspace, last_work_id, evidence_json, created_at, updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(id, signature, name, description, triggerText, JSON.stringify(steps), 'candidate', 1, 1, clean(workspace?.alias || workspace, 120), taskId,
-          JSON.stringify(compactProcedureEvidence(session, completion, failures, checks)), now, now);
+      db.prepare(`INSERT INTO procedures(id, signature, name, description, trigger_text, steps_json, status, success_count, workspace_count, last_workspace, last_work_id, evidence_json, failure_count, last_failed_at, last_repository_fingerprint, created_at, updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(id, signature, review.name, review.description, review.trigger, JSON.stringify(review.steps), 'candidate', 1, 1, workspaceAlias, taskId,
+          JSON.stringify(compactProcedureEvidence(session, completion, failures, checks, changedFiles)), 0, '', repositoryFingerprint, now, now);
     } else {
-      const independentRun = !db.prepare('SELECT 1 FROM procedure_runs WHERE procedure_id=? AND work_id=?').get(id, taskId);
+      const previousRuns = db.prepare('SELECT workspace, repository_fingerprint FROM procedure_runs WHERE procedure_id=?').all(id);
+      const duplicateTask = db.prepare('SELECT 1 FROM procedure_runs WHERE procedure_id=? AND work_id=?').get(id, taskId);
+      const sameFingerprint = repositoryFingerprint && previousRuns.some(row => String(row.repository_fingerprint || '') === repositoryFingerprint);
+      const independentRun = !duplicateTask && (!sameFingerprint || previousRuns.some(row => String(row.workspace || '') !== workspaceAlias));
       if (independentRun) {
-        const workspaceAlias = clean(workspace?.alias || workspace, 120);
-        const priorWorkspaces = new Set(db.prepare('SELECT workspace FROM procedure_runs WHERE procedure_id=?').all(id).map(row => String(row.workspace || '')));
+        const priorWorkspaces = new Set(previousRuns.map(row => String(row.workspace || '')));
         const workspaceCount = priorWorkspaces.has(workspaceAlias) ? Number(existing.workspace_count || 1) : Number(existing.workspace_count || 1) + 1;
         const successCount = Number(existing.success_count || 1) + 1;
-        const nextStatus = existing.status === 'rejected' || existing.status === 'superseded' ? String(existing.status) : (successCount >= 2 ? 'verified' : String(existing.status || 'candidate'));
-        db.prepare(`UPDATE procedures SET name=?, description=?, trigger_text=?, steps_json=?, status=?, success_count=?, workspace_count=?, last_workspace=?, last_work_id=?, evidence_json=?, updated_at=? WHERE id=?`)
-          .run(name, description, triggerText, JSON.stringify(steps), nextStatus, successCount, workspaceCount, workspaceAlias, taskId,
-            JSON.stringify(mergeEvidence(existing.evidence_json, compactProcedureEvidence(session, completion, failures, checks))), now, id);
+        const nextStatus = existing.status === 'rejected'
+          ? 'rejected'
+          : existing.status === 'superseded'
+            ? 'verified'
+            : successCount >= 2 ? 'verified' : String(existing.status || 'candidate');
+        db.prepare(`UPDATE procedures SET name=?, description=?, trigger_text=?, steps_json=?, status=?, success_count=?, workspace_count=?, last_workspace=?, last_work_id=?, evidence_json=?, last_repository_fingerprint=?, updated_at=? WHERE id=?`)
+          .run(review.name, review.description, review.trigger, JSON.stringify(review.steps), nextStatus, successCount, workspaceCount, workspaceAlias, taskId,
+            JSON.stringify(mergeEvidence(existing.evidence_json, compactProcedureEvidence(session, completion, failures, checks, changedFiles))), repositoryFingerprint, now, id);
       }
     }
-    db.prepare('INSERT OR IGNORE INTO procedure_runs(procedure_id, work_id, workspace, validation_status, completed_at) VALUES(?,?,?,?,?)')
-      .run(id, taskId, clean(workspace?.alias || workspace, 120), validationStatus, now);
+    db.prepare('INSERT OR IGNORE INTO procedure_runs(procedure_id, work_id, workspace, validation_status, repository_fingerprint, completed_at) VALUES(?,?,?,?,?,?)')
+      .run(id, taskId, workspaceAlias, validationStatus, repositoryFingerprint, now);
+    if (validationStatus === 'passed') learnValidationAffinity(db, workspaceAlias, changedFiles, checks, now);
     const row = db.prepare('SELECT * FROM procedures WHERE id=?').get(id);
     syncProcedureFts(db, row);
-    return procedureRecord(row);
+    learned = procedureRecord(row);
+  } finally { db.close(); }
+  if (learned?.status === 'verified') {
+    try { syncProcedureSkill(config, learned.id); }
+    catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] learned skill sync:', error); }
+  }
+  return learned;
+}
+
+function recordProcedureFailure(config, workspace, session = {}, validation = {}) {
+  const settings = knowledgeSettings(config);
+  if (!settings.enabled || !settings.proceduralLearning) return null;
+  const evidence = Array.isArray(session.workflowEvidence) ? session.workflowEvidence : [];
+  const operationSequence = procedureOperations(Array.isArray(session.events) ? session.events : []);
+  const changedFiles = [...new Set((validation.changedFiles || session.changedFiles || []).map(value => clean(value, 240)).filter(Boolean))].slice(0, 20);
+  const checks = procedureChecks(evidence, validation.failedCheck);
+  if (operationSequence.length < 2 || !changedFiles.length || !checks.length) return null;
+  const signature = procedureSignature(session, operationSequence, changedFiles, checks);
+  const db = openKnowledgeDatabase(config);
+  let procedure;
+  try {
+    const row = findFailedProcedure(db, signature, workspace, session, changedFiles, checks);
+    if (!row) return null;
+    const now = new Date().toISOString();
+    db.prepare("UPDATE procedures SET status='superseded', failure_count=failure_count+1, last_failed_at=?, updated_at=? WHERE id=?").run(now, now, row.id);
+    procedure = procedureRecord(db.prepare('SELECT * FROM procedures WHERE id=?').get(row.id));
+  } finally { db.close(); }
+  if (procedure) removeManagedProcedureSkills(config, procedure);
+  return procedure;
+}
+
+function findFailedProcedure(db, signature, workspace, session, changedFiles, checks) {
+  return findProcedureByEvidence(db, signature, workspace, session, changedFiles, checks, ['verified']);
+}
+
+function findProcedureByEvidence(db, signature, workspace, session, changedFiles, checks, statuses = ['verified']) {
+  const allowed = statuses.filter(status => ['candidate', 'verified', 'rejected', 'superseded'].includes(status));
+  if (!allowed.length) return null;
+  const placeholders = allowed.map(() => '?').join(',');
+  const exact = db.prepare(`SELECT * FROM procedures WHERE signature=? AND status IN (${placeholders})`).get(signature, ...allowed);
+  if (exact) return exact;
+
+  const workspaceAlias = clean(workspace?.alias || workspace, 120);
+  const candidates = workspaceAlias
+    ? db.prepare(`SELECT * FROM procedures WHERE status IN (${placeholders}) AND (last_workspace=? OR workspace_count>=2)`).all(...allowed, workspaceAlias)
+    : db.prepare(`SELECT * FROM procedures WHERE status IN (${placeholders}) AND workspace_count>=2`).all(...allowed);
+  if (!candidates.length) return null;
+  const taskTerms = new Set(procedureTaskTerms(session));
+  const modules = new Set(procedureModules(changedFiles));
+  const normalizedChecks = new Set(checks.map(normalizeSignatureText));
+  const scored = candidates.map(row => {
+    const procedure = procedureRecord(row);
+    const procedureTerms = new Set(relevanceTerms(`${procedure.name} ${procedure.description} ${procedure.trigger}`));
+    const evidence = procedure.evidence.flatMap(item => Array.isArray(item) ? item : [item]);
+    const evidenceModules = new Set(evidence.flatMap(item => Array.isArray(item?.modules) ? item.modules : []).map(String));
+    const evidenceChecks = new Set(evidence.flatMap(item => Array.isArray(item?.checks) ? item.checks : []).map(normalizeSignatureText));
+    const termMatches = intersectionCount(taskTerms, procedureTerms);
+    const moduleMatches = intersectionCount(modules, evidenceModules);
+    const checkMatches = intersectionCount(normalizedChecks, evidenceChecks);
+    return { row, termMatches, moduleMatches, checkMatches, score: termMatches * 2 + moduleMatches * 4 + checkMatches * 4 };
+  }).filter(item => item.termMatches > 0 && item.moduleMatches > 0 && item.checkMatches > 0)
+    .sort((left, right) => right.score - left.score || String(left.row.id).localeCompare(String(right.row.id)));
+  if (!scored.length || scored[0].score < 10) return null;
+  if (scored[1] && scored[1].score === scored[0].score) return null;
+  return scored[0].row;
+}
+
+function intersectionCount(left, right) {
+  let count = 0;
+  for (const value of left) if (right.has(value)) count += 1;
+  return count;
+}
+
+function learnedValidationChecks(config, workspace, paths = [], options = {}) {
+  const workspaceAlias = clean(workspace?.alias || workspace, 120);
+  if (!workspaceAlias) return [];
+  const prefixes = [...new Set((paths || []).map(validationPathPrefix).filter(Boolean))];
+  if (!prefixes.length) return [];
+  const db = openKnowledgeDatabase(config, { readonly: true });
+  if (!db) return [];
+  try {
+    const hasAffinity = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='validation_affinity'").get();
+    if (!hasAffinity) return [];
+    const scores = new Map();
+    const statement = db.prepare('SELECT command, success_count, path_prefix FROM validation_affinity WHERE workspace=? AND path_prefix=?');
+    for (const prefix of prefixes) {
+      for (const row of statement.all(workspaceAlias, prefix)) {
+        const command = String(row.command || '');
+        scores.set(command, Number(scores.get(command) || 0) + Number(row.success_count || 0));
+      }
+    }
+    return [...scores.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, clamp(options.limit, 1, 20, 8))
+      .map(([command, successCount]) => ({ command, successCount, source: 'learned-validation-affinity' }));
   } finally { db.close(); }
 }
 
 function setProcedureStatus(config, id, status) {
   if (!['candidate', 'verified', 'rejected', 'superseded'].includes(status)) throw new Error('Invalid procedure status.');
   const db = openKnowledgeDatabase(config);
+  let procedure;
   try {
     const result = db.prepare('UPDATE procedures SET status=?, updated_at=? WHERE id=?').run(status, new Date().toISOString(), clean(id, 160));
     if (!Number(result.changes || 0)) throw new Error('Unknown procedure.');
-    return procedureRecord(db.prepare('SELECT * FROM procedures WHERE id=?').get(clean(id, 160)));
+    procedure = procedureRecord(db.prepare('SELECT * FROM procedures WHERE id=?').get(clean(id, 160)));
   } finally { db.close(); }
+  if (status === 'verified') syncProcedureSkill(config, procedure.id);
+  if (status === 'rejected' || status === 'superseded') removeManagedProcedureSkills(config, procedure);
+  return procedure;
 }
 
-function promoteProcedureToSkill(config, id, options = {}) {
+function syncProcedureSkill(config, id, options = {}) {
   const db = openKnowledgeDatabase(config, { readonly: true });
   if (!db) throw new Error('No learned procedures are available.');
   let procedure;
-  try { procedure = procedureRecord(db.prepare('SELECT * FROM procedures WHERE id=?').get(clean(id, 160))); }
-  finally { db.close(); }
+  let workspaceAliases = [];
+  try {
+    procedure = procedureRecord(db.prepare('SELECT * FROM procedures WHERE id=?').get(clean(id, 160)));
+    if (procedure) workspaceAliases = [...new Set(db.prepare('SELECT workspace FROM procedure_runs WHERE procedure_id=?').all(procedure.id).map(row => String(row.workspace || '')).filter(Boolean))];
+  } finally { db.close(); }
   if (!procedure) throw new Error('Unknown procedure.');
-  if (procedure.status !== 'verified') throw new Error('Only verified procedures can be promoted to a skill.');
-  const proposedName = options.name
-    ? skillName(options.name)
-    : learnedSkillName(procedure);
+  if (procedure.status !== 'verified') throw new Error('Only learned procedures can be synchronized to a skill.');
+  const proposedName = learnedSkillName(procedure);
   const description = fitSkillDescription(options.description || procedure.description || `Use this learned procedure for tasks matching: ${procedure.trigger}.`);
   const identity = validateSkillIdentity({ name: proposedName, description });
   if (!identity.ok) throw new Error(identity.errors.join(' '));
-  const root = path.resolve(options.userRoot || path.join(os.homedir(), '.agents', 'skills'));
-  const directory = path.join(root, identity.name);
+  const location = managedSkillLocation(config, procedure, options);
+  if (location.scope === 'global') removeManagedProjectCopies(config, procedure, workspaceAliases);
+  const directory = path.join(location.root, identity.name);
   const file = path.join(directory, 'SKILL.md');
-  if (fs.existsSync(directory) && options.overwrite !== true) throw new Error(`Skill '${identity.name}' already exists.`);
+  const provenanceFile = path.join(directory, 'PROVENANCE.md');
+  const existing = existingManagedSkill(directory, provenanceFile, procedure);
+  if (existing.conflict) return { ok: false, skipped: true, reason: 'skill_conflict', name: identity.name, path: `${location.source}:${identity.name}`, procedureId: procedure.id };
   const numbered = procedure.steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
-  const body = `# ${titleCase(identity.name)}\n\nUse this procedure when the current task matches the trigger below. Re-check current repository evidence before applying it.\n\n## Trigger\n\n${procedure.trigger || procedure.description}\n\n## Procedure\n\n${numbered}\n\n## Verification rule\n\nTreat current repository state and current validation as authoritative. Do not reuse stale evidence from the task that taught this procedure.`;
+  const body = `# ${titleCase(identity.name)}\n\nUse this procedure only when the current task matches the trigger and repository scope below. Re-check current repository evidence before applying it.\n\n## Scope\n\n${location.scope === 'global' ? 'Verified independently across multiple repositories.' : `Repository: ${procedure.lastWorkspace}`}\n\n## Trigger\n\n${procedure.trigger || procedure.description}\n\n## Procedure\n\n${numbered}\n\n## Verification rule\n\nTreat current repository state and current validation as authoritative. If the procedure fails its validation, stop using it until a later validated run re-establishes it.`;
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   fs.writeFileSync(file, skillMarkdown({ name: identity.name, description: identity.description, body }), { mode: 0o600 });
-  fs.writeFileSync(path.join(directory, 'PROVENANCE.md'), `# Rel.AI learned-skill provenance\n\n- Procedure ID: ${procedure.id}\n- Signature: ${procedure.signature}\n- Successful runs: ${procedure.successCount}\n- Promoted: ${new Date().toISOString()}\n- Last work ID: ${procedure.lastWorkId || 'unknown'}\n\nThis skill was promoted from locally verified Rel.AI procedural evidence.\n`, { mode: 0o600 });
-  return { ok: true, name: identity.name, path: `user:${identity.name}`, procedureId: procedure.id };
+  fs.writeFileSync(provenanceFile, `# Rel.AI learned-skill provenance\n\n- Managed by: Rel.AI\n- Procedure ID: ${procedure.id}\n- Signature: ${procedure.signature}\n- Scope: ${location.scope}\n- Workspace: ${procedure.lastWorkspace || 'multiple'}\n- Successful runs: ${procedure.successCount}\n- Failed validations: ${procedure.failureCount}\n- Last synchronized: ${new Date().toISOString()}\n- Last work ID: ${procedure.lastWorkId || 'unknown'}\n\nRel.AI maintains this skill from repeated, independently completed procedural evidence.\n`, { mode: 0o600 });
+  return { ok: true, updated: existing.exists, scope: location.scope, name: identity.name, path: `${location.source}:${identity.name}`, procedureId: procedure.id };
+}
+
+function managedSkillLocation(config, procedure, options = {}) {
+  if (options.userRoot) return { root: path.resolve(options.userRoot), source: 'user', scope: 'global' };
+  if (Number(procedure?.workspaceCount || 0) < 2) {
+    const workspacePath = config?.workspaces?.[procedure?.lastWorkspace]?.path;
+    if (workspacePath) return { root: path.join(path.resolve(workspacePath), '.agents', 'skills'), source: 'project', scope: 'workspace' };
+  }
+  return { root: path.resolve(process.env.REL_AI_MCP_USER_SKILLS_DIR || path.join(os.homedir(), '.agents', 'skills')), source: 'user', scope: 'global' };
+}
+
+function existingManagedSkill(directory, provenanceFile, procedure) {
+  if (!fs.existsSync(directory)) return { exists: false, conflict: false };
+  let directoryStat;
+  try { directoryStat = fs.lstatSync(directory); } catch { return { exists: false, conflict: false }; }
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) return { exists: true, conflict: true };
+  let provenance;
+  try {
+    const provenanceStat = fs.lstatSync(provenanceFile);
+    if (!provenanceStat.isFile() || provenanceStat.isSymbolicLink()) return { exists: true, conflict: true };
+    provenance = fs.readFileSync(provenanceFile, 'utf8');
+  } catch { return { exists: true, conflict: true }; }
+  const owned = provenance.includes(`- Procedure ID: ${procedure.id}`) && provenance.includes(`- Signature: ${procedure.signature}`);
+  return { exists: true, conflict: !owned };
+}
+
+function removeManagedProcedureSkills(config, procedure, options = {}) {
+  if (!procedure?.id || !procedure?.signature) return false;
+  const roots = new Set();
+  roots.add(managedSkillLocation(config, procedure, options).root);
+  roots.add(path.resolve(process.env.REL_AI_MCP_USER_SKILLS_DIR || path.join(os.homedir(), '.agents', 'skills')));
+  for (const workspace of Object.values(config?.workspaces || {})) {
+    if (workspace?.path) roots.add(path.join(path.resolve(workspace.path), '.agents', 'skills'));
+  }
+  let removed = false;
+  for (const root of roots) removed = removeManagedProcedureSkillAtRoot(root, procedure) || removed;
+  return removed;
+}
+
+function removeManagedProjectCopies(config, procedure, workspaceAliases = []) {
+  for (const alias of workspaceAliases) {
+    const workspacePath = config?.workspaces?.[alias]?.path;
+    if (workspacePath) removeManagedProcedureSkillAtRoot(path.join(path.resolve(workspacePath), '.agents', 'skills'), procedure);
+  }
+}
+
+function removeManagedProcedureSkillAtRoot(root, procedure) {
+  const directory = path.join(root, learnedSkillName(procedure));
+  const provenanceFile = path.join(directory, 'PROVENANCE.md');
+  const existing = existingManagedSkill(directory, provenanceFile, procedure);
+  if (!existing.exists || existing.conflict) return false;
+  fs.rmSync(directory, { recursive: true, force: true });
+  return true;
 }
 
 function knowledgeSummary(config) {
@@ -360,8 +555,9 @@ function procedureRecord(row) {
   return {
     id: String(row.id), signature: String(row.signature), name: String(row.name), description: String(row.description), trigger: String(row.trigger_text),
     steps: parseArray(row.steps_json).map(String).slice(0, MAX_PROCEDURE_STEPS), status: String(row.status), successCount: Number(row.success_count || 0),
+    failureCount: Number(row.failure_count || 0), lastFailedAt: String(row.last_failed_at || ''),
     workspaceCount: Number(row.workspace_count || 0), lastWorkspace: String(row.last_workspace || ''), lastWorkId: String(row.last_work_id || ''),
-    evidence: parseArray(row.evidence_json), createdAt: String(row.created_at), updatedAt: String(row.updated_at)
+    lastRepositoryFingerprint: String(row.last_repository_fingerprint || ''), evidence: parseArray(row.evidence_json), createdAt: String(row.created_at), updatedAt: String(row.updated_at)
   };
 }
 
@@ -382,11 +578,14 @@ function compactProcedureForBootstrap(row) {
   if (!procedure) return null;
   return {
     name: procedure.name,
-    description: procedure.description,
-    trigger: procedure.trigger,
-    steps: procedure.steps,
+    description: clean(procedure.description, 220),
+    trigger: clean(procedure.trigger, 220),
+    steps: procedure.steps.slice(0, 3).map(step => clean(step, 180)),
     status: procedure.status,
-    successCount: procedure.successCount
+    scope: procedure.workspaceCount >= 2 ? 'global' : 'workspace',
+    ...(procedure.workspaceCount < 2 && procedure.lastWorkspace ? { workspace: procedure.lastWorkspace } : {}),
+    successCount: procedure.successCount,
+    failureCount: procedure.failureCount
   };
 }
 
@@ -400,13 +599,81 @@ function procedureOperations(events) {
   return operations.slice(-MAX_PROCEDURE_STEPS);
 }
 
-function operationStep(operation) {
-  const text = String(operation).replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
-  return text ? `${text[0].toUpperCase()}${text.slice(1)} using current repository evidence.` : 'Continue using current repository evidence.';
+function reviewProceduralLesson(session, completion, operations, changedFiles, checks, failures) {
+  const goal = clean(session.objective || session.title || 'repository task', 260);
+  const outcome = clean(completion.summary || session.resultSummary || session.summary, 360);
+  const modules = procedureModules(changedFiles);
+  const nameSeed = relevanceTerms(goal).slice(0, 5).join('-');
+  const signatureSeed = crypto.createHash('sha256').update(JSON.stringify({ goal: procedureTaskTerms(session), modules })).digest('hex');
+  const steps = [];
+  steps.push(`Confirm the current repository evidence for ${goal}.`);
+  if (modules.length) steps.push(`Inspect the affected ${modules.join(', ')} area${modules.length === 1 ? '' : 's'} before changing behavior.`);
+  if (changedFiles.length) steps.push(`Keep the change scoped to the demonstrated files or their current structural equivalents: ${changedFiles.slice(0, 5).join(', ')}.`);
+  if (failures.length) steps.push(`Account for the recorded failure evidence before applying the successful path.`);
+  const meaningfulOperations = operations.filter(operation => ![OP.VALIDATE_CHECKS].includes(operation)).map(operationLabel).filter(Boolean);
+  if (meaningfulOperations.length) steps.push(`Follow the proven operation sequence where it still matches current code: ${meaningfulOperations.join(' -> ')}.`);
+  if (checks.length) steps.push(`Validate the result with the demonstrated checks: ${checks.slice(0, 4).join('; ')}.`);
+  return {
+    name: skillName(nameSeed || `learned-procedure-${signatureSeed.slice(0, 8)}`),
+    description: clean(`Reusable Rel.AI procedure for ${goal}.${outcome ? ` Learned outcome: ${outcome}` : ''}`, 480),
+    trigger: clean([goal, modules.length ? `affected ${modules.join(', ')}` : '', failures.length ? 'previous failure evidence exists' : ''].filter(Boolean).join('; '), 700),
+    steps: [...new Set(steps)].slice(0, MAX_PROCEDURE_STEPS)
+  };
 }
 
-function compactTrigger(session, failures, changedFiles) {
-  return clean([session.objective || session.title, failures.length ? `failure signatures ${failures.length}` : '', changedFiles.length ? `affected ${fileCategories(changedFiles).join(', ')}` : ''].filter(Boolean).join('; '), 700);
+function operationLabel(operation) {
+  const text = String(operation || '').replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : '';
+}
+
+function procedureSignature(session, operations, changedFiles, checks) {
+  const signatureInput = {
+    intent: clean(session.intent || session.workflow?.intent, 40),
+    taskTerms: procedureTaskTerms(session),
+    operations: operations.filter(operation => operation !== OP.VALIDATE_CHECKS),
+    modules: procedureModules(changedFiles),
+    extensions: [...new Set(changedFiles.map(file => path.extname(file).toLowerCase()).filter(Boolean))].sort(),
+    checks: checks.map(normalizeSignatureText)
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(signatureInput)).digest('hex');
+}
+
+function procedureModules(files) {
+  return [...new Set((files || []).map(file => {
+    const parts = String(file || '').replaceAll('\\', '/').split('/').filter(Boolean);
+    if (parts.length <= 1) return parts[0] || '';
+    const leafLooksLikeFile = /\.[A-Za-z0-9]+$/.test(parts.at(-1) || '');
+    const directories = leafLooksLikeFile ? parts.slice(0, -1) : parts;
+    return directories.slice(0, Math.min(3, directories.length)).join('/');
+  }).filter(Boolean))].sort().slice(0, 8);
+}
+
+function procedureChecks(evidence, extra = '') {
+  return [...new Set([
+    ...(evidence || []).filter(item => item?.kind === 'check' || item?.command || item?.commandId).map(item => clean(item?.command || item?.commandId, 180)),
+    clean(extra, 180)
+  ].filter(Boolean))].slice(-6);
+}
+
+function latestRepositoryFingerprint(evidence) {
+  return [...(evidence || [])].reverse().map(item => clean(item?.repositoryFingerprint, 200)).find(Boolean) || '';
+}
+
+function learnValidationAffinity(db, workspace, changedFiles, checks, now) {
+  if (!workspace || !changedFiles.length || !checks.length) return;
+  const statement = db.prepare(`INSERT INTO validation_affinity(workspace, path_prefix, command, success_count, last_seen_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(workspace,path_prefix,command) DO UPDATE SET success_count=success_count+1,last_seen_at=excluded.last_seen_at`);
+  for (const prefix of [...new Set(changedFiles.map(validationPathPrefix).filter(Boolean))]) {
+    for (const command of checks.slice(0, 6)) statement.run(workspace, prefix, command, 1, now);
+  }
+}
+
+function validationPathPrefix(file) {
+  const normalized = String(file || '').replaceAll('\\', '/').replace(/^\.\//, '');
+  if (!normalized) return '';
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length <= 1) return parts[0] || '';
+  return parts.slice(0, Math.min(3, parts.length - 1)).join('/');
 }
 
 function procedureTaskTerms(session) {
@@ -416,29 +683,17 @@ function procedureTaskTerms(session) {
   return fallback ? [fallback] : [];
 }
 
-function procedureName(session, signature) {
-  const base = relevanceTerms(session.objective || session.title).slice(0, 5).join('-');
-  return skillName(base || `learned-procedure-${signature.slice(0, 8)}`);
-}
-
-function procedureDescription(session, operations) {
-  const goal = clean(session.objective || session.title || 'repository task', 260);
-  return clean(`Verified Rel.AI procedure for ${goal}. Successful path: ${operations.map(item => item.replace(/[._]/g, ' ')).join(' -> ')}.`, 480);
-}
-
-function compactProcedureEvidence(session, completion, failures, checks) {
+function compactProcedureEvidence(session, completion, failures, checks, changedFiles = []) {
   return [{
-    workId: clean(completion.work_id || session.id, 200), workspace: clean(session.workspace, 120), validation: clean(completion.validationStatus || session.validation, 40),
-    completedAt: clean(session.completedAt || completion.validationAt || new Date().toISOString(), 80), failures, checks
+    workId: clean(completion.work_id || session.id, 200), workspace: clean(session.workspace || completion.workspace, 120), validation: clean(completion.validationStatus || session.validation, 40),
+    repositoryFingerprint: clean(completion.validationFingerprint || latestRepositoryFingerprint(session.workflowEvidence), 200),
+    completedAt: clean(session.completedAt || completion.validationAt || new Date().toISOString(), 80),
+    modules: procedureModules(changedFiles), changedFiles: changedFiles.slice(0, 12), failures, checks
   }];
 }
 
 function mergeEvidence(existingJson, next) {
   return [...parseArray(existingJson), ...next].slice(-20);
-}
-
-function fileCategories(files) {
-  return [...new Set(files.map(file => path.extname(file).toLowerCase() || path.basename(file)).filter(Boolean))].slice(0, 5);
 }
 
 function fitSkillDescription(value) {
@@ -519,10 +774,12 @@ export {
   knowledgeSettings,
   knowledgeSummary,
   learnFromCompletedTask,
+  learnedValidationChecks,
   listKnowledge,
   listProcedures,
-  promoteProcedureToSkill,
+  recordProcedureFailure,
   searchKnowledge,
   searchVerifiedProcedures,
-  setProcedureStatus
+  setProcedureStatus,
+  syncProcedureSkill
 };

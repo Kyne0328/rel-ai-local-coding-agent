@@ -72,8 +72,18 @@ async function callTool(name, args = {}, context = {}) {
       throw taskError('TASK_ID_REQUIRED', `${name} requires the work_id returned by relai_work action begin.`);
     }
     if (requestedTaskId && operationName !== OP.WORK_BEGIN) {
-      knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal, effectiveArgs);
-      if (taskAware && !String(effectiveArgs?.workspace || '').trim()) effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
+      try {
+        knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal, effectiveArgs);
+      } catch (error) {
+        const canIgnoreStaleOptionalTask = taskScope === 'optional'
+          && Boolean(String(effectiveArgs?.workspace || '').trim())
+          && ['TASK_NOT_FOUND', 'INVALID_TASK_STATE'].includes(String(error?.code || ''));
+        if (!canIgnoreStaleOptionalTask) throw error;
+        requestedTaskId = '';
+        effectiveArgs = { ...effectiveArgs };
+        delete effectiveArgs.work_id;
+      }
+      if (knownTask && taskAware && !String(effectiveArgs?.workspace || '').trim()) effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
     }
     workspaceResolution = resolveConfiguredWorkspaceArgument(config, effectiveArgs?.workspace);
     if (workspaceResolution?.alias) effectiveArgs = { ...effectiveArgs, workspace: workspaceResolution.alias };
@@ -88,7 +98,7 @@ async function callTool(name, args = {}, context = {}) {
       // resolved alias without re-reading task history a second time.
       assertTaskWorkspaceOwnership(knownTask, effectiveArgs?.workspace);
       const integrity = readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace);
-      if (!integrity) {
+      if (!integrity && taskScoped) {
         throw taskError(
           'TASK_INTEGRITY_STATE_MISSING',
           'Authoritative integrity state is missing for this logical task. Start a new logical task; no task-scoped operation was executed.',
@@ -98,7 +108,7 @@ async function callTool(name, args = {}, context = {}) {
       requestTaskContext = {
         taskId: requestedTaskId,
         session: knownTask,
-        integrity,
+        integrity: integrity || null,
         recentEvidence: null,
         workflowContextEvidence: null,
         topology: null

@@ -22,7 +22,8 @@ let lifecycleQueue = Promise.resolve();
 let desktopContext = {
   status: null,
   runtimeAccess: { blocked: false, errorCode: '', message: '' },
-  runtimeLogs: { available: true, revision: 0, count: 0, entries: [] }
+  runtimeLogs: { available: true, revision: 0, count: 0, entries: [] },
+  reducedBackgroundWork: false
 };
 let nativeRequestSequence = 0;
 const pendingNativeRequests = new Map();
@@ -186,8 +187,10 @@ function updateDesktopContext(next = {}) {
     ...desktopContext,
     ...(hasStatus ? { status: next.status } : {}),
     ...(Object.hasOwn(next, 'runtimeAccess') ? { runtimeAccess: next.runtimeAccess } : {}),
-    ...(Object.hasOwn(next, 'runtimeLogs') ? { runtimeLogs: next.runtimeLogs } : {})
+    ...(Object.hasOwn(next, 'runtimeLogs') ? { runtimeLogs: next.runtimeLogs } : {}),
+    ...(Object.hasOwn(next, 'reducedBackgroundWork') ? { reducedBackgroundWork: next.reducedBackgroundWork === true } : {})
   };
+  process.env.REL_AI_REDUCED_BACKGROUND_WORK = desktopContext.reducedBackgroundWork ? '1' : '';
   if (hasStatus) {
     for (const listener of [...desktopStatusListeners]) {
       try { listener(desktopContext.status); } catch {}

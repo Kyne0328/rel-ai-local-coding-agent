@@ -51,7 +51,7 @@ function eventTimestampMs(value = {}) {
 }
 
 function terminalTaskTimestampValue(value = {}) {
-  return value.endedAt || value.completedAt || value.lastActivityAt || value.updatedAt || value.startedAt || value.createdAt || '';
+  return value.endedAt || value.completedAt || value.cancelledAt || value.inactiveAt || value.lastActivityAt || value.updatedAt || value.startedAt || value.createdAt || '';
 }
 
 function terminalTaskTimestamp(value = {}) {

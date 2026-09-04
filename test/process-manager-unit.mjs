@@ -32,6 +32,7 @@ const ownerLater = { taskId: 'work-session-a', principal: principalA, workspace:
 const otherSession = { taskId: 'work-session-b', principal: principalA, workspace: 'app' };
 const otherPrincipal = { taskId: 'work-session-c', principal: principalB, workspace: 'app' };
 const otherWorkspaceContext = { taskId: 'work-session-d', principal: principalA, workspace: 'other' };
+const workspaceRecovery = { principal: principalA, workspace: 'app' };
 const createdProcessIds = [];
 let externalChild = null;
 
@@ -123,20 +124,19 @@ try {
     () => readManagedProcess(config, { processId: started.processId }, otherWorkspaceContext),
     error => error?.code === 'PROCESS_WORKSPACE_MISMATCH'
   );
-  assert.throws(
-    () => readManagedProcess(config, { processId: started.processId }, otherSession),
-    error => error?.code === 'PROCESS_SESSION_MISMATCH',
-    'another logical task from the same principal must not read this process'
-  );
+  const crossTaskRead = readManagedProcess(config, { processId: started.processId }, otherSession);
+  assert.equal(crossTaskRead.processId, started.processId, 'same-principal same-workspace recovery must inspect a process from another logical task');
+  const tasklessRead = readManagedProcess(config, { processId: started.processId, workspace: 'app' }, workspaceRecovery);
+  assert.equal(tasklessRead.processId, started.processId, 'process inspection must not require resurrecting the original work session');
   await assert.rejects(
     () => writeManagedProcess(config, { processId: started.processId, input: 'cross-task\n' }, otherSession),
     error => error?.code === 'PROCESS_SESSION_MISMATCH',
-    'another logical task from the same principal must not write to this process'
+    'interactive process input must remain bound to the owning logical task'
   );
   await assert.rejects(
-    () => stopManagedProcess(config, { processId: started.processId, graceMs: 0 }, otherSession),
+    () => writeManagedProcess(config, { processId: started.processId, input: 'taskless-write\n', workspace: 'app' }, workspaceRecovery),
     error => error?.code === 'PROCESS_SESSION_MISMATCH',
-    'another logical task from the same principal must not stop this process'
+    'workspace recovery must not grant taskless process input authority'
   );
 
   const written = await writeManagedProcess(config, {
@@ -176,8 +176,10 @@ try {
 
   const listedByOwner = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
   assert.ok(listedByOwner.processes.some(item => item.processId === started.processId));
-  const hiddenFromOtherSession = listManagedProcesses(config, { workspace: 'app' }, otherSession);
-  assert.equal(hiddenFromOtherSession.processes.some(item => item.processId === started.processId), false);
+  const visibleFromOtherSession = listManagedProcesses(config, { workspace: 'app' }, otherSession);
+  assert.equal(visibleFromOtherSession.processes.some(item => item.processId === started.processId), true, 'same-principal same-workspace process listing must support recovery across task boundaries');
+  const visibleWithoutTask = listManagedProcesses(config, { workspace: 'app' }, workspaceRecovery);
+  assert.equal(visibleWithoutTask.processes.some(item => item.processId === started.processId), true, 'process listing must work without the original work_id');
   const hiddenFromOtherPrincipal = listManagedProcesses(config, { workspace: 'app' }, otherPrincipal);
   assert.equal(hiddenFromOtherPrincipal.processes.some(item => item.processId === started.processId), false);
   assert.throws(
@@ -187,11 +189,13 @@ try {
 
   const stopped = await stopManagedProcess(config, {
     processId: started.processId,
-    graceMs: 500
-  }, ownerLater);
+    graceMs: 500,
+    workspace: 'app'
+  }, workspaceRecovery);
   assert.equal(stopped.status, 'stopped');
   assert.ok(stopped.endedAt);
   assert.equal(stopped.duplicate, false);
+  assert.equal(stopped.processId, started.processId, 'same-principal workspace recovery must stop a known process without the old work_id');
   const duplicateStop = await stopManagedProcess(config, {
     processId: started.processId,
     graceMs: 0

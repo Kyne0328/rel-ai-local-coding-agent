@@ -60,9 +60,13 @@ assert.equal(status.branch, 'main');
 assert.ok(Array.isArray(status.untrackedSessionFiles) && status.untrackedSessionFiles.includes('notes.txt'));
 assert.ok(Array.isArray(status.statusEntries) && status.statusEntries.some((item) => item.path === 'notes.txt'));
 
-const dryCommit = await relaiGitCommit(workspace, config, { message: 'dry run', dryRun: true });
+const implicitTasklessCommit = await relaiGitCommit(workspace, config, { message: 'must choose scope', dryRun: true });
+assert.equal(implicitTasklessCommit.ok, false, 'taskless commits must not silently widen to the whole workspace');
+assert.match(implicitTasklessCommit.error, /explicit paths|addAll:true/i);
+const dryCommit = await relaiGitCommit(workspace, config, { message: 'dry run', addAll: true, dryRun: true });
 assert.equal(dryCommit.ok, true);
 assert.equal(dryCommit.dryRun, true);
+assert.equal(dryCommit.addAll, true);
 
 const dryScopedCommit = await relaiGitCommit(workspace, config, { message: 'dry scoped', paths: ['notes.txt'], dryRun: true });
 assert.equal(dryScopedCommit.ok, true);

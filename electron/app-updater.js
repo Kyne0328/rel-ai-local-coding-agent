@@ -9,6 +9,10 @@ import { taskActivityBlockReason } from './tool-sleep-blocker.js';
 import { createMacManualUpdater } from './macos-manual-updater.js';
 import { compareVersions, isStableVersion, parseStableVersion } from "./update-version.js";
 
+const RELEASE_DISCOVERY_URL = 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/latest/download/latest.yml';
+const RELEASE_DOWNLOAD_PREFIX = '/Kyne0328/rel-ai-local-coding-agent/releases/download/';
+const RELEASE_DISCOVERY_INTERVAL_MS = 10 * 60 * 1000;
+const RELEASE_DISCOVERY_MIN_INTERVAL_MS = 60 * 1000;
 const UPDATE_RETRY_DELAYS_MS = Object.freeze([500, 1500]);
 const TRANSIENT_UPDATE_ERROR_CODES = Object.freeze([
   'ERR_HTTP2_SERVER_REFUSED_STREAM',
@@ -39,7 +43,8 @@ function createAppUpdater(options = {}) {
     arch = process.arch,
     fetchImpl = globalThis.fetch,
     openUpdateFile = null,
-    manualMacUpdater = null
+    manualMacUpdater = null,
+    shouldAutoDownload = () => false
   } = options;
   if (!app || typeof app.getVersion !== 'function') throw new TypeError('Electron app is required.');
   if (!autoUpdater || typeof autoUpdater.on !== 'function') throw new TypeError('electron-updater autoUpdater is required.');
@@ -58,6 +63,9 @@ function createAppUpdater(options = {}) {
     : null;
   const handlers = [];
   let autoCheckTimer = null;
+  let releaseDiscoveryTimer = null;
+  let releaseDiscoveryPromise = null;
+  let lastReleaseDiscoveryAt = 0;
   let retryingOperation = '';
   let started = false;
   let status = normalizeStatus({
@@ -93,14 +101,21 @@ function createAppUpdater(options = {}) {
         currentCompatibility: installedCompatibility
       });
     }
-    void scheduleAutomaticCheck(true);
+    void scheduleAutomaticCheck().then(fullCheckDelay => {
+      const discoveryDelay = fullCheckDelay <= AUTO_CHECK_DELAY_MS
+        ? RELEASE_DISCOVERY_INTERVAL_MS
+        : AUTO_CHECK_DELAY_MS;
+      scheduleReleaseDiscovery(discoveryDelay);
+    });
     emit({ state: 'idle' });
     return snapshot();
   }
 
   function stop() {
     if (autoCheckTimer) clearTimer(autoCheckTimer);
+    if (releaseDiscoveryTimer) clearTimer(releaseDiscoveryTimer);
     autoCheckTimer = null;
+    releaseDiscoveryTimer = null;
     for (const [eventName, handler] of handlers.splice(0)) autoUpdater.removeListener?.(eventName, handler);
     started = false;
   }
@@ -110,6 +125,7 @@ function createAppUpdater(options = {}) {
     if (isBusy()) return failure(codes.busy, 'An update action is already in progress.', false);
     emit({ state: 'checking', error: '', errorCode: '', integrityVerified: false, availableCompatibility: null, updateSynchronization: null });
     log('Checking for application updates.');
+    let result;
     try {
       if (platform === 'darwin') {
         const info = await runWithRetries('Update check', () => macUpdater.checkForUpdates());
@@ -117,14 +133,15 @@ function createAppUpdater(options = {}) {
       } else {
         await runWithRetries('Update check', () => autoUpdater.checkForUpdates());
       }
-      await store.writeLastCheck(now());
-      void scheduleAutomaticCheck();
-      return { ok: true, status: snapshot() };
+      result = { ok: true, status: snapshot() };
     } catch (error) {
-      await store.writeLastCheck(now());
-      void scheduleAutomaticCheck();
-      return handleError(error);
+      result = handleError(error);
     }
+    const checkedAt = now();
+    await store.writeLastCheck(checkedAt);
+    lastReleaseDiscoveryAt = checkedAt;
+    void scheduleAutomaticCheck();
+    return result;
   }
 
   async function downloadUpdate() {
@@ -228,19 +245,56 @@ function createAppUpdater(options = {}) {
     });
   }
 
-  async function scheduleAutomaticCheck(forceLaunchCheck = false) {
-    if (!support.supported || !started) return;
-    if (autoCheckTimer) clearTimer(autoCheckTimer);
-    if (forceLaunchCheck) {
-      autoCheckTimer = setTimer(() => {
-        autoCheckTimer = null;
-        void checkForUpdates();
-      }, AUTO_CHECK_DELAY_MS);
-      autoCheckTimer?.unref?.();
-      return;
+  async function discoverUpdate({ force = false } = {}) {
+    if (!support.supported || !started) return { ok: true, skipped: true, status: snapshot() };
+    if (['available', 'downloading', 'downloaded', 'installing'].includes(status.state)) {
+      return { ok: true, skipped: true, status: snapshot() };
     }
-    const lastCheck = await store.readLastCheck();
+    const discoveryAt = now();
+    if (!force && lastReleaseDiscoveryAt > 0 && discoveryAt - lastReleaseDiscoveryAt < RELEASE_DISCOVERY_MIN_INTERVAL_MS) {
+      return { ok: true, skipped: true, status: snapshot() };
+    }
+    if (releaseDiscoveryPromise) return releaseDiscoveryPromise;
+    lastReleaseDiscoveryAt = discoveryAt;
+    releaseDiscoveryPromise = (async () => {
+      try {
+        const latestVersion = await fetchLatestReleaseVersion(fetchImpl);
+        if (!isStableVersion(status.currentVersion)) {
+          throw new Error('The installed application version is invalid, so release discovery cannot compare versions.');
+        }
+        if (compareVersions(latestVersion, status.currentVersion) <= 0) {
+          return { ok: true, newer: false, latestVersion, status: snapshot() };
+        }
+        log(`Newly published release ${latestVersion} detected. Verifying update metadata.`);
+        return await checkForUpdates();
+      } catch (error) {
+        log(`Could not check for a newly published release: ${cleanText(error?.message || error, 400)}`, {
+          level: 'warning',
+          code: 'update_discovery_failed'
+        });
+        return { ok: false, retryable: true, status: snapshot() };
+      } finally {
+        releaseDiscoveryPromise = null;
+      }
+    })();
+    return releaseDiscoveryPromise;
+  }
+
+  function scheduleReleaseDiscovery(delay = RELEASE_DISCOVERY_INTERVAL_MS) {
     if (!support.supported || !started) return;
+    if (releaseDiscoveryTimer) clearTimer(releaseDiscoveryTimer);
+    releaseDiscoveryTimer = setTimer(() => {
+      releaseDiscoveryTimer = null;
+      void discoverUpdate().finally(() => scheduleReleaseDiscovery(RELEASE_DISCOVERY_INTERVAL_MS));
+    }, Math.max(AUTO_CHECK_DELAY_MS, delay));
+    releaseDiscoveryTimer?.unref?.();
+  }
+
+  async function scheduleAutomaticCheck() {
+    if (!support.supported || !started) return 0;
+    if (autoCheckTimer) clearTimer(autoCheckTimer);
+    const lastCheck = await store.readLastCheck();
+    if (!support.supported || !started) return 0;
     const elapsed = lastCheck > 0 ? Math.max(0, now() - lastCheck) : 0;
     const delay = lastCheck > 0 && elapsed < AUTO_CHECK_INTERVAL_MS
       ? AUTO_CHECK_INTERVAL_MS - elapsed
@@ -250,6 +304,7 @@ function createAppUpdater(options = {}) {
       void checkForUpdates();
     }, delay);
     autoCheckTimer?.unref?.();
+    return delay;
   }
 
   async function runWithRetries(label, action) {
@@ -295,8 +350,17 @@ function createAppUpdater(options = {}) {
   }
 
   function emit(patch) {
+    const previousState = status.state;
+    const previousVersion = status.availableVersion;
     status = normalizeStatus({ ...status, ...patch });
     onStatusChange(snapshot());
+    const newlyAvailable = status.state === 'available'
+      && (previousState !== 'available' || previousVersion !== status.availableVersion);
+    if (newlyAvailable && shouldAutoDownload() === true) {
+      queueMicrotask(() => {
+        if (status.state === 'available') void downloadUpdate();
+      });
+    }
   }
 
   function snapshot() {
@@ -307,7 +371,37 @@ function createAppUpdater(options = {}) {
     onLog(cleanText(message, 1000), { source: 'updater', ...options });
   }
 
-  return { start, stop, getStatus: snapshot, checkForUpdates, downloadUpdate, installUpdate };
+  return { start, stop, getStatus: snapshot, discoverUpdate, checkForUpdates, downloadUpdate, installUpdate };
+}
+
+async function fetchLatestReleaseVersion(fetchImpl) {
+  if (typeof fetchImpl !== 'function') throw new TypeError('A fetch implementation is required for release discovery.');
+  const response = await fetchImpl(RELEASE_DISCOVERY_URL, {
+    method: 'HEAD',
+    redirect: 'manual',
+    headers: { 'User-Agent': 'Rel.AI-MCP-Updater' }
+  });
+  const statusCode = Number(response?.status || 0);
+  if (![301, 302, 303, 307, 308].includes(statusCode)) {
+    throw new Error(`Release discovery request failed with HTTP ${statusCode || 'unknown'}.`);
+  }
+  const version = releaseVersionFromLocation(response?.headers?.get?.('location'));
+  if (!version) throw new Error('Release discovery returned an invalid GitHub release redirect.');
+  return version;
+}
+
+function releaseVersionFromLocation(value) {
+  try {
+    const url = new URL(String(value || ''), RELEASE_DISCOVERY_URL);
+    if (url.protocol !== 'https:' || url.hostname !== 'github.com') return '';
+    if (!url.pathname.startsWith(RELEASE_DOWNLOAD_PREFIX) || !url.pathname.endsWith('/latest.yml')) return '';
+    const encodedVersion = url.pathname.slice(RELEASE_DOWNLOAD_PREFIX.length, -'/latest.yml'.length);
+    if (!encodedVersion || encodedVersion.includes('/')) return '';
+    const version = decodeURIComponent(encodedVersion).replace(/^v/i, '');
+    return isStableVersion(version) ? version : '';
+  } catch {
+    return '';
+  }
 }
 
 function isTransientUpdateError(error) {
@@ -327,4 +421,19 @@ function updateRecoveryMessage(error) {
   return 'Rel.AI could not complete the update. Try again. If the problem continues, open Troubleshooting for technical details.';
 }
 
-export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload };
+export {
+  AUTO_CHECK_DELAY_MS,
+  AUTO_CHECK_INTERVAL_MS,
+  RELEASE_DISCOVERY_INTERVAL_MS,
+  RELEASE_DISCOVERY_MIN_INTERVAL_MS,
+  RELEASE_DISCOVERY_URL,
+  compareVersions,
+  createAppUpdater,
+  detectUpdateSupport,
+  fetchLatestReleaseVersion,
+  isStableVersion,
+  normalizeStatus,
+  parseStableVersion,
+  progressPayload,
+  releaseVersionFromLocation
+};

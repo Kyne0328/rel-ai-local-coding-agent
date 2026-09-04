@@ -1,5 +1,5 @@
 import { readConfig, writeConfig } from '../config.js';
-import { addKnowledgeItem, clearKnowledge, deleteKnowledgeItem, knowledgeSummary, listKnowledge, listProcedures, promoteProcedureToSkill, setProcedureStatus } from '../knowledgeStore.js';
+import { addKnowledgeItem, clearKnowledge, deleteKnowledgeItem, knowledgeSummary, listKnowledge, listProcedures, setProcedureStatus } from '../knowledgeStore.js';
 import { readJsonBody, sendJson } from './io.js';
 
 function handleApiKnowledge(ctx) {
@@ -7,8 +7,8 @@ function handleApiKnowledge(ctx) {
   sendJson(ctx.res, 200, {
     ok: true,
     ...knowledgeSummary(config),
-    items: listKnowledge(config, { limit: 50 }),
-    procedures: listProcedures(config, { limit: 50 })
+    items: listKnowledge(config, { limit: 200 }),
+    procedures: listProcedures(config, { limit: 100 })
   });
 }
 
@@ -31,12 +31,8 @@ async function handleApiKnowledgeAction(ctx) {
       result = { ok: true, item: addKnowledgeItem(config, payload) };
     } else if (action === 'delete') {
       result = deleteKnowledgeItem(config, payload.id);
-    } else if (action === 'trust_procedure') {
-      result = { ok: true, procedure: setProcedureStatus(config, payload.id, 'verified') };
-    } else if (action === 'reject_procedure') {
+    } else if (action === 'dismiss_procedure') {
       result = { ok: true, procedure: setProcedureStatus(config, payload.id, 'rejected') };
-    } else if (action === 'promote_skill') {
-      result = promoteProcedureToSkill(config, payload.id, { name: payload.name, overwrite: payload.overwrite === true });
     } else if (action === 'clear') {
       if (payload.confirm !== true) throw new Error('Clearing knowledge requires confirm=true.');
       result = clearKnowledge(config);

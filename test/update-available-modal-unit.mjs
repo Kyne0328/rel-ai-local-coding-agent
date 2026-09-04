@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { supportPolicyModalView } from '../src/ui/update-available-modal.js';
+import { availableUpdateModalView, supportPolicyModalView } from '../src/ui/update-available-modal.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = fs.readFileSync(path.join(root, 'src', 'ui', 'update-available-modal.js'), 'utf8');
@@ -22,9 +22,21 @@ assert.equal(supportPolicyModalView(requiredPolicy).blocking, true);
 assert.equal(supportPolicyModalView(requiredPolicy).allowLater, false);
 assert.match(supportPolicyModalView(emergencyPolicy).title, /critical/i);
 
-assert.doesNotMatch(source, /shouldShowUpdateModal|showUpdateModal|Ignore this version/, 'routine optional updates must not open a competing dashboard modal');
-assert.doesNotMatch(source, /getNotificationPreferences|setNotificationPreferences/, 'support-policy modal must not depend on notification preferences');
-assert.match(source, /supportPolicyModalView/, 'required and support-policy update notices must remain available');
-assert.match(source, /closeModal\(\);[\s\S]*bridge\[method\]\(\)/, 'support-policy update actions must close the modal before starting the action');
+assert.equal(availableUpdateModalView({ state: 'idle', availableVersion: '0.27.5' }), null);
+assert.equal(availableUpdateModalView({ state: 'available' }), null);
+const available = availableUpdateModalView({ state: 'available', availableVersion: '0.27.5' });
+assert.equal(available.title, 'Update available');
+assert.equal(available.allowLater, true);
+assert.equal(available.blocking, false);
+assert.match(available.description, /v0\.27\.5/);
+assert.match(available.detail, /later launch/i);
 
-console.log('Update support-policy modal interaction tests passed.');
+assert.doesNotMatch(source, /Ignore this version/, 'routine updates must not add permanent per-version ignore state');
+assert.doesNotMatch(source, /getNotificationPreferences|setNotificationPreferences/, 'update modals must not depend on notification preferences');
+assert.match(source, /supportPolicyModalView/, 'required and support-policy update notices must remain available');
+assert.match(source, /shownUpdateKeys\.has\(updateView\.key\)/, 'routine update notices must deduplicate the offered version for the current launch');
+assert.match(source, /shownPolicyKeys[\s\S]*availableUpdateModalView/, 'support-policy notices must retain priority over routine optional update notices');
+assert.match(source, /actions\.appendChild\(later\)[\s\S]*actions\.appendChild\(primaryAction\)/, 'Later must remain before the primary update action');
+assert.match(source, /closeModal\(\);[\s\S]*bridge\[method\]\(\)/, 'update actions must close the modal before starting the action');
+
+console.log('Update available and support-policy modal interaction tests passed.');

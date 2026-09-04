@@ -5,6 +5,7 @@ const ICONS = Object.freeze({
   workspaces: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />',
   activity: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />',
   preferences: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M8 14v6" />',
+  memory: '<path d="M8 4a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4V8a4 4 0 0 0-4-4H8Z"/><path d="M8 9h8M8 13h6M8 17h4"/>',
   application: '<rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h5" />',
   about: '<circle cx="12" cy="12" r="9" /><path d="M12 10v6M12 7h.01" />',
   connection: '<path d="M8.5 15.5 15.5 8.5M7 7h.01M17 17h.01M4 12a8 8 0 1 1 16 0 8 8 0 0 1-16 0Z" />',
@@ -37,7 +38,7 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
   route('system', 'System', 'processes', 'Running commands, troubleshooting, tools, and analytics.', 'Application'),
-  route('settings', 'Settings', 'settings', 'Change connection, appearance, and app settings.', 'Application')
+  route('settings', 'Settings', 'settings', 'Change connection, preferences, memory, and app settings.', 'Application')
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
@@ -45,7 +46,8 @@ export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
   route('connection', 'Connection', 'settings/connection', 'Connect this computer and change OpenAI connection settings.', 'Settings'),
-  route('preferences', 'General', 'settings', 'Change appearance and desktop notifications.', 'Settings'),
+  route('preferences', 'Preferences', 'settings', 'Change appearance and desktop notifications.', 'Settings'),
+  route('memory', 'Memory & learning', 'settings/memory', 'Manage local memories and reusable workflows learned from completed work.', 'Settings'),
   route('application', 'App', 'settings/application', 'Choose startup behavior and manage app updates.', 'Settings'),
   route('about', 'About', 'settings/about', 'View app, developer, source code, and license information.', 'Settings')
 ]);

@@ -58,6 +58,9 @@ function createDesktopLifecycleManager(options = {}) {
       lastCleanExitAt: cleanText(previous.lastCleanExitAt, 80),
       launchAtLogin,
       keepAwake: previous.keepAwake === true,
+      keepRunningOnClose: previous.keepRunningOnClose !== false,
+      autoDownloadUpdates: previous.autoDownloadUpdates === true,
+      reducedBackgroundWork: previous.reducedBackgroundWork === true,
       openedAtLogin: argv.includes('--background') || launchAtLogin.openedAtLogin === true
     };
     await writeState(persistedState(true));
@@ -118,6 +121,32 @@ function createDesktopLifecycleManager(options = {}) {
     return { ok: true, status: snapshot() };
   }
 
+  async function setPreferences(patch = {}) {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return { ok: false, errorCode: codes.state, error: 'App preferences are invalid.', status: snapshot() };
+    }
+    const fields = ['keepRunningOnClose', 'autoDownloadUpdates', 'reducedBackgroundWork'];
+    const previous = Object.fromEntries(fields.map(field => [field, status[field] === true]));
+    const next = { ...previous };
+    let changed = false;
+    for (const field of fields) {
+      if (!Object.hasOwn(patch, field)) continue;
+      if (typeof patch[field] !== 'boolean') {
+        return { ok: false, errorCode: codes.state, error: 'App preferences must use on/off values.', status: snapshot() };
+      }
+      next[field] = patch[field];
+      if (next[field] !== previous[field]) changed = true;
+    }
+    if (!changed) return { ok: true, status: snapshot() };
+    status = { ...status, ...next };
+    if (!await writeState(persistedState(Boolean(launchId)))) {
+      status = { ...status, ...previous };
+      return { ok: false, errorCode: codes.state, error: 'App preferences could not be saved. Try again.', status: snapshot() };
+    }
+    onLog('Desktop app preferences updated.', { source: 'desktop-lifecycle' });
+    return { ok: true, status: snapshot() };
+  }
+
   function readLaunchAtLogin() {
     if (!startupSupport.supported) {
       return { supported: false, enabled: false, openedAtLogin: false, reason: startupSupport.reason };
@@ -167,7 +196,10 @@ function createDesktopLifecycleManager(options = {}) {
       launchCount: status.launchCount,
       launchedAt: status.launchedAt,
       lastCleanExitAt,
-      keepAwake: status.keepAwake === true
+      keepAwake: status.keepAwake === true,
+      keepRunningOnClose: status.keepRunningOnClose !== false,
+      autoDownloadUpdates: status.autoDownloadUpdates === true,
+      reducedBackgroundWork: status.reducedBackgroundWork === true
     };
   }
 
@@ -190,7 +222,7 @@ function createDesktopLifecycleManager(options = {}) {
     return { ...status, launchAtLogin: { ...status.launchAtLogin } };
   }
 
-  return { start, markCleanShutdown, getStatus, setLaunchAtLogin, setKeepAwake };
+  return { start, markCleanShutdown, getStatus, setLaunchAtLogin, setKeepAwake, setPreferences };
 }
 
 function baseStatus(app, support, connectorRevision = '') {
@@ -207,6 +239,9 @@ function baseStatus(app, support, connectorRevision = '') {
     lastCleanExitAt: '',
     launchAtLogin: { supported: support.supported, enabled: false, openedAtLogin: false, reason: support.reason },
     keepAwake: false,
+    keepRunningOnClose: true,
+    autoDownloadUpdates: false,
+    reducedBackgroundWork: false,
     openedAtLogin: false
   };
 }

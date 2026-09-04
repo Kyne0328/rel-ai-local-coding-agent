@@ -149,12 +149,12 @@ assert.match(activity, /routeHref\('tasks'/, 'Activity details must deep-link ba
 assert.match(sessions, /data-session-fingerprint/, 'session rows must carry semantic fingerprints for keyed reconciliation');
 assert.match(functionSource(sessions, 'timingHtml'), /data-clock-relative/, 'ended and inactive task rows must show relative age instead of total duration');
 assert.match(functionSource(sessions, 'updateTaskSessions'), /syncSessionWorkspaceMenu\(current, data\.config\?\.workspaces \|\| \[\], workspace\)/, 'task live updates must keep the project filter synchronized with current configuration');
-assert.match(functionSource(sessions, 'updateTaskSessions'), /refreshOpenSession\(data\)/, 'live task updates must refresh an already-open task detail drawer');
+assert.match(functionSource(sessions, 'updateTaskSessions'), /refreshOpenSession\(data\)/, 'live task updates must refresh an already-open task inspector');
 const refreshOpenSessionSource = functionSource(sessions, 'refreshOpenSession');
-assert.match(refreshOpenSessionSource, /task-detail-technical/, 'live task detail refreshes must preserve the technical disclosure state');
-assert.match(refreshOpenSessionSource, /\.open\s*===\s*true/, 'live task detail refreshes must read the current disclosure state before rebuilding content');
-assert.match(refreshOpenSessionSource, /technical\.open\s*=\s*technicalOpen/, 'live task detail refreshes must restore the technical disclosure state');
-assert.match(refreshOpenSessionSource, /updateDrawer/, 'open task details must update in place without reopening the drawer');
+assert.match(refreshOpenSessionSource, /data-session-inspector/, 'live task detail refreshes must target the persistent task inspector');
+assert.match(refreshOpenSessionSource, /activeTab/, 'live task detail refreshes must preserve the selected inspector tab');
+assert.match(refreshOpenSessionSource, /setSessionTab\(content, activeTab\)/, 'live task detail refreshes must restore the selected inspector tab');
+assert.match(refreshOpenSessionSource, /replaceChildren\(content\)/, 'open task details must update the inspector in place');
 const technicalDetailsSource = functionSource(sessions, 'technicalDetailsSection');
 assert.match(technicalDetailsSource, /<h3>Identifiers<\/h3>/, 'session diagnostics must group task identifiers separately from runtime state');
 assert.match(technicalDetailsSource, /<h3>Runtime<\/h3>/, 'session diagnostics must group runtime state separately from identifiers');

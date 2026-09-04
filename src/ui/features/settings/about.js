@@ -1,5 +1,4 @@
 import { get as getStore } from '../../store.js';
-import { toast } from '../../components/toast.js';
 import { header, panel } from './shared.js';
 
 export function mountAbout(container) {
@@ -22,32 +21,6 @@ export function mountAbout(container) {
   information.body.appendChild(valueRow('License', metadata.license));
   container.appendChild(information.el);
 
-  if (typeof window.relaiDesktop?.quitApp === 'function') {
-    const controls = panel('Application controls');
-    controls.body.appendChild(quitRow());
-    container.appendChild(controls.el);
-  }
-}
-
-function quitRow() {
-  const row = detailRow('Quit Rel.AI MCP', 'Stop the local connection and close Rel.AI completely.');
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'secondary';
-  button.textContent = 'Quit Rel.AI MCP';
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    button.textContent = 'Quitting…';
-    try {
-      await window.relaiDesktop.quitApp();
-    } catch (error) {
-      button.disabled = false;
-      button.textContent = 'Quit Rel.AI MCP';
-      toast(error instanceof Error ? error.message : String(error || 'Rel.AI could not quit.'), { variant: 'error' });
-    }
-  });
-  row.appendChild(button);
-  return row;
 }
 
 function productSummary(metadata) {

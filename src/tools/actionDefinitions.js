@@ -125,21 +125,21 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_snapshot', title: 'Repository Snapshot',
-    description: 'Use when a compact repository or bootstrap overview is needed. Do not use for targeted file reads or searches.'
+    description: 'Use when a compact repository or bootstrap overview is needed. This read-only operation may use an authorized workspace directly without a work_id. Do not use for targeted file reads or searches.'
   },
   {
     name: 'relai_read', title: 'Read Repository',
-    description: 'Use when exact file content, ranges, directories, one discovered skill, or a task-scoped outputRef from truncated relai_exec output is known and needed. Use asResource:true with one exact file path when the file itself must be transferred or downloaded instead of read as text. Do not use for discovery across unknown locations.'
+    description: 'Use when exact file content, ranges, directories, one discovered skill, or a task-scoped outputRef from truncated relai_exec output is known and needed. Ordinary reads may use an authorized workspace directly without a work_id; outputRef remains bound to the exact work_id that produced it. Use asResource:true with one exact file path when the file itself must be transferred or downloaded instead of read as text. Do not use for discovery across unknown locations.'
   },
   {
     name: 'relai_search', title: 'Search Repository',
     description: 'Use for lexical or semantic discovery across repository content. Do not use when the exact file and range are already known.',
-    annotations: annotations(true, false, true, false)
+    annotations: annotations(true, false, true, false), behavior: { taskScope: 'optional' }
   },
   {
     name: 'relai_inspect', title: 'Inspect Code Relationships',
     description: 'Use for symbol, reference, impact, trace, diagnostic, or architecture analysis. Do not use for plain text lookup.',
-    annotations: annotations(true, false, true, false), groups: ['audit']
+    annotations: annotations(true, false, true, false), groups: ['audit'], behavior: { taskScope: 'optional' }
   },
   {
     name: 'relai_edit', title: 'Edit Repository',
@@ -153,9 +153,9 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_process', title: 'Manage Process',
-    description: 'Use for persistent services, watchers, or interactive programs. Do not use for one-shot work; use relai_exec or relai_validate for one-shot work and prefer executable + argv.',
+    description: 'Use for persistent services, watchers, or interactive programs. Starting or writing a process stays task-scoped; listing, reading, or stopping a known process may recover by authorized principal + workspace without the original work_id. Do not use for one-shot work; use relai_exec or relai_validate for one-shot work and prefer executable + argv.',
     annotations: annotations(false, true, false, true),
-    dashboard: { capabilities: ['execute'] }, behavior: { executionClass: 'persistent_process' }
+    dashboard: { capabilities: ['execute'] }, behavior: { executionClass: 'persistent_process', taskScope: 'optional' }
   },
   {
     name: 'relai_ui', title: 'Test Local UI',
@@ -164,20 +164,20 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_validate', title: 'Validate Repository',
-    description: 'Use for explicit checks, diagnostics, or HTTP validation. If long checks outlive the connector request, they continue under work_id and relai_work status returns the result. Do not rerun unchanged authoritative checks without a new mutation or reason.',
-    annotations: annotations(false, true, false, true), behavior: { longRunning: true },
+    description: 'Use for explicit checks, diagnostics, or HTTP validation. Checks and diagnostics stay task-scoped; read-only local HTTP probes may use an authorized workspace directly. If long checks outlive the connector request, they continue under work_id and relai_work status returns the result. Do not rerun unchanged authoritative checks without a new mutation or reason.',
+    annotations: annotations(false, true, false, true), behavior: { longRunning: true, taskScope: 'optional' },
     dashboard: { capabilities: ['validate'] }
   },
   {
     name: 'relai_changes', title: 'Review or Restore Changes',
-    description: 'Use to review, checkpoint/replay a review, restore, reset, or tidy workspace changes. Do not use to create new source edits.',
+    description: 'Use to review, checkpoint/replay a review, restore, reset, or tidy workspace changes. Read-only review/replay and explicitly scoped restore/reset may use an authorized workspace directly when their action contract allows it. Do not use to create new source edits.',
     annotations: annotations(false, true, false, false), dashboard: { capabilities: ['review', 'recover'] },
-    groups: ['audit', 'cleanup']
+    groups: ['audit', 'cleanup'], behavior: { taskScope: 'optional' }
   },
   {
     name: 'relai_publish', title: 'Publish Repository Work',
-    description: 'Use to commit, push, or draft PR text after changes are reviewed and ready. Commits stay task-scoped by default; use addAll:true only when the user explicitly wants one commit containing all current visible workspace changes, including changes from other or earlier tasks. Do not use before the publish boundary is satisfied.',
-    annotations: annotations(false, false, false, true), dashboard: { capabilities: ['git'] }, groups: ['git']
+    description: 'Use to commit, push, or draft PR text after changes are reviewed and ready. A commit with no explicit scope stays limited to current task-owned paths. Explicit paths select exactly those reviewed paths and may cross earlier/parallel task ownership without a second approval prompt; addAll:true explicitly selects all current visible workspace changes. Commit, push, and draft-PR actions may use an authorized workspace directly without resurrecting an old task. Push remains approval-gated. Do not use before the publish boundary is satisfied.',
+    annotations: annotations(false, false, false, true), dashboard: { capabilities: ['git'] }, groups: ['git'], behavior: { taskScope: 'optional' }
   }
 ];
 
@@ -326,11 +326,11 @@ function getPublicActionContract(definition, action) {
     const fields = Object.keys(definition.inputSchema?.properties || {}).filter(field => field !== 'action');
     if (taskScope !== 'none' && !fields.includes('work_id')) fields.push('work_id');
     const required = [...(definition.inputSchema?.required || [])].filter(field => field !== 'action');
-    if (taskScope === 'required') {
+    if (taskScope === 'required' || taskScope === 'optional') {
       const workspaceIndex = required.indexOf('workspace');
       if (workspaceIndex >= 0) required.splice(workspaceIndex, 1);
-      if (!required.includes('work_id')) required.push('work_id');
     }
+    if (taskScope === 'required' && !required.includes('work_id')) required.push('work_id');
     return Object.freeze({ fields: Object.freeze(fields.sort()), required: Object.freeze(required.sort()) });
   }
   const branch = definition.inputSchema?.oneOf?.find(item => item?.properties?.action?.const === action);
@@ -341,6 +341,10 @@ function getPublicActionContract(definition, action) {
   const fields = Object.keys(branch.properties || {}).filter(field => field !== 'action');
   if (taskScope !== 'none' && !fields.includes('work_id')) fields.push('work_id');
   const required = [...(branch.required || [])].filter(field => field !== 'action');
+  if (taskScope === 'required' || taskScope === 'optional') {
+    const workspaceIndex = required.indexOf('workspace');
+    if (workspaceIndex >= 0) required.splice(workspaceIndex, 1);
+  }
   if (taskScope === 'required' && !required.includes('work_id')) required.push('work_id');
   return Object.freeze({ fields: Object.freeze(fields.sort()), required: Object.freeze(required.sort()) });
 }

@@ -1,14 +1,14 @@
 import { fetchJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
 import { pillHtml } from '../../components/pill.js';
-import { panel } from './shared.js';
+import { formatBytes, panel, toggleControl, toggleRow } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 import { supportPolicyView } from './desktop-update-policy.js';
 
 const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases';
 let removeUpdateListener = null;
 
-export function applicationUpdatesPanel() {
+export function applicationUpdatesPanel(lifecycle = null) {
   const updates = panel('App updates');
   updates.el.classList.add('application-update-panel');
   updates.body.setAttribute('aria-live', 'polite');
@@ -18,12 +18,30 @@ export function applicationUpdatesPanel() {
   removeUpdateListener = null;
   const bridge = window.relaiDesktop;
   if (!hasUpdateBridge(bridge)) {
-    renderManual(updates.body, 'Automatic updates are managed by the installed Windows app.');
+    renderManual(updates.body, 'Automatic updates are managed by the installed Rel.AI desktop app.');
     return updates;
   }
 
   let installedReleaseNotes = null;
-  const render = status => renderStatus(updates.body, status, installedReleaseNotes);
+  let latestStatus = null;
+  let autoDownload = lifecycle?.autoDownloadUpdates === true;
+  const statusHost = document.createElement('div');
+  statusHost.className = 'application-update-status';
+  statusHost.dataset.autoDownloadUpdates = String(autoDownload);
+  const autoToggle = toggleControl(autoDownload, value => {
+    void updateAutoDownloadPreference(value);
+  }, { enabled: 'Automatic downloads on', disabled: 'Ask before downloading' });
+  const preference = toggleRow(
+    'Download verified updates automatically',
+    autoToggle,
+    'Downloads a verified update in the background when one is found. Rel.AI still asks before restarting or opening the macOS installer.'
+  );
+  updates.body.replaceChildren(preference, statusHost);
+
+  const render = status => {
+    latestStatus = status;
+    renderStatus(statusHost, status, installedReleaseNotes);
+  };
   if (typeof bridge.onUpdateStatus === 'function') {
     removeUpdateListener = bridge.onUpdateStatus(status => render(status));
   }
@@ -33,7 +51,29 @@ export function applicationUpdatesPanel() {
   ]).then(([status, notes]) => {
     installedReleaseNotes = notes?.ok === false ? null : notes;
     render(status);
-  }).catch(error => renderFailure(updates.body, messageOf(error), installedReleaseNotes));
+  }).catch(error => renderFailure(statusHost, messageOf(error), installedReleaseNotes));
+
+  async function updateAutoDownloadPreference(enabled) {
+    if (typeof bridge.setAppPreferences !== 'function') return;
+    const input = autoToggle.querySelector('input');
+    if (input) input.disabled = true;
+    try {
+      const result = await bridge.setAppPreferences({ autoDownloadUpdates: enabled });
+      autoDownload = result?.status?.autoDownloadUpdates === true;
+      syncToggle(autoToggle, autoDownload, { enabled: 'Automatic downloads on', disabled: 'Ask before downloading' });
+      statusHost.dataset.autoDownloadUpdates = String(autoDownload);
+      if (result?.ok === false) toast(result.error || 'Automatic update downloads could not be changed.', { variant: 'error' });
+      if (latestStatus) render(latestStatus);
+    } catch (error) {
+      autoDownload = !enabled;
+      syncToggle(autoToggle, autoDownload, { enabled: 'Automatic downloads on', disabled: 'Ask before downloading' });
+      statusHost.dataset.autoDownloadUpdates = String(autoDownload);
+      toast(messageOf(error), { variant: 'error' });
+    } finally {
+      if (input) input.disabled = false;
+    }
+  }
+
   return updates;
 }
 
@@ -50,7 +90,8 @@ function renderStatus(container, status = {}, installedReleaseNotes = null) {
   const state = String(status.state || 'idle');
   const currentVersion = status.currentVersion ? `v${escapeHtml(status.currentVersion)}` : 'Unknown version';
   const availableVersion = status.availableVersion ? `v${escapeHtml(status.availableVersion)}` : '';
-  const view = updateView(state, status, currentVersion, availableVersion);
+  const autoDownload = container.dataset.autoDownloadUpdates === 'true';
+  const view = updateView(state, status, currentVersion, availableVersion, autoDownload);
   container.innerHTML = `
     <div class="application-update-summary">
       <div>
@@ -73,7 +114,7 @@ function renderStatus(container, status = {}, installedReleaseNotes = null) {
   wireActions(container, installedReleaseNotes);
 }
 
-function updateView(state, status, currentVersion, availableVersion) {
+function updateView(state, status, currentVersion, availableVersion, autoDownload = false) {
   if (state === 'unsupported') {
     return {
       label: 'Manual update', tone: 'warn',
@@ -91,7 +132,9 @@ function updateView(state, status, currentVersion, availableVersion) {
   if (state === 'available') {
     return {
       label: 'Update available', tone: 'warn',
-      description: `${availableVersion || 'A newer version'} is available. Downloading does not restart Rel.AI.`,
+      description: autoDownload
+        ? `${availableVersion || 'A newer version'} is available. Rel.AI will download it automatically without restarting.`
+        : `${availableVersion || 'A newer version'} is available. Downloading does not restart Rel.AI.`,
       action: { id: 'download', label: `Download ${availableVersion || 'update'}`, className: 'primary' },
       secondary: { id: 'check', label: 'Check again' }
     };
@@ -122,9 +165,13 @@ function updateView(state, status, currentVersion, availableVersion) {
   }
   return {
     label: 'Updates enabled', tone: 'ok',
-    description: status.installMode === 'open_dmg'
-      ? 'Rel.AI checks once per day. Rel.AI asks before it downloads an update or opens the macOS installer.'
-      : 'Rel.AI checks once per day. Rel.AI asks before it downloads an update or restarts.',
+    description: autoDownload
+      ? (status.installMode === 'open_dmg'
+          ? 'Rel.AI watches for newly published releases and downloads verified updates automatically. It still asks before opening the macOS installer.'
+          : 'Rel.AI watches for newly published releases and downloads verified updates automatically. It still asks before restarting to install.')
+      : (status.installMode === 'open_dmg'
+          ? 'Rel.AI watches for newly published releases while it is running and fully verifies updates at least once per day. Rel.AI asks before it downloads an update or opens the macOS installer.'
+          : 'Rel.AI watches for newly published releases while it is running and fully verifies updates at least once per day. Rel.AI asks before it downloads an update or restarts.'),
     action: { id: 'check', label: 'Check for updates', className: 'secondary' }
   };
 }
@@ -268,16 +315,14 @@ function renderFailure(container, message, installedReleaseNotes = null) {
   renderStatus(container, { state: 'error', error: message, errorCode: 'update_failed' }, installedReleaseNotes);
 }
 
-function formatBytes(value) {
-  let bytes = Number(value || 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let unit = 0;
-  while (bytes >= 1024 && unit < units.length - 1) {
-    bytes /= 1024;
-    unit += 1;
+function syncToggle(toggle, enabled, labels) {
+  const input = toggle?.querySelector('input');
+  const label = toggle?.querySelector('.toggle-label');
+  if (input) {
+    input.checked = enabled;
+    input.setAttribute('aria-checked', String(enabled));
   }
-  return `${bytes >= 10 || unit === 0 ? bytes.toFixed(0) : bytes.toFixed(1)} ${units[unit]}`;
+  if (label) label.textContent = enabled ? labels.enabled : labels.disabled;
 }
 
 function messageOf(error) {

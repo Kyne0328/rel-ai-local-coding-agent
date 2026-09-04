@@ -21,7 +21,8 @@ import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { selectRelevantSkills } from '../skillDiscovery.js';
-import { buildTaskContinuity } from '../context/taskContinuity.js';
+import { buildTaskContinuity, rankBootstrapGroups } from '../context/taskContinuity.js';
+import { knowledgeSettings } from '../knowledgeStore.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 import { createReviewCheckpoint, replayReviewCheckpoint } from '../reviewCheckpoints.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args, context) => {
@@ -46,23 +47,26 @@ const startTaskHandler = inWorkspace(async (workspace, config, args, context) =>
     excludeTaskId: task.work_id,
     conversationId: context?.conversationId
   });
+  const supplemental = rankBootstrapGroups(taskQuery, {
+    suggestedSkills,
+    relatedTasks,
+    ...continuity
+  }, knowledgeSettings(config).maxBootstrapBytes);
   const baseBootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
+  let cachedIntelligence = null;
+  try {
+    cachedIntelligence = bootstrapMode === 'full'
+      ? await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 })
+      : await repositoryIntelligence.cachedSummary(workspace, config);
+  } catch {}
   const bootstrap = {
     ...baseBootstrap,
-    ...(suggestedSkills.length ? { suggestedSkills } : {}),
-    ...(relatedTasks.length ? { relatedTasks } : {}),
+    ...supplemental,
     ...(hostContextSummary ? { hostContextSummary } : {}),
-    ...continuity
+    ...(cachedIntelligence ? { repositoryIntelligence: cachedIntelligence } : {})
   };
   if (bootstrapMode === 'full') {
-    let cachedIntelligence = null;
-    try {
-      cachedIntelligence = await repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
-    } catch {}
-    const result = {
-      ...task,
-      bootstrap: cachedIntelligence ? { ...bootstrap, repositoryIntelligence: cachedIntelligence } : bootstrap
-    };
+    const result = { ...task, bootstrap };
     scheduleIntelligenceWarmup(workspace, config);
     return result;
   }
@@ -72,6 +76,7 @@ const startTaskHandler = inWorkspace(async (workspace, config, args, context) =>
 });
 
 function scheduleIntelligenceWarmup(workspace, config) {
+  if (process.env.REL_AI_REDUCED_BACKGROUND_WORK === '1') return;
   const timer = setNodeTimeout(() => {
     void repositoryIntelligence.ensure(workspace, config, { watch: false }).catch(() => {});
   }, 0);
@@ -166,10 +171,14 @@ function withTaskOwnedReviewContext(config, workspace, args, context = {}) {
   const taskId = String(context.taskId || args.work_id || '').trim();
   if (!taskId) return args;
   const requestState = requestTaskState(context, taskId);
-  const owned = Array.isArray(requestState?.integrity?.taskOwnedChangedFiles)
-    ? [...requestState.integrity.taskOwnedChangedFiles]
-    : taskOwnedChangedFiles(config, taskId, workspace.alias);
-  return { ...args, _taskOwnedPaths: owned };
+  if (Array.isArray(requestState?.integrity?.taskOwnedChangedFiles)) {
+    return { ...args, _taskOwnedPaths: [...requestState.integrity.taskOwnedChangedFiles] };
+  }
+  try {
+    return { ...args, _taskOwnedPaths: taskOwnedChangedFiles(config, taskId, workspace.alias) };
+  } catch {
+    return args;
+  }
 }
 
 function withTaskOwnedCommitContext(config, workspace, args, context = {}) {

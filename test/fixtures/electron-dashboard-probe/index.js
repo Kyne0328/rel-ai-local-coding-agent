@@ -142,20 +142,20 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
   await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
   await win.webContents.executeJavaScript(`document.querySelector('.task-row')?.click()`);
-  await waitFor(win, `document.querySelector('.session-detail-drawer .session-detail')`);
+  await waitFor(win, `document.querySelector('[data-session-inspector] .session-detail')`);
   const taskInteraction = await win.webContents.executeJavaScript(`(() => {
-    const dialog = document.querySelector('.session-detail-drawer');
-    const detail = dialog?.querySelector('.session-detail');
+    const inspector = document.querySelector('[data-session-inspector]');
+    const detail = inspector?.querySelector('.session-detail');
     return {
-      dialog: dialog?.getAttribute('role') === 'dialog',
+      inspector: Boolean(inspector && detail),
+      selectedRow: Boolean(document.querySelector('.task-row.is-selected')),
+      tabs: detail?.querySelectorAll('[data-session-tab]').length || 0,
       detailText: detail?.textContent || '',
       workSessionId: /Work session ID/.test(detail?.textContent || ''),
       processId: /Process ID/.test(detail?.textContent || ''),
       eventLinks: detail?.querySelectorAll('.task-event-link').length || 0
     };
   })()`);
-  await win.webContents.executeJavaScript(`document.querySelector('.session-detail-drawer .drawer-head button')?.click()`);
-  await waitFor(win, `!document.querySelector('.session-detail-drawer')`);
 
   await win.webContents.setZoomFactor(1);
   win.setSize(1600, 900);
@@ -227,17 +227,18 @@ app.whenReady().then(async () => {
   await delay(50);
   const afterFocus = await win.webContents.executeJavaScript(`({tag: document.activeElement?.tagName || '', className: document.activeElement?.className || ''})`);
   await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .activity-row-button')?.click()`);
-  await waitFor(win, `document.querySelector('.drawer-panel .activity-detail-head')`);
+  await waitFor(win, `document.querySelector('[data-activity-inspector] .activity-detail-head')`);
   const activityInteraction = await win.webContents.executeJavaScript(`(() => {
-    const detail = document.querySelector('.drawer-panel .activity-detail-head');
-    const pre = document.querySelector('.drawer-panel .detail-pre');
+    const inspector = document.querySelector('[data-activity-inspector]');
+    const detail = inspector?.querySelector('.activity-detail-head');
+    const pre = inspector?.querySelector('.detail-pre');
     return {
       expanded: Boolean(detail),
-      copyButton: Boolean([...document.querySelectorAll('.drawer-panel button')].find(button => /copy event json/i.test(button.textContent))),
+      selectedRow: Boolean(document.querySelector('.activity-table tbody tr.is-selected')),
+      copyButton: Boolean([...inspector.querySelectorAll('button')].find(button => /copy event json/i.test(button.textContent))),
       errorWrapped: pre ? getComputedStyle(pre).overflowWrap !== 'normal' : false
     };
   })()`);
-  await win.webContents.executeJavaScript(`document.querySelector('.drawer-panel .drawer-head button')?.click()`);
   await waitFor(win, `!document.querySelector('#__relai-drawer-backdrop')`);
   await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
   await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
@@ -308,7 +309,18 @@ app.whenReady().then(async () => {
       };
     })()`);
     await win.webContents.executeJavaScript(`location.hash = '#activity'`);
-    await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-button')`);
+    try {
+      await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-button')`);
+    } catch (error) {
+      const activityDebug = await win.webContents.executeJavaScript(`(() => ({
+        hash: location.hash,
+        table: Boolean(document.querySelector('.activity-table')),
+        bodyText: document.getElementById('__activity-tbody')?.textContent.trim() || '',
+        count: document.getElementById('__activity-count')?.textContent.trim() || '',
+        summary: document.querySelector('#__activity-filter-bar .filter-summary')?.textContent.trim() || ''
+      }))()`);
+      throw new Error(`${error.message}; scenario=${scenario.name}; activity=${JSON.stringify(activityDebug)}`);
+    }
     const activityMeasurement = await win.webContents.executeJavaScript(`(() => {
       const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
       if (wrap) wrap.scrollLeft = 0;

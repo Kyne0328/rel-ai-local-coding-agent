@@ -171,8 +171,11 @@ assert.deepEqual(resolvedKeys.sort(), discoveredKeys.sort(), 'every discovered p
 assert.ok(approvalRequirement('relai_changes', { action: 'reset', work_id: 'work_contract', confirmation: 'RESET' }), 'workspace reset must remain approval-gated');
 assert.ok(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract' }), 'Git push must remain approval-gated');
 assert.equal(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract', dryRun: true }), null, 'Git push dry-run must not request destructive approval');
-assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit' }), null, 'scoped commit should not require extra approval');
-assert.ok(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', addAll: true }), 'commit --all must remain approval-gated');
+assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit' }), null, 'implicit task-owned commit should not require extra approval');
+assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', paths: ['src/selected.js'] }), null, 'explicit local commit scope must not require a second approval prompt');
+assert.equal(approvalRequirement('relai_publish', { action: 'commit', message: 'Taskless explicit commit', paths: ['src/selected.js'] }), null, 'taskless explicit local commits must execute without dashboard approval');
+assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', addAll: true }), null, 'explicit addAll local commits must not require dashboard approval');
+assert.equal(approvalRequirement('relai_publish', { action: 'commit', message: 'Sensitive commit', paths: ['secret.txt'], sensitiveAuthorization: { operation: 'commit', paths: ['secret.txt'], reason: 'User explicitly requested this local commit.' } }), null, 'sensitiveAuthorization is the explicit local commit authorization and must not trigger a second approval layer');
 
 console.log(`Dynamic public contract parity passed for ${definitions.length} tools and ${catalog.length} actions.`);
 

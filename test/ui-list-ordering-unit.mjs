@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { orderToolsForCatalog, toolCapabilities } from '../src/ui/features/tools/index.js';
 import { getToolMetadata } from '../src/tools/surface.js';
 import { orderChangedFiles, orderSessionsForDisplay } from '../src/ui/features/sessions/index.js';
+import { timeAgo } from '../src/ui/utils.js';
 import { orderWorkspacesAlphabetically } from '../src/ui/components/workspace-menu.js';
 import { orderOverviewTasks, orderOverviewWorkspaces } from '../src/ui/features/home/index.js';
 import { sortEntries as orderActivityEntries } from '../src/ui/features/activity/index.js';
@@ -69,8 +70,8 @@ assert.deepEqual(orderSessionsForDisplay([
   { id: 'failed-middle', status: 'failed', endedAt: '2026-07-25T12:03:00.000Z' },
   { id: 'inactive-oldest', status: 'inactive', endedAt: '2026-07-25T12:00:00.000Z' }
 ]).map(session => session.id), [
-  'working-older',
   'waiting-newer',
+  'working-older',
   'completed-newest',
   'failed-middle',
   'inactive-oldest'
@@ -79,9 +80,15 @@ const stableOngoing = [
   { id: 'first-open', status: 'planning', state: 'waiting', activeCalls: 0, startedAt: '2026-07-25T10:00:00.000Z', updatedAt: '2026-07-25T10:05:00.000Z' },
   { id: 'second-working', status: 'working', state: 'working', activeCalls: 1, startedAt: '2026-07-25T10:01:00.000Z', updatedAt: '2026-07-25T10:02:00.000Z' }
 ];
-assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.id), ['first-open', 'second-working']);
+assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.id), ['second-working', 'first-open']);
 stableOngoing[1].updatedAt = '2026-07-25T10:10:00.000Z';
-assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.id), ['first-open', 'second-working'], 'ongoing task activity must not reorder stable task rows');
+assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.id), ['second-working', 'first-open'], 'ongoing task activity must not reorder rows after their start time is established');
+assert.deepEqual(orderSessionsForDisplay([
+  { id: 'completed', status: 'completed', completedAt: '2026-07-25T12:03:00.000Z' },
+  { id: 'cancelled', status: 'cancelled', cancelledAt: '2026-07-25T12:05:00.000Z' },
+  { id: 'inactive', status: 'inactive', inactiveAt: '2026-07-25T12:04:00.000Z' }
+]).map(session => session.id), ['cancelled', 'inactive', 'completed'], 'terminal and inactive rows must sort by their actual end/inactivity timestamps');
+assert.equal(timeAgo(Date.parse('2026-07-25T12:00:00.000Z'), Date.parse('2026-07-25T12:05:00.000Z')), '5m ago', 'relative time must support numeric epoch timestamps used by historical task records');
 assert.deepEqual(orderOverviewTasks(sessions).map(session => session.id), ['newer', 'older', 'invalid']);
 assert.deepEqual(orderActivityEntries([
   { id: 'older', ts: '2026-07-25T10:00:00.000Z' },

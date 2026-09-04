@@ -27,10 +27,11 @@ function executableActionBranch(branch, catalogTool, fallbackTaskScope) {
 }
 
 function applyTaskScope(required, taskScope) {
-  if (taskScope !== 'required') return;
-  const workspaceIndex = required.indexOf('workspace');
-  if (workspaceIndex >= 0) required.splice(workspaceIndex, 1);
-  if (!required.includes('work_id')) required.push('work_id');
+  if (taskScope === 'required' || taskScope === 'optional') {
+    const workspaceIndex = required.indexOf('workspace');
+    if (workspaceIndex >= 0) required.splice(workspaceIndex, 1);
+  }
+  if (taskScope === 'required' && !required.includes('work_id')) required.push('work_id');
 }
 
 function zodJsonSchema(schema) {

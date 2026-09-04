@@ -1,5 +1,4 @@
 import { fetchJson } from '../../api.js';
-import { closeDrawer, openDrawer } from '../../components/drawer.js';
 import { createFilterBar } from '../../components/filter-bar.js';
 import { filterRadioField, filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
 import { setStateIconButton, stateIconButton } from '../../components/state-icon-button.js';
@@ -69,13 +68,14 @@ export function mountActivity(container, data = {}) {
   _filterState.timeRange = ['15m', '1h', '24h', '7d', 'all'].includes(requestedRange) ? requestedRange : '1h';
   _virtualizer?.destroy();
   _virtualizer = null;
-  _allEntries = [];
+  const initialEntries = replaceActivityHistory(data.auditTail?.entries || []);
+  _allEntries = initialEntries;
   _paused = false;
   _pausedEntries = [];
   _liveEntriesSinceLoad = [];
   _historyLoading = true;
   _loadError = '';
-  _entriesRevision = 0;
+  _entriesRevision = initialEntries.length ? 1 : 0;
   _renderedTableKey = '';
   _nextExpiryAt = Number.POSITIVE_INFINITY;
   _historyRenderPending = false;
@@ -83,6 +83,7 @@ export function mountActivity(container, data = {}) {
   bindClockListener();
   container.innerHTML = '';
   container.appendChild(buildActivity());
+  updateFilterOptions();
   renderFilteredTable();
   void loadLogs(token, { mode: 'replace' });
 }
@@ -204,7 +205,7 @@ function buildActivity() {
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-task"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Action</th><th scope="col" class="activity-task-column">Task</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="activity-master-detail"><div class="activity-list-pane"><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-task"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Action</th><th scope="col" class="activity-task-column">Task</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div></div><aside class="activity-inspector" data-activity-inspector><div class="inspector-empty"><strong>Select an activity</strong><span>Choose an event to inspect its result, task context, and technical details without leaving the activity stream.</span></div></aside></div>';
   root.append(toolbar, tableCard);
   queueMicrotask(() => renderActivityFilterBar(root));
   return root;
@@ -623,6 +624,18 @@ function renderActivityRow(entry) {
     </td>
     <td class="activity-action-column"><button class="secondary activity-row-button" type="button" data-focus-key="activity-${esc(eventId)}" aria-label="${esc(activityActionLabel(entry))}">Open</button></td>`;
   row.querySelector('.activity-row-button')?.addEventListener('click', () => openDetail(entry));
+  row.tabIndex = 0;
+  row.setAttribute('role', 'button');
+  row.setAttribute('aria-label', activityActionLabel(entry));
+  row.addEventListener('click', event => {
+    if (event.target.closest('button, a')) return;
+    openDetail(entry);
+  });
+  row.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openDetail(entry);
+  });
   return row;
 }
 
@@ -655,7 +668,6 @@ function openDetail(entry) {
     const context = document.createElement('section');
     context.className = 'activity-detail-section activity-session-context';
     context.innerHTML = `<h3>Task</h3><strong>${esc(session.title)}</strong><span>${esc([session.workspace, session.shortId].filter(Boolean).join(' · '))}</span><div class="activity-session-actions"><a class="buttonlike secondary" href="${routeHref('tasks', { workspace: session.workspace || entry.workspace, task: session.id })}">Open task</a><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace || entry.workspace, task: session.id, time: 'all' })}">Show only this task</a></div>`;
-    for (const link of context.querySelectorAll('a')) link.addEventListener('click', closeDrawer);
     content.appendChild(context);
   }
 
@@ -709,8 +721,17 @@ function openDetail(entry) {
   };
   technical.appendChild(copyButton);
   content.appendChild(technical);
-
-  openDrawer({ title: entry.title || entry.operation || toolName(entry) || 'Activity detail', content });
+  const inspector = document.querySelector('[data-activity-inspector]');
+  if (!inspector) return;
+  const heading = document.createElement('div');
+  heading.className = 'activity-inspector-head';
+  heading.innerHTML = `<span class="overview-kicker">Activity</span><h2>${esc(entry.title || entry.operation || toolName(entry) || 'Activity detail')}</h2>`;
+  inspector.replaceChildren(heading, content);
+  inspector.scrollTop = 0;
+  const selectedId = activityEventId(entry);
+  for (const row of document.querySelectorAll('#__activity-tbody tr')) {
+    row.classList.toggle('is-selected', row.querySelector('[data-focus-key]')?.dataset.focusKey === `activity-${selectedId}`);
+  }
 }
 
 function appendReadableSection(container, title, value, className = '') {

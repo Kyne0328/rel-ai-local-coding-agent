@@ -14,7 +14,7 @@ assert.deepEqual(WORK_NAV_ITEMS.map(item => item.label), ['Overview', 'Tasks', '
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.label), ['Running commands', 'Troubleshooting', 'ChatGPT tools', 'Analytics']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.label), ['System', 'Settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.label), ['Overview', 'Tasks', 'Changes', 'Projects', 'Activity', 'System', 'Settings']);
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'General', 'App', 'About']);
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'Preferences', 'Memory & learning', 'App', 'About']);
 
 for (const code of [ERROR_CODES.CONFIGURATION_INVALID, ERROR_CODES.LOCAL_PORT_IN_USE, ERROR_CODES.SECURE_TUNNEL_FAILED, ERROR_CODES.TUNNEL_AUTHENTICATION_FAILED, ERROR_CODES.TUNNEL_ACCESS_DENIED, ERROR_CODES.TUNNEL_NOT_FOUND, ERROR_CODES.PUBLIC_ENDPOINT_FAILED]) assert.equal(errorGuidance(code).href, '#settings/connection');
 assert.equal(errorGuidance(ERROR_CODES.DIAGNOSTICS_UNAVAILABLE).href, '#settings/connection');

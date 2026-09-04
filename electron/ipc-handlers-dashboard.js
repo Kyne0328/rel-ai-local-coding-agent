@@ -10,6 +10,7 @@ function registerDesktopSettingsIpc({
   getLifecycleStatus,
   setLaunchAtLogin,
   setKeepAwake,
+  setAppPreferences,
   getNotificationsEnabled,
   setNotificationsEnabled,
   getNotificationPreferences,
@@ -20,6 +21,7 @@ function registerDesktopSettingsIpc({
   ipcMain.handle('desktop:lifecycle:get', event => dashboardOnly(event, getLifecycleStatus));
   ipcMain.handle('desktop:startup:set', (event, enabled) => dashboardOnly(event, () => setLaunchAtLogin(enabled)));
   ipcMain.handle('desktop:keep-awake:set', (event, enabled) => dashboardOnly(event, () => setKeepAwake(enabled)));
+  ipcMain.handle('desktop:app-preferences:set', (event, patch) => dashboardOnly(event, () => setAppPreferences(patch)));
   ipcMain.handle('desktop:notifications:get', event => dashboardOnly(event, () => ({ ok: true, enabled: getNotificationsEnabled() })));
   ipcMain.handle('desktop:notifications:set', (event, enabled) => dashboardOnly(event, () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
   ipcMain.handle('desktop:notification-preferences:get', event => dashboardOnly(event, () => ({ ok: true, preferences: getNotificationPreferences() })));
@@ -38,10 +40,16 @@ function registerDiagnosticsIpc({ ipcMain, dashboardOnly, exportDiagnosticState,
   ipcMain.handle('desktop:diagnostics:open-folder', event => dashboardOnly(event, openDiagnosticsFolder));
 }
 
+function registerLocalDataIpc({ ipcMain, dashboardOnly, getLocalDataUsage, clearTemporaryLocalData, openLocalDataFolder }) {
+  ipcMain.handle('desktop:local-data:get', event => dashboardOnly(event, getLocalDataUsage));
+  ipcMain.handle('desktop:local-data:clear-temporary', event => dashboardOnly(event, clearTemporaryLocalData));
+  ipcMain.handle('desktop:local-data:open-folder', event => dashboardOnly(event, openLocalDataFolder));
+}
+
 function normalizeAnalyticsMonth(month) {
   const value = String(month || '').trim();
   if (value && !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new Error('Analytics month must use YYYY-MM.');
   return value;
 }
 
-export { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerUpdaterIpc };
+export { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerLocalDataIpc, registerUpdaterIpc };

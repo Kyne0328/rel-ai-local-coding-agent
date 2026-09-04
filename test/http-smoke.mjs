@@ -44,6 +44,17 @@ try {
   await dashboardLogin.arrayBuffer();
   const dashboardHeaders = { cookie: dashboardCookie };
 
+  const analyticsResetResponse = await fetch(`${base}/api/diagnostics/reset`, {
+    method: 'POST',
+    headers: { ...dashboardHeaders, 'content-type': 'application/json' },
+    body: JSON.stringify({ target: 'analytics', confirm: true })
+  });
+  assert.equal(analyticsResetResponse.status, 200, 'dashboard analytics reset must accept the explicit analytics target');
+  const analyticsReset = await analyticsResetResponse.json();
+  assert.equal(analyticsReset.ok, true);
+  assert.equal(analyticsReset.target, 'analytics');
+  assert.equal(analyticsReset.message, 'Local analytics cleared.');
+
   const uncompressed = await fetch(`${base}/api/tools`, { headers: { ...dashboardHeaders, 'accept-encoding': 'gzip' } });
   assert.equal(uncompressed.headers.get('content-encoding'), null, 'Rel.AI JSON responses must stay uncompressed even when a local client advertises gzip');
   const uncompressedTools = await uncompressed.json();

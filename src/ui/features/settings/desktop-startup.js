@@ -3,10 +3,12 @@ import { panel, toggleControl, toggleRow } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 
 const LAUNCH_TOGGLE_LABELS = Object.freeze({ enabled: 'Launch at sign-in on', disabled: 'Launch at sign-in off' });
+const CLOSE_TOGGLE_LABELS = Object.freeze({ enabled: 'Keep running on close', disabled: 'Quit on close' });
 const KEEP_AWAKE_TOGGLE_LABELS = Object.freeze({ enabled: 'Keep computer awake on', disabled: 'Keep computer awake off' });
+const REDUCED_WORK_TOGGLE_LABELS = Object.freeze({ enabled: 'Reduced background work on', disabled: 'Reduced background work off' });
 
 export function desktopStartupPanel(lifecycle) {
-  const startup = panel('Startup');
+  const startup = panel('Startup & background');
   startup.el.classList.add('desktop-startup-panel');
   startup.body.setAttribute('aria-live', 'polite');
   if (!lifecycle) {
@@ -28,11 +30,29 @@ export function desktopStartupPanel(lifecycle) {
       : launchAtLogin.reason || 'This build cannot register itself for Windows sign-in.'
   ));
 
+  const closeToggle = toggleControl(lifecycle.keepRunningOnClose !== false, enabled => {
+    void setAppPreference(startup.body, closeToggle, 'keepRunningOnClose', enabled, CLOSE_TOGGLE_LABELS, 'Close-window behavior could not be changed.');
+  }, CLOSE_TOGGLE_LABELS);
+  startup.body.appendChild(toggleRow(
+    'Keep Rel.AI running when I close the window',
+    closeToggle,
+    'Keeps the local ChatGPT connection available in the system tray. Turn this off if closing the dashboard should quit Rel.AI completely.'
+  ));
+
   const keepAwakeToggle = toggleControl(lifecycle.keepAwake === true, enabled => setKeepAwake(startup.body, keepAwakeToggle, enabled), KEEP_AWAKE_TOGGLE_LABELS);
   startup.body.appendChild(toggleRow(
     'Keep computer awake',
     keepAwakeToggle,
     'Prevents this computer from automatically sleeping or hibernating while Rel.AI is running. The display can still turn off normally.'
+  ));
+
+  const reducedWorkToggle = toggleControl(lifecycle.reducedBackgroundWork === true, enabled => {
+    void setAppPreference(startup.body, reducedWorkToggle, 'reducedBackgroundWork', enabled, REDUCED_WORK_TOGGLE_LABELS, 'Reduced background work could not be changed.');
+  }, REDUCED_WORK_TOGGLE_LABELS);
+  startup.body.appendChild(toggleRow(
+    'Reduced background work',
+    reducedWorkToggle,
+    'Skips optional repository pre-warming to reduce idle CPU and memory use. Repository analysis still runs normally when a task needs it.'
   ));
 
   if (lifecycle.updated) {
@@ -69,6 +89,22 @@ async function setLaunchAtLogin(container, toggle, enabled) {
     syncToggle(toggle, actual, LAUNCH_TOGGLE_LABELS);
   } catch (error) {
     syncToggle(toggle, !enabled, LAUNCH_TOGGLE_LABELS);
+    toast(messageOf(error), { variant: 'error' });
+  } finally {
+    container.removeAttribute('aria-busy');
+  }
+}
+
+async function setAppPreference(container, toggle, key, enabled, labels, fallbackError) {
+  if (typeof window.relaiDesktop?.setAppPreferences !== 'function') return;
+  container.setAttribute('aria-busy', 'true');
+  try {
+    const result = await window.relaiDesktop.setAppPreferences({ [key]: enabled });
+    const actual = result?.status?.[key] === true;
+    syncToggle(toggle, actual, labels);
+    if (result?.ok === false) toast(result.error || fallbackError, { variant: 'error' });
+  } catch (error) {
+    syncToggle(toggle, !enabled, labels);
     toast(messageOf(error), { variant: 'error' });
   } finally {
     container.removeAttribute('aria-busy');

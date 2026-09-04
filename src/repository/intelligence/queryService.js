@@ -12,6 +12,7 @@ import { rankWithGraphDiffusion } from './graphDiffusion.js';
 import { queryTerms, simpleSymbol } from './languages.js';
 import { searchZoekt } from './zoekt.js';
 import { searchGitCandidates } from './lexicalFallback.js';
+import { learnedValidationChecks } from '../../knowledgeStore.js';
 
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
@@ -74,8 +75,10 @@ async function executeCodeInspectQuery(workspace, config, args = {}, index = {},
     if (action === 'references') return { ...base, symbol, definitions, ...references };
 
     const impact = impactAnalysis(workspace, db, symbol, definitions, references, args, maxResults);
-    if (action === 'trace') return { ...base, symbol, ...traceAnalysis(db, symbol, definitions, references, impact, maxResults) };
-    return { ...base, ...(symbol ? { symbol } : {}), ...impact };
+    const learnedValidationCommands = learnedValidationChecks(config, workspace.alias, impact.impactedPaths.map(item => item.path), { limit: 8 });
+    const learnedValidation = learnedValidationCommands.length ? { validationCommands: { learned: learnedValidationCommands } } : {};
+    if (action === 'trace') return { ...base, symbol, ...traceAnalysis(db, symbol, definitions, references, impact, maxResults), ...learnedValidation };
+    return { ...base, ...(symbol ? { symbol } : {}), ...impact, ...learnedValidation };
   } finally {
     if (closeDatabase) db.close();
   }

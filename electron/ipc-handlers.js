@@ -1,5 +1,5 @@
 import { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, logIpcFailure } from './ipc-security.js';
-import { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerUpdaterIpc } from './ipc-handlers-dashboard.js';
+import { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerLocalDataIpc, registerUpdaterIpc } from './ipc-handlers-dashboard.js';
 import { registerCodeWorkspaceIpc } from './ipc-handlers-code.js';
 
 const OPENAI_SETUP_URLS = Object.freeze({
@@ -63,6 +63,7 @@ function registerIpcHandlers(deps) {
     getLifecycleStatus: deps.getLifecycleStatus,
     setLaunchAtLogin: deps.setLaunchAtLogin,
     setKeepAwake: deps.setKeepAwake,
+    setAppPreferences: deps.setAppPreferences,
     getNotificationsEnabled: deps.getNotificationsEnabled,
     setNotificationsEnabled: deps.setNotificationsEnabled,
     getNotificationPreferences: deps.getNotificationPreferences,
@@ -81,6 +82,13 @@ function registerIpcHandlers(deps) {
     dashboardOnly,
     exportDiagnosticState: deps.exportDiagnosticState,
     openDiagnosticsFolder: deps.openDiagnosticsFolder
+  });
+  registerLocalDataIpc({
+    ipcMain: deps.ipcMain,
+    dashboardOnly,
+    getLocalDataUsage: deps.getLocalDataUsage,
+    clearTemporaryLocalData: deps.clearTemporaryLocalData,
+    openLocalDataFolder: deps.openLocalDataFolder
   });
   registerCodeWorkspaceIpc({
     ipcMain: deps.ipcMain,

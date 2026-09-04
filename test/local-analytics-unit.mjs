@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot, readLocalUsageSnapshotAsync } from '../src/localAnalytics.js';
+import { LOCAL_ANALYTICS_RETENTION_DAYS, clearLocalAnalytics, flushLocalAnalytics, pruneLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot, readLocalUsageSnapshotAsync } from '../src/localAnalytics.js';
 import { failureCategoryFromCode } from '../src/analyticsFailureCategory.js';
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-local-analytics-'));
@@ -14,6 +14,11 @@ try {
 
   const snapshot = readLocalUsageSnapshot(config, '2026-08');
   assert.equal(snapshot.source, 'local');
+  assert.deepEqual(snapshot.privacy, {
+    retentionDays: LOCAL_ANALYTICS_RETENTION_DAYS,
+    externalTelemetry: { enabled: false, endpointConfigured: false, sampleRatio: 1 }
+  });
+  assert.equal(LOCAL_ANALYTICS_RETENTION_DAYS, 180);
   assert.deepEqual(snapshot.totals, {
     requests: 3, toolCalls: 3, successes: 2, failures: 1,
     reliabilityCalls: 3, reliableCalls: 3, infrastructureFailures: 0,
@@ -47,6 +52,20 @@ try {
   assert.equal(readLocalUsageSnapshot(config, '2026-08').totals.toolCalls, 3, 'the runtime aggregate path may retain its process-local write cache');
   const freshSnapshot = await readLocalUsageSnapshotAsync(config, '2026-08');
   assert.equal(freshSnapshot.totals.toolCalls, 9, 'desktop analytics reads must bypass another process cache and observe persisted state');
+
+  const oldAnalyticsFile = path.join(stateDir, 'analytics', 'local', '2025-01.json');
+  recordLocalToolOutcome(config, { tool: 'relai_read', workspace: 'repo', ok: true, durationMs: 1, at: '2025-01-15T00:00:00Z' });
+  await flushLocalAnalytics(config);
+  assert.equal(fs.existsSync(oldAnalyticsFile), true, 'old analytics fixture must exercise a persisted in-memory write state');
+  const pruned = await pruneLocalAnalytics(config, { now: new Date('2026-09-04T00:00:00Z') });
+  assert.equal(pruned.removedFiles, 1, 'analytics retention must remove monthly files older than the supported history window');
+  assert.equal(fs.existsSync(oldAnalyticsFile), false);
+  assert.equal(fs.existsSync(analyticsFile), true, 'retention must preserve analytics inside the supported history window');
+
+  const cleared = await clearLocalAnalytics(config);
+  assert.equal(cleared.ok, true);
+  assert.ok(cleared.removedFiles >= 1);
+  assert.equal(readLocalUsageSnapshot(config, '2026-08').totals.toolCalls, 0, 'clearing analytics must invalidate process-local caches as well as files');
 } finally {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }

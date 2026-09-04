@@ -90,6 +90,19 @@ export function toggleRow(label, control, help = '') {
   return wrapper;
 }
 
+export function formatBytes(value, { zero = false } = {}) {
+  let bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes < 0) bytes = 0;
+  if (bytes === 0) return zero ? '0 B' : '';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let unit = 0;
+  while (bytes >= 1024 && unit < units.length - 1) {
+    bytes /= 1024;
+    unit += 1;
+  }
+  return `${bytes >= 10 || unit === 0 ? bytes.toFixed(0) : bytes.toFixed(1)} ${units[unit]}`;
+}
+
 export function numberControl(value, onChange, { min = 0, max = 1000000, step = 1 } = {}) {
   const element = document.createElement('input');
   element.className = 'settings-number-control';

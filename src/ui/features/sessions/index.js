@@ -1,5 +1,4 @@
 import { fetchJson, postJson } from '../../api.js';
-import { closeDrawer, openDrawer, updateDrawer } from '../../components/drawer.js';
 import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
 import { toast } from '../../components/toast.js';
@@ -49,6 +48,8 @@ export function mountTasks(container, data = {}) {
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
   card.innerHTML = '<div class="card-head"><div><h3>Recent tasks</h3></div><div class="card-head-actions"><a class="section-action" href="#activity">Activity</a><a class="section-action" href="#diagnostics">Troubleshooting</a></div></div>';
+  const workspaceShell = document.createElement('div');
+  workspaceShell.className = 'sessions-master-detail';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   renderSessionRows(body, sessions, scopeKey);
@@ -63,7 +64,12 @@ export function mountTasks(container, data = {}) {
     if (!button) return;
     void openSession(_sessionsById.get(button.dataset.taskId));
   });
-  card.appendChild(body);
+  const inspector = document.createElement('aside');
+  inspector.className = 'session-inspector';
+  inspector.dataset.sessionInspector = '';
+  inspector.innerHTML = '<div class="inspector-empty"><strong>Select a task</strong><span>Choose a task to inspect its overview, activity, and technical details without leaving this page.</span></div>';
+  workspaceShell.append(body, inspector);
+  card.appendChild(workspaceShell);
   root.appendChild(card);
   container.appendChild(root);
   bindWorkspaceMenus(root);
@@ -428,8 +434,15 @@ async function openSession(session) {
   session = mergeSessionDetail(session, _sessionsById.get(requestedId));
   _openSessionDetail = session;
   _openSessionFingerprint = sessionDetailFingerprint(session);
-  const { title, content } = buildSessionDetail(session);
-  openDrawer({ title, content, panelClass: 'session-detail-drawer', onClose: clearOpenSessionState });
+  const { content } = buildSessionDetail(session);
+  const inspector = document.querySelector('[data-session-inspector]');
+  if (!inspector) return;
+  inspector.replaceChildren(content);
+  inspector.scrollTop = 0;
+  for (const row of document.querySelectorAll('.task-row[data-task-id]')) {
+    row.classList.toggle('is-selected', row.dataset.taskId === requestedId);
+    row.setAttribute('aria-current', row.dataset.taskId === requestedId ? 'true' : 'false');
+  }
 }
 
 function buildSessionDetail(session) {
@@ -446,28 +459,42 @@ function buildSessionDetail(session) {
     ? (semantic.currentActivity || operationValue || 'Task is open.')
     : (session.summary || session.endReason || sessionDescription(session, false, operationValue, semantic));
 
+  const taskActivity = taskTraceSection(session.trace, session.events || [], session);
   content.innerHTML = `
     <header class="task-detail-header">
       <div><span class="overview-kicker">Task</span><h2>${esc(session.title || operationValue)}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
       ${statusPill(state.label, state.pillClass)}
     </header>
-    <div class="task-detail-current${sessionNeedsAttention(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
-    <div class="task-detail-grid task-detail-facts">
-      ${detail('Project', session.workspace || '—')}
-      ${durationDetail(session, live)}
-      ${detail('Tool calls', session.toolCallCount ?? session.calls ?? 0)}
-      ${detail('Project files', fileCounts.product)}
-      ${fileCounts.support > 0 ? detail('Support artifacts', fileCounts.support) : ''}
+    <div class="inspector-tabs" role="tablist" aria-label="Task details">
+      <button class="inspector-tab is-active" type="button" role="tab" aria-selected="true" data-session-tab="overview">Overview</button>
+      <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-session-tab="activity">Activity</button>
+      <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-session-tab="technical">Technical</button>
     </div>
-    ${attentionSection(session)}
-    ${sessionActionSection(session)}
-    ${taskMilestonesSection(semantic)}
-    ${failureHistorySection(session)}
-    ${changedFilesSection(session.changedFiles || [])}
-    ${technicalDetailsSection(session, identities, state, operationValue, session.events || [])}
-    <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">Open in Activity</a>${session.trace?.entries?.length ? '<button class="secondary" type="button" data-export-task-trace>Export trace (.jsonl)</button>' : ''}</div>`;
+    <div class="inspector-panel" data-session-panel="overview">
+      <div class="task-detail-current${sessionNeedsAttention(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
+      <div class="task-detail-grid task-detail-facts">
+        ${detail('Project', session.workspace || '—')}
+        ${durationDetail(session, live)}
+        ${detail('Tool calls', session.toolCallCount ?? session.calls ?? 0)}
+        ${detail('Project files', fileCounts.product)}
+        ${fileCounts.support > 0 ? detail('Support artifacts', fileCounts.support) : ''}
+      </div>
+      ${attentionSection(session)}
+      ${sessionActionSection(session)}
+      ${taskMilestonesSection(semantic)}
+      ${failureHistorySection(session)}
+      ${changedFilesSection(session.changedFiles || [])}
+    </div>
+    <div class="inspector-panel" data-session-panel="activity" hidden>
+      ${taskActivity || '<div class="inspector-empty compact"><strong>No activity recorded</strong><span>Task activity will appear here as Rel.AI tools run.</span></div>'}
+      <div class="session-inline-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">View in all Activity</a></div>
+    </div>
+    <div class="inspector-panel" data-session-panel="technical" hidden>
+      ${technicalDetailsSection(session, identities, state, operationValue)}
+      ${session.trace?.entries?.length ? '<div class="session-inline-actions"><button class="secondary" type="button" data-export-task-trace>Export trace (.jsonl)</button></div>' : ''}
+    </div>`;
 
-  for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) link.addEventListener('click', closeOpenSession);
+  bindSessionTabs(content);
   bindCopyActions(content);
   bindTraceExportAction(content, session);
   const id = sessionIdentifier(session);
@@ -481,16 +508,34 @@ function refreshOpenSession(data = {}) {
   const next = mergeSessionDetail(_openSessionDetail, summary, data);
   const fingerprint = sessionDetailFingerprint(next);
   if (fingerprint === _openSessionFingerprint) return;
-  const technicalOpen = document.querySelector('.session-detail-drawer .task-detail-technical')?.open === true;
-  const { title, content } = buildSessionDetail(next);
-  const technical = content.querySelector('.task-detail-technical');
-  if (technical) technical.open = technicalOpen;
-  if (!updateDrawer({ title, content })) {
+  const inspector = document.querySelector('[data-session-inspector]');
+  if (!inspector) {
     clearOpenSessionState();
     return;
   }
+  const activeTab = inspector.querySelector('[data-session-tab].is-active')?.dataset.sessionTab || 'overview';
+  const { content } = buildSessionDetail(next);
+  setSessionTab(content, activeTab);
+  inspector.replaceChildren(content);
   _openSessionDetail = next;
   _openSessionFingerprint = fingerprint;
+}
+
+function bindSessionTabs(content) {
+  content.querySelector('.inspector-tabs')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-session-tab]');
+    if (!button) return;
+    setSessionTab(content, button.dataset.sessionTab);
+  });
+}
+
+function setSessionTab(content, tab) {
+  for (const button of content.querySelectorAll('[data-session-tab]')) {
+    const active = button.dataset.sessionTab === tab;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+  for (const panel of content.querySelectorAll('[data-session-panel]')) panel.hidden = panel.dataset.sessionPanel !== tab;
 }
 
 function mergeSessionDetail(previous = {}, summary = {}, data = {}) {
@@ -549,7 +594,12 @@ function clearOpenSessionState() {
 
 function closeOpenSession() {
   clearOpenSessionState();
-  closeDrawer();
+  const inspector = document.querySelector('[data-session-inspector]');
+  if (inspector) inspector.innerHTML = '<div class="inspector-empty"><strong>Select a task</strong><span>Choose a task to inspect its overview, activity, and technical details without leaving this page.</span></div>';
+  for (const row of document.querySelectorAll('.task-row[data-task-id]')) {
+    row.classList.remove('is-selected');
+    row.removeAttribute('aria-current');
+  }
 }
 
 async function loadSessionDetail(session) {
@@ -606,10 +656,9 @@ function failureHistorySection(session) {
   return `<section class="task-detail-section task-detail-history"><h3>${esc(title)}</h3><p>${esc(copy)}</p></section>`;
 }
 
-function technicalDetailsSection(session, identities, state, operationValue, events = []) {
+function technicalDetailsSection(session, identities, state, operationValue) {
   const workflow = workflowTechnicalHtml(session);
-  return `<details class="task-detail-technical">
-    <summary>Technical details</summary>
+  return `<div class="task-detail-technical is-expanded">
     <section class="task-detail-section">
       <div class="task-detail-heading"><h3>Identifiers</h3></div>
       <div class="task-detail-grid">
@@ -630,8 +679,7 @@ function technicalDetailsSection(session, identities, state, operationValue, eve
     </section>
     ${workflow}
     ${currentOperations(session)}
-    ${taskTraceSection(session.trace, events, session)}
-  </details>`;
+  </div>`;
 }
 
 function workflowTechnicalHtml(session = {}) {
@@ -712,7 +760,7 @@ export function orderSessionsForDisplay(sessions = []) {
     const ongoingDifference = Number(rightOngoing) - Number(leftOngoing);
     if (ongoingDifference) return ongoingDifference;
     const timestampDifference = leftOngoing && rightOngoing
-      ? sessionStartTimestamp(left) - sessionStartTimestamp(right)
+      ? sessionStartTimestamp(right) - sessionStartTimestamp(left)
       : terminalTaskTimestamp(right) - terminalTaskTimestamp(left);
     if (timestampDifference) return timestampDifference;
     return sessionIdentifier(left).localeCompare(sessionIdentifier(right), 'en-US', { numeric: true, sensitivity: 'base' });
@@ -720,12 +768,12 @@ export function orderSessionsForDisplay(sessions = []) {
 }
 
 function sessionStartTimestamp(session = {}) {
-  for (const value of [session.startedAtIso, session.startedAt, session.createdAt]) {
+  for (const value of [session.startedAtIso, session.startedAt, session.createdAt, session.lastActivityAt, session.updatedAt]) {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     const parsed = Date.parse(String(value || ''));
     if (Number.isFinite(parsed)) return parsed;
   }
-  return Number.MAX_SAFE_INTEGER;
+  return 0;
 }
 
 function sessionListTimestampValue(session = {}) {

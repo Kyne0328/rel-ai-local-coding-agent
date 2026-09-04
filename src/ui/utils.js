@@ -22,7 +22,7 @@ export function metricHtml(label, value, meta, type) {
 
 
 export function timeAgo(v, now = Date.now()) {
-  const ts = Date.parse(String(v || ''));
+  const ts = typeof v === 'number' && Number.isFinite(v) ? v : Date.parse(String(v || ''));
   if (!Number.isFinite(ts)) return '';
   const m = Math.floor(Math.max(0, now - ts) / 60000);
   if (m < 1) return 'now';

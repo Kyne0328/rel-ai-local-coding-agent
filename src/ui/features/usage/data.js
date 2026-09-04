@@ -26,5 +26,6 @@ export async function loadAnalyticsData(options = {}) {
     end: bounds.previousEnd
   }, { workspace });
   const allCurrent = analyticsRangeScope(models, bounds, { monthlyFallback: true });
-  return { bounds, models, current, previous, allCurrent };
+  const privacy = models.find(model => model?.privacy)?.privacy || null;
+  return { bounds, models, current, previous, allCurrent, privacy };
 }

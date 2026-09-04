@@ -113,12 +113,15 @@ try {
     assert.equal(route.loadingSeen, false, `MCP activity exposed a loading placeholder on #${route.route}: ${JSON.stringify(route)}`);
     assert.deepEqual(route.mainFrameNavigationDelta, { didStartNavigation: 0, didNavigate: 0, didFinishLoad: 0 }, `MCP activity navigated the main frame on #${route.route}`);
   }
-  assert.equal(result.taskInteraction.dialog, true);
+  assert.equal(result.taskInteraction.inspector, true);
+  assert.equal(result.taskInteraction.selectedRow, true);
+  assert.equal(result.taskInteraction.tabs, 3);
   assert.ok(result.taskInteraction.detailText.length > 100);
   assert.equal(result.taskInteraction.workSessionId, true);
   assert.ok(result.taskInteraction.eventLinks > 0, JSON.stringify(result.taskInteraction));
   assert.notEqual(result.keyboard.afterFocus.tag, 'BODY');
   assert.equal(result.activityInteraction.expanded, true);
+  assert.equal(result.activityInteraction.selectedRow, true);
   assert.equal(result.activityInteraction.copyButton, true);
   assert.equal(result.activityInteraction.errorWrapped, true);
   assert.deepEqual(result.activityDesktopGeometry.visibleHeaders, ['Time', 'Action', 'Task', 'Status', 'Message', 'Actions'], JSON.stringify(result.activityDesktopGeometry));

@@ -21,7 +21,7 @@ const usageCss = read('src/ui/features/usage/styles.css');
 const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageData}`;
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Analytics['"]/);
-assert.match(navigationCatalog, /See activity trends, reliability, and where problems happen/i);
+assert.match(navigationCatalog, /See activity trends, reliability, and problem areas/i);
 assert.match(dashboard, /usage: systemSection\(['"]usage['"]\)/, 'Usage must mount through the generation-safe lazy system route wrapper');
 assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.doesNotMatch(preload, /getGatewayUsage|desktop:gateway:usage/);
@@ -32,6 +32,11 @@ assert.match(usageData, /desktop\.getLocalUsage/);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
 assert.match(usageSource, /Analytics are stored on this computer\. Prompts, file paths, command output, and action results are not stored/i);
+assert.match(usageSource, /data-usage-privacy/, 'Analytics must disclose local retention and external telemetry state');
+assert.match(usageSource, /External developer telemetry is off/, 'Analytics must make the default external-telemetry state explicit');
+assert.match(usageSource, /OTLP endpoint is configured, but the telemetry switch is disabled/, 'Analytics must distinguish a configured endpoint from an enabled exporter');
+assert.match(usageSource, /raw exception messages are not exported/, 'Analytics must disclose the external trace redaction boundary');
+assert.match(usageSource, /target: 'analytics', confirm: true/, 'Analytics must expose an explicit local-history clear action');
 assert.match(usageSource, /import \{ esc as escapeHtml \} from '\.\.\/\.\.\/utils\.js'/);
 assert.doesNotMatch(usageSource, /function escapeHtml\(/);
 assert.match(usageRender, /import \{ esc \} from '\.\.\/\.\.\/utils\.js'/);
@@ -47,8 +52,9 @@ assert.match(usageRender, /Peak \$\{formatChartValue\(peak, metricLabel\)\}/, 'A
 assert.match(usageRender, /role="tooltip"/, 'Analytics metric help must expose tooltip semantics');
 assert.match(usageRender, /aria-describedby=/, 'Analytics metric help triggers must reference their tooltip text');
 assert.match(usageRender, /event\.key !== 'Escape'/, 'Analytics metric tooltips must be dismissible with Escape');
-assert.match(usageRender, /percentage points: 90% to 95% is \+5 pp/i, 'Rate help must explain percentage points with an example');
+assert.match(usageRender, /percentage points[\s\S]{0,80}90% to 95% is \+5 pp/i, 'Rate help must explain percentage points with an example');
 assert.match(usageCss, /\.usage-metric-help\.is-open \.usage-metric-tooltip/, 'Analytics metric tooltips must have an explicit visible state');
+assert.match(usageCss, /\.usage-privacy-body/, 'Analytics privacy disclosure must use a stable responsive layout');
 
 const metricRenderTarget = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
 const currentMetricScope = {
@@ -129,6 +135,7 @@ const loaded = await loadAnalyticsData({
     ok: true,
     source: 'local',
     month: '2026-08',
+    privacy: { retentionDays: 180, externalTelemetry: { enabled: false, endpointConfigured: true, sampleRatio: 0.25 } },
     totals: { requests: 2, toolCalls: 2, successes: 2, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 120, activeDays: 1 },
     tools: [], devices: [], workspaces: [{ workspace: 'repo', toolCalls: 2, successes: 2, failures: 0, executionMs: 120 }],
     workspaceDimensions: [{ deviceId: 'local', displayName: 'This device', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 2, successes: 2, failures: 0, executionMs: 120 }],
@@ -141,5 +148,9 @@ const loaded = await loadAnalyticsData({
 });
 assert.equal(loaded.current.toolCalls, 2);
 assert.equal(loaded.current.workspaces[0].workspace, 'repo');
+assert.deepEqual(loaded.privacy, {
+  retentionDays: 180,
+  externalTelemetry: { enabled: false, endpointConfigured: true, sampleRatio: 0.25 }
+});
 
 console.log('Local analytics UI and privacy contracts passed.');

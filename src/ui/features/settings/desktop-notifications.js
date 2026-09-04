@@ -77,16 +77,16 @@ export function desktopNotificationsPanel(initialState = null) {
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'secondary';
-    reset.textContent = `Notify me about v${version} again`;
+    reset.textContent = `Show notifications for v${version} again`;
     reset.disabled = pending;
     reset.addEventListener('click', () => {
       void update({ ignoredUpdateVersion: '' });
     });
     control.append(value, reset);
     return field(
-      'Skipped update',
+      'Muted update notification',
       control,
-      'Only this exact version is ignored. Newer versions can still notify you.'
+      'Notifications for only this exact version are muted. Newer versions can still notify you.'
     );
   }
 

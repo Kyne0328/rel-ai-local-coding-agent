@@ -250,9 +250,9 @@ await publicValid('relai_edit', { work_id: 'work', path: 'README.md' });
 await publicValid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', oldText: 'before', newText: 'after' });
 await publicValid('relai_edit', { work_id: 'work', path: 'artifact.bin', file: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test', mime_type: 'application/octet-stream', file_name: 'artifact.bin' } });
 
-// Discovery still rejects universally invalid shapes: unknown fields, missing
-// universal task/action identity, and wrong primitive types.
-await publicInvalid('relai_search', { action: 'text', pattern: 'needle' });
+// Discovery allows task-optional actions to use an authorized workspace directly,
+// while still rejecting unknown fields and wrong primitive types.
+await publicValid('relai_search', { action: 'text', workspace: 'repo', pattern: 'needle' });
 await publicInvalid('relai_search', { action: 'text', work_id: 'work', unknown: true });
 await publicInvalid('relai_edit', { work_id: 'work', content: 42 });
 await publicInvalid('relai_edit', { work_id: 'work', path: 'artifact.bin', content: { download_url: 'https://files.oaiusercontent.com/download/test', file_id: 'file_test' } });

@@ -4,7 +4,22 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload } from "../electron/app-updater.js";
+import {
+  AUTO_CHECK_DELAY_MS,
+  AUTO_CHECK_INTERVAL_MS,
+  RELEASE_DISCOVERY_INTERVAL_MS,
+  RELEASE_DISCOVERY_MIN_INTERVAL_MS,
+  RELEASE_DISCOVERY_URL,
+  compareVersions,
+  createAppUpdater,
+  detectUpdateSupport,
+  fetchLatestReleaseVersion,
+  isStableVersion,
+  normalizeStatus,
+  parseStableVersion,
+  progressPayload,
+  releaseVersionFromLocation
+} from "../electron/app-updater.js";
 
 class FakeUpdater extends EventEmitter {
   constructor({ checkFailures = [], downloadFailures = [] } = {}) {
@@ -38,7 +53,7 @@ async function waitFor(condition, message, timeoutMs = 2000) {
   }
 }
 
-function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, platform = 'win32', manualMacUpdater = null, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null, lastCheckAt = 0 } = {}) {
+function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, platform = 'win32', manualMacUpdater = null, activeCalls = 0, activeTaskCount = 0, taskState = 'idle', tasks = [], checkFailures = [], downloadFailures = [], currentCompatibility = null, lastCheckAt = 0, fetchImpl = globalThis.fetch, now = () => Date.parse('2026-07-25T00:00:00.000Z'), autoDownloadUpdates = false } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-'));
   roots.push(temp);
   if (lastCheckAt > 0) fs.writeFileSync(path.join(temp, 'update-state.json'), `${JSON.stringify({ lastCheckAt })}\n`);
@@ -58,7 +73,8 @@ function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, p
     platform,
     manualMacUpdater,
     env,
-    now: () => Date.parse('2026-07-25T00:00:00.000Z'),
+    now,
+    fetchImpl,
     setTimer: (callback, delay) => {
       const timer = { callback, delay, unref() {} };
       timers.push(timer);
@@ -68,6 +84,7 @@ function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, p
     getTaskActivity: () => ({ ...activity, tasks: [...activity.tasks] }),
     onStatusChange: status => statuses.push(status),
     onBeforeInstall: () => { beforeInstall += 1; },
+    shouldAutoDownload: () => autoDownloadUpdates,
     retryDelay: async () => {},
     onLog: (message, options) => logs.push({ message, options }),
     currentCompatibility: currentCompatibility || {
@@ -122,6 +139,21 @@ assert.equal(compareVersions('1.2.3', '2.0.0'), -1);
 assert.equal(Number.isNaN(compareVersions('bad', '1.0.0')), true);
 assert.ok(Number.isSafeInteger(AUTO_CHECK_DELAY_MS) && AUTO_CHECK_DELAY_MS >= 0, 'automatic update delay must remain bounded');
 assert.ok(Number.isSafeInteger(AUTO_CHECK_INTERVAL_MS) && AUTO_CHECK_INTERVAL_MS > AUTO_CHECK_DELAY_MS, 'automatic update interval must remain longer than the initial delay');
+assert.ok(RELEASE_DISCOVERY_INTERVAL_MS >= RELEASE_DISCOVERY_MIN_INTERVAL_MS, 'release discovery interval must respect its focus-event throttle');
+assert.ok(RELEASE_DISCOVERY_INTERVAL_MS <= 15 * 60 * 1000, 'new releases must be discovered within the intended short background interval');
+assert.ok(RELEASE_DISCOVERY_MIN_INTERVAL_MS >= 60 * 1000, 'focus-driven discovery must not create request bursts');
+assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml'), '0.27.5');
+assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/v0.27.5/latest.yml'), '0.27.5');
+assert.equal(releaseVersionFromLocation('https://example.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml'), '');
+assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/other.yml'), '');
+let discoveryRequest = null;
+assert.equal(await fetchLatestReleaseVersion(async (url, options) => {
+  discoveryRequest = { url, options };
+  return { status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml' : null } };
+}), '0.27.5');
+assert.equal(discoveryRequest.url, RELEASE_DISCOVERY_URL);
+assert.equal(discoveryRequest.options.method, 'HEAD');
+assert.equal(discoveryRequest.options.redirect, 'manual');
 assert.equal(normalizeStatus({ supported: true, state: 'downloaded', integrityVerified: false }).canInstall, false);
 assert.equal(normalizeStatus({ supported: true, state: 'downloaded', integrityVerified: true }).canInstall, true);
 assert.equal(normalizeStatus({ supported: true, installMode: 'open_dmg' }).installMode, 'open_dmg');
@@ -134,7 +166,11 @@ assert.equal(valid.fake.autoInstallOnAppQuit, false);
 assert.equal(valid.fake.allowPrerelease, false);
 await waitFor(
   () => valid.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
-  'starting the updater must eventually schedule its automatic update check'
+  'starting without a prior full check must schedule the fallback update check'
+);
+await waitFor(
+  () => valid.timers.some(timer => timer.delay === RELEASE_DISCOVERY_INTERVAL_MS),
+  'an immediately due full check must avoid duplicating it with a simultaneous lightweight discovery request'
 );
 
 const macCalls = { checks: 0, downloads: 0, opens: 0 };
@@ -184,9 +220,48 @@ assert.equal(mac.fake.downloadCalls, 0, 'macOS downloads the architecture-specif
 const recentLaunch = createHarness({ lastCheckAt: Date.parse('2026-07-24T23:59:00.000Z') });
 recentLaunch.updater.start();
 await waitFor(
-  () => recentLaunch.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
-  'every application launch must schedule a fresh update check even when the previous check was recent'
+  () => recentLaunch.timers.some(timer => timer.delay === AUTO_CHECK_INTERVAL_MS - 60 * 1000),
+  'a recent full update check must defer the next full verification until the 24-hour fallback is due'
 );
+await waitFor(
+  () => recentLaunch.timers.some(timer => timer.delay === AUTO_CHECK_DELAY_MS),
+  'a recent full update check must still schedule lightweight release discovery shortly after launch'
+);
+
+let sameVersionFetches = 0;
+const sameVersionDiscovery = createHarness({
+  currentVersion: '0.27.4',
+  fetchImpl: async () => {
+    sameVersionFetches += 1;
+    return { status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.4/latest.yml' : null } };
+  }
+});
+sameVersionDiscovery.updater.start();
+const sameVersionResult = await sameVersionDiscovery.updater.discoverUpdate({ force: true });
+assert.equal(sameVersionResult.ok, true);
+assert.equal(sameVersionResult.newer, false);
+assert.equal(sameVersionDiscovery.fake.checkCalls, 0, 'unchanged release discovery must not run the full updater');
+const throttledDiscovery = await sameVersionDiscovery.updater.discoverUpdate();
+assert.equal(throttledDiscovery.skipped, true, 'rapid focus events must reuse the discovery throttle');
+assert.equal(sameVersionFetches, 1);
+
+const newerVersionDiscovery = createHarness({
+  currentVersion: '0.27.4',
+  fetchImpl: async () => ({ status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml' : null } })
+});
+newerVersionDiscovery.updater.start();
+assert.equal((await newerVersionDiscovery.updater.discoverUpdate({ force: true })).ok, true);
+assert.equal(newerVersionDiscovery.fake.checkCalls, 1, 'a newer published release must trigger the full updater verification exactly once');
+assert.ok(newerVersionDiscovery.logs.some(entry => /Newly published release 0\.27\.5 detected/.test(entry.message)));
+
+const failedDiscovery = createHarness({
+  currentVersion: '0.27.4',
+  fetchImpl: async () => ({ status: 503, headers: { get: () => null } })
+});
+failedDiscovery.updater.start();
+assert.equal((await failedDiscovery.updater.discoverUpdate({ force: true })).ok, false);
+assert.equal(failedDiscovery.updater.getStatus().state, 'idle', 'lightweight discovery failure must not turn a healthy updater into an error state');
+assert.ok(failedDiscovery.logs.some(entry => entry.options.code === 'update_discovery_failed'));
 
 const checkPromise = valid.updater.checkForUpdates();
 assert.equal(valid.updater.getStatus().state, 'checking');
@@ -243,6 +318,13 @@ assert.deepEqual(valid.updater.getStatus().releaseNotes, [{
   version: '0.21.0',
   note: '### Improvements\n- Faster updater\n- Clearer release notes'
 }]);
+
+const automaticDownload = createHarness({ autoDownloadUpdates: true });
+automaticDownload.updater.start();
+automaticDownload.fake.emit('update-available', { version: '0.21.0' });
+await waitFor(() => automaticDownload.fake.downloadCalls === 1, 'opted-in update downloads must start automatically after an update becomes available');
+assert.equal(automaticDownload.updater.getStatus().state, 'downloading');
+assert.equal(automaticDownload.fake.autoDownload, false, 'Rel.AI must keep electron-updater autoDownload disabled so its own verified policy remains authoritative');
 
 const downloadPromise = valid.updater.downloadUpdate();
 assert.equal(valid.updater.getStatus().state, 'downloading');

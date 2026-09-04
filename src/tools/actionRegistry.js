@@ -96,10 +96,7 @@ const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
   [OP.CHANGES_TIDY_PLAN]: [expose('relai_changes', 'tidy_plan', { capability: READ })],
   [OP.CHANGES_TIDY_RUN]: [expose('relai_changes', 'tidy_run', { capability: WRITE })],
   [OP.PUBLISH_COMMIT]: [expose('relai_publish', 'commit', {
-    capability: WRITE,
-    approval: args => (args.addAll === true || args.sensitiveAuthorization
-      ? { message: `Create the requested Git commit${args.addAll ? ' including all current changes' : ''}?` }
-      : null)
+    capability: WRITE
   })],
   [OP.PUBLISH_PUSH]: [expose('relai_publish', 'push', {
     capability: PUBLISH,

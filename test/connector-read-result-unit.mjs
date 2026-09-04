@@ -31,7 +31,7 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 const { callTool: rawCallTool } = await import('../src/tools.js');
-const { toolResult } = await import('../src/mcpServer.js');
+const { toolResult } = await import('../src/mcp/results.js');
 const { repositoryIntelligence } = await import('../src/repository/intelligence/service.js');
 const sessionCache = await import('../src/sessionCache.js');
 const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
@@ -41,6 +41,17 @@ try {
     workspace: 'repo',
     bootstrap: 'none'
   }, { publicHttpOnly: true, requestId: 1, transportType: 'test' });
+  const tasklessRead = await callTool('relai_read', {
+    workspace: 'repo',
+    paths: ['large-lines.txt'],
+    startLine: 1,
+    endLine: 1,
+    maxBytes: 16 * 1024,
+    guidanceMode: 'none'
+  }, { publicHttpOnly: true, requestId: 2, transportType: 'test' });
+  assert.equal(tasklessRead.ok, true, 'ordinary authorized workspace reads must not require a live work_id');
+  assert.equal(tasklessRead.items[0].content, `${largeLines[0]}\n`);
+
   const output = await callTool('relai_read', {
     work_id: task.work_id,
     paths: ['big.txt'],

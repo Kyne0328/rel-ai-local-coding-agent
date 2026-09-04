@@ -112,7 +112,7 @@ function createDashboardWindowManager(deps) {
       void persistBounds();
       if (isQuitting()) return;
       event.preventDefault();
-      if (platform === 'linux' && !canHideOnClose()) {
+      if (!canHideOnClose()) {
         app.quit();
         return;
       }

@@ -11,8 +11,16 @@ let provider = null;
 let initializedEndpoint = '';
 let initializedSampleRatio = null;
 
-function telemetryEndpoint(config = {}) {
+function configuredTelemetryEndpoint(config = {}) {
   return String(config.telemetry?.endpoint || process.env.REL_AI_OTEL_EXPORTER_OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || '').trim();
+}
+
+function telemetryEnabled(config = {}) {
+  return config.telemetry?.enabled === true;
+}
+
+function telemetryEndpoint(config = {}) {
+  return telemetryEnabled(config) ? configuredTelemetryEndpoint(config) : '';
 }
 
 function telemetrySampleRatio(config = {}) {
@@ -23,7 +31,8 @@ function telemetrySampleRatio(config = {}) {
 
 function initializeTelemetry(config = {}) {
   const endpoint = telemetryEndpoint(config);
-  if (!endpoint || provider) return Boolean(provider);
+  if (!endpoint) return false;
+  if (provider) return true;
   const sampleRatio = telemetrySampleRatio(config);
   const exporter = new OTLPTraceExporter({ url: endpoint });
   provider = new NodeTracerProvider({
@@ -99,6 +108,7 @@ function extractTraceContext(carrier = {}) {
 }
 
 async function runSpan(config, name, attributes, operation, options = {}) {
+  if (!telemetryEndpoint(config)) return operation();
   const parentContext = options.carrier ? extractTraceContext(options.carrier) : api.context.active();
   const span = tracer(config).startSpan(String(name || 'relai.operation'), {
     attributes: sanitizeAttributes(attributes),
@@ -107,12 +117,19 @@ async function runSpan(config, name, attributes, operation, options = {}) {
   try {
     return await api.context.with(api.trace.setSpan(parentContext, span), operation);
   } catch (error) {
-    span.recordException(error instanceof Error ? error : new Error(String(error)));
-    span.setStatus({ code: api.SpanStatusCode.ERROR, message: String(error?.message || error).slice(0, 500) });
+    span.setAttribute('relai.error.type', safeExceptionType(error));
+    span.setStatus({ code: api.SpanStatusCode.ERROR });
     throw error;
   } finally {
     span.end();
   }
+}
+
+function safeExceptionType(error) {
+  const name = error instanceof Error ? error.name : '';
+  return new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'AggregateError']).has(name)
+    ? name
+    : error instanceof Error ? 'Error' : 'NonErrorThrow';
 }
 
 function addSpanEvent(name, attributes = {}) {
@@ -132,12 +149,14 @@ async function shutdownTelemetry() {
 }
 
 function telemetryStatus(config = {}) {
+  const endpointConfigured = Boolean(configuredTelemetryEndpoint(config));
+  const enabled = telemetryEnabled(config) && endpointConfigured;
   return {
-    enabled: Boolean(provider || telemetryEndpoint(config)),
-    initialized: Boolean(provider),
-    exporter: provider ? 'otlp-http' : '',
-    endpointConfigured: Boolean(telemetryEndpoint(config)),
-    endpoint: initializedEndpoint ? '[configured]' : '',
+    enabled,
+    initialized: enabled && Boolean(provider),
+    exporter: enabled && provider ? 'otlp-http' : '',
+    endpointConfigured,
+    endpoint: enabled && initializedEndpoint ? '[configured]' : '',
     sampleRatio: initializedSampleRatio ?? telemetrySampleRatio(config)
   };
 }
@@ -149,6 +168,7 @@ export {
   setSpanAttributes,
   shutdownTelemetry,
   telemetryStatus,
+  telemetryEnabled,
   sanitizeAttributes,
   summarizeCommandForTelemetry,
   telemetrySampleRatio,

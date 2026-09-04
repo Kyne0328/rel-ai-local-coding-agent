@@ -89,17 +89,28 @@ try {
   assert.equal(git('diff', '--cached', '--name-only').trim(), '', 'rejected shared ownership must not disturb the visible Git index');
 
   const foreignPublish = await callTool('relai_publish', {
-    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'must stay task scoped', paths: ['src/task-b.js']
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit explicitly selected earlier task path', paths: ['src/task-b.js']
   });
-  assert.equal(foreignPublish.ok, false, 'explicit paths must not widen a logical task commit beyond current ownership');
-  assert.match(String(foreignPublish.error || ''), /outside current task ownership/i);
+  assert.equal(foreignPublish.ok, true, 'explicit paths must cross logical-task ownership without widening beyond the selected files');
+  assert.deepEqual(foreignPublish.paths, ['src/task-b.js']);
+  assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'src/task-b.js', 'cross-task explicit commit must contain only the selected path');
+  assert.ok(git('status', '--porcelain=v1', '--', 'src/task-a.js').trim(), 'unselected task A work must remain dirty');
+  assert.ok(git('status', '--porcelain=v1', '--', 'src/shared.js').trim(), 'unselected shared work must remain dirty');
+
+  fs.writeFileSync(path.join(workspacePath, 'src', 'taskless.js'), 'export const taskless = true;\n');
+  const tasklessPublish = await callTool('relai_publish', {
+    action: 'commit', workspace: 'app', message: 'commit explicit workspace path without resurrecting a task', paths: ['src/taskless.js']
+  });
+  assert.equal(tasklessPublish.ok, true, 'an explicitly scoped commit must not require a live work_id');
+  assert.deepEqual(tasklessPublish.paths, ['src/taskless.js']);
+  assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'src/taskless.js');
 
   const addAllPublish = await callTool('relai_publish', {
     action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'aggregate reviewed workspace changes', addAll: true
   });
-  assert.equal(addAllPublish.ok, true, 'explicit addAll must aggregate the visible workspace even from a logical task');
+  assert.equal(addAllPublish.ok, true, 'explicit addAll must aggregate the remaining visible workspace even from a logical task');
   assert.equal(addAllPublish.addAll, true);
-  assert.deepEqual(new Set(addAllPublish.paths), new Set(['src/shared.js', 'src/task-a.js', 'src/task-b.js']));
+  assert.deepEqual(new Set(addAllPublish.paths), new Set(['src/shared.js', 'src/task-a.js']));
   assert.equal(git('status', '--porcelain=v1').trim(), '', 'workspace aggregation must leave the committed repository clean');
   assert.deepEqual(taskCommitOwnership(readConfig(), taskA.work_id, 'app').ownedFiles, [], 'workspace aggregation must reconcile task A ownership');
   assert.deepEqual(taskCommitOwnership(readConfig(), taskB.work_id, 'app').ownedFiles, [], 'workspace aggregation must reconcile task B ownership');
@@ -111,6 +122,23 @@ try {
 
   assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-a.js')), true, 'cancellation must preserve already-visible task A changes');
   assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-b.js')), true, 'cancellation must preserve already-visible task B changes');
+
+  fs.writeFileSync(path.join(workspacePath, 'src', 'stale-task.js'), 'export const staleTask = true;\n');
+  const staleOptionalPublish = await callTool('relai_publish', {
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit after old task ended', paths: ['src/stale-task.js']
+  });
+  assert.equal(staleOptionalPublish.ok, true, 'a stale work_id must not block a task-optional explicitly scoped commit when workspace authorization is available');
+  assert.deepEqual(staleOptionalPublish.paths, ['src/stale-task.js']);
+  assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'src/stale-task.js');
+
+  fs.writeFileSync(path.join(workspacePath, 'src', 'stale-add-all.js'), 'export const staleAddAll = true;\n');
+  const staleAddAllPublish = await callTool('relai_publish', {
+    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit all requested workspace changes after old task ended', addAll: true
+  });
+  assert.equal(staleAddAllPublish.ok, true, 'explicit addAll must execute without resurrecting an ended work_id or requiring a dashboard approval');
+  assert.equal(staleAddAllPublish.addAll, true);
+  assert.deepEqual(staleAddAllPublish.paths, ['src/stale-add-all.js']);
+  assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'src/stale-add-all.js');
 
   console.log('Independent concurrent task ownership stays narrow by default and supports explicit workspace aggregation.');
 } finally {
