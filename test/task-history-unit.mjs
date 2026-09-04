@@ -26,6 +26,16 @@ task = reduceTaskLifecycleAuditEvent(task, event('task-1', {
 assert.equal(task.calls, 1);
 assert.deepEqual(task.changedFiles, ['src/a.js']);
 
+let representedEventTask = canonicalTaskSnapshot({
+  id: 'represented-event', taskId: 'represented-event', status: 'planning', workspace: 'repo',
+  events: [{ eventId: 'read-1', operationId: 'read-1', status: 'running', summary: 'Reading files.' }]
+});
+representedEventTask = reduceTaskLifecycleAuditEvent(representedEventTask, event('represented-event', {
+  operationId: 'read-1', eventId: 'read-1', ts: '2026-07-11T06:00:01.000Z', tool: 'read', status: 'succeeded', summary: 'Read files.'
+}));
+assert.equal(representedEventTask.events[0].status, 'succeeded', 'newer audit completion fields must replace the earlier running event projection');
+assert.equal(representedEventTask.events[0].summary, 'Read files.');
+
 task = reduceTaskLifecycleAuditEvent(task, event('task-1', {
   operationId: 'check-1', ts: '2026-07-11T06:00:02.000Z', tool: 'validate.checks', ok: false, validationStatus: 'failed'
 }));

@@ -78,7 +78,7 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
   const calls = Number(current.calls || 0) + (represented ? 0 : 1);
   const compact = compactLifecycleEvent(event);
   const events = represented
-    ? current.events.map((item, index) => index === lifecycleIndex ? { ...compact, ...item } : item)
+    ? current.events.map((item, index) => index === lifecycleIndex ? { ...item, ...compact } : item)
     : [...current.events, compact];
   const status = completion || current.completionKnown
     ? 'completed'
