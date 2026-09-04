@@ -52,6 +52,7 @@ try {
   recordTaskHistoryEvent(config, currentEvent('exact-task', {
     ts: new Date(base + 301000).toISOString(), tool: 'work.finish', completionKnown: true, taskSummary: 'Completed exactly.'
   }));
+  assert.equal(readTaskHistorySessionRecord(config, 'exact-task')?.resultSummary, 'Completed exactly.', 'audit-only completion must retain the final result summary');
   assert.equal(recordWorkflowEvidenceBatch(config, 'exact-task', [
     { kind: 'check', marker: 'durable-1' },
     { kind: 'check', marker: 'durable-2' }

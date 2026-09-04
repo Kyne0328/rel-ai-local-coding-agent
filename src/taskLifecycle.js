@@ -118,6 +118,7 @@ function reduceTaskLifecycleAuditEvent(session, event = {}) {
       ? 'explicit_completion'
       : cancellation ? 'explicit_cancellation' : current.endReason || '',
     summary: event.taskSummary || current.summary || '',
+    resultSummary: event.taskSummary || current.resultSummary || current.summary || '',
     workspace: current.workspace || event.workspace || '',
     startedAt,
     updatedAt,

@@ -6,7 +6,7 @@ import { readTaskIntegrity } from '../taskIntegrity.js';
 import { workspaceDirtyPaths } from '../repo/gitOps.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
-import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
+import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, getToolActivity, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
 import { runWorkspaceMutationBoundary } from '../workspaceOperationQueue.js';
 
 const WORK_FINISH_SOURCE = 'relai_work:finish';
@@ -121,7 +121,14 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
   const validationStatus = String(options.validationStatus || 'passed');
   const residualChangedFiles = await workspaceDirtyPaths(workspace, config, changedFiles);
   const residualState = residualChangedFiles.length ? 'preserved_uncommitted' : 'clean';
-  const learningSession = readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false }) || {};
+  const persistedLearningSession = readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false }) || {};
+  const liveLearningSession = getToolActivity().tasks.find(task => task.id === taskId || task.taskId === taskId) || {};
+  const learningSession = {
+    ...persistedLearningSession,
+    ...liveLearningSession,
+    workflowEvidence: persistedLearningSession.workflowEvidence || [],
+    changedFiles
+  };
   const completion = requestCurrentTaskCompletion({
     summary,
     validationStatus,
