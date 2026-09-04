@@ -8,7 +8,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const dashboard = read('public/dashboard.js');
 const api = read('src/ui/api.js');
-const system = read('src/ui/features/system/index.js');
 const connector = read('src/ui/features/settings/connector.js');
 const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const home = read('src/ui/features/home/index.js');

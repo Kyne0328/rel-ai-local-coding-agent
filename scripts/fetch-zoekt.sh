@@ -71,7 +71,7 @@ resolve_go() {
   archive="${TMPDIR:-/tmp}/relai-go-${go_version}-${toolchain_key}.tar.gz"
   if [[ ! -f "$archive" ]]; then
     echo "GET $url" >&2
-    curl -fsSL "$url" -o "$archive"
+    curl -fsSL --retry 4 --retry-delay 2 --retry-all-errors "$url" -o "$archive"
   fi
   actual="$(sha256_file "$archive")"
   [[ "$actual" == "$sha" ]] || { echo "Go archive SHA-256 mismatch. Expected $sha, got $actual." >&2; exit 1; }
