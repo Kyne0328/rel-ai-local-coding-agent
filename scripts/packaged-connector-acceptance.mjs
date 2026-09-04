@@ -221,12 +221,12 @@ try {
   assert.equal(reconnectedTask?.completionKnown, true);
   assert.equal(reconnectedTask?.status, 'completed');
 
-  const rejected = await mcp(reconnectSession, 31, 'tools/call', {
+  const recoveredRead = await mcp(reconnectSession, 31, 'tools/call', {
     name: 'relai_read',
     arguments: { workspace: 'acceptance', work_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
   });
-  assert.equal(rejected.result?.isError, true);
-  assert.equal(rejected.result?.structuredContent?.errorCode, 'INVALID_TASK_STATE');
+  assert.equal(recoveredRead.result?.isError, false, JSON.stringify(recoveredRead));
+  assert.equal(recoveredRead.result?.structuredContent?.items?.[0]?.content, 'packaged connector acceptance verified\n');
 
   const chatGptInitializeResponse = await freshFetch(`${base}/mcp`, {
     method: 'POST',

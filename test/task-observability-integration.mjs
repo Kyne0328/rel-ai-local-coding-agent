@@ -48,15 +48,19 @@ const previousConfig = process.env.REL_AI_MCP_CONFIG;
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-  const context = { publicHttpOnly: true, requestId: 'request-1', serverInstanceId: 'server-1', transportType: 'streamable-http' };
+  const context = { publicHttpOnly: true, requestId: 'request-1', serverInstanceId: 'server-1', transportType: 'streamable-http', conversationId: 'task-observability-chat' };
 
-  const started = await callTool('relai_work', { action: 'begin',
+  const taskArgs = {
+    action: 'begin',
     workspace: 'repo',
     title: 'Inspect session activity model',
     objective: 'Verify canonical task and activity persistence.'
-  }, context);
+  };
+  const started = await callTool('relai_work', taskArgs, context);
   assert.ok(started.work_id);
   assert.equal(started.title, 'Inspect session activity model');
+  const duplicateStart = await callTool('relai_work', taskArgs, { ...context, requestId: 'request-duplicate-start' });
+  assert.equal(duplicateStart.work_id, started.work_id, 'same-conversation retries of the same active goal must reuse the existing logical task');
 
   const read = await callTool('relai_read', {
     workspace: 'repo',
@@ -87,13 +91,14 @@ try {
   assert.equal(session.status, 'completed');
   assert.equal(session.progress.mode, 'complete');
   assert.equal(session.progress.percentage, 100);
-  assert.equal(session.toolCallCount, 3);
+  assert.equal(session.toolCallCount, 4);
   assert.equal(session.failedToolCallCount, 0);
   assert.equal(session.resultSummary, 'Inspected and verified session activity persistence.');
   assert.equal(session.correlation.requestId, 'request-1');
   assert.equal(session.correlation.workspaceId, 'repo');
-  assert.equal(session.events.length, 3, 'one canonical lifecycle event must be persisted per tool call');
-  assert.deepEqual(session.events.map(event => event.sequence), [1, 2, 3]);
+  assert.equal(session.correlation.conversationId, 'task-observability-chat');
+  assert.equal(session.events.length, 4, 'one canonical lifecycle event must be persisted per tool call without creating a duplicate logical task');
+  assert.deepEqual(session.events.map(event => event.sequence), [1, 2, 3, 4]);
   assert.equal(session.events.every(event => event.taskId === started.work_id && event.sessionId === started.work_id), true);
   assert.equal(session.events.find(event => event.tool?.name === 'relai_read')?.result?.affectedItemCount, 2);
   assert.equal(session.events.at(-1)?.status, 'succeeded');

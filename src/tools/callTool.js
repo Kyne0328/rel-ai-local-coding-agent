@@ -18,7 +18,7 @@ import { describeToolOperation } from './operation.js';
 import { resolveExecutableToolCall, validateExecutableOperationInput } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
-import { assertKnownTask, assertTaskWorkspaceOwnership, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
+import { assertKnownTask, assertTaskWorkspaceOwnership, findReusableActiveTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
 import { deterministicActionId, stableJson } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
@@ -92,6 +92,18 @@ async function callTool(name, args = {}, context = {}) {
       operationName,
       workspace: workspaceResolution?.alias || effectiveArgs?.workspace || knownTask?.workspace || ''
     });
+    if (operationName === OP.WORK_BEGIN) {
+      const reusableTask = findReusableActiveTask(
+        effectiveArgs?.workspace,
+        effectiveArgs,
+        effectivePrincipal,
+        context?.conversationId
+      );
+      if (reusableTask) {
+        requestedTaskId = normalizeTaskId(reusableTask.id || reusableTask.taskId);
+        knownTask = reusableTask;
+      }
+    }
     if (knownTask) {
       // The task record/principal/state was already validated above. Workspace
       // resolution cannot change that record, so validate ownership against the
@@ -132,7 +144,7 @@ async function callTool(name, args = {}, context = {}) {
       workspace: effectiveArgs?.workspace,
       scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
-      createTask: operationName === OP.WORK_BEGIN,
+      createTask: operationName === OP.WORK_BEGIN && !knownTask,
       trackTask: context?.trackTaskActivity !== false
         && operationName !== OP.WORK_STATUS
         && !duplicateTerminalCancellation

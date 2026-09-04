@@ -451,7 +451,7 @@ function buildSessionDetail(session) {
   const identities = taskEntityView(session);
   const state = workSessionStateView(session);
   const live = isOngoingSession(session);
-  const semantic = semanticProgressFor(session, { includeCommands: true });
+  const semantic = semanticProgressFor(session);
   const fileCounts = semanticFileCounts(session, semantic);
   const operationValue = session.operation || operationForTool(session.lastTool) || '—';
   const currentTitle = live ? (semantic.currentStage || state.label) : state.label;
@@ -481,7 +481,6 @@ function buildSessionDetail(session) {
       </div>
       ${attentionSection(session)}
       ${sessionActionSection(session)}
-      ${taskMilestonesSection(semantic)}
       ${failureHistorySection(session)}
       ${changedFilesSection(session.changedFiles || [])}
     </div>
@@ -495,6 +494,7 @@ function buildSessionDetail(session) {
     </div>`;
 
   bindSessionTabs(content);
+  bindOlderEventsAction(content);
   bindCopyActions(content);
   bindTraceExportAction(content, session);
   const id = sessionIdentifier(session);
@@ -516,6 +516,7 @@ function refreshOpenSession(data = {}) {
   const activeTab = inspector.querySelector('[data-session-tab].is-active')?.dataset.sessionTab || 'overview';
   const { content } = buildSessionDetail(next);
   setSessionTab(content, activeTab);
+  copyOlderEventsState(inspector, content);
   inspector.replaceChildren(content);
   _openSessionDetail = next;
   _openSessionFingerprint = fingerprint;
@@ -536,6 +537,21 @@ function setSessionTab(content, tab) {
     button.setAttribute('aria-selected', active ? 'true' : 'false');
   }
   for (const panel of content.querySelectorAll('[data-session-panel]')) panel.hidden = panel.dataset.sessionPanel !== tab;
+}
+
+function bindOlderEventsAction(root) {
+  const button = root.querySelector('[data-show-older-events]');
+  if (!button) return;
+  button.addEventListener('click', () => {
+    for (const row of root.querySelectorAll('[data-task-older-event][hidden]')) row.hidden = false;
+    button.remove();
+  });
+}
+
+function copyOlderEventsState(previous, next) {
+  if (!previous.querySelector('[data-task-older-event]:not([hidden])')) return;
+  for (const row of next.querySelectorAll('[data-task-older-event][hidden]')) row.hidden = false;
+  next.querySelector('[data-show-older-events]')?.remove();
 }
 
 function mergeSessionDetail(previous = {}, summary = {}, data = {}) {
@@ -727,8 +743,10 @@ function taskTraceSection(trace, fallbackEvents, session) {
   return `<section class="task-detail-section">
     <div class="task-detail-heading"><h3>Rel.AI task trace</h3><span>${events.length}</span></div>
     <p class="task-detail-note">${esc(limitation)}</p>
-    <div class="task-event-list">${visible.map(event => eventRow(event, session)).join('')}</div>
-    ${hidden.length ? `<details class="task-detail-overflow"><summary>Show ${hidden.length} older event${hidden.length === 1 ? '' : 's'}</summary><div class="task-event-list">${hidden.map(event => eventRow(event, session)).join('')}</div></details>` : ''}
+    <div class="task-event-list">
+      ${visible.map(event => eventRow(event, session)).join('')}
+      ${hidden.length ? `<button class="secondary task-event-more" type="button" data-show-older-events>Show ${hidden.length} older event${hidden.length === 1 ? '' : 's'}</button>${hidden.map(event => eventRow(event, session, true)).join('')}` : ''}
+    </div>
   </section>`;
 }
 
@@ -798,26 +816,6 @@ function semanticFileCounts(session = {}, semantic = semanticProgressFor(session
   return { product, support };
 }
 
-function taskMilestonesSection(semantic = {}) {
-  const milestones = Array.isArray(semantic.milestones) ? semantic.milestones : [];
-  if (!milestones.length) return '';
-  return `<section class="task-detail-section">
-    <div class="task-detail-heading"><h3>Key activity</h3><span>${milestones.length}</span></div>
-    <ul class="task-milestone-list">${milestones.map(item => {
-      const context = [item.tool, item.action].filter(Boolean).join(' · ');
-      const command = String(item.command || '');
-      return `<li>
-        ${item.status === 'failed' ? '<span class="task-milestone-state">Issue</span>' : '<span aria-hidden="true"></span>'}
-        <span><strong>${esc(item.label || 'Task activity')}</strong>
-          ${item.detail ? `<small>${esc(item.detail)}</small>` : ''}
-          ${context ? `<small>${esc(context)}</small>` : ''}
-          ${command ? `<div class="process-output-block"><div class="section-head-actions"><span class="muted">Command</span><button type="button" class="secondary compact-button" data-copy-command="${esc(encodeURIComponent(command))}" aria-label="Copy command">Copy command</button></div><pre tabindex="0"><code>${esc(command)}</code></pre></div>` : ''}
-        </span>
-      </li>`;
-    }).join('')}</ul>
-  </section>`;
-}
-
 function sessionChangedFileCount(session = {}) {
   return Math.max(0, Number(session.changedFileCount || 0), orderChangedFiles(session.changedFiles || []).length);
 }
@@ -856,7 +854,7 @@ function identifierDetail(label, value) {
   return `<div><span>${esc(label)}</span><strong class="task-detail-identifier"><code>${esc(value)}</code><button class="runtime-copy-id" type="button" data-copy-value="${esc(value)}" aria-label="Copy ${esc(label)} ${esc(value)}">Copy</button></strong></div>`;
 }
 
-function eventRow(event, session) {
+function eventRow(event, session, hidden = false) {
   const operation = event.title || event.tool?.operation || event.operation || operationForTool(event.tool?.name || event.tool);
   const href = routeHref('activity', {
     workspace: event.workspace || session.workspace,
@@ -866,7 +864,8 @@ function eventRow(event, session) {
   });
   const timestamp = eventTimestampValue(event);
   const status = event.status || (event.ok === false ? 'failed' : 'succeeded');
-  return `<a class="task-event task-event-link" data-task-event-link href="${esc(href)}" aria-label="Open ${esc(operation)} event in Activity"><span data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp))}</span><span class="task-event-copy"><code title="${esc(event.tool?.name || event.tool || '')}">${esc(operation)}</code>${event.summary ? `<small>${esc(event.summary)}</small>` : ''}</span>${pillHtml(status)}</a>`;
+  const command = String(event.command || '').trim();
+  return `<a class="task-event task-event-link" data-task-event-link${hidden ? ' data-task-older-event hidden' : ''} href="${esc(href)}" aria-label="Open ${esc(operation)} event in Activity"><span data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp))}</span><span class="task-event-copy"><code title="${esc(event.tool?.name || event.tool || '')}">${esc(operation)}</code>${event.summary ? `<small>${esc(event.summary)}</small>` : ''}${command ? `<small class="task-event-command"><span>Command</span><code>${esc(command)}</code></small>` : ''}</span>${pillHtml(status)}</a>`;
 }
 
 function operationForTool(tool) {

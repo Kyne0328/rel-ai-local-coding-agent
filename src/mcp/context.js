@@ -18,13 +18,15 @@ import { principalIdentity } from './principal.js';
 const SERVER_INSTANCE_ID = crypto.randomUUID();
 const OPENAI_SESSION_META_KEY = 'openai/session';
 
-function openAiConversationId(envelope) {
-  return String(objectValue(envelope)[OPENAI_SESSION_META_KEY] || '');
+function openAiConversationId(value) {
+  const source = objectValue(value);
+  const nestedMeta = objectValue(source._meta);
+  return String(source[OPENAI_SESSION_META_KEY] || nestedMeta[OPENAI_SESSION_META_KEY] || '');
 }
 
 function toolContext(context, options = {}) {
   const envelope = context?.mcpReq?.envelope || {};
-  const requestMeta = context?.mcpReq?._meta || {};
+  const requestMeta = context?.mcpReq?._meta || context?.mcpReq?.params?._meta || {};
   const client = objectValue(envelope[CLIENT_INFO_META_KEY]);
   const capabilities = objectValue(envelope[CLIENT_CAPABILITIES_META_KEY]);
   const requestHeaders = httpHeaders(context?.http?.req);

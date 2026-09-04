@@ -348,10 +348,10 @@ try {
   callEvents.length = 0;
   await assert.rejects(
     () => callTool('relai_read', {}, { publicHttpOnly: true }),
-    error => /work_id/i.test(String(error?.message || ''))
+    error => /input validation|required property/i.test(String(error?.message || ''))
   );
-  assert.deepEqual(callEvents, [], 'schema-level task rejection must happen before activity begins');
-  assert.equal(getToolActivity().activeTaskCount, 0, 'rejected taskless calls must not leave waiting sessions');
+  assert.deepEqual(callEvents, [], 'schema-level read rejection must happen before activity begins');
+  assert.equal(getToolActivity().activeTaskCount, 0, 'rejected invalid reads must not leave waiting sessions');
   stopListening();
   resetToolActivity();
 } finally {

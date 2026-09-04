@@ -9,6 +9,29 @@ import { buildTaskBootstrap } from '../context/context-builder.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 
 const TERMINAL_REFERENCE_OPERATIONS = new Set([OP.PROCESS_LIST, OP.PROCESS_READ, OP.PROCESS_STOP, OP.WORK_STATUS]);
+
+function findReusableActiveTask(workspace, args = {}, principal, conversationId = '') {
+  const conversation = String(conversationId || '').trim();
+  const workspaceAlias = String(workspace || '').trim();
+  const objective = normalizeTaskGoal(args.objective);
+  const title = normalizeTaskGoal(args.title);
+  if (!conversation || !workspaceAlias || (!objective && !title)) return null;
+  const expectedPrincipal = principalFingerprint(principal || 'anonymous');
+  return getToolActivity().tasks.find(session => {
+    if (!session || session.status === 'inactive' || isTerminalTaskStatus(session.status)) return false;
+    if (String(session.workspace || '') !== workspaceAlias) return false;
+    if (String(session.correlation?.conversationId || '') !== conversation) return false;
+    const sessionPrincipal = String(session.principalFingerprint || '');
+    if (!sessionPrincipal || !safeEqual(sessionPrincipal, expectedPrincipal)) return false;
+    if (objective) return normalizeTaskGoal(session.objective) === objective;
+    return normalizeTaskGoal(session.title) === title;
+  }) || null;
+}
+
+function normalizeTaskGoal(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
@@ -115,4 +138,4 @@ function withTaskIdentity(value, taskId) {
   return { ok: true, value, work_id: identity };
 }
 
-export { startTask, taskBootstrapFromSnapshot, assertKnownTask, assertTaskWorkspaceOwnership, isTerminalTaskReference, taskAuditContext, withTaskIdentity };
+export { startTask, taskBootstrapFromSnapshot, assertKnownTask, assertTaskWorkspaceOwnership, findReusableActiveTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity };

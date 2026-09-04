@@ -319,7 +319,7 @@ app.whenReady().then(async () => {
         count: document.getElementById('__activity-count')?.textContent.trim() || '',
         summary: document.querySelector('#__activity-filter-bar .filter-summary')?.textContent.trim() || ''
       }))()`);
-      throw new Error(`${error.message}; scenario=${scenario.name}; activity=${JSON.stringify(activityDebug)}`);
+      throw new Error(`${error.message}; scenario=${scenario.name}; activity=${JSON.stringify(activityDebug)}`, { cause: error });
     }
     const activityMeasurement = await win.webContents.executeJavaScript(`(() => {
       const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
