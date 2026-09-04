@@ -6,14 +6,15 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [2000, 5000];
-const TRANSIENT_AUDIT_FAILURE = /(?:EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|E50[0234]|E429|429 Too Many Requests|50[0234] Service|Service Unavailable|socket hang up)/i;
+const AUDIT_NETWORK_ARGS = ['--fetch-retries=0', '--fetch-timeout=30000'];
+const TRANSIENT_AUDIT_FAILURE = /(?:EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|E50[0234]|E429|429 Too Many Requests|50[0234] Service|Service Unavailable|socket hang up|network timeout)/i;
 
 function isTransientAuditFailure(result = {}) {
   return TRANSIENT_AUDIT_FAILURE.test(`${result.stdout || ''}\n${result.stderr || ''}`);
 }
 
 function runAudit(npmCli, prefix) {
-  const args = [npmCli, 'audit', '--omit=dev', '--audit-level=high'];
+  const args = [npmCli, 'audit', '--omit=dev', '--audit-level=high', ...AUDIT_NETWORK_ARGS];
   if (prefix) args.push('--prefix', prefix);
   return spawnSync(process.execPath, args, {
     cwd: root,

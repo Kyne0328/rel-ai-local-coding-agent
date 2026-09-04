@@ -309,6 +309,10 @@ app.on('before-quit', event => {
   void quitApplication();
 });
 
+if (process.platform !== 'win32') {
+  process.once('SIGTERM', () => { void quitApplication(); });
+}
+
 app.on('window-all-closed', () => {}); // Keep the tray app alive after windows close.
 
 function configuredProcessEnvironmentAllow() {

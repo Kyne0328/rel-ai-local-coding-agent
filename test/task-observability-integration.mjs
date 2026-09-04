@@ -123,7 +123,7 @@ try {
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
-  fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }
 
 console.log('End-to-end tool execution persists canonical task and activity lifecycle records.');

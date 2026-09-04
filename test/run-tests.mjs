@@ -36,6 +36,7 @@ const files = [
   'electron-dynamic-resource-contract-unit.mjs',
   'electron-product-path-unit.mjs',
   'test-rigidity-audit-unit.mjs',
+  'audit-production-unit.mjs',
   'generated-assets-check-unit.mjs',
   'http-auth-smoke.mjs',
   'mcp-app-ui-unit.mjs',

@@ -215,7 +215,7 @@ jobs:
         id: release-artifacts
         run: node scripts/release-artifacts.mjs --platform win32 --github-output paths
       - name: Upload Windows release bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-release-${{ needs.preflight.outputs.version }}
           path: ${{ steps.release-artifacts.outputs.paths }}
@@ -293,30 +293,13 @@ jobs:
         run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify packaged bearer-authenticated MCP flow
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
-      - name: Smoke-test Linux desktop startup under Xvfb
+      - name: Smoke-test Linux desktop startup and shutdown under Xvfb
         shell: bash
-        env:
-          PACKAGE_DIRECTORY: ${{ steps.unpacked.outputs.path }}
-        run: |
-          set -euo pipefail
-          state_directory="$RUNNER_TEMP/relai-linux-release-smoke"
-          sandbox_helper="$PACKAGE_DIRECTORY/chrome-sandbox"
-          mkdir -p "$state_directory"
-          sudo chown root:root "$sandbox_helper"
-          sudo chmod 4755 "$sandbox_helper"
-          test "$(stat -c '%u:%g:%a' "$sandbox_helper")" = '0:0:4755'
-          set +e
-          REL_AI_MCP_STATE_DIR="$state_directory" timeout --signal=TERM --kill-after=5s 15s \
-            xvfb-run --auto-servernum "$PACKAGE_DIRECTORY/rel-ai-mcp" --background
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
-            exit "$status"
-          fi
+        run: bash scripts/smoke-linux-desktop.sh '${{ steps.unpacked.outputs.path }}' "$RUNNER_TEMP/relai-linux-release-smoke"
       - name: Report Electron package size
         run: npm run electron:size:linux -- --json dist/electron-size-report-linux.json
       - name: Upload Linux release bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linux-release-${{ needs.preflight.outputs.version }}
           path: ${{ steps.release-artifacts.outputs.paths }}
@@ -395,7 +378,7 @@ jobs:
           test -n "$dmg_path"
           node scripts/verify-macos-release.mjs --unpacked '${{ steps.unpacked.outputs.path }}' --dmg "$dmg_path"
       - name: Upload macOS release bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-release-${{ needs.preflight.outputs.version }}-${{ matrix.arch }}
           path: ${{ steps.release-artifacts.outputs.paths }}
@@ -421,7 +404,7 @@ jobs:
       - name: Install release validation dependencies
         run: npm ci --ignore-scripts
       - name: Download Windows release bundle
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: windows-release-${{ needs.preflight.outputs.version }}
           path: dist
@@ -455,7 +438,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends xvfb xauth
           npm ci --ignore-scripts
       - name: Download Linux release bundle
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: linux-release-${{ needs.preflight.outputs.version }}
           path: dist
@@ -490,17 +473,17 @@ jobs:
       - name: Install release tooling dependencies
         run: npm ci --ignore-scripts
       - name: Download Windows release bundle
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: windows-release-${{ needs.preflight.outputs.version }}
           path: dist
       - name: Download Linux release bundle
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: linux-release-${{ needs.preflight.outputs.version }}
           path: dist
       - name: Download macOS release bundles
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: macos-release-${{ needs.preflight.outputs.version }}-*
           path: dist

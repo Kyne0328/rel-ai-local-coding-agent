@@ -217,10 +217,8 @@ function verifyWorkflowContracts() {
     /npm run verify:packaged -- --platform linux/,
     /npm run verify:fuses -- --platform win32/,
     /npm run verify:fuses -- --platform linux/,
-    /sudo chown root:root "\$sandbox_helper"/,
-    /sudo chmod 4755 "\$sandbox_helper"/,
-    /stat -c '%u:%g:%a'/,
-    /xvfb-run --auto-servernum/,
+    /scripts\/smoke-linux-desktop\.sh/,
+    /Smoke-test Linux desktop startup and shutdown under Xvfb/,
     /release-artifacts\.mjs --platform win32 --github-output paths/,
     /release-artifacts\.mjs --platform linux --github-output paths/,
     /release-artifacts\.mjs --platform darwin --arch '[^']+' --github-output paths/,
@@ -256,6 +254,7 @@ function verifyWorkflowContracts() {
   ]) assert.match(workflow, pattern);
 
   assert.doesNotMatch(workflow, /test:installed|REL_AI_SMOKE_INSTALLER|release-evidence-check|uninstall/i);
+  assert.doesNotMatch(workflow, /status[^\n]*-ne 124|timeout --signal=TERM[^\n]*xvfb-run/, 'Linux smoke validation must not treat forced timeout as a successful shutdown.');
   const macVerifier = fs.readFileSync(path.join(tmp, 'scripts', 'verify-macos-release.mjs'), 'utf8');
   for (const pattern of [
     /hdiutil'[\s\S]*'verify'/,

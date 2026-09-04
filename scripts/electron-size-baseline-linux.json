@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-23",
+  "capturedAt": "2026-09-04",
   "platform": "linux",
   "architecture": "x64",
   "policy": "advisory",
@@ -13,19 +13,19 @@
     "resourcesBytes"
   ],
   "provisional": false,
-  "notes": "Measured Linux release baseline rebased for v0.27.0 after the deliberate Monaco editor and TypeScript/Pyright language-server runtime additions. Component drift remains diagnostic; only structural packaging mistakes or an exceptional 25%+ jump in aggregate release footprint blocks release for investigation.",
+  "notes": "Measured Linux release baseline rebased for v0.27.4 after the deliberate PTY runtime addition on top of the Monaco editor and TypeScript/Pyright language-server runtime. Component drift remains diagnostic; only structural packaging mistakes or an exceptional 25%+ jump in aggregate release footprint blocks release for investigation.",
   "metrics": {
-    "appImageBytes": 167228358,
-    "debBytes": 128878952,
-    "unpackedBytes": 514831188,
-    "resourcesBytes": 236326417,
-    "appAsarBytes": 1548812,
-    "packagedDependencyBytes": 1107372,
+    "appImageBytes": 168286019,
+    "debBytes": 129571700,
+    "unpackedBytes": 517998328,
+    "resourcesBytes": 239493557,
+    "appAsarBytes": 1976979,
+    "packagedDependencyBytes": 3769270,
     "webAutomationBytes": 11504855,
     "localesBytes": 556772,
     "tunnelClientBytes": 20246690,
     "zoektBytes": 51319080,
     "treeSitterBytes": 72352700,
-    "dashboardCssBytes": 183542
+    "dashboardCssBytes": 188397
   }
 }

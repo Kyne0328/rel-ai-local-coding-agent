@@ -10,7 +10,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     name: test (node 24)
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -121,19 +121,6 @@ jobs:
         run: npm run verify:fuses -- --platform linux
       - name: Verify packaged MCP connector flow
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
-      - name: Smoke-test Linux desktop startup under Xvfb
+      - name: Smoke-test Linux desktop startup and shutdown under Xvfb
         shell: bash
-        env:
-          PACKAGE_DIRECTORY: ${{ steps.unpacked.outputs.path }}
-        run: |
-          set -euo pipefail
-          state_directory="$RUNNER_TEMP/relai-linux-smoke"
-          sandbox_helper="$PACKAGE_DIRECTORY/chrome-sandbox"
-          mkdir -p "$state_directory"
-          sudo chown root:root "$sandbox_helper"
-          sudo chmod 4755 "$sandbox_helper"
-          set +e
-          REL_AI_MCP_STATE_DIR="$state_directory" timeout --signal=TERM --kill-after=5s 15s xvfb-run --auto-servernum "$PACKAGE_DIRECTORY/rel-ai-mcp" --background
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then exit "$status"; fi
+        run: bash scripts/smoke-linux-desktop.sh '${{ steps.unpacked.outputs.path }}' "$RUNNER_TEMP/relai-linux-smoke"
