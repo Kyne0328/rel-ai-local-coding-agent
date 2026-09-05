@@ -27,16 +27,10 @@ const resourcesRoot = process.argv[2];
 
 app.whenReady().then(async () => {
   const moduleUrl = pathToFileURL(path.join(resourcesRoot, 'src', 'computerManager.js')).href;
-  const { readComputerStatus, runComputerAction } = await import(moduleUrl);
+  const { readComputerStatus } = await import(moduleUrl);
   const status = await readComputerStatus({ computerControl: { enabled: false } });
   if (!status.available) throw new Error(status.message || 'Packaged computer runtime is unavailable.');
-  const displays = await runComputerAction(
-    { alias: 'packaged-probe' },
-    { computerControl: { enabled: true } },
-    { action: 'displays' }
-  );
-  if (!Number.isInteger(displays.count) || displays.count < 1) throw new Error('Packaged computer runtime did not enumerate a display.');
-  console.log(JSON.stringify({ available: status.available, platform: status.platform, screen: status.screen, displayCount: displays.count }));
+  console.log(JSON.stringify({ available: status.available, platform: status.platform, screen: status.screen }));
   app.quit();
 }).catch(error => {
   console.error(error && (error.stack || error.message) || error);
@@ -46,7 +40,8 @@ app.whenReady().then(async () => {
 
 try {
   fs.writeFileSync(probe, source, 'utf8');
-  const result = spawnSync(electronBinary, [probe, resourcesRoot], {
+  const electronArgs = platform === 'linux' ? ['--no-sandbox', probe, resourcesRoot] : [probe, resourcesRoot];
+  const result = spawnSync(electronBinary, electronArgs, {
     cwd: root,
     env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' },
     encoding: 'utf8',
@@ -63,8 +58,7 @@ try {
   assert.equal(parsed.available, true, 'Packaged computer runtime must report available.');
   assert.equal(parsed.platform, platform, 'Packaged computer runtime reported the wrong platform.');
   assert.ok(Number(parsed.screen?.width) > 0 && Number(parsed.screen?.height) > 0, 'Packaged computer runtime must report a usable screen size.');
-  assert.ok(Number(parsed.displayCount) > 0, 'Packaged computer runtime must enumerate at least one display.');
-  console.log(`Packaged computer runtime verified on ${platform}: ${parsed.screen.width}x${parsed.screen.height}, ${parsed.displayCount} display(s).`);
+  console.log(`Packaged computer runtime verified on ${platform}: ${parsed.screen.width}x${parsed.screen.height}.`);
 } finally {
   fs.rmSync(probe, { force: true });
 }

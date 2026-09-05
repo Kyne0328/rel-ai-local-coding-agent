@@ -262,12 +262,18 @@ async function withIndexTimeout(execution, timeoutMs) {
   }, timeoutMs);
   timer.unref?.();
   try {
-    return await execution.promise;
-  } catch (error) {
-    if (!timedOut) throw error;
-    const timeoutError = new Error(`Repository Intelligence indexing exceeded ${timeoutMs}ms.`);
-    timeoutError.code = 'INDEX_TIMEOUT';
-    throw timeoutError;
+    let result;
+    try {
+      result = await execution.promise;
+    } catch (error) {
+      if (!timedOut) throw error;
+    }
+    if (timedOut) {
+      const timeoutError = new Error(`Repository Intelligence indexing exceeded ${timeoutMs}ms.`);
+      timeoutError.code = 'INDEX_TIMEOUT';
+      throw timeoutError;
+    }
+    return result;
   } finally {
     clearTimeout(timer);
   }
