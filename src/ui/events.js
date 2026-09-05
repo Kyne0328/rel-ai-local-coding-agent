@@ -52,9 +52,8 @@ export function isLive() {
 }
 
 function _handleVisibilityChange() {
-  if (_stopped || document.visibilityState !== 'visible' || _es) return;
-  _retryCount = 0;
-  _connect();
+  if (_stopped || document.visibilityState !== 'visible') return;
+  restartSSE();
 }
 
 function _connect() {

@@ -70,10 +70,12 @@ try {
 
   documentStub.visibilityState = 'visible';
   for (const listener of visibilityListeners) listener();
-  assert.equal(sources.length, 1, 'showing the dashboard must reuse the live stream when continuity was preserved');
+  assert.equal(sources[0].closed, true, 'showing the dashboard must retire the possibly suspended live stream');
+  assert.equal(sources.length, 2, 'showing the dashboard must re-handshake live revisions so missed list updates can be detected');
+  assert.equal(sources[1].closed, false);
 
   events.stopSSE({ emit: false });
-  assert.equal(sources[0].closed, true, 'stopping dashboard events must close the live stream');
+  assert.equal(sources[1].closed, true, 'stopping dashboard events must close the resumed live stream');
 
   documentStub.visibilityState = 'hidden';
   globalThis.fetch = (_url, options = {}) => new Promise((_resolve, reject) => {
