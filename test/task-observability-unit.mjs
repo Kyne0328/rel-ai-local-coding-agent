@@ -59,7 +59,7 @@ assert.equal(failed.error.retryable, true);
 assert.match(failed.summary, /Workspace path was unavailable/);
 const blocked = buildToolActivityDetails('edit', {}, null, { code: 'APPROVAL_REQUIRED', message: 'Authorization: Bearer abc.def is required.' }, { phase: 'complete' });
 assert.equal(blocked.status, 'blocked');
-assert.equal(blocked.currentStage, 'Waiting for approval');
+assert.equal(blocked.currentStage, 'Blocked');
 assert.doesNotMatch(blocked.error.message, /abc\.def/);
 
 assert.deepEqual(determinateProgress(4, 7, 'plan', '4 of 7 planned steps'), {

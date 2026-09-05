@@ -6,6 +6,7 @@ const CAPABILITIES = Object.freeze({
   REPOSITORY_WRITE: 'repository:write',
   COMMAND_EXECUTE: 'command:execute',
   PROCESS_MANAGE: 'process:manage',
+  COMPUTER_CONTROL: 'computer:control',
   GIT_PUBLISH: 'git:publish'
 });
 const ALL_CAPABILITIES = Object.freeze(Object.values(CAPABILITIES));

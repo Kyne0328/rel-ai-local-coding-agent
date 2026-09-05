@@ -1,6 +1,6 @@
-# Connecting Rel.AI MCP to ChatGPT
+# Connecting the Rel.AI harness to ChatGPT
 
-Rel.AI connects ChatGPT web to local projects through **OpenAI Secure MCP Tunnel**. ChatGPT provides the conversation and reasoning. Rel.AI lets it find files, edit code, run commands and tests, check the result, review changes, and use Git on the computer running Rel.AI.
+Rel.AI is a local harness for ChatGPT Web connected through **OpenAI Secure MCP Tunnel**. ChatGPT remains the model, conversation, and reasoning host. Rel.AI supplies the local agency/runtime layer: repository access, work sessions, commands and processes, validation, Git, skills/memory, observability, and explicitly enabled computer control on the machine running Rel.AI.
 
 ## Configure the tunnel
 
@@ -31,7 +31,7 @@ Rel.AI creates a separate work session for each new goal. Internally, that sessi
 
 Rel.AI uses ChatGPT's app/tool path, not Codex. OpenAI currently documents that [Apps use the normal ChatGPT rate limits for your plan](https://help.openai.com/en/articles/11487775-connectors-in), while [Codex usage counts toward agentic usage](https://help.openai.com/en/articles/11369540-codex-and-chatgpt-plan-usage-limits). Rel.AI therefore does not draw from the Codex agentic allowance. Your normal ChatGPT plan limits still apply, so Rel.AI does not describe its usage as unlimited.
 
-ChatGPT supplies the model and reasoning. Rel.AI supplies the local coding tools. Model availability and plan limits are controlled by ChatGPT and may change independently of Rel.AI.
+ChatGPT supplies the model, conversation, and reasoning. Rel.AI supplies the durable local harness around that model. MCP carries the tool calls, but local task state, validation evidence, process ownership, Git state, memory/skills, and desktop control remain Rel.AI responsibilities. Model availability and plan limits are controlled by ChatGPT and may change independently of Rel.AI.
 
 For many everyday repository tasks, Rel.AI can take the place of a Codex-style workflow: it can help ChatGPT read the project, edit files, run commands and tests, inspect the result, and use Git. Rel.AI does not emulate Codex internals or claim to be the same product.
 
@@ -41,7 +41,7 @@ Rel.AI does not currently support Claude, Cursor, Gemini, or other AI clients. T
 
 ## Local connection security
 
-The local Rel.AI MCP service requires a bearer credential. The bundled tunnel client adds that credential when it forwards MCP traffic to Rel.AI. ChatGPT does not receive or need the local Rel.AI bearer token.
+The ChatGPT-facing MCP service inside the Rel.AI harness requires a bearer credential. The bundled tunnel client adds that credential when it forwards MCP traffic to Rel.AI. ChatGPT does not receive or need the local Rel.AI bearer token.
 
 The public Rel.AI runtime no longer exposes a local OAuth authorization server. `/register`, `/authorize`, `/token`, legacy `/sse`, and legacy `/messages` are not supported connection paths.
 
@@ -55,7 +55,7 @@ Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/t
 
 A tunnel reconnect restores the connection only. It does not choose a workspace, pick a work session, repeat an uncertain edit, or mark repository work complete.
 
-When the public tool schema changes, use the current ChatGPT integration refresh/review flow so ChatGPT observes the current Rel.AI tool surface. Application updates, tunnel connectivity, and host-side tool refresh are separate states.
+When the public tool schema changes, ChatGPT must review the updated action snapshot before it can reliably use the new Rel.AI surface. For **Enterprise/Edu**, open **Workspace settings → Apps**, find **Rel.AI MCP**, open its menu, choose **Action control**, then click **Refresh** and review the changed actions before publishing or applying the update. For **Business**, published custom apps currently cannot update tools or metadata in place; recreate and republish the app when the Rel.AI tool surface changes. Application updates, tunnel connectivity, and host-side action refresh are separate states.
 
 ## Troubleshooting
 

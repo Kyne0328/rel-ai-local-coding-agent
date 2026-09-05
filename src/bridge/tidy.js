@@ -82,7 +82,7 @@ function scanUntrackedSessionFiles(workspace, ownership, maxCandidates) {
   return { candidates, skipped };
 }
 
-async function readTidyOwnership(workspace, config) {
+async function readTidyOwnership(workspace, config, taskId = '') {
   const status = await runProcess("git", gitStatusArgs(), {
     cwd: workspace.path,
     timeout: 30000,
@@ -91,13 +91,14 @@ async function readTidyOwnership(workspace, config) {
   if (status.exitCode !== 0 || status.stdoutTruncated) {
     throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || (status.stdoutTruncated ? "output exceeded internal limit" : status.exitCode)}`);
   }
-  return classifyStatusOwnership(workspace, config, status.stdout || "");
+  return classifyStatusOwnership(workspace, config, status.stdout || "", taskId);
 }
 
 async function workspaceTidyPlan(workspace, config, args = {}) {
   const mode = normalizeTidyMode(args.mode);
   const maxCandidates = clampNumber(args.maxCandidates, 1, 100, 50);
-  const ownership = await readTidyOwnership(workspace, config);
+  const taskId = String(args.work_id || '').trim();
+  const ownership = await readTidyOwnership(workspace, config, taskId);
   // Without a captured session baseline we cannot distinguish this agent's
   // untracked artifacts from pre-existing user files. Refuse rather than risk
   // planning a delete of files the user created before any session started.
@@ -121,6 +122,7 @@ async function workspaceTidyPlan(workspace, config, args = {}) {
     id: planId,
     workspace: workspace.alias,
     root: workspace.path,
+    taskId,
     mode,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + TIDY_PLAN_TTL_MS).toISOString(),
@@ -165,8 +167,12 @@ function readTidyPlan(config, workspace, planId) {
 
 async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
   const planId = validateTidyPlanId(args.planId);
+  const taskId = String(args.work_id || '').trim();
   const { file, plan } = readTidyPlan(config, workspace, planId);
-  const ownership = await readTidyOwnership(workspace, config);
+  if (!taskId || taskId !== String(plan.taskId || '').trim()) {
+    throw new Error(`Workspace tidy plan ${planId} belongs to a different work session.`);
+  }
+  const ownership = await readTidyOwnership(workspace, config, taskId);
   const currentUntracked = new Set(ownership.untrackedSession || []);
   const candidates = Array.isArray(plan.candidates) ? plan.candidates : [];
   const { preflight, refused } = preflightTidyCandidates(candidates, workspace, currentUntracked);

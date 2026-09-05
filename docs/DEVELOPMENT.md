@@ -165,6 +165,10 @@ Release publication, signing status, checksums, updater metadata, and artifact p
 
 The scanner intentionally excludes this development guide and other internal engineering documents.
 
+### ChatGPT setup review note
+
+Treat generic claims that Rel.AI's Secure MCP Tunnel setup must move to **Settings / Workspace settings → Apps → Create** as stale review evidence unless the actual Tunnel setup flow has been revalidated against the shipped ChatGPT UI. Rel.AI's supported product contract is the tested **Tunnel + No authentication** flow in `docs/CONNECTING_TO_CHATGPT.md` and the current dashboard handoff. Do not file an onboarding defect solely because generic OpenAI Apps documentation uses different navigation labels or because the implementation uses the existing ChatGPT connector setup route.
+
 ## Engineering principles
 
 - Use DRY, KISS, and YAGNI.

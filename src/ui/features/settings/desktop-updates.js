@@ -4,8 +4,9 @@ import { pillHtml } from '../../components/pill.js';
 import { formatBytes, panel, toggleControl, toggleRow } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 import { supportPolicyView } from './desktop-update-policy.js';
+import { iconActionHtml } from '../../components/icons.js';
 
-const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases';
+const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases';
 let removeUpdateListener = null;
 
 export function applicationUpdatesPanel(lifecycle = null) {
@@ -106,7 +107,7 @@ function renderStatus(container, status = {}, installedReleaseNotes = null) {
     ${progressHtml(state, status.progress)}
     ${status.errorCode ? `<code class="application-update-code">Error code: ${escapeHtml(status.errorCode)}</code>` : ''}
     <div class="connection-actions application-update-actions">
-      ${view.action ? `<button class="${view.action.className}" type="button" data-update-action="${view.action.id}">${escapeHtml(view.action.label)}</button>` : ''}
+      ${view.action ? `<button class="${view.action.className}" type="button" data-update-action="${view.action.id}">${view.action.icon ? iconActionHtml(view.action.icon, view.action.label) : escapeHtml(view.action.label)}</button>` : ''}
       ${view.secondary ? `<button class="secondary" type="button" data-update-action="${view.secondary.id}">${escapeHtml(view.secondary.label)}</button>` : ''}
       <a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">GitHub Releases</a>
       ${state === 'error' ? '<a class="buttonlike secondary" href="#diagnostics">Troubleshoot</a>' : ''}
@@ -152,7 +153,7 @@ function updateView(state, status, currentVersion, availableVersion, autoDownloa
       description: opensDmg
         ? `${availableVersion || 'The update'} is verified and downloaded. Open the DMG, then replace Rel.AI MCP in Applications.`
         : `${availableVersion || 'The update'} is ready. Restart when Rel.AI is not working on a task.`,
-      action: { id: 'install', label: opensDmg ? 'Open DMG' : 'Restart and install', className: 'primary' }
+      action: { id: 'install', label: opensDmg ? 'DMG' : 'Restart and install', className: 'primary', icon: opensDmg ? 'externalLink' : '' }
     };
   }
   if (state === 'installing') return { label: 'Installing', tone: 'working', description: 'Rel.AI is restarting to install the downloaded update.' };
@@ -308,7 +309,7 @@ function renderManual(container, reason) {
   container.innerHTML = `
     <div class="application-update-summary"><div><span class="application-update-label">Update method</span><strong>Manual download</strong></div>${pillHtml('Desktop required', 'warn')}</div>
     <p class="muted application-update-copy">${escapeHtml(reason)}</p>
-    <div class="connection-actions"><a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">Open GitHub Releases</a></div>`;
+    <div class="connection-actions"><a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">${iconActionHtml('externalLink', 'GitHub Releases')}</a></div>`;
 }
 
 function renderFailure(container, message, installedReleaseNotes = null) {

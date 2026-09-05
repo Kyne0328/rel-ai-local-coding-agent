@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DESKTOP_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
+import { DESKTOP_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS, MOBILE_NAV_ITEMS, MOBILE_PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
 import { activityFilterTransition, mergeActivityEntries } from '../src/ui/features/activity/model.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,7 +22,9 @@ const drawer = read('src/ui/components/drawer.js');
 
 const desktopNavIds = DESKTOP_NAV_ITEMS.map(item => item.id);
 const mobileNavIds = MOBILE_NAV_ITEMS.map(item => item.id);
-assert.deepEqual(mobileNavIds, desktopNavIds, 'desktop and mobile navigation must expose the same primary destinations');
+assert.deepEqual(mobileNavIds, desktopNavIds, 'desktop and mobile navigation must keep the same reachable destinations');
+assert.deepEqual(MOBILE_PRIMARY_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity']);
+assert.deepEqual(MOBILE_MORE_NAV_ITEMS.map(item => item.id), ['code', 'system', 'settings']);
 assert.equal(new Set(desktopNavIds).size, desktopNavIds.length, 'primary navigation destinations must be unique');
 for (const required of ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']) assert.ok(desktopNavIds.includes(required), `${required} must remain reachable`);
 assert.ok(DESKTOP_NAV_ITEMS.every(item => String(item.label || '').trim()), 'every navigation destination must have a label');
@@ -31,7 +33,9 @@ assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.label, 'Syste
 const settingsNavIds = SETTINGS_NAV_ITEMS.map(item => item.id);
 for (const required of ['connection', 'preferences', 'memory', 'application', 'about']) assert.ok(settingsNavIds.includes(required), `${required} settings must remain reachable`);
 assert.equal(SETTINGS_NAV_ITEMS.find(item => item.id === 'connection')?.href, '#settings/connection');
-assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS/);
+assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS, MOBILE_PRIMARY_NAV_ITEMS/);
+assert.match(shellChrome, /renderDashboardMobileNav/);
+assert.match(shellChrome, /More navigation/);
 assert.match(shellChrome, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
 assert.doesNotMatch(shell, /const PRIMARY_NAV_ITEMS|const SECONDARY_NAV_ITEMS/);
 assert.match(router, /routeMetadata\(path\)/);

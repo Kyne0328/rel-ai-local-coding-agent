@@ -22,7 +22,7 @@ for (const [status, className, state, fallback] of [
 for (const [status, className, state] of [
   ['validation_failed', 'static paused failed', 'Action required'],
   ['blocked', 'static paused blocked', 'Action required'],
-  ['waiting_for_approval', 'static paused approval', 'Paused']
+  ['waiting_for_approval', 'static paused blocked', 'Action required']
 ]) {
   const html = taskProgressHtml({ mode: 'indeterminate', label: 'Approval required' }, status, { compact: true });
   assert.match(html, new RegExp(className.replaceAll(' ', '\\s+')));

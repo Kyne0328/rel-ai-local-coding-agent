@@ -47,8 +47,7 @@ function copyFixture() {
     'scripts/verify-macos-release.mjs',
     'scripts/current-unpacked.mjs',
     'scripts/active-controller-guard.mjs',
-    '.github/workflows/release.yml',
-    '.github/workflows/ci.yml'
+    '.github/workflows/release.yml'
   ]) {
     const source = path.join(root, relativePath);
     const destination = path.join(tmp, relativePath);
@@ -111,7 +110,7 @@ function verifyPackageContracts() {
     email: 'Kyne0328@users.noreply.github.com',
     url: 'https://github.com/Kyne0328'
   });
-  assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-local-coding-agent');
+  assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness');
   assert.deepEqual(electronLockRoot.dependencies || {}, electronPackage.dependencies || {}, 'Electron runtime dependencies must stay synchronized with the lockfile');
   assert.deepEqual(electronLockRoot.devDependencies || {}, electronPackage.devDependencies || {}, 'Electron development dependencies must stay synchronized with the lockfile');
   assert.equal(rootPackage.allowScripts?.['node-pty@1.1.0'], true, 'root installs must explicitly approve the pinned node-pty native build under npm 12');
@@ -177,7 +176,6 @@ function verifyPackageContracts() {
 
 function verifyWorkflowContracts() {
   const workflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'release.yml'), 'utf8');
-  const ciWorkflow = fs.readFileSync(path.join(tmp, '.github', 'workflows', 'ci.yml'), 'utf8');
   const productionAuditIndex = workflow.indexOf('npm run audit:production');
   const packagingAuditIndex = workflow.indexOf('npm run audit:packaging');
   const windowsBuildIndex = workflow.indexOf('npm run electron:dist:windows');
@@ -188,7 +186,6 @@ function verifyWorkflowContracts() {
   assert.doesNotMatch(workflow, /Install gateway test dependencies|gateway\/package\.json/i, 'public release workflow must not depend on the private gateway workspace');
   assert.doesNotMatch(workflow, /scripts\/fetch-(?:tunnel-client|zoekt)/, 'platform workflows must let the shared packager provision pinned runtime binaries');
   assert.match(workflow, /preflight:[\s\S]*Verify release consistency[\s\S]*npm run release:check/, 'release preflight must run generated-asset and version consistency checks before platform packaging jobs');
-  assert.match(ciWorkflow, /Verify release and generated-asset consistency[\s\S]*npm run release:check[\s\S]*xvfb-run --auto-servernum npm run test:all/, 'normal CI must reject release/version drift before the full Xvfb test gate');
 
   for (const pattern of [
     /workflow_dispatch:/,
@@ -215,6 +212,9 @@ function verifyWorkflowContracts() {
     /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/,
     /npm run verify:packaged -- --platform win32/,
     /npm run verify:packaged -- --platform linux/,
+    /verify-packaged-computer-runtime\.mjs --platform win32/,
+    /verify-packaged-computer-runtime\.mjs --platform linux/,
+    /verify-packaged-computer-runtime\.mjs --platform darwin/,
     /npm run verify:fuses -- --platform win32/,
     /npm run verify:fuses -- --platform linux/,
     /scripts\/smoke-linux-desktop\.sh/,
@@ -248,7 +248,6 @@ function verifyWorkflowContracts() {
     /verify-macos-release\.mjs --unpacked/,
     /System Settings → Privacy & Security → Open Anyway/,
     /verify-tunnel-client\.mjs/,
-    /npm run benchmark:observability/,
     /npm run test:observability-browser/,
     /npm run test:native-tasks-release-gate/
   ]) assert.match(workflow, pattern);

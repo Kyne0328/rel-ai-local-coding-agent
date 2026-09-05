@@ -10,10 +10,13 @@ import { DEFAULT_MAX_INDEX_FILES } from './indexBuild.js';
 import { recentIntelligenceDiagnostics, recordIntelligenceDiagnostic } from './state.js';
 
 const FALLBACK_RECONCILE_INTERVAL_MS = 5 * 60_000;
+const ZOEKT_RECONCILE_DELAY_MS = 1500;
 const MAX_INCREMENTAL_PATHS = 1000;
 const MAX_COALESCED_PASSES = 3;
 const WORKER_CANCEL_GRACE_MS = 250;
 const WORKER_IDLE_EVICT_MS = 60_000;
+const INDEX_INCREMENTAL_TIMEOUT_MS = 60_000;
+const INDEX_FULL_TIMEOUT_MS = 300_000;
 const activeBuilds = new Map();
 const runtimeStates = new Map();
 const workerClients = new Map();
@@ -25,7 +28,8 @@ async function ensureRepositoryIndex(workspace, config = {}, options = {}) {
   if (options.watch !== false) ensureWorkspaceWatcher(workspace, config, state);
   const now = Date.now();
   const fallbackReconcileDue = !state.watcher && now - state.lastFullScanAt >= FALLBACK_RECONCILE_INTERVAL_MS;
-  if (state.metadata && !state.dirty && !fallbackReconcileDue && options.force !== true) {
+  const zoektOnly = normalizeMode(options.mode) === 'zoekt';
+  if (state.metadata && !state.dirty && !fallbackReconcileDue && options.force !== true && !zoektOnly) {
     return decorateMetadata(state, { ...state.metadata, cacheHit: true, checkedAt: new Date().toISOString() });
   }
 
@@ -62,6 +66,7 @@ async function recoverRepositoryIndex(workspace, config = {}, options = {}) {
 
 function noteRepositoryMutation(workspace, config = {}, paths = []) {
   const state = runtimeState(repositoryIndexPath(config, workspace));
+  clearZoektReconcile(state);
   state.changeRevision += 1;
   state.dirty = true;
   const normalized = normalizePaths(paths);
@@ -80,13 +85,14 @@ function repositoryIndexStatus(workspace, config = {}) {
   const databaseFile = repositoryIndexPath(config, workspace);
   const state = runtimeStates.get(databaseFile);
   if (!state) {
-    return { status: 'idle', dirty: true, active: false, watching: false, pendingPathCount: 0, lastError: null, lastFullScanAt: null, lastReconciledAt: null, metadata: null, diagnostics: recentIntelligenceDiagnostics(workspace) };
+    return { status: 'idle', dirty: true, active: false, watching: false, zoektRefreshScheduled: false, pendingPathCount: 0, lastError: null, lastFullScanAt: null, lastReconciledAt: null, metadata: null, diagnostics: recentIntelligenceDiagnostics(workspace) };
   }
   return {
     status: state.status,
     dirty: state.dirty,
     active: activeBuilds.has(databaseFile),
     watching: Boolean(state.watcher),
+    zoektRefreshScheduled: Boolean(state.zoektReconcileTimer),
     pendingPathCount: pendingRefreshPathCount(state),
     lastError: state.lastError,
     lastFullScanAt: isoTime(state.lastFullScanAt),
@@ -121,6 +127,7 @@ async function disposeRepositoryIndex(workspace, config = {}, options = {}) {
   await cancelAndDrain(databaseFile, 'Repository Intelligence workspace detached.');
   const state = runtimeStates.get(databaseFile);
   if (state) {
+    clearZoektReconcile(state);
     try { state.watcher?.close(); } catch {}
     state.watcher = null;
     runtimeStates.delete(databaseFile);
@@ -140,6 +147,7 @@ function shutdownRepositoryIndexes() {
   for (const record of activeBuilds.values()) record.cancel(shutdownError.message);
   const terminations = [...workerClients.values()].map(client => client.terminate(shutdownError));
   for (const state of runtimeStates.values()) {
+    clearZoektReconcile(state);
     try { state.watcher?.close(); } catch {}
     state.watcher = null;
   }
@@ -159,7 +167,8 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
     for (let pass = 0; pass < MAX_COALESCED_PASSES; pass += 1) {
       throwIfAborted(options.signal);
       const revisionAtStart = state.changeRevision;
-      const selection = consumeRefreshSelection(state, mode, options.force === true);
+      const zoektOnly = mode === 'zoekt';
+      const selection = zoektOnly ? { paths: [] } : consumeRefreshSelection(state, mode, options.force === true);
       state.status = statusForMode(mode, metadata);
       state.lastError = null;
       const execution = runIndexWorker({
@@ -172,23 +181,52 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
       });
       state.currentCancel = execution.cancel;
       try {
-        const passMetadata = await execution.promise;
-        coalescedPassCount += 1;
-        totalChangedPathCount += Number(passMetadata?.changedPathCount || 0);
-        totalDeletedPathCount += Number(passMetadata?.deletedPathCount || 0);
-        metadata = {
-          ...passMetadata,
-          changedPathCount: totalChangedPathCount,
-          deletedPathCount: totalDeletedPathCount,
-          cacheHit: totalChangedPathCount === 0 && totalDeletedPathCount === 0 && passMetadata?.cacheHit === true,
-          ...(coalescedPassCount > 1 ? { coalescedPassCount } : {})
-        };
+        const defaultTimeoutMs = zoektOnly
+          ? INDEX_FULL_TIMEOUT_MS
+          : selection.paths === null ? INDEX_FULL_TIMEOUT_MS : INDEX_INCREMENTAL_TIMEOUT_MS;
+        const previousZoekt = metadata?.zoekt;
+        const passMetadata = await withIndexTimeout(execution, positiveTimeout(options.indexTimeoutMs, defaultTimeoutMs));
+        if (zoektOnly) {
+          if (!metadata || Number(passMetadata?.generation || 0) !== Number(metadata.generation || 0)) {
+            const error = new Error('Repository Intelligence generation changed during the Zoekt refresh.');
+            error.code = 'INDEX_GENERATION_CHANGED';
+            throw error;
+          }
+          coalescedPassCount += 1;
+          metadata = {
+            ...metadata,
+            checkedAt: new Date().toISOString(),
+            zoekt: passMetadata.zoekt
+          };
+        } else {
+          const changedThisPass = Number(passMetadata?.changedPathCount || 0);
+          const deletedThisPass = Number(passMetadata?.deletedPathCount || 0);
+          coalescedPassCount += 1;
+          totalChangedPathCount += changedThisPass;
+          totalDeletedPathCount += deletedThisPass;
+          let zoekt = passMetadata?.zoekt;
+          if (passMetadata?.scanMode === 'incremental' && previousZoekt) {
+            zoekt = changedThisPass > 0 || deletedThisPass > 0
+              ? { ...previousZoekt, current: false, reason: 'Zoekt refresh scheduled after incremental Repository Intelligence changes.' }
+              : previousZoekt;
+          }
+          metadata = {
+            ...passMetadata,
+            ...(zoekt ? { zoekt } : {}),
+            changedPathCount: totalChangedPathCount,
+            deletedPathCount: totalDeletedPathCount,
+            cacheHit: totalChangedPathCount === 0 && totalDeletedPathCount === 0 && passMetadata?.cacheHit === true,
+            ...(coalescedPassCount > 1 ? { coalescedPassCount } : {})
+          };
+        }
       } finally {
         if (state.currentCancel === execution.cancel) state.currentCancel = null;
       }
       state.metadata = metadata;
-      state.lastReconciledAt = Date.now();
-      if (metadata.scanMode === 'full') state.lastFullScanAt = state.lastReconciledAt;
+      if (!zoektOnly) {
+        state.lastReconciledAt = Date.now();
+        if (metadata.scanMode === 'full') state.lastFullScanAt = state.lastReconciledAt;
+      }
       const changedDuringBuild = state.changeRevision !== revisionAtStart;
       const needsReconcile = metadata?.needsReconcile === true;
       state.dirty = changedDuringBuild || needsReconcile;
@@ -198,6 +236,9 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
     state.status = 'ready';
     if (state.dirty && metadata && metadata.freshness !== 'partial') metadata = { ...metadata, freshness: 'stale' };
     state.metadata = metadata;
+    if (!state.dirty && metadata?.zoekt?.current === false && metadata.zoekt.available !== false) {
+      scheduleZoektReconcile(workspace, config, state);
+    }
     return decorateMetadata(state, metadata);
   } catch (error) {
     state.dirty = true;
@@ -209,6 +250,26 @@ async function runCoalescedIndexing(workspace, config, databaseFile, state, opti
       recordIntelligenceDiagnostic(workspace, 'index_refresh_failed', error);
     }
     throw error;
+  }
+}
+
+async function withIndexTimeout(execution, timeoutMs) {
+  let timer;
+  let timedOut = false;
+  timer = setTimeout(() => {
+    timedOut = true;
+    execution.cancel(`Repository Intelligence indexing exceeded ${timeoutMs}ms.`);
+  }, timeoutMs);
+  timer.unref?.();
+  try {
+    return await execution.promise;
+  } catch (error) {
+    if (!timedOut) throw error;
+    const timeoutError = new Error(`Repository Intelligence indexing exceeded ${timeoutMs}ms.`);
+    timeoutError.code = 'INDEX_TIMEOUT';
+    throw timeoutError;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -360,6 +421,7 @@ function ensureWorkspaceWatcher(workspace, config, state) {
     const stateRoot = watchedStateRoot(workspace.path, root, getStateDir(config));
     let shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
     state.watcher = fs.watch(root, { recursive: true, persistent: false }, (eventType, filename) => {
+      clearZoektReconcile(state);
       const normalized = normalizeWatchPath(filename);
       if (normalized === '.relaiignore') {
         shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
@@ -414,10 +476,27 @@ function shouldIgnoreWatchPath(root, stateRoot, filename, shouldCollect) {
 function runtimeState(databaseFile) {
   let state = runtimeStates.get(databaseFile);
   if (!state) {
-    state = { metadata: null, dirty: true, changeRevision: 0, lastReconciledAt: 0, lastFullScanAt: 0, watcher: null, pendingPaths: new Set(), pendingDirectories: new Set(), fullScanRequired: true, status: 'idle', lastError: null, currentCancel: null };
+    state = { metadata: null, dirty: true, changeRevision: 0, lastReconciledAt: 0, lastFullScanAt: 0, watcher: null, zoektReconcileTimer: null, pendingPaths: new Set(), pendingDirectories: new Set(), fullScanRequired: true, status: 'idle', lastError: null, currentCancel: null };
     runtimeStates.set(databaseFile, state);
   }
   return state;
+}
+
+function scheduleZoektReconcile(workspace, config, state) {
+  clearZoektReconcile(state);
+  state.zoektReconcileTimer = setTimeout(() => {
+    state.zoektReconcileTimer = null;
+    if (state.dirty) return;
+    void ensureRepositoryIndex(workspace, config, { mode: 'zoekt', watch: false })
+      .catch(error => recordIntelligenceDiagnostic(workspace, 'zoekt_background_refresh_failed', error));
+  }, ZOEKT_RECONCILE_DELAY_MS);
+  state.zoektReconcileTimer.unref?.();
+}
+
+function clearZoektReconcile(state) {
+  if (!state?.zoektReconcileTimer) return;
+  clearTimeout(state.zoektReconcileTimer);
+  state.zoektReconcileTimer = null;
 }
 
 function decorateMetadata(state, metadata) {
@@ -476,7 +555,7 @@ function normalizeWatchPath(value) {
 
 function normalizeMode(value) {
   const mode = String(value || 'refresh').toLowerCase();
-  return ['refresh', 'rebuild', 'recover'].includes(mode) ? mode : 'refresh';
+  return ['refresh', 'rebuild', 'recover', 'zoekt'].includes(mode) ? mode : 'refresh';
 }
 
 function statusForMode(mode, metadata) {
@@ -489,6 +568,11 @@ function boundedMaxFiles(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MAX_INDEX_FILES;
   return Math.max(1, Math.min(500000, Math.floor(parsed)));
+}
+
+function positiveTimeout(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
 }
 
 function workerError(details = {}) {
@@ -519,6 +603,8 @@ function isoTime(value) {
 }
 
 export {
+  INDEX_FULL_TIMEOUT_MS,
+  INDEX_INCREMENTAL_TIMEOUT_MS,
   cancelRepositoryIndex,
   disposeRepositoryIndex,
   evictIdleRepositoryWorkers,

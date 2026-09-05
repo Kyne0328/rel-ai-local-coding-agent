@@ -146,6 +146,13 @@ function _updateNavActive(id) {
     details.querySelector(':scope > summary')?.classList.toggle('active', active);
     if (active) details.open = true;
   });
+  const mobileMore = document.querySelector('.mobile-nav-more');
+  if (mobileMore) {
+    const active = Boolean(mobileMore.querySelector('a.active'));
+    mobileMore.classList.toggle('active', active);
+    mobileMore.querySelector(':scope > summary')?.classList.toggle('active', active);
+    mobileMore.open = false;
+  }
 }
 
 function _updatePageIdentity(id) {

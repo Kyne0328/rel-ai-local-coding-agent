@@ -42,6 +42,16 @@ export const APPLICATION_NAV_ITEMS = Object.freeze([
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
+export const MOBILE_PRIMARY_NAV_ITEMS = Object.freeze([
+  WORK_NAV_ITEMS.find(item => item.id === 'home'),
+  WORK_NAV_ITEMS.find(item => item.id === 'tasks'),
+  WORK_NAV_ITEMS.find(item => item.id === 'workspaces'),
+  WORK_NAV_ITEMS.find(item => item.id === 'activity')
+].filter(Boolean));
+export const MOBILE_MORE_NAV_ITEMS = Object.freeze([
+  WORK_NAV_ITEMS.find(item => item.id === 'code'),
+  ...APPLICATION_NAV_ITEMS
+].filter(Boolean));
 export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([

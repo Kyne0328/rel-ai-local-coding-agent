@@ -110,29 +110,29 @@ assert.deepEqual(fileTask?.changedFiles, ['src/a.js', 'src/b.js', 'src/c.js']);
 assert.equal(fileTask?.changedFileCount, 3, 'live task snapshots must retain cumulative changed files across tool calls');
 fileTracker.reset();
 
-const approvalTracker = createToolActivityTracker({ idleMs: 60_000 });
-const finishApproval = approvalTracker.beginConnectorToolCall({
+const blockedTracker = createToolActivityTracker({ idleMs: 60_000 });
+const finishBlocked = blockedTracker.beginConnectorToolCall({
   tool: 'relai_edit',
   workspace: 'repo',
-  scopeId: 'approval-test',
+  scopeId: 'blocked-test',
   createTask: true
 });
-finishApproval({
+finishBlocked({
   ok: false,
-  error: 'Approval required.',
+  error: 'Approval interaction unavailable.',
   activity: {
     status: 'blocked',
     title: 'Update repository files',
-    summary: 'Approval is required before updating repository files.',
-    currentStage: 'Waiting for approval',
-    currentActivity: 'Approval is required before updating repository files.',
-    progress: { mode: 'indeterminate', label: 'Approval required' }
+    summary: 'The requested operation is blocked.',
+    currentStage: 'Blocked',
+    currentActivity: 'The requested operation is blocked.',
+    progress: { mode: 'indeterminate', label: 'Blocked' }
   }
 });
-const approvalTask = approvalTracker.getToolActivity().tasks[0];
-assert.equal(approvalTask?.status, 'waiting_for_approval');
-assert.equal(approvalTask?.currentStage, 'Waiting for approval');
-assert.equal(approvalTask?.events[0]?.status, 'blocked');
+const blockedTask = blockedTracker.getToolActivity().tasks[0];
+assert.equal(blockedTask?.status, 'blocked');
+assert.equal(blockedTask?.currentStage, 'Blocked');
+assert.equal(blockedTask?.events[0]?.status, 'blocked');
 
 const revalidationTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishRevalidation = revalidationTracker.beginConnectorToolCall({

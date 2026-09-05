@@ -5,7 +5,8 @@ import * as path from 'node:path';
 import { resolveWorkspace } from './config.js';
 import { requestStateKey } from './mcp/context.js';
 import { principalFingerprint } from './mcp/principal.js';
-import { readTaskHistorySessionRecord } from './taskHistoryStore.js';
+import { assertAuthorizedToolCall } from './mcp/authorizationPolicy.js';
+import { OPERATION_IDS as OP } from './tools/operationIds.js';
 import { resolveWorkspaceSourcePath } from './workspaceSources.js';
 
 const ARTIFACT_RESOURCE_TEMPLATE = 'relai://artifact/{token}';
@@ -15,8 +16,6 @@ const ARTIFACT_TOKEN_TTL_MS = 10 * 60 * 1000;
 const ARTIFACT_MAX_BYTES = 100 * 1024 * 1024;
 
 async function createArtifactResourceLink(workspace, config, requestedPath, options = {}) {
-  const workId = String(options.workId || '').trim();
-  if (!workId) throw new Error('relai_read asResource requires work_id.');
   const safe = resolveWorkspaceSourcePath(workspace, requestedPath, { operation: 'read' });
   const before = await fs.promises.stat(safe.absolutePath);
   if (!before.isFile()) throw new Error(`Artifact target is not a file: ${safe.relativePath}`);
@@ -38,7 +37,6 @@ async function createArtifactResourceLink(workspace, config, requestedPath, opti
     h: sha256,
     s: before.size,
     e: expiresAt,
-    t: workId,
     f: principalFingerprint(options.principal)
   });
   return {
@@ -61,7 +59,7 @@ async function createArtifactResourceLink(workspace, config, requestedPath, opti
 
 async function readArtifactResource(config, uri, options = {}) {
   const claims = openArtifactClaims(config, artifactTokenFromUri(uri));
-  if (claims.v !== ARTIFACT_TOKEN_VERSION || !claims.w || !claims.p || !claims.h || !claims.t || !claims.f) {
+  if (claims.v !== ARTIFACT_TOKEN_VERSION || !claims.w || !claims.p || !claims.h || !claims.f) {
     throw new Error('Invalid Rel.AI artifact resource.');
   }
   if (!Number.isSafeInteger(claims.s) || claims.s < 0 || claims.s > ARTIFACT_MAX_BYTES) {
@@ -70,10 +68,7 @@ async function readArtifactResource(config, uri, options = {}) {
   if (!Number.isFinite(claims.e) || claims.e <= Date.now()) throw new Error('Rel.AI artifact resource has expired.');
   const actualPrincipal = principalFingerprint(options.principal);
   if (!safeEqual(claims.f, actualPrincipal)) throw new Error('Rel.AI artifact resource is unavailable.');
-
-  const session = readTaskHistorySessionRecord(config, claims.t, { reconcileInactive: false });
-  if (!session || String(session.workspace || '') !== String(claims.w)) throw new Error('Rel.AI artifact resource is unavailable.');
-  if (!safeEqual(String(session.principalFingerprint || ''), claims.f)) throw new Error('Rel.AI artifact resource is unavailable.');
+  assertAuthorizedToolCall({ principal: options.principal, operationName: OP.READ, workspace: claims.w });
 
   const workspace = resolveWorkspace(config, claims.w);
   const safe = resolveWorkspaceSourcePath(workspace, claims.p, { operation: 'read' });

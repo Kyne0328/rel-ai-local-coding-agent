@@ -220,9 +220,7 @@ function createToolActivityTracker(options = {}) {
       task.changedFiles = mergeTaskChangedFiles(task.changedFiles, current.activity?.metadata?.changedFiles);
       current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.internalOperation !== OP.WORK_CANCEL
         ? 'cancelled'
-        : result.ok === false
-          ? (completionActivity.status || 'failed')
-          : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
+        : completedActivityStatus(result, completionActivity);
       const blockedResult = current.activity.status === 'blocked';
       const validationStatus = String(current.activity?.metadata?.validationStatus || '');
       const validationTool = current.internalOperation === OP.VALIDATE_CHECKS;
@@ -261,11 +259,11 @@ function createToolActivityTracker(options = {}) {
         } else if (current.activity.status === 'blocked') {
           const blockedCode = String(current.activity?.error?.code || current.activity?.metadata?.errorCode || '');
           const validationRequired = /VALIDATION_REQUIRED|TASK_PERSISTENCE_CONFLICT/.test(blockedCode);
-          task.status = validationRequired ? 'blocked' : 'waiting_for_approval';
-          task.currentStage = validationRequired ? 'Validation required' : 'Waiting for approval';
+          task.status = 'blocked';
+          task.currentStage = validationRequired ? 'Validation required' : 'Blocked';
           task.progress = {
             mode: 'indeterminate',
-            label: validationRequired ? 'Final validation required' : 'Approval required'
+            label: validationRequired ? 'Final validation required' : 'Blocked'
           };
         } else {
           task.status = 'planning';
@@ -317,13 +315,29 @@ function createToolActivityTracker(options = {}) {
     const connectorCall = details.connector !== false;
     const scopeId = resolveScopeId(details);
     const operationId = crypto.randomUUID();
+    const internalOperation = String(details.internalOperation || details.tool || '');
+    const initialActivity = buildToolActivityDetails(
+      internalOperation,
+      details.input || {},
+      null,
+      null,
+      { operation: details.operation, phase: 'running', metadata: { ...(details.metadata || {}), internalOperation } }
+    );
     const operation = {
       id: operationId,
       tool: String(details.tool || ''),
-      label: String(details.operation || defaultOperation(details.tool)),
-      detail: String(details.detail || ''),
+      internalOperation,
+      label: String(details.operation || initialActivity.title || defaultOperation(details.tool)),
+      detail: String(details.detail || initialActivity.summary || ''),
       workspace: String(details.workspace || ''),
-      startedAt
+      startedAt,
+      activity: createActivityEvent({
+        eventId: operationId,
+        operationId,
+        startedAt,
+        ...initialActivity,
+        tool: { name: String(details.tool || ''), operation: String(details.operation || initialActivity.title || '') }
+      })
     };
 
     activeToolCalls += 1;
@@ -333,7 +347,8 @@ function createToolActivityTracker(options = {}) {
       tool: operation.tool,
       workspace: operation.workspace,
       operation: operation.label,
-      operationId
+      operationId,
+      activityEvent: cloneActivityEvent(operation.activity)
     });
 
     let finish;
@@ -343,6 +358,11 @@ function createToolActivityTracker(options = {}) {
       if (patch.detail != null) operation.detail = String(patch.detail);
       if (patch.workspace != null) operation.workspace = String(patch.workspace);
       if (patch.tool != null) operation.tool = String(patch.tool);
+      applyActivityPatch(operation.activity, {
+        ...(patch.operation != null ? { title: operation.label } : {}),
+        ...(patch.detail != null ? { summary: operation.detail } : {}),
+        tool: { name: operation.tool, operation: operation.label }
+      });
       finish.operation = operation.label;
       notifyObserved('progress', {
         scopeId,
@@ -350,7 +370,8 @@ function createToolActivityTracker(options = {}) {
         workspace: operation.workspace,
         operation: operation.label,
         detail: operation.detail,
-        operationId
+        operationId,
+        activityEvent: cloneActivityEvent(operation.activity)
       });
     };
 
@@ -358,6 +379,16 @@ function createToolActivityTracker(options = {}) {
       if (finished) return;
       finished = true;
       const finishedAt = now();
+      const completionActivity = result.activity && typeof result.activity === 'object'
+        ? result.activity
+        : buildToolActivityDetails(internalOperation, {}, null, result.ok === false ? { message: result.error } : null, {
+            operation: operation.label,
+            phase: 'complete'
+          });
+      applyActivityPatch(operation.activity, completionActivity);
+      operation.activity.status = completedActivityStatus(result, completionActivity);
+      operation.activity.completedAt = new Date(finishedAt).toISOString();
+      operation.activity.durationMs = Math.max(0, finishedAt - startedAt);
       activeToolCalls = Math.max(0, activeToolCalls - 1);
       if (connectorCall) activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
       finish.operation = operation.label;
@@ -369,7 +400,8 @@ function createToolActivityTracker(options = {}) {
         operationId,
         ok: result.ok !== false,
         error: String(result.error || ''),
-        durationMs: Math.max(0, finishedAt - startedAt)
+        durationMs: Math.max(0, finishedAt - startedAt),
+        activityEvent: cloneActivityEvent(operation.activity)
       });
     };
 
@@ -824,6 +856,12 @@ function createToolActivityTracker(options = {}) {
 
 function mergeTaskChangedFiles(...sources) {
   return [...new Set(sources.flatMap(files => Array.isArray(files) ? files : []).map(String).filter(Boolean))].slice(0, 200);
+}
+
+function completedActivityStatus(result = {}, completionActivity = {}) {
+  if (result.ok === false) return completionActivity.status || 'failed';
+  const status = String(completionActivity.status || '');
+  return ['failed', 'blocked', 'cancelled'].includes(status) ? status : 'succeeded';
 }
 
 function applyActivityPatch(activity, patch = {}) {

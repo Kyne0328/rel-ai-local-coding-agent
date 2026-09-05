@@ -9,7 +9,7 @@ import {
 } from './actionDefinitions.js';
 import { ACTION_REGISTRY } from './actionRegistry.js';
 
-const TOOL_SURFACE_VERSION = 63;
+const TOOL_SURFACE_VERSION = 68;
 
 const TOOL_ACTION_CATALOG = Object.freeze(buildCatalog());
 const ACTION_BY_KEY = new Map(TOOL_ACTION_CATALOG.map(entry => [catalogKey(entry.publicTool, entry.action), entry]));
@@ -43,7 +43,7 @@ function buildCatalog() {
         inputSchema: operationMetadata.inputSchema,
         outputSchema: operationMetadata.outputSchema,
         annotations: operationMetadata.annotations,
-        behavior: operationMetadata.behavior,
+        behavior: Object.freeze({ ...operationMetadata.behavior, ...(mapping.behavior || {}) }),
         execution: operationMetadata.execution,
         dashboard: operationMetadata.dashboard,
         groups: operationMetadata.groups,

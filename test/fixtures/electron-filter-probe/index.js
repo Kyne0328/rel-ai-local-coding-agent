@@ -269,6 +269,22 @@ app.whenReady().then(async () => {
       const focusChipLabel = document.querySelector('.workspace-focus-chip')?.getAttribute('aria-label') || '';
       location.hash = '#tasks';
       await waitUntil(() => Boolean(document.querySelector('.workspace-menu-trigger')));
+      const menuTrigger = document.querySelector('.workspace-menu-trigger');
+      menuTrigger.click();
+      await delay(20);
+      const menuOptions = [...document.querySelectorAll('.workspace-menu-popover [role="option"]')];
+      const menuSingleTabStop = menuOptions.filter(option => option.tabIndex === 0).length === 1;
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      const menuArrowNavigation = document.activeElement?.dataset?.workspaceValue === 'app';
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      const homeFocused = document.activeElement === menuOptions[0];
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+      const endFocused = document.activeElement === menuOptions.at(-1);
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      const menuTypeahead = document.activeElement?.dataset?.workspaceValue === 'app';
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const menuEscapeRestoresFocus = document.activeElement === menuTrigger && menuTrigger.getAttribute('aria-expanded') === 'false';
       return {
         validationPreferenceRemoved,
         validationMetricRemoved,
@@ -278,7 +294,12 @@ app.whenReady().then(async () => {
         aliasValidationCleared,
         redundantProjectActionsRemoved,
         focusChipLabel,
-        scopeName: document.querySelector('.workspace-menu-trigger')?.getAttribute('aria-label') || ''
+        scopeName: menuTrigger?.getAttribute('aria-label') || '',
+        menuSingleTabStop,
+        menuArrowNavigation,
+        menuHomeEndNavigation: homeFocused && endFocused,
+        menuTypeahead,
+        menuEscapeRestoresFocus
       };
     })()`);
 

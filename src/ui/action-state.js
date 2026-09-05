@@ -4,16 +4,18 @@ function messageFor(error) {
   return 'The action failed.';
 }
 
-function setButtonState(button, state, text) {
+function setButtonState(button, state, text, html = '') {
   if (!button) return;
   if (state === 'idle') delete button.dataset.state;
   else button.dataset.state = state;
   button.disabled = state === 'loading';
-  if (text) button.textContent = text;
+  if (state === 'idle' && html) button.innerHTML = html;
+  else if (text) button.textContent = text;
 }
 
 export async function runButtonAction(button, options, action) {
   const idleText = options?.idleText || button?.textContent || '';
+  const idleHtml = button?.innerHTML || idleText;
   const loadingText = options?.loadingText || 'Working…';
   const successText = options?.successText || idleText;
   const errorText = options?.errorText || idleText;
@@ -24,15 +26,15 @@ export async function runButtonAction(button, options, action) {
     const result = await action();
     if (result?.ok === false) {
       setButtonState(button, 'error', errorText);
-      window.setTimeout(() => setButtonState(button, 'idle', idleText), 1200);
+      window.setTimeout(() => setButtonState(button, 'idle', idleText, idleHtml), 1200);
       return result;
     }
     setButtonState(button, 'success', successText);
-    window.setTimeout(() => setButtonState(button, 'idle', idleText), successDuration);
+    window.setTimeout(() => setButtonState(button, 'idle', idleText, idleHtml), successDuration);
     return result;
   } catch (error) {
     setButtonState(button, 'error', errorText);
-    window.setTimeout(() => setButtonState(button, 'idle', idleText), 1200);
+    window.setTimeout(() => setButtonState(button, 'idle', idleText, idleHtml), 1200);
     return { ok: false, error: messageFor(error) };
   }
 }

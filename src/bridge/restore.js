@@ -14,7 +14,7 @@ function normalizePaths(workspace, paths) {
   return paths.map((item) => {
     const relativePath = resolveSafePath(workspace.path, item, { operation: "restore" }).relativePath;
     if (PATHSPEC_MAGIC.test(relativePath) || relativePath === ".") {
-      throw new Error(`relai_changes action "restore" requires literal file paths, not patterns: ${relativePath}. Use relai_changes action "reset" with confirmation RESET to discard everything.`);
+      throw new Error(`relai_changes action "restore" requires literal file paths, not patterns: ${relativePath}. Use relai_changes action "reset" to discard the entire workspace after approval.`);
     }
     return relativePath;
   });
@@ -37,17 +37,8 @@ async function relaiRestorePaths(workspace, config, args = {}) {
   };
 }
 
-function expectedConfirmation(removeUntracked) {
-  return removeUntracked ? "RESET_AND_CLEAN" : "RESET";
-}
-
 async function relaiResetWorkspace(workspace, config, args = {}) {
   const removeUntracked = args.removeUntracked === true;
-  const expected = expectedConfirmation(removeUntracked);
-  const confirmation = String(args.confirmation || "").trim();
-  if (confirmation !== expected) {
-    throw new Error(`relai_changes action "reset" requires confirmation='${expected}'${removeUntracked ? " when removeUntracked is true" : ""}.`);
-  }
 
   const reset = await runProcess("git", ["reset", "--hard", "HEAD"], {
     cwd: workspace.path,

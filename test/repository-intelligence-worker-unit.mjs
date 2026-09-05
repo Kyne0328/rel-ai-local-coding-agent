@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { repositoryIndexPath } from '../src/repository/intelligence/database.js';
-import { evictIdleRepositoryWorkers } from '../src/repository/intelligence/indexer.js';
+import {
+  INDEX_FULL_TIMEOUT_MS,
+  INDEX_INCREMENTAL_TIMEOUT_MS,
+  evictIdleRepositoryWorkers
+} from '../src/repository/intelligence/indexer.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-repository-worker-'));
@@ -17,6 +21,10 @@ fs.writeFileSync(path.join(workspaceRoot, 'src', 'beta.js'), 'export function be
 const workspace = { alias: 'worker-test', path: workspaceRoot, context: {}, testCommands: {}, commands: {} };
 const config = { stateDir };
 const plannedIndexPath = repositoryIndexPath(config, workspace);
+assert.equal(INDEX_INCREMENTAL_TIMEOUT_MS, 60_000,
+  'incremental refreshes should fail fast rather than inheriting the full-build budget');
+assert.equal(INDEX_FULL_TIMEOUT_MS, 300_000,
+  'full, rebuild, and recovery indexing need enough budget to include the bounded Zoekt rebuild');
 assert.equal(fs.existsSync(path.dirname(plannedIndexPath)), false,
   'resolving an intelligence index path must not create runtime directories on a read-only path');
 
@@ -41,6 +49,18 @@ try {
   assert.equal(incremental.scanMode, 'incremental');
   assert.equal(incremental.changedPathCount, 1);
   assert.equal(incremental.pendingRefresh, false);
+  if (initial.zoekt?.current === true) {
+    assert.equal(incremental.zoekt?.current, false,
+      'incremental graph changes must mark the prior Zoekt generation stale immediately');
+    assert.equal(repositoryIntelligence.status(workspace, config).zoektRefreshScheduled, true,
+      'incremental graph changes must schedule a coalesced Zoekt refresh');
+    await waitForZoektCurrent();
+    const afterZoektRefresh = repositoryIntelligence.status(workspace, config);
+    assert.equal(afterZoektRefresh.metadata?.scanMode, 'incremental',
+      'refreshing Zoekt after a one-file edit must not force a full Repository Intelligence reconciliation');
+    assert.equal(afterZoektRefresh.metadata?.generation, incremental.generation,
+      'refreshing Zoekt must preserve the already-current graph generation');
+  }
 
   assert.equal(evictIdleRepositoryWorkers('test second idle eviction'), 1);
   const cached = await repositoryIntelligence.ensure(workspace, config);
@@ -68,6 +88,14 @@ try {
   assert.equal(rebuilt.scanMode, 'full');
   assert.equal(rebuilt.rebuilt, true);
   assert.ok(rebuilt.generation > incremental.generation);
+
+  const generationBeforeRestart = rebuilt.generation;
+  await repositoryIntelligence.shutdown();
+  const resumed = await repositoryIntelligence.ensure(workspace, config, { watch: false });
+  assert.equal(resumed.generation, generationBeforeRestart,
+    'an unchanged restart must reuse the persisted generation instead of rebuilding it');
+  assert.equal(resumed.cacheHit, true);
+  assert.equal(resumed.changedPathCount, 0);
 
   const alphaPath = path.join(workspaceRoot, 'src', 'alpha.js');
   const alphaStat = fs.statSync(alphaPath);
@@ -115,9 +143,30 @@ try {
   const afterCancellation = await repositoryIntelligence.ensure(workspace, config, { force: true });
   assert.equal(afterCancellation.runtimeStatus, 'ready');
   assert.equal(afterCancellation.workerIsolated, true);
+
+  for (let index = 0; index < 1500; index += 1) {
+    fs.writeFileSync(path.join(workspaceRoot, 'src', `timeout-${index}.js`), `export const timeout${index} = ${index};\n`);
+  }
+  await assert.rejects(
+    repositoryIntelligence.ensure(workspace, config, { force: true, watch: false, indexTimeoutMs: 1 }),
+    error => error?.code === 'INDEX_TIMEOUT',
+    'indexing must fail with a bounded timeout instead of leaving callers waiting indefinitely'
+  );
+  await waitForIdle();
+  const afterTimeout = await repositoryIntelligence.ensure(workspace, config, { force: true, watch: false });
+  assert.equal(afterTimeout.runtimeStatus, 'ready', 'a timed-out index worker must recover for the next request');
 } finally {
   await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+async function waitForZoektCurrent() {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const status = repositoryIntelligence.status(workspace, config);
+    if (status.metadata?.zoekt?.current === true && status.zoektRefreshScheduled === false) return;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  throw new Error('Repository Intelligence did not refresh Zoekt after incremental changes.');
 }
 
 async function waitForIdle() {

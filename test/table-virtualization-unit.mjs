@@ -56,6 +56,7 @@ test('virtualizer preserves the number of rendered rows when data changes', () =
     return element;
   });
   assert.equal(virtualizer.getRendered(), 50);
+  assert.equal(tbody.children.at(-1)?.children[0]?.colSpan, 1, 'virtualization sentinel must not create implicit table columns');
   observer.callback([{ isIntersecting: true }]);
   assert.equal(virtualizer.getRendered(), 100);
 

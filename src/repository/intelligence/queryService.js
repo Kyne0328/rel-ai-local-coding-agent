@@ -47,8 +47,15 @@ async function executeCodeInspectQuery(workspace, config, args = {}, index = {},
       if (!query) throw new Error('relai_inspect action "related" requires query or symbol.');
       const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 10);
       const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
-      const fallback = zoekt.available && zoekt.current ? [] : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
-      return { ...base, query, ...relatedFiles(workspace, db, query, maxResults, args._workflowContext, {}, [...zoekt.results, ...fallback], sourceCache) };
+      const fallback = zoekt.available && zoekt.current
+        ? { available: true, skipped: true, results: [] }
+        : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
+      return {
+        ...base,
+        query,
+        retrieval: retrievalStatus(zoekt, fallback),
+        ...relatedFiles(workspace, db, query, maxResults, args._workflowContext, {}, [...zoekt.results, ...fallback.results], sourceCache)
+      };
     }
 
     const symbol = String(args.symbol || '').trim();
@@ -95,12 +102,14 @@ async function executeSemanticSearchQuery(workspace, config, args = {}, index = 
   try {
     const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 20);
     const zoekt = await searchZoekt(workspace, repositoryIndexPath(config, workspace), config.repositoryIntelligence || {}, index, query, candidateLimit, { signal: options.signal });
-    const fallback = zoekt.available && zoekt.current ? [] : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
+    const fallback = zoekt.available && zoekt.current
+      ? { available: true, skipped: true, results: [] }
+      : await searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit, { signal: options.signal });
     const filters = {
       pathPrefix: String(args.pathPrefix || '').replaceAll('\\', '/').replace(/^\.\//, ''),
       language: String(args.language || '').toLowerCase()
     };
-    const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, filters, [...zoekt.results, ...fallback], sourceCache);
+    const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, filters, [...zoekt.results, ...fallback.results], sourceCache);
     const diffusionEnabled = options.graphDiffusion !== false && shouldDiffuseSemanticResults(related, query, maxResults);
     const diffused = diffusionEnabled
       ? diffuseRelatedFiles(workspace, db, query, related, filters, maxResults, sourceCache)
@@ -115,6 +124,7 @@ async function executeSemanticSearchQuery(workspace, config, args = {}, index = 
       privacy: 'All parsing, graph indexing, and ranking run locally. No source text is sent to an external service.',
       fingerprint: index.fingerprint,
       cacheHit: index.cacheHit,
+      retrieval: retrievalStatus(zoekt, fallback),
       results: bounded.results,
       resultCount: Math.max(related.matchCount, diffused.files.length),
       truncated: related.truncated || diffused.truncated || bounded.truncated
@@ -307,6 +317,24 @@ function structuralSnippets(workspace, db, relativePath, limit = 3, sourceCache 
     if (text) snippets.push({ line: index + 1, text: text.slice(0, 500) });
   }
   return snippets;
+}
+
+function retrievalStatus(zoekt, fallback) {
+  const degraded = zoekt.current !== true || zoekt.available !== true || fallback.available === false;
+  return {
+    degraded,
+    zoekt: {
+      available: zoekt.available === true,
+      current: zoekt.current === true,
+      ...(zoekt.reason ? { reason: String(zoekt.reason) } : {})
+    },
+    fallback: {
+      provider: 'git-grep',
+      used: fallback.skipped !== true,
+      available: fallback.available === true,
+      ...(fallback.reason ? { reason: String(fallback.reason) } : {})
+    }
+  };
 }
 
 function externalStrategy(candidates) {

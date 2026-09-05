@@ -61,6 +61,36 @@ await assert.doesNotReject(() => validateToolOutput({}, 'relai_snapshot', {
   next: 'Use relai_search or targeted relai_read calls for omitted repository paths.'
 }));
 
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_process', {
+  action: 'list',
+  workspace: 'repo'
+}, {
+  ok: true,
+  processes: [],
+  count: 0
+}));
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_process', {
+  action: 'read',
+  workspace: 'repo',
+  processId: 'proc_abcdefghijklmnopqrst'
+}, {
+  ok: true,
+  processId: 'proc_abcdefghijklmnopqrst',
+  status: 'running',
+  stdout: { text: '', nextOffset: 0 },
+  stderr: { text: '', nextOffset: 0 }
+}));
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_process', {
+  action: 'stop',
+  workspace: 'repo',
+  processId: 'proc_abcdefghijklmnopqrst'
+}, {
+  ok: true,
+  processId: 'proc_abcdefghijklmnopqrst',
+  status: 'stopped',
+  duplicate: false
+}));
+
 await assert.doesNotReject(() => validateToolOutput({}, 'relai_inspect', {
   action: 'diagnostics',
   work_id: 'work_output'
@@ -189,6 +219,10 @@ function requiredArgs(entry) {
     case 'relai_inspect:trace': return { symbol: 'target' };
     case 'relai_inspect:related': return { query: 'target' };
     case 'relai_inspect:impact': return { paths: ['src/index.js'] };
+    case 'relai_skill:create':
+    case 'relai_skill:edit': return { name: 'output-skill', content: 'skill content' };
+    case 'relai_skill:patch': return { name: 'output-skill', oldText: 'old', newText: 'new' };
+    case 'relai_skill:delete': return { name: 'output-skill' };
     case 'relai_exec:default': return { command: 'npm test' };
     case 'relai_process:start': return { command: 'npm run dev', kind: 'service', purpose: 'Validate.' };
     case 'relai_ui:start': return { port: 3000 };
@@ -201,12 +235,21 @@ function requiredArgs(entry) {
     case 'relai_ui:network':
     case 'relai_ui:reload':
     case 'relai_ui:stop': return { sessionId: 'ui_abcdefghijklmnopqrst' };
+    case 'relai_computer:move':
+    case 'relai_computer:click':
+    case 'relai_computer:double_click':
+    case 'relai_computer:right_click': return { x: 10, y: 20 };
+    case 'relai_computer:drag': return { x: 10, y: 20, toX: 30, toY: 40 };
+    case 'relai_computer:scroll': return { direction: 'down' };
+    case 'relai_computer:type': return { text: 'hello' };
+    case 'relai_computer:key': return { key: 'enter' };
+    case 'relai_computer:hotkey': return { keys: ['ctrl', 's'] };
     case 'relai_process:read':
     case 'relai_process:stop': return { processId: 'proc_output' };
     case 'relai_process:write': return { processId: 'proc_output', input: 'status\n' };
     case 'relai_validate:http': return { route: '/health' };
     case 'relai_changes:restore': return { paths: ['README.md'] };
-    case 'relai_changes:reset': return { confirmation: 'RESET' };
+    case 'relai_changes:reset': return {};
     case 'relai_changes:replay': return { checkpointId: 'review_abcdefghijklmnopqrstuvwx' };
     case 'relai_changes:tidy_run': return { planId: 'tidy_abcdefghijklmnopqrst' };
     case 'relai_publish:commit': return { message: 'Validate output' };

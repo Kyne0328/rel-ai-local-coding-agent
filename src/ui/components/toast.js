@@ -1,3 +1,5 @@
+import { iconHtml } from './icons.js';
+
 const TOAST_VARIANTS = Object.freeze({
   info: { symbol: 'i', label: 'Information', role: 'status', duration: 5000 },
   success: { symbol: '✓', label: 'Success', role: 'status', duration: 4000 },
@@ -48,7 +50,7 @@ export function toast(message, { variant = 'info', duration } = {}) {
   dismiss.type = 'button';
   dismiss.className = 'toast-dismiss';
   dismiss.setAttribute('aria-label', `Dismiss ${metadata.label.toLowerCase()} notification`);
-  dismiss.textContent = '×';
+  dismiss.innerHTML = iconHtml('close');
 
   let timer = null;
   let timerStartedAt = 0;

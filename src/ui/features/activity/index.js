@@ -9,6 +9,7 @@ import { esc, timeAgo } from '../../utils.js';
 import { getRouteParams, getWorkspaceFilter, navigate, replaceRouteParams, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { copyText } from '../../clipboard.js';
+import { iconActionHtml } from '../../components/icons.js';
 import { eventTimestampValue } from '../../../taskEvents.js';
 import {
   activityAbsoluteTime,
@@ -205,7 +206,7 @@ function buildActivity() {
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="activity-master-detail"><div class="activity-list-pane"><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-task"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Action</th><th scope="col" class="activity-task-column">Task</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div></div><aside class="activity-inspector" data-activity-inspector><div class="inspector-empty"><strong>Select an activity</strong><span>Choose an event to inspect its result, task context, and technical details without leaving the activity stream.</span></div></aside></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Activity history</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="activity-master-detail"><div class="activity-list-pane"><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Activity history</caption><colgroup><col class="activity-col-time"><col class="activity-col-message"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-message-column">Activity</th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div></div><aside class="activity-inspector" data-activity-inspector><div class="inspector-empty"><strong>Select an activity</strong><span>Choose an event to inspect its result, task context, and technical details without leaving the activity stream.</span></div></aside></div>';
   root.append(toolbar, tableCard);
   queueMicrotask(() => renderActivityFilterBar(root));
   return root;
@@ -562,7 +563,7 @@ function renderTable(entries, tableKey) {
       const emptyMessage = _loadError
         ? 'Activity history could not be loaded. Live events will appear here when available.'
         : 'No activity matches these filters.';
-      body.innerHTML = `<tr><td colspan="6"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="2"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
     }
     _virtualizer?.destroy();
     _virtualizer = null;
@@ -580,18 +581,13 @@ function activityLoadingRows() {
   return Array.from({ length: 6 }, (_, index) => `
     <tr class="activity-skeleton-row" aria-hidden="true">
       <td class="activity-time-column"><span class="activity-skeleton activity-skeleton-time"></span></td>
-      <td class="activity-tool-column"><span class="activity-skeleton activity-skeleton-tool"></span></td>
-      <td class="activity-task-column"><span class="activity-skeleton activity-skeleton-task"></span></td>
-      <td class="activity-status-column"><span class="activity-skeleton activity-skeleton-status"></span></td>
       <td class="activity-message-column activity-message-cell">
-        <span class="activity-message-mobile-meta">
-          <span class="activity-skeleton activity-skeleton-status"></span>
-          <span class="activity-skeleton activity-skeleton-tool"></span>
-          <span class="activity-skeleton activity-skeleton-time"></span>
-        </span>
         <span class="activity-skeleton activity-skeleton-message${index % 3 === 1 ? ' activity-skeleton-message-short' : ''}"></span>
+        <span class="activity-skeleton-meta">
+          <span class="activity-skeleton activity-skeleton-status"></span>
+          <span class="activity-skeleton activity-skeleton-context"></span>
+        </span>
       </td>
-      <td class="activity-action-column"><span class="activity-skeleton activity-skeleton-action"></span></td>
     </tr>`).join('');
 }
 
@@ -601,39 +597,31 @@ function renderActivityRow(entry) {
   const message = activityMessage(entry);
   const timestamp = eventTimestampValue(entry);
   const absoluteTime = activityAbsoluteTime(entry);
-  const tool = toolName(entry);
   const action = activityDisplayAction(entry);
-  const title = entry.title || entry.operation || '';
   const session = activitySessionView(entry, _sessionIndex);
-  const taskMeta = [session.workspace, session.shortId].filter(Boolean).join(' · ');
-  const mobileTask = [session.title, session.workspace].filter(Boolean).join(' · ');
+  const project = session.workspace || entry.workspace || 'project';
+  const taskTitle = session.title || 'Task';
   const relativeTime = timeAgo(timestamp) || '—';
   const row = document.createElement('tr');
+  row.classList.add('activity-data-row');
   const eventId = activityEventId(entry);
   if (_requestedEventId && eventId === _requestedEventId) row.classList.add('activity-requested-row');
   row.innerHTML = `
     <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</td>
-    <td class="activity-tool-column truncate" title="${esc(tool)}">${esc(action)}</td>
-    <td class="activity-task-column"><span class="activity-task-title" title="${esc(session.title)}">${esc(session.title)}</span>${taskMeta ? `<span class="activity-task-meta">${esc(taskMeta)}</span>` : ''}</td>
-    <td class="activity-status-column">${pillHtml(status)}</td>
     <td class="activity-message-column activity-message-cell">
-      <span class="activity-message-mobile-task" title="${esc(mobileTask)}">${esc(mobileTask)}</span>
-      <span class="activity-message-mobile-meta">${pillHtml(status)}<span class="activity-message-mobile-action">${esc(action)}</span><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</span></span>
-      <span class="activity-message-copy">${esc(message)}</span>
-      ${title && title !== action ? `<span class="activity-message-title">${esc(title)}</span>` : ''}
-    </td>
-    <td class="activity-action-column"><button class="secondary activity-row-button" type="button" data-focus-key="activity-${esc(eventId)}" aria-label="${esc(activityActionLabel(entry))}">Open</button></td>`;
-  row.querySelector('.activity-row-button')?.addEventListener('click', () => openDetail(entry));
-  row.tabIndex = 0;
-  row.setAttribute('role', 'button');
-  row.setAttribute('aria-label', activityActionLabel(entry));
+      <button class="activity-row-trigger" type="button" data-focus-key="activity-${esc(eventId)}" aria-label="${esc(activityActionLabel(entry))}">
+        <span class="activity-message-copy">${esc(message)}</span>
+        <span class="activity-row-meta">
+          ${pillHtml(status)}
+          <span class="activity-row-action">${esc(action)}</span>
+          <span class="activity-row-task" title="${esc(taskTitle)}">${esc(taskTitle)}</span>
+          <span class="activity-row-project" title="${esc(project)}">${esc(project)}</span>
+        </span>
+      </button>
+    </td>`;
+  row.querySelector('.activity-row-trigger')?.addEventListener('click', () => openDetail(entry));
   row.addEventListener('click', event => {
     if (event.target.closest('button, a')) return;
-    openDetail(entry);
-  });
-  row.addEventListener('keydown', event => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
     openDetail(entry);
   });
   return row;
@@ -667,7 +655,7 @@ function openDetail(entry) {
   if (session.id) {
     const context = document.createElement('section');
     context.className = 'activity-detail-section activity-session-context';
-    context.innerHTML = `<h3>Task</h3><strong>${esc(session.title)}</strong><span>${esc([session.workspace, session.shortId].filter(Boolean).join(' · '))}</span><div class="activity-session-actions"><a class="buttonlike secondary" href="${routeHref('tasks', { workspace: session.workspace || entry.workspace, task: session.id })}">Open task</a><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace || entry.workspace, task: session.id, time: 'all' })}">Show only this task</a></div>`;
+    context.innerHTML = `<h3>Task</h3><strong>${esc(session.title)}</strong><span>${esc([session.workspace, session.shortId].filter(Boolean).join(' · '))}</span><div class="activity-session-actions"><a class="buttonlike secondary" href="${routeHref('tasks', { workspace: session.workspace || entry.workspace, task: session.id })}">${iconActionHtml('chevronRight', 'Task', { position: 'end' })}</a><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace || entry.workspace, task: session.id, time: 'all' })}">Show only this task</a></div>`;
     content.appendChild(context);
   }
 
@@ -725,13 +713,22 @@ function openDetail(entry) {
   if (!inspector) return;
   const heading = document.createElement('div');
   heading.className = 'activity-inspector-head';
-  heading.innerHTML = `<span class="overview-kicker">Activity</span><h2>${esc(entry.title || entry.operation || toolName(entry) || 'Activity detail')}</h2>`;
+  heading.innerHTML = `<span class="overview-kicker">Activity</span><h2 tabindex="-1">${esc(entry.title || entry.operation || toolName(entry) || 'Activity detail')}</h2>`;
   inspector.replaceChildren(heading, content);
   inspector.scrollTop = 0;
+  revealStackedActivityInspector(inspector);
   const selectedId = activityEventId(entry);
   for (const row of document.querySelectorAll('#__activity-tbody tr')) {
     row.classList.toggle('is-selected', row.querySelector('[data-focus-key]')?.dataset.focusKey === `activity-${selectedId}`);
   }
+}
+
+function revealStackedActivityInspector(inspector) {
+  if (!window.matchMedia('(max-width: 1140px)').matches) return;
+  const heading = inspector.querySelector('.activity-inspector-head h2');
+  if (!(heading instanceof HTMLElement)) return;
+  heading.focus({ preventScroll: true });
+  heading.scrollIntoView({ block: 'start', inline: 'nearest' });
 }
 
 function appendReadableSection(container, title, value, className = '') {

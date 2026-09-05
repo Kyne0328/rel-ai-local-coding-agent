@@ -104,7 +104,7 @@ function activityDescription(activity, waiting) {
   const taskCount = Number(activity.activeTaskCount || tasks.length || 1);
   const activeCalls = Number(activity.activeCalls || 0);
   const location = activityLocation(activity, tasks);
-  if (waiting) return 'ChatGPT may still be working, waiting for approval, or already finished. Rel.AI only knows when ChatGPT asks it to take an action.';
+  if (waiting) return 'ChatGPT may still be working or already finished. Rel.AI only knows when ChatGPT asks it to take an action.';
   if (taskCount > 1) return `${activeCalls} ${pluralize(activeCalls, 'active action')} across ${location}. The computer stays awake while actions are running.`;
   return `${activity.operation || toolLabel(activity.tool)} in ${location}. The computer stays awake until the action finishes.`;
 }

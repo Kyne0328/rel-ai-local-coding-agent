@@ -1,7 +1,4 @@
-const ICONS = Object.freeze({
-  play: '<path d="m8 5 11 7-11 7Z"/>',
-  pause: '<path d="M8 5v14M16 5v14"/>'
-});
+import { iconHtml } from './icons.js';
 
 export function stateIconButton({ pressed = false, label = '', icon = 'play', className = '', onClick } = {}) {
   const button = document.createElement('button');
@@ -18,5 +15,5 @@ export function setStateIconButton(button, { pressed = false, label = '', icon =
   button.setAttribute('aria-label', label);
   button.title = label;
   button.classList.toggle('active', Boolean(pressed));
-  button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[icon] || ICONS.play}</svg>`;
+  button.innerHTML = iconHtml(icon);
 }

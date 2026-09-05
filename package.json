@@ -1,8 +1,8 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.27.5",
-  "description": "Use ChatGPT web like a coding agent with local repository tools for search, edit, run, inspect, validate, review, and Git.",
+  "version": "0.28.0",
+  "description": "Local agency/runtime harness that turns ChatGPT Web into a repository- and computer-capable development agent.",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -131,6 +131,8 @@
     "mcp",
     "chatgpt",
     "chatgpt-web",
+    "chatgpt-harness",
+    "agent-harness",
     "coding-agent",
     "git",
     "pull-request"
@@ -139,10 +141,10 @@
     "name": "Kyne",
     "url": "https://github.com/Kyne0328"
   },
-  "homepage": "https://github.com/Kyne0328/rel-ai-local-coding-agent",
+  "homepage": "https://github.com/Kyne0328/rel-ai-chatgpt-web-harness",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Kyne0328/rel-ai-local-coding-agent.git"
+    "url": "git+https://github.com/Kyne0328/rel-ai-chatgpt-web-harness.git"
   },
   "devDependencies": {
     "@electron/asar": "^4.2.1",
@@ -158,6 +160,7 @@
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
+    "@nut-tree-fork/libnut": "4.2.6",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/resources": "^2.10.0",
@@ -166,6 +169,7 @@
     "monaco-editor": "0.56.0",
     "playwright-core": "^1.62.1",
     "pyright": "1.1.413",
+    "screenshot-desktop": "1.15.6",
     "tree-sitter-wasms": "^0.1.13",
     "typescript-language-server": "6.0.0",
     "typescript-lsp-runtime": "npm:typescript@6.0.3",
@@ -179,6 +183,8 @@
   },
   "bundleDependencies": [
     "@modelcontextprotocol/server",
+    "@nut-tree-fork/libnut",
+    "screenshot-desktop",
     "@opentelemetry/api",
     "@opentelemetry/exporter-trace-otlp-http",
     "@opentelemetry/resources",

@@ -43,7 +43,7 @@ const snapshot = compactForConnector('snapshot', {
 });
 const skillMetrics = skillMeasurements();
 const report = {
-  baseline,
+  historicalBaseline: baseline,
   budget,
   surface,
   resultBudgets: {
@@ -53,8 +53,9 @@ const report = {
     boundedSnapshot: bytes(snapshot)
   },
   skills: skillMetrics,
-  change: {
-    discoveryReductionPercent: reduction(surface.discoverySchemaBytes)
+  currentBudget: {
+    discoveryHeadroomBytes: Math.max(0, budget.discoverySchemaBytes - surface.discoverySchemaBytes),
+    discoveryBudgetUsagePercent: percentage(surface.discoverySchemaBytes, budget.discoverySchemaBytes)
   }
 };
 
@@ -76,7 +77,7 @@ function skillMeasurements() {
   }
   return { files, totalBytes: files.reduce((total, item) => total + item.bytes, 0) };
 }
-function reduction(current) { return Number(((1 - current / baseline.discoverySchemaBytes) * 100).toFixed(2)); }
+function percentage(value, total) { return Number(((value / Math.max(1, total)) * 100).toFixed(2)); }
 function bytes(value) { return Buffer.byteLength(JSON.stringify(value), 'utf8'); }
 
 export { baseline, budget, measure };

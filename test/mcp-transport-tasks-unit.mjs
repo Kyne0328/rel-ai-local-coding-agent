@@ -113,6 +113,26 @@ try {
   ]) {
     assert.equal(isTransportTaskRequestCandidate(config, candidate), true, `${candidate.params.name} long operation must reach capability negotiation`);
   }
+  for (const [id, name, args] of [
+    [93, 'relai_search', { action: 'semantic', workspace: 'app', query: 'target' }],
+    [92, 'relai_inspect', { action: 'architecture', workspace: 'app' }],
+    [91, 'relai_validate', { action: 'http', workspace: 'app', route: '/health' }]
+  ]) {
+    const taskless = await handleTransportTaskRequest(config, request(id, 'tools/call', {
+      name,
+      arguments: args
+    }, {}), {
+      principal: owner,
+      transportType: 'streamable-http',
+      synchronousFallbackGraceMs: 0,
+      executeToolResult: async (_config, calledName, calledArgs) => ({
+        isError: false,
+        structuredContent: { ok: true, tool: calledName, workspace: calledArgs.workspace }
+      })
+    });
+    assert.equal(taskless.body.result?.structuredContent?.ok, true, `${name} must execute without a logical work_id when its action is task-optional`);
+    assert.equal(taskless.body.result?.structuredContent?.tool, name);
+  }
   const timeout = await runBoundedExecution(
     signal => signal.aborted
       ? Promise.resolve({ stopped: true })

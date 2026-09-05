@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { onToolActivity, taskError } from './toolActivity.js';
+import { principalFingerprint } from './mcp/principal.js';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_VIEWPORT = Object.freeze({ width: 1440, height: 900 });
@@ -79,6 +80,7 @@ async function startUiSession(workspace, args = {}, context = {}) {
       sessionId,
       taskId,
       workspaceId: workspace.alias,
+      principalFingerprint: principalFingerprint(context.principal),
       browser,
       browserContext,
       page: null,
@@ -298,7 +300,15 @@ function requireSession(workspace, args = {}, context = {}) {
   const record = sessions.get(sessionId);
   if (!record) throw taskError('UI_SESSION_NOT_FOUND', `Unknown or closed UI test session: ${sessionId}.`);
   if (record.workspaceId !== workspace.alias) throw taskError('UI_SESSION_WORKSPACE_MISMATCH', 'UI test session belongs to a different workspace.');
+  const action = String(args.action || '').trim();
   const taskId = taskIdFor(args, context);
+  const observation = ['snapshot', 'screenshot', 'console', 'network', 'stop'].includes(action) && args.clear !== true;
+  if (observation) {
+    if (record.principalFingerprint !== principalFingerprint(context.principal)) {
+      throw taskError('UI_SESSION_PRINCIPAL_MISMATCH', 'UI test session belongs to a different authenticated client.');
+    }
+    return record;
+  }
   if (!taskId || taskId !== record.taskId) throw taskError('UI_SESSION_TASK_MISMATCH', 'UI test session belongs to a different work session.');
   return record;
 }

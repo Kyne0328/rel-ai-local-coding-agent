@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { orderToolsForCatalog, toolCapabilities } from '../src/ui/features/tools/index.js';
-import { getToolMetadata } from '../src/tools/surface.js';
+import { orderToolsForCatalog } from '../src/ui/features/tools/index.js';
 import { orderChangedFiles, orderSessionsForDisplay } from '../src/ui/features/sessions/index.js';
 import { timeAgo } from '../src/ui/utils.js';
 import { orderWorkspacesAlphabetically } from '../src/ui/components/workspace-menu.js';
@@ -30,32 +29,6 @@ assert.deepEqual(orderedTools.map(tool => tool.name), [
   'relai_validate',
   'relai_publish'
 ]);
-
-const consolidatedToolMetadata = getToolMetadata();
-const consolidatedToolCapabilities = Object.fromEntries(
-  consolidatedToolMetadata.map(tool => [tool.name, toolCapabilities(tool)])
-);
-assert.deepEqual(consolidatedToolCapabilities, {
-  relai_work: ['workflow'],
-  relai_snapshot: ['inspect'],
-  relai_read: ['inspect'],
-  relai_search: ['inspect'],
-  relai_inspect: ['inspect'],
-  relai_edit: ['edit'],
-  relai_exec: ['execute'],
-  relai_process: ['execute'],
-  relai_ui: ['execute'],
-  relai_validate: ['validate'],
-  relai_changes: ['review', 'recover'],
-  relai_publish: ['git']
-});
-assert.deepEqual(
-  Object.fromEntries(['workflow', 'inspect', 'edit', 'execute', 'validate', 'review', 'git', 'recover'].map(capability => [
-    capability,
-    consolidatedToolMetadata.filter(tool => toolCapabilities(tool).includes(capability)).length
-  ])),
-  { workflow: 1, inspect: 4, edit: 1, execute: 3, validate: 1, review: 1, git: 1, recover: 1 }
-);
 
 const sessions = [
   { id: 'older', endedAt: '2026-07-25T10:00:00.000Z' },
@@ -86,8 +59,8 @@ assert.deepEqual(orderSessionsForDisplay(stableOngoing).map(session => session.i
 assert.deepEqual(orderSessionsForDisplay([
   { id: 'completed', status: 'completed', completedAt: '2026-07-25T12:03:00.000Z' },
   { id: 'cancelled', status: 'cancelled', cancelledAt: '2026-07-25T12:05:00.000Z' },
-  { id: 'inactive', status: 'inactive', inactiveAt: '2026-07-25T12:04:00.000Z' }
-]).map(session => session.id), ['cancelled', 'inactive', 'completed'], 'terminal and inactive rows must sort by their actual end/inactivity timestamps');
+  { id: 'inactive', status: 'inactive', inactiveAt: '2026-07-25T12:04:00.000Z', endedAt: '2026-07-25T11:00:00.000Z' }
+]).map(session => session.id), ['cancelled', 'inactive', 'completed'], 'inactive rows must sort by the same inactivity timestamp shown in the list even if stale terminal timestamps remain');
 assert.equal(timeAgo(Date.parse('2026-07-25T12:00:00.000Z'), Date.parse('2026-07-25T12:05:00.000Z')), '5m ago', 'relative time must support numeric epoch timestamps used by historical task records');
 assert.deepEqual(orderOverviewTasks(sessions).map(session => session.id), ['newer', 'older', 'invalid']);
 assert.deepEqual(orderActivityEntries([

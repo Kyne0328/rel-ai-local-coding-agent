@@ -34,7 +34,12 @@ const SUM_FIELDS = new Set(['matchCount', 'definitionCount', 'referenceCount', '
 function createRepositoryIntelligenceService() {
   const singleIndexedQuery = async (kind, workspace, config, args, options = {}) => {
     for (let attempt = 0; attempt < MAX_INDEXED_QUERY_ATTEMPTS; attempt += 1) {
-      const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
+      const index = await ensureRepositoryIndex(workspace, config, {
+        maxFiles: args.maxFiles,
+        signal: options.signal,
+        watch: options.watch,
+        indexTimeoutMs: options.indexTimeoutMs
+      });
       let result;
       try {
         result = await runRepositoryQuery(kind, workspace, config, { args, index }, options);
@@ -105,13 +110,12 @@ async function disposeWorkspaceIntelligence(workspace, config = {}, options = {}
 
 async function multiSourceSemanticSearch(singleIndexedQuery, workspace, config, args, options, sources) {
   const selected = selectSourcesForPrefix(workspace, sources, args.pathPrefix);
-  const results = [];
-  for (const source of selected.sources) {
+  const results = await mapWithConcurrency(selected.sources, 4, async source => {
     const scopedArgs = { ...args };
     if (selected.explicitSource) scopedArgs.pathPrefix = selected.relativePath;
     const result = await singleIndexedQuery('semanticSearch', sourceWorkspace(workspace, source), config, scopedArgs, options);
-    results.push({ source, result: qualifyResultPaths(result, source) });
-  }
+    return { source, result: qualifyResultPaths(result, source) };
+  });
 
   const maxResults = Math.max(1, Math.min(100, Number(args.maxResults || 20)));
   const maxBytes = args.maxBytes == null ? 393216 : Math.max(1000, Math.min(393216, Number(args.maxBytes) || 393216));
@@ -133,6 +137,10 @@ async function multiSourceSemanticSearch(singleIndexedQuery, workspace, config, 
     workspace: workspace.alias,
     query: String(args.query || ''),
     strategy: 'multi-source-local-hybrid',
+    retrieval: {
+      degraded: results.some(item => item.result.retrieval?.degraded === true),
+      sources: results.map(item => ({ source: item.source.number, ...(item.result.retrieval || {}) }))
+    },
     neuralEmbeddings: false,
     privacy: 'All parsing, graph indexing, and ranking run locally. No source text is sent to an external service.',
     fingerprint: combinedFingerprint(fingerprints),
@@ -142,6 +150,19 @@ async function multiSourceSemanticSearch(singleIndexedQuery, workspace, config, 
     returnedBytes,
     truncated: results.some(item => item.result.truncated === true) || ranked.length > bounded.length
   };
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 async function multiSourceCodeInspect(singleIndexedQuery, workspace, config, args, options, sources) {

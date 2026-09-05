@@ -142,14 +142,14 @@ assert.ok(Number.isSafeInteger(AUTO_CHECK_INTERVAL_MS) && AUTO_CHECK_INTERVAL_MS
 assert.ok(RELEASE_DISCOVERY_INTERVAL_MS >= RELEASE_DISCOVERY_MIN_INTERVAL_MS, 'release discovery interval must respect its focus-event throttle');
 assert.ok(RELEASE_DISCOVERY_INTERVAL_MS <= 15 * 60 * 1000, 'new releases must be discovered within the intended short background interval');
 assert.ok(RELEASE_DISCOVERY_MIN_INTERVAL_MS >= 60 * 1000, 'focus-driven discovery must not create request bursts');
-assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml'), '0.27.5');
-assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/v0.27.5/latest.yml'), '0.27.5');
-assert.equal(releaseVersionFromLocation('https://example.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml'), '');
-assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/other.yml'), '');
+assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/0.27.5/latest.yml'), '0.27.5');
+assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/v0.27.5/latest.yml'), '0.27.5');
+assert.equal(releaseVersionFromLocation('https://example.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/0.27.5/latest.yml'), '');
+assert.equal(releaseVersionFromLocation('https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/0.27.5/other.yml'), '');
 let discoveryRequest = null;
 assert.equal(await fetchLatestReleaseVersion(async (url, options) => {
   discoveryRequest = { url, options };
-  return { status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml' : null } };
+  return { status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/0.27.5/latest.yml' : null } };
 }), '0.27.5');
 assert.equal(discoveryRequest.url, RELEASE_DISCOVERY_URL);
 assert.equal(discoveryRequest.options.method, 'HEAD');
@@ -233,7 +233,7 @@ const sameVersionDiscovery = createHarness({
   currentVersion: '0.27.4',
   fetchImpl: async () => {
     sameVersionFetches += 1;
-    return { status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.4/latest.yml' : null } };
+    return { status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/0.27.4/latest.yml' : null } };
   }
 });
 sameVersionDiscovery.updater.start();
@@ -247,7 +247,7 @@ assert.equal(sameVersionFetches, 1);
 
 const newerVersionDiscovery = createHarness({
   currentVersion: '0.27.4',
-  fetchImpl: async () => ({ status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/download/0.27.5/latest.yml' : null } })
+  fetchImpl: async () => ({ status: 302, headers: { get: name => name.toLowerCase() === 'location' ? 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/0.27.5/latest.yml' : null } })
 });
 newerVersionDiscovery.updater.start();
 assert.equal((await newerVersionDiscovery.updater.discoverUpdate({ force: true })).ok, true);

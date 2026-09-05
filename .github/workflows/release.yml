@@ -172,8 +172,14 @@ jobs:
         run: npm run test:native-tasks-release-gate
       - name: Run tests
         run: npm test
-      - name: Record observability performance metrics
-        run: npm run benchmark:observability
+      - name: Enforce release performance budgets
+        shell: pwsh
+        run: |
+          npm run benchmark:mcp-startup
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/repository-intelligence-benchmark.mjs --files 5000 --mutations 50 --json --max-full-ms 30000 --max-incremental-ms 5000
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run benchmark:observability:strict
       - name: Verify responsive and accessible dashboard behavior
         run: npm run test:observability-browser
       - name: Reverify generated color assets before packaging
@@ -204,6 +210,9 @@ jobs:
       - name: Verify packaged application layout
         shell: pwsh
         run: npm run verify:packaged -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged computer runtime
+        shell: pwsh
+        run: node scripts/verify-packaged-computer-runtime.mjs --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify packaged bearer-authenticated MCP flow
         shell: pwsh
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
@@ -291,6 +300,8 @@ jobs:
         run: npm run verify:fuses -- --platform linux
       - name: Verify packaged application layout
         run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged computer runtime
+        run: xvfb-run --auto-servernum node scripts/verify-packaged-computer-runtime.mjs --platform linux --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify packaged bearer-authenticated MCP flow
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
       - name: Smoke-test Linux desktop startup and shutdown under Xvfb
@@ -363,6 +374,8 @@ jobs:
           test -n "$package_directory"
           test -d "$package_directory"
           echo "path=$package_directory" >> "$GITHUB_OUTPUT"
+      - name: Verify packaged computer runtime
+        run: node scripts/verify-packaged-computer-runtime.mjs --platform darwin --dir '${{ steps.unpacked.outputs.path }}'
       - name: Resolve macOS release artifact path
         id: release-artifacts
         env:

@@ -93,7 +93,8 @@ async function parseJsonResponse(res) {
 }
 
 function normalizeResponseData(res, data) {
-  data.status = res.status;
+  data.httpStatus = res.status;
+  if (!Object.hasOwn(data, 'status')) data.status = res.status;
   if (!res.ok && data.ok !== true) data.ok = false;
   if (res.status === 401) {
     data.error = data.error || 'Dashboard authorization expired. Reopening the dashboard…';

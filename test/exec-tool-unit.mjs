@@ -344,7 +344,7 @@ try {
   await callTool('relai_exec', {
     workspace: 'app',
     work_id: mutationTask.work_id,
-    command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'after-validation.txt')
+    command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'after-validation.js')
   }, mutationContext);
   await assert.rejects(
     () => callTool('relai_work', { action: 'finish',

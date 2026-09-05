@@ -32,6 +32,6 @@ assert.match(appCss, /:root\[data-sidebar="collapsed"\]\s*\{[^}]*--sidebar-width
 assert.match(appCss, /:root\[data-sidebar="collapsed"\][\s\S]*\.nav-icon\s*\{[^}]*size-5/s);
 assert.match(appCss, /\.sidebar-accordion > summary/);
 assert.match(appCss, /\.sidebar-subnav/);
-assert.match(settingsCss, /@media\s*\(min-width:[^)]+\)[\s\S]*\.settings-rail\s*\{\s*display:\s*none;/s, 'wide layouts must suppress the redundant settings rail');
+assert.doesNotMatch(settingsCss, /\.settings-rail\b/, 'Settings must not reintroduce a redundant in-page navigation rail');
 
 console.log('Sidebar accordion and collapsed navigation contracts passed.');

@@ -9,8 +9,8 @@ import { taskActivityBlockReason } from './tool-sleep-blocker.js';
 import { createMacManualUpdater } from './macos-manual-updater.js';
 import { compareVersions, isStableVersion, parseStableVersion } from "./update-version.js";
 
-const RELEASE_DISCOVERY_URL = 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases/latest/download/latest.yml';
-const RELEASE_DOWNLOAD_PREFIX = '/Kyne0328/rel-ai-local-coding-agent/releases/download/';
+const RELEASE_DISCOVERY_URL = 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases/latest/download/latest.yml';
+const RELEASE_DOWNLOAD_PREFIX = '/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/';
 const RELEASE_DISCOVERY_INTERVAL_MS = 10 * 60 * 1000;
 const RELEASE_DISCOVERY_MIN_INTERVAL_MS = 60 * 1000;
 const UPDATE_RETRY_DELAYS_MS = Object.freeze([500, 1500]);

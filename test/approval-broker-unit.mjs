@@ -4,18 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { resolveWorkspace } from '../src/config.js';
 import { approvalRequirement } from '../src/mcp/approval.js';
 import {
   APPROVAL_TTL_MS,
   approvalDigest,
-  decidePendingApproval,
-  decidePendingApprovalFromDashboard,
   requestApproval,
   samePushTarget,
   supportsNativeApproval
 } from '../src/mcp/approvalBroker.js';
-import { relaiGitPush } from '../src/repo/gitOps.js';
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-approval-broker-'));
 const workspacePath = path.join(temp, 'workspace');
@@ -35,7 +31,6 @@ const config = {
   stateDir: path.join(temp, 'state'),
   workspaces: { repo: { path: workspacePath } }
 };
-const workspace = resolveWorkspace(config, 'repo');
 const principal = { clientId: 'chatgpt-session-a', authMode: 'local_session' };
 const otherPrincipal = { clientId: 'chatgpt-session-b', authMode: 'local_session' };
 const baseArgs = {
@@ -76,84 +71,9 @@ try {
   assert.equal(unsupported.structuredContent?.remote, 'origin');
   assert.equal(unsupported.structuredContent?.branch, 'main');
   assert.equal(unsupported.structuredContent?.head, target.head);
-  assert.equal(unsupported.structuredContent?.recovery?.mode, 'dashboard');
-  assert.equal(unsupported.structuredContent?.recovery?.dashboardPath, '/#tasks');
-  assert.equal(Object.hasOwn(unsupported.structuredContent?.recovery || {}, 'renderTool'), false);
-  assert.match(unsupported.structuredContent?.nextAction || '', /dashboard Tasks page/i);
-  assert.match(unsupported.structuredContent?.approvalId || '', /^approval_/);
-
-  let executed = 0;
-  const declined = await decidePendingApproval({
-    approvalId: unsupported.structuredContent.approvalId,
-    approved: false,
-    context: { principal },
-    rawContext: rawContext(),
-    codec: unsupportedCodec,
-    config,
-    execute: async () => { executed += 1; return { ok: true }; }
-  });
-  assert.equal(declined.structuredContent?.errorCode, 'APPROVAL_DECLINED');
-  assert.equal(executed, 0, 'declining must not execute the stored operation');
-  const declinedReuse = await decidePendingApproval({
-    approvalId: unsupported.structuredContent.approvalId,
-    approved: true,
-    context: { principal }, rawContext: rawContext(), codec: unsupportedCodec, config,
-    execute: async () => { executed += 1; return { ok: true }; }
-  });
-  assert.equal(declinedReuse.structuredContent?.errorCode, 'APPROVAL_GRANT_CONSUMED');
-  assert.equal(executed, 0);
-
-  const dashboardCodec = fakeCodec();
-  const dashboardPending = await startApproval({ codec: dashboardCodec, capabilities: {} });
-  let dashboardExecution = null;
-  const dashboardApproved = await decidePendingApprovalFromDashboard({
-    approvalId: dashboardPending.structuredContent.approvalId,
-    approved: true,
-    config,
-    codec: dashboardCodec,
-    execute: async (name, args, context) => {
-      dashboardExecution = { name, args, context };
-      return { ok: true, executed: true };
-    }
-  });
-  assert.equal(dashboardApproved.ok, true, 'dashboard approval must execute the stored operation exactly once');
-  assert.equal(dashboardExecution?.name, 'relai_publish');
-  assert.deepEqual(dashboardExecution?.args, baseArgs);
-  assert.equal(dashboardExecution?.context?.publicHttpOnly, true);
-  assert.deepEqual(dashboardExecution?.context?.principal, principal);
-  const dashboardReplay = await decidePendingApprovalFromDashboard({
-    approvalId: dashboardPending.structuredContent.approvalId,
-    approved: true,
-    config,
-    codec: dashboardCodec,
-    execute: async () => ({ ok: true })
-  });
-  assert.equal(dashboardReplay.errorCode, 'APPROVAL_GRANT_CONSUMED', 'dashboard approval must remain single-use');
-
-  const principalCodec = fakeCodec();
-  const principalPending = await startApproval({ codec: principalCodec, capabilities: {} });
-  const principalMismatch = await decidePendingApproval({
-    approvalId: principalPending.structuredContent.approvalId,
-    approved: true,
-    context: { principal: otherPrincipal }, rawContext: rawContext(), codec: principalCodec, config,
-    execute: async () => { executed += 1; return { ok: true }; }
-  });
-  assert.equal(principalMismatch.structuredContent?.errorCode, 'APPROVAL_PRINCIPAL_MISMATCH');
-  assert.equal(executed, 0);
-
-  const staleCodec = fakeCodec();
-  const stalePending = await startApproval({ codec: staleCodec, capabilities: {} });
-  fs.writeFileSync(path.join(workspacePath, 'tracked.txt'), 'changed after approval\n');
-  git(workspacePath, 'add', 'tracked.txt');
-  git(workspacePath, 'commit', '-m', 'Change HEAD after approval');
-  const stale = await decidePendingApproval({
-    approvalId: stalePending.structuredContent.approvalId,
-    approved: true,
-    context: { principal }, rawContext: rawContext(), codec: staleCodec, config,
-    execute: async () => { executed += 1; return { ok: true }; }
-  });
-  assert.equal(stale.structuredContent?.errorCode, 'APPROVAL_TARGET_CHANGED');
-  assert.equal(executed, 0, 'changed HEAD must reject before execution');
+  assert.equal(Object.hasOwn(unsupported.structuredContent || {}, 'approvalId'), false, 'unsupported clients must not create pending dashboard approvals');
+  assert.equal(Object.hasOwn(unsupported.structuredContent || {}, 'recovery'), false, 'unsupported clients must not advertise the removed dashboard approval fallback');
+  assert.match(unsupported.structuredContent?.nextAction || '', /client that supports MCP approval elicitation/i);
 
   const nativeCodec = fakeCodec();
   const native = await startApproval({ codec: nativeCodec, capabilities: { elicitation: {} } });
@@ -180,14 +100,39 @@ try {
     assert.equal(result.structuredContent?.errorCode, label === 'principal' ? 'APPROVAL_PRINCIPAL_MISMATCH' : 'APPROVAL_TARGET_CHANGED', `${label} change must reject the approval`);
   }
 
-  const expiredState = { ...nativeCodec.lastClaims, expiresAt: Date.now() - 1 };
+  const staleCodec = fakeCodec();
+  await startApproval({ codec: staleCodec, capabilities: { elicitation: {} } });
+  fs.writeFileSync(path.join(workspacePath, 'tracked.txt'), 'changed after approval\n');
+  git(workspacePath, 'add', 'tracked.txt');
+  git(workspacePath, 'commit', '-m', 'Change HEAD after approval');
+  const stale = await requestApproval({
+    name: 'relai_publish', args: baseArgs, requirement,
+    context: { principal, clientCapabilities: { elicitation: {} } },
+    rawContext: rawContext({ inputResponses: accepted(true), state: staleCodec.lastClaims }),
+    codec: staleCodec, config
+  });
+  assert.equal(stale.structuredContent?.errorCode, 'APPROVAL_TARGET_CHANGED');
+
+  const expiryCodec = fakeCodec();
+  await startApproval({ codec: expiryCodec, capabilities: { elicitation: {} } });
+  const expiredState = { ...expiryCodec.lastClaims, expiresAt: Date.now() - 1 };
   const expired = await requestApproval({
     name: 'relai_publish', args: baseArgs, requirement,
     context: { principal, clientCapabilities: { elicitation: {} } },
     rawContext: rawContext({ inputResponses: accepted(true), state: expiredState }),
-    codec: nativeCodec, config
+    codec: expiryCodec, config
   });
   assert.equal(expired.structuredContent?.errorCode, 'APPROVAL_GRANT_EXPIRED');
+
+  const declineCodec = fakeCodec();
+  await startApproval({ codec: declineCodec, capabilities: { elicitation: {} } });
+  const declined = await requestApproval({
+    name: 'relai_publish', args: baseArgs, requirement,
+    context: { principal, clientCapabilities: { elicitation: {} } },
+    rawContext: rawContext({ inputResponses: accepted(false), state: declineCodec.lastClaims }),
+    codec: declineCodec, config
+  });
+  assert.equal(declined.structuredContent?.errorCode, 'APPROVAL_DECLINED');
 
   const reuseCodec = fakeCodec();
   await startApproval({ codec: reuseCodec, capabilities: { elicitation: {} } });
@@ -206,44 +151,23 @@ try {
   });
   assert.equal(reusedNative.structuredContent?.errorCode, 'APPROVAL_GRANT_CONSUMED');
 
-  const pushCodec = fakeCodec();
-  const pushPending = await startApproval({ codec: pushCodec, capabilities: {} });
-  const approvedHead = pushPending.structuredContent.head;
-  const pushed = await decidePendingApproval({
-    approvalId: pushPending.structuredContent.approvalId,
-    approved: true,
-    context: { principal }, rawContext: rawContext(), codec: pushCodec, config,
-    execute: async (_name, args) => relaiGitPush(workspace, config, args)
-  });
-  assert.equal(pushed.ok, true, JSON.stringify(pushed));
-  assert.equal(git(remotePath, 'rev-parse', 'refs/heads/main'), approvedHead, 'approved exact HEAD must be the commit published to origin/main');
-  const pushedReuse = await decidePendingApproval({
-    approvalId: pushPending.structuredContent.approvalId,
-    approved: true,
-    context: { principal }, rawContext: rawContext(), codec: pushCodec, config,
-    execute: async () => { executed += 1; return { ok: true }; }
-  });
-  assert.equal(pushedReuse.structuredContent?.errorCode, 'APPROVAL_GRANT_CONSUMED');
-  assert.equal(executed, 0);
-
-  const expiryCodec = fakeCodec();
-  const expiryPending = await startApproval({ codec: expiryCodec, capabilities: {} });
+  const timeoutCodec = fakeCodec();
+  await startApproval({ codec: timeoutCodec, capabilities: { elicitation: {} } });
   const originalNow = Date.now;
   Date.now = () => originalNow() + APPROVAL_TTL_MS + 1;
   try {
-    const expiredPending = await decidePendingApproval({
-      approvalId: expiryPending.structuredContent.approvalId,
-      approved: true,
-      context: { principal }, rawContext: rawContext(), codec: expiryCodec, config,
-      execute: async () => { executed += 1; return { ok: true }; }
+    const expiredByClock = await requestApproval({
+      name: 'relai_publish', args: baseArgs, requirement,
+      context: { principal, clientCapabilities: { elicitation: {} } },
+      rawContext: rawContext({ inputResponses: accepted(true), state: timeoutCodec.lastClaims }),
+      codec: timeoutCodec, config
     });
-    assert.equal(expiredPending.structuredContent?.errorCode, 'APPROVAL_GRANT_EXPIRED');
-    assert.equal(executed, 0);
+    assert.equal(expiredByClock.structuredContent?.errorCode, 'APPROVAL_GRANT_EXPIRED');
   } finally {
     Date.now = originalNow;
   }
 
-  console.log('Approval broker transport fallback, exact push binding, expiry, replay, principal isolation, and real push tests passed.');
+  console.log('Approval broker native elicitation, unsupported-client fail-closed behavior, exact push binding, expiry, replay, and principal isolation tests passed.');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

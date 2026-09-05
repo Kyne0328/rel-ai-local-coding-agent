@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
+import { clearTaskHistory, getTaskHistoryDir, readCrossWorkspaceTaskEpisodes, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
 import { writeSession } from '../src/taskHistoryStorage.js';
 import { principalFingerprint } from '../src/mcp/principal.js';
 import { assertKnownTask } from '../src/tools/task.js';
@@ -186,6 +186,22 @@ try {
   assert.equal(relatedEpisodes[0].outcome, 'Fixed connector timeout recovery without changing unrelated behavior.', 'newer tasks from another workspace must not consume this workspace scan window');
   assert.deepEqual(relatedEpisodes[0].changes, ['src/connector.js']);
   assert.deepEqual(readRelevantTaskEpisodes(config, 'other-workspace', 'connector timeout recovery'), [], 'episodic retrieval must remain workspace-local');
+
+  writeSession(historyDir, {
+    id: 'portable-single-match', taskId: 'portable-single-match', sessionId: 'portable-single-match', version: 3,
+    workspace: 'portable-a', title: 'Repository migration', objective: 'Repository migration', resultSummary: 'Migrated safely.',
+    status: 'completed', completionKnown: true, startedAt: new Date(base + 500000).toISOString(), updatedAt: new Date(base + 501000).toISOString()
+  });
+  writeSession(historyDir, {
+    id: 'portable-strong-match', taskId: 'portable-strong-match', sessionId: 'portable-strong-match', version: 3,
+    workspace: 'portable-b', title: 'Connector timeout recovery', objective: 'Connector timeout recovery', resultSummary: 'Fixed connector timeout recovery.',
+    status: 'completed', completionKnown: true, startedAt: new Date(base + 502000).toISOString(), updatedAt: new Date(base + 503000).toISOString()
+  });
+  assert.deepEqual(readCrossWorkspaceTaskEpisodes(config, 'repo', 'repository cleanup', { limit: 4 }), [],
+    'one generic lexical overlap must not inject unrelated cross-workspace history');
+  assert.match(readCrossWorkspaceTaskEpisodes(config, 'repo', 'connector timeout recovery', { limit: 4 })[0]?.goal || '', /Connector timeout recovery/i,
+    'multiple meaningful overlaps must still allow portable cross-workspace continuity');
+
   assert.equal(sessions.some(session => session.id === 'separate-task'), true, 'relatedTaskIds must not merge distinct task IDs');
   const atomic = sessions.find(session => session.id === 'atomic-completion');
   assert.equal(atomic.validation, 'passed');

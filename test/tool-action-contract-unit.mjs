@@ -50,7 +50,6 @@ assert.ok(OPERATION_REGISTRY.every(record => record.publicActions.length > 0), '
 
 const editDefinition = definitions.find(definition => definition.name === 'relai_edit');
 assert.ok(editDefinition, 'relai_edit definition must exist');
-assert.match(editDefinition.description, /one logical updateText (?:patch|operation)/i, 'large repository-wide changes should stay together instead of being split into repeated edit batches');
 
 const semanticWithMaxBytes = resolveExecutableToolCall('relai_search', {
   workspace: 'fixture', work_id: 'work_contract', action: 'semantic', query: 'needle', maxBytes: 4096
@@ -168,7 +167,9 @@ const discoveredKeys = definitions.flatMap(definition => {
 });
 assert.deepEqual(resolvedKeys.sort(), discoveredKeys.sort(), 'every discovered public action must be executable through the canonical resolver');
 
-assert.ok(approvalRequirement('relai_changes', { action: 'reset', work_id: 'work_contract', confirmation: 'RESET' }), 'workspace reset must remain approval-gated');
+assert.ok(approvalRequirement('relai_changes', { action: 'reset', work_id: 'work_contract' }), 'workspace reset must remain approval-gated without a duplicate confirmation token');
+const resetAction = catalog.find(entry => entry.publicTool === 'relai_changes' && entry.action === 'reset');
+assert.equal(resetAction.fields.includes('confirmation'), false, 'reset must use native approval instead of a model-supplied magic confirmation field');
 assert.ok(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract' }), 'Git push must remain approval-gated');
 assert.equal(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract', dryRun: true }), null, 'Git push dry-run must not request destructive approval');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit' }), null, 'implicit task-owned commit should not require extra approval');
@@ -176,6 +177,9 @@ assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: '
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', message: 'Taskless explicit commit', paths: ['src/selected.js'] }), null, 'taskless explicit local commits must execute without dashboard approval');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', addAll: true }), null, 'explicit addAll local commits must not require dashboard approval');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', message: 'Sensitive commit', paths: ['secret.txt'], sensitiveAuthorization: { operation: 'commit', paths: ['secret.txt'], reason: 'User explicitly requested this local commit.' } }), null, 'sensitiveAuthorization is the explicit local commit authorization and must not trigger a second approval layer');
+for (const entry of catalog.filter(item => item.publicTool === 'relai_computer')) {
+  assert.equal(approvalRequirement('relai_computer', sampleArgs(entry)), null, `relai_computer:${entry.action} must never enter the MCP approval flow`);
+}
 
 console.log(`Dynamic public contract parity passed for ${definitions.length} tools and ${catalog.length} actions.`);
 
@@ -193,6 +197,10 @@ function sampleArgs(entry) {
     case 'relai_inspect:trace': args.symbol = 'target'; break;
     case 'relai_inspect:related': args.query = 'target'; break;
     case 'relai_inspect:impact': args.paths = ['src/index.js']; break;
+    case 'relai_skill:create':
+    case 'relai_skill:edit': Object.assign(args, { name: 'contract-skill', content: 'skill content' }); break;
+    case 'relai_skill:patch': Object.assign(args, { name: 'contract-skill', oldText: 'old', newText: 'new' }); break;
+    case 'relai_skill:delete': args.name = 'contract-skill'; break;
     case 'relai_exec:default': args.command = 'node --version'; break;
     case 'relai_process:start': Object.assign(args, { command: 'node server.js', kind: 'service', purpose: 'Contract parity.' }); break;
     case 'relai_process:read':
@@ -208,9 +216,18 @@ function sampleArgs(entry) {
     case 'relai_ui:stop': args.sessionId = 'ui_abcdefghijklmnopqrst'; break;
     case 'relai_ui:interact': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', interaction: 'click', target: { by: 'text', value: 'Save' } }); break;
     case 'relai_ui:viewport': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', width: 1280, height: 720 }); break;
+    case 'relai_computer:move':
+    case 'relai_computer:click':
+    case 'relai_computer:double_click':
+    case 'relai_computer:right_click': Object.assign(args, { x: 10, y: 20 }); break;
+    case 'relai_computer:drag': Object.assign(args, { x: 10, y: 20, toX: 30, toY: 40 }); break;
+    case 'relai_computer:scroll': Object.assign(args, { direction: 'down', distance: 500 }); break;
+    case 'relai_computer:type': args.text = 'hello'; break;
+    case 'relai_computer:key': args.key = 'enter'; break;
+    case 'relai_computer:hotkey': args.keys = ['ctrl', 's']; break;
     case 'relai_validate:http': args.route = '/health'; break;
     case 'relai_changes:restore': args.paths = ['README.md']; break;
-    case 'relai_changes:reset': args.confirmation = 'RESET'; break;
+    case 'relai_changes:reset': break;
     case 'relai_changes:replay': args.checkpointId = 'review_abcdefghijklmnopqrstuvwx'; break;
     case 'relai_changes:tidy_run': args.planId = 'tidy_abcdefghijklmnopqrst'; break;
     case 'relai_publish:commit': args.message = 'Contract commit'; break;

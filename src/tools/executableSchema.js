@@ -5,7 +5,10 @@ const WORK_ID_SCHEMA = zodJsonSchema(
 );
 
 function executableInputSchema(definition, catalogTool) {
-  const taskScope = definition.behavior?.taskScope || 'required';
+  const actionScopes = (catalogTool?.actions || []).map(action => action.behavior?.taskScope || definition.behavior?.taskScope || 'required');
+  const taskScope = actionScopes.length
+    ? (actionScopes.every(scope => scope === 'required') ? 'required' : actionScopes.every(scope => scope === 'none') ? 'none' : 'optional')
+    : (definition.behavior?.taskScope || 'required');
   const properties = { ...(definition.inputSchema?.properties || {}) };
   if (taskScope !== 'none') properties.work_id = WORK_ID_SCHEMA;
   const required = [...(definition.inputSchema?.required || [])];

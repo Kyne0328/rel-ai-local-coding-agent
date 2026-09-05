@@ -7,7 +7,7 @@ import { LOCAL_DEVELOPER_SECURITY_SCHEMES } from '../mcp/localDeveloperMode.js';
 const toolDefinitions = getCatalogToolDefinitions();
 const catalogToolByName = new Map(getCatalogTools().map(tool => [tool.definition.name, tool]));
 const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.name));
-const PUBLIC_DISCOVERY_OUTPUT_FIELDS = Object.freeze(['ok', 'workspace', 'work_id', 'message', 'error', 'errorCode', 'nextAction']);
+const PUBLIC_DISCOVERY_OUTPUT_FIELDS = Object.freeze(['ok']);
 // Keep schema object identity stable for the lifetime of the process. The MCP SDK
 // caches JSON-schema adapters by object identity, so rebuilding equivalent objects
 // on every stateless request defeats that cache and adds tens of milliseconds.

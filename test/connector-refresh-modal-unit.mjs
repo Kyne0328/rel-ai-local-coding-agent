@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 
 import {
-  DISMISS_DELAY_MS,
-  REFRESH_STEPS,
   acknowledgeConnectorRefreshNotice,
   prepareConnectorRefreshNotice
 } from '../src/ui/connector-refresh-modal.js';
+import { CHATGPT_REFRESH_BUSINESS_NOTE, CHATGPT_REFRESH_STEPS } from '../src/ui/features/settings/connection-guidance.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -37,15 +36,11 @@ const updateNotice = prepareConnectorRefreshNotice({
   connectorRefreshRequired: true
 }, updateStorage);
 assert.ok(updateNotice, '0.27.4 must require a connector refresh when its connector revision changed');
-assert.equal(updateNotice.dismissDelayMs, DISMISS_DELAY_MS);
-assert.deepEqual(updateNotice.steps, REFRESH_STEPS);
-assert.deepEqual(REFRESH_STEPS, [
-  'Open Settings.',
-  'Open Plugins.',
-  'Select the Rel.AI MCP connector.',
-  'Scroll to the bottom and open Information.',
-  'Click Refresh.'
-]);
+assert.deepEqual(updateNotice.steps, CHATGPT_REFRESH_STEPS);
+assert.equal(updateNotice.businessNote, CHATGPT_REFRESH_BUSINESS_NOTE);
+assert.match(updateNotice.steps.join(' '), /Enterprise\/Edu.*Workspace settings.*Apps.*Action control.*Refresh/i);
+assert.match(updateNotice.businessNote, /Business.*recreate and republish/i);
+assert.equal('dismissDelayMs' in updateNotice, false, 'connector refresh notices must never impose a timed dismissal lockout');
 
 const nextLaunchNotice = prepareConnectorRefreshNotice({
   currentVersion: '0.27.4',
@@ -77,7 +72,7 @@ const futureNotice = prepareConnectorRefreshNotice({
   connectorRefreshRequired: true
 }, futureStorage);
 assert.ok(futureNotice, 'future connector changes must not depend on a hand-maintained version allowlist');
-assert.match(futureNotice.description, /9\.9\.9 changed the connector details or tool definitions/i);
+assert.match(futureNotice.description, /9\.9\.9 changed its ChatGPT action definitions/i);
 
 const sameVersionNotice = prepareConnectorRefreshNotice({
   currentVersion: '9.9.9',

@@ -41,37 +41,23 @@ try {
   assert.equal(read('tracked.txt'), 'saved\n');
   assert.equal(fs.existsSync(path.join(repo, 'untracked.txt')), true, 'scoped restore must not remove untracked files');
 
-  await assert.rejects(
-    () => relaiResetWorkspace(workspace, {}, { confirmation: 'RESET_AND_CLEAN' }),
-    /confirmation='RESET'/,
-    'tracked-only reset must require the exact RESET confirmation'
-  );
-
   write('tracked.txt', 'changed again\n');
-  const trackedReset = await relaiResetWorkspace(workspace, {}, { confirmation: 'RESET' });
+  const trackedReset = await relaiResetWorkspace(workspace, {}, {});
   assert.equal(trackedReset.ok, true);
   assert.equal(trackedReset.removeUntracked, false);
   assert.equal(read('tracked.txt'), 'saved\n');
-  assert.equal(fs.existsSync(path.join(repo, 'untracked.txt')), true, 'RESET must leave untracked files intact');
+  assert.equal(fs.existsSync(path.join(repo, 'untracked.txt')), true, 'tracked-only reset must leave untracked files intact');
 
   write('tracked.txt', 'changed for clean\n');
   write('nested/generated.txt', 'remove\n');
-  await assert.rejects(
-    () => relaiResetWorkspace(workspace, {}, { confirmation: 'RESET', removeUntracked: true }),
-    /confirmation='RESET_AND_CLEAN'/,
-    'untracked cleanup must require the stronger confirmation'
-  );
-  const cleanReset = await relaiResetWorkspace(workspace, {}, {
-    confirmation: 'RESET_AND_CLEAN',
-    removeUntracked: true
-  });
+  const cleanReset = await relaiResetWorkspace(workspace, {}, { removeUntracked: true });
   assert.equal(cleanReset.ok, true);
   assert.equal(cleanReset.removeUntracked, true);
   assert.equal(read('tracked.txt'), 'saved\n');
   assert.equal(fs.existsSync(path.join(repo, 'untracked.txt')), false);
   assert.equal(fs.existsSync(path.join(repo, 'nested')), false);
 
-  console.log('Restore contract passed for scoped restore and confirmed workspace reset.');
+  console.log('Restore contract passed for scoped restore and approval-owned workspace reset semantics.');
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });
 }

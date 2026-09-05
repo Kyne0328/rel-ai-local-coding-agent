@@ -21,7 +21,7 @@ for (const imported of [
   '../features/tools/styles.css',
   '../features/processes/styles.css'
 ]) assert.match(appCss, new RegExp(imported.replaceAll('/', '\\/').replace('.', '\\.')));
-for (const selector of ['.overview-hero-compact', '.desktop-setup-item', '.settings-shell', '.connection-primary-action', '.activity-table', '.filter-drawer-footer']) {
+for (const selector of ['.overview-hero-compact', '.desktop-setup-item', '.settings-content', '.connection-primary-action', '.activity-table', '.filter-drawer-footer']) {
   assert.match(compiledCss, new RegExp(selector.replace('.', '\\.')));
 }
 assert.doesNotMatch(appCss, /\.settings-shell|\.connection-primary-action|\.activity-table/);

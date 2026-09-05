@@ -36,12 +36,17 @@ assert.equal(assertAuthorizedToolCall({ principal: stdioPrincipal, operationName
 assert.equal(isTrustedLocalPrincipal({ clientId: 'remote-client', authMode: 'local_session' }), false);
 
 const destructiveApproval = {
-  action: 'reset', workspace: 'repo-a', work_id: 'work-a', removeUntracked: true, confirmation: 'RESET_AND_CLEAN'
+  action: 'reset', workspace: 'repo-a', work_id: 'work-a', removeUntracked: true
 };
 assert.notEqual(
   approvalDigest('relai_changes', destructiveApproval),
   approvalDigest('relai_changes', { ...destructiveApproval, work_id: 'work-b' }),
   'approval state must not be reusable across logical tasks'
+);
+assert.notEqual(
+  approvalDigest('relai_changes', destructiveApproval),
+  approvalDigest('relai_changes', { ...destructiveApproval, removeUntracked: false }),
+  'approval state must bind the destructive cleanup scope instead of relying on a model-supplied confirmation token'
 );
 assert.equal(
   approvalDigest('relai_changes', { ...destructiveApproval, _operationTaskId: 'transport-a' }),

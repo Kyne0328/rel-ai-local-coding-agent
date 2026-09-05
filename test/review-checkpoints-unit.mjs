@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createReviewCheckpoint, replayReviewCheckpoint } from '../src/reviewCheckpoints.js';
+import { getCatalogAction } from '../src/tools/actionCatalog.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-review-checkpoint-'));
 const config = { stateDir: path.join(root, 'state') };
@@ -13,6 +14,11 @@ fs.mkdirSync(workspace.path, { recursive: true });
 fs.mkdirSync(otherWorkspace.path, { recursive: true });
 
 try {
+  const publicCheckpoint = getCatalogAction('relai_changes', { action: 'checkpoint' });
+  assert.equal(publicCheckpoint.behavior.taskScope, 'optional', 'workspace review checkpoints must not require a synthetic task');
+  assert.equal(publicCheckpoint.fields.includes('work_id'), true, 'task-scoped checkpoints must still accept an explicit work_id');
+  assert.equal(publicCheckpoint.required.includes('work_id'), false);
+
   const review = {
     ok: true,
     workspace: 'app',

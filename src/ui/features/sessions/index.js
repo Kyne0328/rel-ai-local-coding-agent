@@ -1,4 +1,4 @@
-import { fetchJson, postJson } from '../../api.js';
+import { fetchJson } from '../../api.js';
 import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
 import { toast } from '../../components/toast.js';
@@ -6,14 +6,13 @@ import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getRouteParams, getWorkspaceFilter, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
-import { eventTimestampMs, eventTimestampValue, terminalTaskTimestamp, terminalTaskTimestampValue } from '../../../taskEvents.js';
+import { eventTimestampMs, eventTimestampValue, terminalTaskTimestampValue, timestampMs } from '../../../taskEvents.js';
 import { buildTaskSemanticProgress, classifyTaskChangedFiles } from '../../../taskSemanticProgress.js';
 import { taskEntityView, workSessionStateView } from '../../task-identity.js';
+import { iconHtml } from '../../components/icons.js';
 
 const SESSION_PAGE_SIZE = 50;
 const TASK_SESSION_URL = '/api/tasks/session';
-const APPROVALS_URL = '/api/approvals';
-const APPROVAL_DECISION_URL = '/api/approvals/decide';
 const DETAIL_FILE_PREVIEW = 12;
 const DETAIL_EVENT_PREVIEW = 8;
 const visibleCounts = new Map();
@@ -42,8 +41,7 @@ export function mountTasks(container, data = {}) {
         ${workspaceMenuHtml(data.config?.workspaces || [], workspace, { id: 'sessionsWorkspaceMenu' })}
         <span class="feature-count">${esc(sessionCountLabel(sessions, workspace))}</span>
       </div>
-    </div>
-    <div data-pending-approvals></div>`;
+    </div>`;
 
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
@@ -74,7 +72,6 @@ export function mountTasks(container, data = {}) {
   container.appendChild(root);
   bindWorkspaceMenus(root);
   bindCopyActions(root);
-  void refreshPendingApprovals(root);
   maybeOpenRequestedSession();
 }
 
@@ -98,58 +95,8 @@ export function updateTaskSessions(container, data = {}) {
   const body = current.querySelector('.task-list');
   if (body) reconcileSessionRows(body, sessions, scopeKey);
   refreshOpenSession(data);
-  void refreshPendingApprovals(current);
   maybeOpenRequestedSession();
   return true;
-}
-
-async function refreshPendingApprovals(root) {
-  const host = root.querySelector('[data-pending-approvals]');
-  if (!host) return;
-  const response = await fetchJson(APPROVALS_URL, { cache: 'no-store' });
-  const approvals = response?.ok === true && Array.isArray(response.approvals) ? response.approvals : [];
-  host.innerHTML = approvals.map(approvalCardHtml).join('');
-  host.onclick = event => {
-    const button = event.target.closest('[data-approval-decision]');
-    if (!button) return;
-    void decideDashboardApproval(button, root);
-  };
-}
-
-function approvalCardHtml(approval) {
-  const target = [approval.remote, approval.branch].filter(Boolean).join('/');
-  const title = approval.operation === 'push' ? 'Push ready' : 'Approval required';
-  const approveLabel = approval.operation === 'push' && approval.remote ? `Push to ${approval.remote}` : 'Approve';
-  return `<section class="card" data-approval-card="${esc(approval.approvalId)}">
-    <div class="card-head"><div><h3>${esc(title)}</h3><p>${esc(approval.message || 'Confirm this Rel.AI operation.')}</p></div></div>
-    <div class="card-body">
-      <div class="task-detail-grid">
-        ${target ? `<div><span>Target</span><strong>${esc(target)}</strong></div>` : ''}
-        ${approval.head ? `<div><span>Commit</span><code>${esc(String(approval.head).slice(0, 12))}</code></div>` : ''}
-        ${approval.workspace ? `<div><span>Project</span><strong>${esc(approval.workspace)}</strong></div>` : ''}
-      </div>
-      <div class="section-head-actions">
-        <button class="section-action" type="button" data-approval-decision="approve" data-approval-id="${esc(approval.approvalId)}">${esc(approveLabel)}</button>
-        <button class="section-action" type="button" data-approval-decision="cancel" data-approval-id="${esc(approval.approvalId)}">Cancel</button>
-      </div>
-    </div>
-  </section>`;
-}
-
-async function decideDashboardApproval(button, root) {
-  const approvalId = String(button.dataset.approvalId || '').trim();
-  if (!approvalId) return;
-  const card = button.closest('[data-approval-card]');
-  for (const control of card?.querySelectorAll('button') || []) control.disabled = true;
-  const approved = button.dataset.approvalDecision === 'approve';
-  const result = await postJson(APPROVAL_DECISION_URL, { approvalId, approved });
-  if (result?.ok === false && result?.cancelled !== true) {
-    toast(result.error || 'Rel.AI could not complete this approval.', { variant: 'error' });
-    for (const control of card?.querySelectorAll('button') || []) control.disabled = false;
-    return;
-  }
-  toast(approved ? 'Operation approved.' : 'Operation cancelled.');
-  await refreshPendingApprovals(root);
 }
 
 function syncSessionWorkspaceMenu(current, workspaces, selected) {
@@ -317,18 +264,20 @@ function sessionRow(session) {
   const semantic = semanticProgressFor(session);
   const operation = semantic.currentActivity || session.currentActivity || session.operation || operationForTool(session.lastTool);
   const description = sessionDescription(session, live, operation, semantic);
-  const facts = sessionFacts(session, live, semantic);
+  const toolCalls = Number(session.toolCallCount ?? session.calls ?? 0);
+  const toolCallLabel = `${toolCalls} tool call${toolCalls === 1 ? '' : 's'}`;
+  const projectFiles = semanticFileCounts(session, semantic).product;
+  const projectFileLabel = `${projectFiles} project file${projectFiles === 1 ? '' : 's'}`;
 
   return `
     <button class="task-row" type="button" data-task-id="${esc(id)}" data-session-fingerprint="${esc(sessionFingerprint(session))}">
       <span class="task-row-status">${statusPill(state.label, state.pillClass)}</span>
       <span class="task-row-main">
         <strong>${esc(session.title || operation)}</strong>
-        <span class="task-row-description">${esc(session.workspace || 'project')} · ${esc(description)}</span>
-        ${facts ? `<span class="task-row-facts">${esc(facts)}</span>` : ''}
+        <span class="task-row-description">${esc(session.workspace || 'project')} · ${esc(toolCallLabel)} · ${esc(projectFileLabel)} · ${esc(description)}</span>
       </span>
       <span class="task-row-time">${timingHtml(session, live)}</span>
-      <span aria-hidden="true">›</span>
+      ${iconHtml('chevronRight')}
     </button>`;
 }
 
@@ -339,27 +288,6 @@ function sessionDescription(session, live, operation, semantic = semanticProgres
   if (session.status === 'blocked') return session.endReason || workSessionStateView(session).label;
   if (session.status === 'cancelled') return 'Cancelled before completion';
   return semantic.currentActivity || session.currentActivity || session.currentStage || operation || 'Task ended';
-}
-
-function sessionFacts(session, live, semantic = semanticProgressFor(session)) {
-  const facts = [];
-  const toolCalls = Number(session.toolCallCount ?? session.calls ?? 0);
-  const fileCounts = semanticFileCounts(session, semantic);
-  const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
-  const state = workSessionStateView(session);
-  const completed = state.status === 'completed';
-  facts.push(`${toolCalls} tool call${toolCalls === 1 ? '' : 's'}`);
-  facts.push(`${fileCounts.product} project file${fileCounts.product === 1 ? '' : 's'}`);
-  if (fileCounts.support > 0) facts.push(`${fileCounts.support} support artifact${fileCounts.support === 1 ? '' : 's'}`);
-  if (failures > 0) facts.push(completed
-    ? `${failures} recovered failed tool call${failures === 1 ? '' : 's'}`
-    : `${failures} failed tool call${failures === 1 ? '' : 's'}`);
-  if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('checks failed');
-  if (session.status === 'waiting_for_approval') facts.push('approval required');
-  if (session.status === 'blocked') facts.push(state.label.toLowerCase());
-  const publish = publishLabel(session);
-  if (!live && publish) facts.push(publish.toLowerCase());
-  return facts.join(' · ');
 }
 
 function sessionFingerprint(session) {
@@ -415,13 +343,6 @@ function sessionDurationMs(session) {
   return Math.max(0, end - start);
 }
 
-function publishLabel(session) {
-  if (session.pushed) return 'Pushed';
-  if (session.committed) return 'Committed';
-  if (session.prDrafted) return 'PR drafted';
-  return '';
-}
-
 async function openSession(session) {
   if (!session) return;
   const requestedId = sessionIdentifier(session);
@@ -429,20 +350,56 @@ async function openSession(session) {
   closeOpenSession();
   const request = ++_openSessionRequest;
   _openSessionId = requestedId;
-  session = await loadSessionDetail(session);
+  const initial = mergeSessionDetail(session, _sessionsById.get(requestedId));
+  if (!renderOpenSessionDetail(initial, { reveal: true })) return;
+
+  const loaded = await loadSessionDetail(initial);
   if (request !== _openSessionRequest || _openSessionId !== requestedId) return;
-  session = mergeSessionDetail(session, _sessionsById.get(requestedId));
-  _openSessionDetail = session;
-  _openSessionFingerprint = sessionDetailFingerprint(session);
-  const { content } = buildSessionDetail(session);
+  const next = mergeSessionDetail(loaded, _sessionsById.get(requestedId));
+  const fingerprint = sessionDetailFingerprint(next);
+  if (fingerprint === _openSessionFingerprint) return;
+  renderOpenSessionDetail(next, { preserveTab: true, fingerprint });
+}
+
+function renderOpenSessionDetail(session, options = {}) {
+  const preserveTab = options.preserveTab === true;
+  const reveal = options.reveal === true;
+  const fingerprint = options.fingerprint || sessionDetailFingerprint(session);
   const inspector = document.querySelector('[data-session-inspector]');
-  if (!inspector) return;
-  inspector.replaceChildren(content);
-  inspector.scrollTop = 0;
-  for (const row of document.querySelectorAll('.task-row[data-task-id]')) {
-    row.classList.toggle('is-selected', row.dataset.taskId === requestedId);
-    row.setAttribute('aria-current', row.dataset.taskId === requestedId ? 'true' : 'false');
+  if (!inspector) {
+    clearOpenSessionState();
+    return false;
   }
+  const activeTab = preserveTab
+    ? inspector.querySelector('[data-session-tab].is-active')?.dataset.sessionTab || 'overview'
+    : 'overview';
+  const { content } = buildSessionDetail(session);
+  if (preserveTab) {
+    setSessionTab(content, activeTab);
+    copyOlderEventsState(inspector, content);
+  }
+  inspector.replaceChildren(content);
+  if (reveal) {
+    inspector.scrollTop = 0;
+    revealStackedSessionInspector(inspector);
+  }
+  _openSessionDetail = session;
+  _openSessionFingerprint = fingerprint;
+  for (const row of document.querySelectorAll('.task-row[data-task-id]')) {
+    const selected = row.dataset.taskId === _openSessionId;
+    row.classList.toggle('is-selected', selected);
+    if (selected) row.setAttribute('aria-current', 'true');
+    else row.removeAttribute('aria-current');
+  }
+  return true;
+}
+
+function revealStackedSessionInspector(inspector) {
+  if (!window.matchMedia('(max-width: 760px)').matches) return;
+  const heading = inspector.querySelector('.task-detail-header h2');
+  if (!(heading instanceof HTMLElement)) return;
+  heading.focus({ preventScroll: true });
+  heading.scrollIntoView({ block: 'start', inline: 'nearest' });
 }
 
 function buildSessionDetail(session) {
@@ -462,15 +419,15 @@ function buildSessionDetail(session) {
   const taskActivity = taskTraceSection(session.trace, session.events || [], session);
   content.innerHTML = `
     <header class="task-detail-header">
-      <div><span class="overview-kicker">Task</span><h2>${esc(session.title || operationValue)}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
+      <div><span class="overview-kicker">Task</span><h2 tabindex="-1">${esc(session.title || operationValue)}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
       ${statusPill(state.label, state.pillClass)}
     </header>
     <div class="inspector-tabs" role="tablist" aria-label="Task details">
-      <button class="inspector-tab is-active" type="button" role="tab" aria-selected="true" data-session-tab="overview">Overview</button>
-      <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-session-tab="activity">Activity</button>
-      <button class="inspector-tab" type="button" role="tab" aria-selected="false" data-session-tab="technical">Technical</button>
+      <button class="inspector-tab is-active" id="session-tab-overview" type="button" role="tab" aria-selected="true" aria-controls="session-panel-overview" tabindex="0" data-session-tab="overview">Overview</button>
+      <button class="inspector-tab" id="session-tab-activity" type="button" role="tab" aria-selected="false" aria-controls="session-panel-activity" tabindex="-1" data-session-tab="activity">Activity</button>
+      <button class="inspector-tab" id="session-tab-technical" type="button" role="tab" aria-selected="false" aria-controls="session-panel-technical" tabindex="-1" data-session-tab="technical">Technical</button>
     </div>
-    <div class="inspector-panel" data-session-panel="overview">
+    <div class="inspector-panel" id="session-panel-overview" role="tabpanel" aria-labelledby="session-tab-overview" tabindex="0" data-session-panel="overview">
       <div class="task-detail-current${sessionNeedsAttention(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
       <div class="task-detail-grid task-detail-facts">
         ${detail('Project', session.workspace || '—')}
@@ -480,15 +437,14 @@ function buildSessionDetail(session) {
         ${fileCounts.support > 0 ? detail('Support artifacts', fileCounts.support) : ''}
       </div>
       ${attentionSection(session)}
-      ${sessionActionSection(session)}
       ${failureHistorySection(session)}
       ${changedFilesSection(session.changedFiles || [])}
     </div>
-    <div class="inspector-panel" data-session-panel="activity" hidden>
+    <div class="inspector-panel" id="session-panel-activity" role="tabpanel" aria-labelledby="session-tab-activity" tabindex="0" data-session-panel="activity" hidden>
       ${taskActivity || '<div class="inspector-empty compact"><strong>No activity recorded</strong><span>Task activity will appear here as Rel.AI tools run.</span></div>'}
       <div class="session-inline-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session), time: 'all' })}">View in all Activity</a></div>
     </div>
-    <div class="inspector-panel" data-session-panel="technical" hidden>
+    <div class="inspector-panel" id="session-panel-technical" role="tabpanel" aria-labelledby="session-tab-technical" tabindex="0" data-session-panel="technical" hidden>
       ${technicalDetailsSection(session, identities, state, operationValue)}
       ${session.trace?.entries?.length ? '<div class="session-inline-actions"><button class="secondary" type="button" data-export-task-trace>Export trace (.jsonl)</button></div>' : ''}
     </div>`;
@@ -508,33 +464,40 @@ function refreshOpenSession(data = {}) {
   const next = mergeSessionDetail(_openSessionDetail, summary, data);
   const fingerprint = sessionDetailFingerprint(next);
   if (fingerprint === _openSessionFingerprint) return;
-  const inspector = document.querySelector('[data-session-inspector]');
-  if (!inspector) {
-    clearOpenSessionState();
-    return;
-  }
-  const activeTab = inspector.querySelector('[data-session-tab].is-active')?.dataset.sessionTab || 'overview';
-  const { content } = buildSessionDetail(next);
-  setSessionTab(content, activeTab);
-  copyOlderEventsState(inspector, content);
-  inspector.replaceChildren(content);
-  _openSessionDetail = next;
-  _openSessionFingerprint = fingerprint;
+  renderOpenSessionDetail(next, { preserveTab: true, fingerprint });
 }
 
 function bindSessionTabs(content) {
-  content.querySelector('.inspector-tabs')?.addEventListener('click', event => {
+  const tablist = content.querySelector('.inspector-tabs');
+  if (!tablist) return;
+  tablist.addEventListener('click', event => {
     const button = event.target.closest('[data-session-tab]');
     if (!button) return;
     setSessionTab(content, button.dataset.sessionTab);
   });
+  tablist.addEventListener('keydown', event => {
+    const tabs = [...tablist.querySelectorAll('[data-session-tab]')];
+    const current = event.target.closest('[data-session-tab]');
+    const index = tabs.indexOf(current);
+    if (index < 0) return;
+    let nextIndex = null;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = tabs.length - 1;
+    if (nextIndex == null) return;
+    event.preventDefault();
+    setSessionTab(content, tabs[nextIndex].dataset.sessionTab, { focus: true });
+  });
 }
 
-function setSessionTab(content, tab) {
+function setSessionTab(content, tab, { focus = false } = {}) {
   for (const button of content.querySelectorAll('[data-session-tab]')) {
     const active = button.dataset.sessionTab === tab;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
+    button.tabIndex = active ? 0 : -1;
+    if (active && focus) button.focus({ preventScroll: true });
   }
   for (const panel of content.querySelectorAll('[data-session-panel]')) panel.hidden = panel.dataset.sessionPanel !== tab;
 }
@@ -655,11 +618,6 @@ function attentionSection(session) {
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
 }
 
-function sessionActionSection(session) {
-  if (session.status !== 'waiting_for_approval') return '';
-  return '<section class="task-detail-section task-detail-action"><h3>Action required</h3><p>Approval is required before work can continue.</p></section>';
-}
-
 function failureHistorySection(session) {
   const failures = Number(session.failures || session.failedToolCallCount || 0);
   if (!failures || sessionNeedsAttention(session)) return '';
@@ -731,7 +689,7 @@ function fileList(files) {
 
 function taskTraceSection(trace, fallbackEvents, session) {
   const traceEvents = Array.isArray(trace?.entries) ? trace.entries : [];
-  const events = traceEvents.length ? traceEvents : fallbackEvents;
+  const events = mergeSessionEvents(traceEvents, fallbackEvents);
   if (!events.length) return '';
   const ordered = orderSessionEvents(events);
   const visible = ordered.slice(0, DETAIL_EVENT_PREVIEW);
@@ -779,7 +737,7 @@ export function orderSessionsForDisplay(sessions = []) {
     if (ongoingDifference) return ongoingDifference;
     const timestampDifference = leftOngoing && rightOngoing
       ? sessionStartTimestamp(right) - sessionStartTimestamp(left)
-      : terminalTaskTimestamp(right) - terminalTaskTimestamp(left);
+      : timestampMs(sessionListTimestampValue(right)) - timestampMs(sessionListTimestampValue(left));
     if (timestampDifference) return timestampDifference;
     return sessionIdentifier(left).localeCompare(sessionIdentifier(right), 'en-US', { numeric: true, sensitivity: 'base' });
   });

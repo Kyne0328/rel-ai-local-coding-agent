@@ -1,6 +1,7 @@
 import { toast } from '../../components/toast.js';
 import { getRouteParams, replaceRouteParams } from '../../router.js';
 import { esc } from '../../utils.js';
+import { iconActionHtml } from '../../components/icons.js';
 
 let activeState = null;
 let monacoPromise = null;
@@ -99,7 +100,7 @@ async function refreshWorkspace(state, options = {}) {
     renderWorkspaceMeta(state);
     renderFiles(state);
     if (options.refreshCurrent && state.filePath) {
-      await openFile(state, state.filePath, { preserveSelection: true });
+      await openFile(state, state.filePath);
       return;
     }
     if (!state.filePath) {
@@ -179,7 +180,7 @@ function renderFiles(state) {
   });
 }
 
-async function openFile(state, filePath, options = {}) {
+async function openFile(state, filePath) {
   const path = String(filePath || '').trim();
   if (!path) return;
   const previous = state.filePath;
@@ -189,7 +190,7 @@ async function openFile(state, filePath, options = {}) {
     state.filePath = path;
     renderFiles(state);
     renderFileHeading(state, path);
-    await renderDiff(state, file, options);
+    await renderDiff(state, file);
   } catch (error) {
     state.filePath = previous;
     renderFiles(state);
@@ -197,7 +198,7 @@ async function openFile(state, filePath, options = {}) {
   }
 }
 
-async function renderDiff(state, file, options = {}) {
+async function renderDiff(state, file) {
   const host = state.root.querySelector('[data-code-editor]');
   if (!host) return;
   disposeEditor(state);
@@ -225,7 +226,6 @@ async function renderDiff(state, file, options = {}) {
       fontLigatures: true
     });
     state.diffEditor.setModel({ original, modified });
-    if (!options.preserveSelection) state.diffEditor.getModifiedEditor().focus();
   } catch (error) {
     renderTextFallback(state, file, error);
   }
@@ -362,7 +362,7 @@ function shellHtml(tasks) {
       </div>
       <div class="code-toolbar-actions">
         <select data-code-ide aria-label="Application for project"><option>Loading applications…</option></select>
-        <button class="secondary" type="button" data-code-open-ide>Open in IDE</button>
+        <button class="secondary" type="button" data-code-open-ide>${iconActionHtml('externalLink', 'IDE')}</button>
         <button class="secondary" type="button" data-code-refresh>Refresh</button>
       </div>
     </div>
@@ -390,7 +390,7 @@ function desktopOnlyHtml() {
 }
 
 function emptyHtml() {
-  return '<div class="dashboard-state"><div class="dashboard-state-card"><h2>No task changes are available.</h2><p>Start a Rel.AI task, then return here to review what changed.</p><div class="dashboard-state-actions"><a class="buttonlike primary" href="#tasks">Open tasks</a></div></div></div>';
+  return `<div class="dashboard-state"><div class="dashboard-state-card"><h2>No task changes are available.</h2><p>Start a Rel.AI task, then return here to review what changed.</p><div class="dashboard-state-actions"><a class="buttonlike primary" href="#tasks">${iconActionHtml('chevronRight', 'Tasks', { position: 'end' })}</a></div></div></div>`;
 }
 
 function emptyViewerMessage(workspace = {}) {

@@ -3,11 +3,11 @@ function publicExecInputSchema(inputSchema) {
   const describe = (name, description) => ({ ...properties[name], description });
   return {
     ...inputSchema,
-    description: 'Choose one mode. Prefer direct executable + argv mode by default; use command only for deliberate shell parsing.',
+    description: 'Two execution forms are available: direct executable + argv, and shell command. Direct execution avoids shell parsing.',
     properties: {
       ...properties,
-      command: describe('command', 'Shell command. Use only for shell syntax. Do not embed JavaScript, Python, JSON, patches, or multiline scripts.'),
-      executable: describe('executable', 'Executable launched with shell:false; preferred for structured arguments.'),
+      command: describe('command', 'Shell command form for syntax that requires a shell. Multiline scripts or structured text can be supplied through input.'),
+      executable: describe('executable', 'Executable launched directly with shell:false.'),
       argv: describe('argv', 'Arguments passed without shell parsing; keep each logical argument separate.'),
       input: describe('input', 'Literal stdin for multiline scripts or structured text; preserves quote-sensitive content.'),
       cwd: describe('cwd', 'Optional workspace-relative working directory.'),
@@ -25,8 +25,8 @@ function publicProcessInputSchema(inputSchema) {
     ...inputSchema,
     properties: {
       ...properties,
-      command: describe('command', 'Shell command string for start. Use only when shell syntax is deliberately required.'),
-      executable: describe('executable', 'Executable to launch directly with shell:false. Preferred for persistent process startup.'),
+      command: describe('command', 'Shell command string for process start when shell syntax is required.'),
+      executable: describe('executable', 'Executable launched directly with shell:false for process start.'),
       argv: describe('argv', 'Literal arguments passed directly to executable without shell parsing.'),
       input: describe('input', 'For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream; PTY starts write the same input to the terminal. For write, UTF-8 input is sent to the running process or PTY.'),
       pty: describe('pty', 'For start, allocate a real pseudo-terminal. Only valid with kind:interactive.'),
@@ -41,7 +41,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
   const describe = (name, description) => ({ ...properties[name], description });
   return {
     ...inputSchema,
-    description: 'Choose one primary form. Rel.AI validates the selected form before touching the workspace.',
+    description: 'One primary edit form is accepted per call. Rel.AI validates the selected form before touching the workspace.',
     properties: {
       ...properties,
       workspace: describe('workspace', 'Optional workspace ownership assertion. The work_id already identifies the bound workspace.'),
@@ -55,7 +55,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       content: describe('content', 'Complete replacement content as text for one file. Large complete-file text writes are staged internally when needed.'),
       file: describe('file', 'Native ChatGPT file reference to stream into path without overwrite.'),
       expectedSha256: describe('expectedSha256', 'Optional stale-write guard for direct, staged, batch, symbol, and environment edits.'),
-      updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes. Keep one logical patch together when the client transport can carry it.'),
+      updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes. One logical patch can contain repository-wide changes when transport capacity permits.'),
       envAction: describe('envAction', 'Secret-safe environment operation: list, set, remove, or compare.'),
       key: describe('key', 'Environment key used by envAction set or remove.'),
       value: describe('value', 'Environment value used by envAction set. Values are never returned.'),
@@ -65,7 +65,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       level: describe('level', 'Validation level used when runChecks is true.'),
       returnDiff: describe('returnDiff', 'Return a bounded diff after a successful edit.'),
       dryRun: describe('dryRun', 'Validate and preview the edit without changing files.'),
-      stage: describe('stage', 'Explicit chunked content or updateText lifecycle: start, append, commit, or abort. Use only when the client transport cannot carry the intended payload in one request; normal large complete-file writes are staged internally.'),
+      stage: describe('stage', 'Explicit chunked content or updateText lifecycle: start, append, commit, or abort. This is a transport-size fallback; normal large complete-file writes are staged internally.'),
       writeId: describe('writeId', 'Opaque staged-write ID returned by stage start.')
     }
   };

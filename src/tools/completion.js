@@ -1,13 +1,14 @@
 import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
 import { readTaskHistorySession, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
-import { learnFromCompletedTask } from '../knowledgeStore.js';
+import { recordTaskValidationAffinity } from '../knowledgeStore.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { workspaceDirtyPaths } from '../repo/gitOps.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, getToolActivity, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
 import { runWorkspaceMutationBoundary } from '../workspaceOperationQueue.js';
+import { taskValidationReadiness } from '../workflow/completionReadiness.js';
 
 const WORK_FINISH_SOURCE = 'relai_work:finish';
 const VALIDATE_CHECKS_SOURCE = 'relai_validate:checks';
@@ -40,9 +41,13 @@ async function completeTask(config, args = {}) {
       { retryable: false }
     );
   }
-  const mutationGeneration = Number(authority.mutationGeneration || 0);
-  const validatedMutationGeneration = Number(authority.latestValidatedMutationGeneration || 0);
-  if (mutationGeneration > 0 && authority.hasPassedValidation === true && validatedMutationGeneration !== mutationGeneration) {
+  const {
+    mutationGeneration,
+    validationRequired,
+    knownValidationFailure,
+    validatedMutationGeneration
+  } = taskValidationReadiness(authority);
+  if (validationRequired && authority.hasPassedValidation === true && validatedMutationGeneration !== mutationGeneration) {
     throw taskError(
       'TASK_REVALIDATION_REQUIRED',
       'Work-session completion is paused because code changed after the last passed validation. Run relai_validate with action "checks" with complete:true, summary, and the same work_id to validate and close the work session atomically.',
@@ -56,7 +61,7 @@ async function completeTask(config, args = {}) {
     );
   }
 
-  if (mutationGeneration > 0 && authority.validationResult !== 'passed') {
+  if ((validationRequired || knownValidationFailure) && authority.validationResult !== 'passed') {
     throw taskError(
       'TASK_VALIDATION_REQUIRED',
       'Work-session completion is paused because no successful final validation is recorded for this exact work_id. Run relai_validate with action "checks" with complete:true, summary, and the same work_id to validate and close the work session atomically.',
@@ -156,8 +161,8 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
     residualState,
     message: completionMessage(completionSource, completion.duplicate === true, residualChangedFiles)
   };
-  try { learnFromCompletedTask(config, workspace, learningSession, result); }
-  catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] procedural learning:', error); }
+  try { recordTaskValidationAffinity(config, workspace, learningSession, result); }
+  catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] validation affinity learning:', error); }
   clearSessionPolicy(config, workspace.alias, taskId);
   return result;
 }

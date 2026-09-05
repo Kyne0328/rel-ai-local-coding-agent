@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS, WORK_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
+import { APPLICATION_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS, MOBILE_NAV_ITEMS, MOBILE_PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS, WORK_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
 import { connectionLayerViews, connectionSummary } from '../src/ui/connection-state.js';
 import { ERROR_CODES, TERMINOLOGY, deriveConnectionState, errorGuidance, errorPayload } from '../src/desktopUxContracts.js';
 
@@ -14,6 +14,8 @@ assert.deepEqual(WORK_NAV_ITEMS.map(item => item.label), ['Overview', 'Tasks', '
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.label), ['Running commands', 'Troubleshooting', 'ChatGPT tools', 'Analytics']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.label), ['System', 'Settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.label), ['Overview', 'Tasks', 'Changes', 'Projects', 'Activity', 'System', 'Settings']);
+assert.deepEqual(MOBILE_PRIMARY_NAV_ITEMS.map(item => item.label), ['Overview', 'Tasks', 'Projects', 'Activity']);
+assert.deepEqual(MOBILE_MORE_NAV_ITEMS.map(item => item.label), ['Changes', 'System', 'Settings']);
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'Preferences', 'Memory & learning', 'App', 'About']);
 
 for (const code of [ERROR_CODES.CONFIGURATION_INVALID, ERROR_CODES.LOCAL_PORT_IN_USE, ERROR_CODES.SECURE_TUNNEL_FAILED, ERROR_CODES.TUNNEL_AUTHENTICATION_FAILED, ERROR_CODES.TUNNEL_ACCESS_DENIED, ERROR_CODES.TUNNEL_NOT_FOUND, ERROR_CODES.PUBLIC_ENDPOINT_FAILED]) assert.equal(errorGuidance(code).href, '#settings/connection');

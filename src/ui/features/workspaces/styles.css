@@ -67,8 +67,8 @@
 .ws-source-folder-copy { @apply grid min-w-0; }
 .ws-source-folder-title { @apply flex min-w-0 items-center gap-2; }
 .ws-source-folder-copy strong { @apply truncate text-[12px] font-medium; }
-.ws-source-folder-copy small { @apply truncate text-[10px]; color: var(--ui-text-tertiary); }
-.ws-source-primary { @apply shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[.04em]; background: var(--ui-surface-secondary); color: var(--ui-text-tertiary); }
+.ws-source-folder-copy small { @apply truncate text-[11px]; color: var(--ui-text-tertiary); }
+.ws-source-primary { @apply shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[.04em]; background: var(--ui-surface-secondary); color: var(--ui-text-tertiary); }
 .ws-source-folder-actions { @apply flex shrink-0 items-center gap-1; }
 .ws-source-folder-change, .ws-source-folder-remove { @apply min-h-8 rounded-lg px-2.5 text-[11px] font-medium; color: var(--ui-text-secondary); }
 .ws-source-folder-change:hover, .ws-source-folder-remove:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
@@ -129,7 +129,7 @@ textarea.ws-form-path { @apply min-h-24 resize-y; }
 .workspace-analytics-mini[hidden] { display: none; }
 .workspace-analytics-head { @apply flex items-center justify-between gap-2; }
 .workspace-analytics-head span { @apply text-[11px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
-.workspace-analytics-head small { @apply text-[10px]; color: var(--ui-text-tertiary); }
+.workspace-analytics-head small { @apply text-[11px]; color: var(--ui-text-tertiary); }
 .workspace-analytics-metrics { @apply grid gap-2; grid-template-columns: repeat(3,minmax(0,1fr)); }
 .workspace-analytics-metrics > div { @apply grid min-w-0 gap-0.5; }
 .workspace-analytics-metrics span { @apply text-[11px]; overflow-wrap: anywhere; color: var(--ui-text-tertiary); }

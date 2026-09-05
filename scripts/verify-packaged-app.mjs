@@ -17,6 +17,7 @@ const packageDirectory = resolvePackagedDirectory(root, argv, { platform });
 const resourcesDirectory = String(spec.resourcesDirectory || 'resources').replaceAll('\\', '/');
 const resourcePath = (...parts) => path.posix.join(resourcesDirectory, ...parts);
 const resourcesRoot = path.join(packageDirectory, spec.resourcesDirectory || 'resources');
+const libnutPlatformPackage = `libnut-${platform}`;
 
 assert.ok(fs.existsSync(packageDirectory), `Packaged application directory does not exist: ${packageDirectory}`);
 assert.ok(fs.statSync(packageDirectory).isDirectory(), `Packaged application path is not a directory: ${packageDirectory}`);
@@ -47,12 +48,18 @@ const requiredFiles = [
   spec.executableName,
   resourcePath('app.asar'),
   resourcePath('src', 'httpServer.js'),
+  resourcePath('src', 'computerManager.js'),
   resourcePath('src', 'tools', 'actionCatalog.js'),
   resourcePath('src', 'config.js'),
   resourcePath('src', 'mcpServer.js'),
   resourcePath('node_modules', '@modelcontextprotocol', 'server', 'package.json'),
   resourcePath('node_modules', '@modelcontextprotocol', 'node', 'package.json'),
   resourcePath('node_modules', '@modelcontextprotocol', 'core', 'package.json'),
+  resourcePath('node_modules', '@nut-tree-fork', 'libnut', 'package.json'),
+  resourcePath('node_modules', '@nut-tree-fork', libnutPlatformPackage, 'package.json'),
+  resourcePath('node_modules', '@nut-tree-fork', libnutPlatformPackage, 'build', 'Release', 'libnut.node'),
+  resourcePath('node_modules', 'fs.realpath', 'package.json'),
+  resourcePath('node_modules', 'screenshot-desktop', 'package.json'),
   resourcePath('node_modules', '@opentelemetry', 'api', 'package.json'),
   resourcePath('node_modules', '@opentelemetry', 'exporter-trace-otlp-http', 'package.json'),
   resourcePath('node_modules', '@opentelemetry', 'resources', 'package.json'),

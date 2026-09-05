@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="electron/build/icon.png" alt="Rel.AI MCP logo" width="112" />
+  <img src="electron/build/icon.png" alt="Rel.AI logo" width="112" />
 </p>
 
-<h1 align="center">Rel.AI MCP — Local Coding Agent for ChatGPT Web</h1>
+<h1 align="center">Rel.AI — ChatGPT Web Harness</h1>
 
 <p align="center">
-  <strong>Use ChatGPT Web with the code on your computer.</strong><br />
-  Rel.AI MCP connects ChatGPT to local repositories so it can search files, edit code, run commands and tests, inspect results, review changes, and use Git through MCP.
+  <strong>Turn normal ChatGPT Web into a local development agent without replacing ChatGPT.</strong><br />
+  Rel.AI is the local agency/runtime harness around ChatGPT: it supplies repository tools, task state, validation, Git, skills and memory, observability, and opt-in computer control while ChatGPT remains the model, conversation, and reasoning host.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/releases"><strong>Download Rel.AI</strong></a>
+  <a href="https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases"><strong>Download Rel.AI</strong></a>
   · <a href="docs/ONE_CLICK_SETUP.md">Set up</a>
   · <a href="docs/CONNECTING_TO_CHATGPT.md">Connect ChatGPT</a>
   · <a href="#how-relai-works">How it works</a>
@@ -18,10 +18,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
-  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/pages.yml"><img src="https://github.com/Kyne0328/rel-ai-local-coding-agent/actions/workflows/pages.yml/badge.svg" alt="Deploy Website to GitHub Pages status" /></a>
-  <a href="https://github.com/Kyne0328/rel-ai-local-coding-agent/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-local-coding-agent?display_name=tag&style=flat-square" alt="Latest Rel.AI MCP release" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-local-coding-agent?style=flat-square" alt="Apache License 2.0" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/actions/workflows/pages.yml"><img src="https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/actions/workflows/pages.yml/badge.svg" alt="Deploy Website to GitHub Pages status" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-chatgpt-web-harness?display_name=tag&style=flat-square" alt="Latest Rel.AI MCP release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-chatgpt-web-harness?style=flat-square" alt="Apache License 2.0" /></a>
   <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square" alt="Windows, macOS, and Linux" />
   <img src="https://img.shields.io/badge/MCP-2026--07--28-7c3aed?style=flat-square" alt="MCP 2026-07-28" />
 </p>
@@ -36,9 +36,9 @@
 > **Use Rel.AI MCP only on repositories, systems, and services you own or are authorized to access.** Rel.AI can read and modify files, execute project commands, and perform Git actions when requested. You are responsible for complying with applicable third-party terms, policies, and laws. The project authors and maintainers are not responsible for consequences resulting from misuse. Use at your own risk.
 
 > [!IMPORTANT]
-> **Official release binaries are built and published by this repository's GitHub Actions release workflow from the source commit used for the release.** The release workflow also produces SHA-256 checksums and GitHub build-provenance and SBOM attestations for supported artifacts, so releases can be checked against the public source and CI/CD pipeline. You can also use DeepWiki to explore and ask questions about the codebase: [Ask DeepWiki](https://deepwiki.com/Kyne0328/rel-ai-local-coding-agent) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Kyne0328/rel-ai-local-coding-agent)
+> **Official release binaries are built and published by this repository's GitHub Actions release workflow from the source commit used for the release.** The release workflow also produces SHA-256 checksums and GitHub build-provenance and SBOM attestations for supported artifacts, so releases can be checked against the public source and CI/CD pipeline. You can also use DeepWiki to explore and ask questions about the codebase: [Ask DeepWiki](https://deepwiki.com/Kyne0328/rel-ai-chatgpt-web-harness) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Kyne0328/rel-ai-chatgpt-web-harness)
 
-Rel.AI MCP is a **local coding agent bridge for ChatGPT Web**. You keep the normal ChatGPT conversation, while Rel.AI gives that conversation controlled access to repositories you choose on your own computer.
+Rel.AI is a **local agency/runtime harness for ChatGPT Web**. You keep the normal ChatGPT conversation and model behavior, while Rel.AI supplies the durable local environment that turns that conversation into controlled repository and computer work.
 
 Instead of copying files into chat or moving every repository task into a separate coding product, you can ask ChatGPT to inspect a project, make focused edits, run the relevant checks, review the result, and use Git without giving it open-ended access to your machine.
 
@@ -61,9 +61,11 @@ Instead of copying files into chat or moving every repository task into a separa
 
 </details>
 
-## What is Rel.AI MCP?
+## What is Rel.AI?
 
-Rel.AI MCP connects **ChatGPT Web to local code through Model Context Protocol (MCP)**. ChatGPT provides the model, conversation, and reasoning. Rel.AI provides the local repository tools and the desktop controls around them.
+Rel.AI is a **ChatGPT Web harness**. ChatGPT provides the model, conversation, hidden reasoning, and product-side context. Rel.AI provides the local agency layer around it: repository access, task/session state, validation, Git, managed processes, skills and memory, observability, desktop lifecycle, and opt-in computer control.
+
+Model Context Protocol (MCP) is the primary tool transport between ChatGPT and Rel.AI. It is an important protocol boundary, but it is not the full product architecture.
 
 With a configured workspace, ChatGPT can use Rel.AI to:
 
@@ -74,9 +76,11 @@ With a configured workspace, ChatGPT can use Rel.AI to:
 - inspect changes and verify that the current code actually satisfies the task;
 - manage long-running local processes such as dev servers and watchers;
 - review task-scoped diffs and Git state;
-- commit or push changes only when explicitly requested.
+- commit or push changes only when explicitly requested;
+- preserve task continuity, validation evidence, local learned skills, and saved project context across tool calls; and
+- use explicit opt-in host computer control when a task genuinely requires desktop interaction.
 
-Rel.AI is **not** a hosted development machine, a new AI model, or a general-purpose remote shell. It is a local bridge between ChatGPT and the repositories you explicitly add.
+Rel.AI is **not** a hosted development machine, a new AI model, or a replacement ChatGPT runtime. It is the local harness around ChatGPT for the projects and capabilities you explicitly enable.
 
 ## Why use Rel.AI?
 
@@ -106,7 +110,7 @@ Editing code does not automatically commit, push, reset, clean, or rewrite repos
 
 Rel.AI currently uses one supported ChatGPT connection: **OpenAI Secure MCP Tunnel**.
 
-1. **Download Rel.AI MCP** from the [GitHub Releases page](https://github.com/Kyne0328/rel-ai-local-coding-agent/releases). Desktop packages are built for Windows, macOS, and Linux.
+1. **Download Rel.AI MCP** from the [GitHub Releases page](https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases). Desktop packages are built for Windows, macOS, and Linux.
 2. **Create an OpenAI Secure MCP Tunnel** for the computer running Rel.AI and create the runtime API key required by the tunnel.
 3. **Open Rel.AI and finish first-run setup.** Enter the tunnel ID and runtime API key. Rel.AI stores the runtime key with Electron `safeStorage` and manages the bundled tunnel client.
 4. **Add a workspace.** Choose a repository folder and assign a short alias such as `myapp`.
@@ -220,7 +224,7 @@ Task review is scoped to the current objective so ChatGPT can distinguish new wo
 
 Rel.AI can inspect Git status, review changes, create scoped commits, push to an existing remote, and prepare pull-request draft text. Push targets must already exist in the repository, and sensitive staged paths receive stricter authorization.
 
-## Rel.AI MCP vs. Codex
+## Rel.AI vs. Codex
 
 Rel.AI and Codex overlap in some everyday coding workflows, but they are not the same product.
 
@@ -243,7 +247,7 @@ OpenAI currently documents that ChatGPT Apps use the normal ChatGPT rate limits 
 
 ## Desktop visibility
 
-The Rel.AI desktop app shows the local side of the workflow so you can see what ChatGPT is allowed to access and what the connector is doing.
+The Rel.AI desktop app shows the local side of the harness so you can see what ChatGPT is allowed to access, which tasks and processes exist, and what local actions are occurring.
 
 - **Home** — current connection, recent work, and a quick usage overview.
 - **Workspaces** — repositories ChatGPT is allowed to use and their local status.
@@ -258,7 +262,7 @@ Rel.AI records observable tool activity and results. It does not claim access to
 
 ## Security and privacy
 
-Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. Add only repositories you trust ChatGPT and Rel.AI to inspect, execute, and modify.
+Rel.AI is a **trusted local ChatGPT harness, not a sandbox**. Add only repositories and capabilities you trust ChatGPT and Rel.AI to inspect, execute, and modify.
 
 Important boundaries include:
 
@@ -298,7 +302,7 @@ Rel.AI is currently built specifically for ChatGPT Web. It does not currently su
 
 ## MCP tool surface
 
-Rel.AI targets MCP protocol `2026-07-28` and keeps its public tool surface intentionally small. The public tools cover broader workflows instead of exposing a separate tool for every internal operation.
+MCP is Rel.AI's ChatGPT-facing tool transport, not the full harness. Rel.AI targets MCP protocol `2026-07-28` and keeps its public tool surface intentionally small. The public tools cover broader workflows instead of exposing a separate tool for every internal operation.
 
 That design keeps schemas, authorization, task behavior, output validation, and desktop metadata aligned while still supporting repository inspection, search, edits, command execution, managed processes, validation, review, Git operations, recovery, and work-session lifecycle.
 
@@ -338,7 +342,7 @@ No. Rel.AI's semantic repository search uses local signals and does not require 
 
 ### Is Rel.AI a sandbox?
 
-No. Rel.AI is a trusted local coding bridge. Commands and repository-defined scripts run with the permissions of the local Rel.AI process and should be treated as code execution.
+No. Rel.AI is a trusted local ChatGPT harness. Commands, repository-defined scripts, and enabled computer-control actions run with the permissions of the local Rel.AI process and should be treated as real local execution.
 
 ### Does Rel.AI work without ChatGPT?
 
@@ -358,7 +362,7 @@ No. Rel.AI does not bypass ChatGPT plan limits. It uses the ChatGPT app/tool pat
 
 ### Which operating systems are supported?
 
-The desktop release pipeline targets **Windows, macOS, and Linux**. Check the [latest GitHub release](https://github.com/Kyne0328/rel-ai-local-coding-agent/releases) for currently published installers and packages.
+The desktop release pipeline targets **Windows, macOS, and Linux**. Check the [latest GitHub release](https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases) for currently published installers and packages.
 
 ### What happens if the tunnel disconnects during a task?
 
@@ -370,9 +374,9 @@ The Usage view measures **locally observed Rel.AI activity**, not ChatGPT model 
 
 Keep tunnel runtime API keys, local bearer credentials, repository credentials, private keys, and other secrets out of public issues and unreviewed diagnostic exports.
 
-## Build Rel.AI MCP from source
+## Build Rel.AI from source
 
-Rel.AI MCP currently uses **Node.js 24** and **npm 12**. The root runtime and Electron desktop maintain separate lockfiles.
+Rel.AI currently uses **Node.js 24** and **npm 12**. The root runtime and Electron desktop maintain separate lockfiles.
 
 ```bash
 npm ci --ignore-scripts
@@ -428,7 +432,7 @@ For connection or repository-work problems:
 
 1. Check **Diagnostics** in the Rel.AI desktop app.
 2. Review [One-click setup](docs/ONE_CLICK_SETUP.md) and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md).
-3. If the problem is reproducible, [open a GitHub issue](https://github.com/Kyne0328/rel-ai-local-coding-agent/issues) with the smallest safe reproduction and sanitized diagnostics.
+3. If the problem is reproducible, [open a GitHub issue](https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/issues) with the smallest safe reproduction and sanitized diagnostics.
 
 Never include tunnel runtime API keys, local bearer credentials, repository secrets, private keys, or other sensitive credentials in a public issue.
 

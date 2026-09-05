@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { runRepositoryQuery } from '../src/repository/intelligence/queryWorkerClient.js';
+import {
+  QUERY_WORKER_COUNT,
+  QUERY_WORKER_GLOBAL_COUNT,
+  QUERY_WORKER_TIMEOUT_MS,
+  repositoryQueryWorkerStats,
+  runRepositoryQuery
+} from '../src/repository/intelligence/queryWorkerClient.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-query-generation-'));
@@ -14,6 +20,10 @@ fs.writeFileSync(path.join(workspaceRoot, 'src', 'alpha.js'), 'export function a
 
 const workspace = { alias: 'query-generation', path: workspaceRoot, context: {}, testCommands: {}, commands: {} };
 const config = { stateDir };
+
+assert.equal(QUERY_WORKER_COUNT, 4, 'Repository Intelligence must allow four concurrent indexed queries per repository');
+assert.equal(QUERY_WORKER_GLOBAL_COUNT, 4, 'Repository Intelligence must cap query workers globally across repository roots');
+assert.equal(QUERY_WORKER_TIMEOUT_MS, 30_000, 'indexed queries must have a bounded default deadline');
 
 try {
   const initial = await repositoryIntelligence.ensure(workspace, config, { force: true, watch: false });
@@ -33,6 +43,13 @@ try {
   const current = await repositoryIntelligence.semanticSearch(workspace, config, { query: 'alpha', maxResults: 5 }, { watch: false });
   assert.equal(current.fingerprint, rebuilt.fingerprint);
   assert.ok(current.results.some(item => item.path === 'src/alpha.js'));
+  assert.equal(repositoryQueryWorkerStats().liveWorkerCount, 1,
+    'one semantic query must create only one query worker instead of eagerly warming the full pool');
+
+  await Promise.all(['alpha one', 'alpha two', 'alpha three', 'alpha four'].map(query =>
+    repositoryIntelligence.semanticSearch(workspace, config, { query, maxResults: 5 }, { watch: false })));
+  assert.ok(repositoryQueryWorkerStats().liveWorkerCount <= QUERY_WORKER_GLOBAL_COUNT,
+    'concurrent semantic queries must stay inside the global query worker budget');
 } finally {
   await repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });

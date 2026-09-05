@@ -51,7 +51,7 @@ async function repoSnapshot(workspace, config, args = {}) {
   const topology = discoverRepositoryTopology(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path, { topology });
   const projectInstructions = readProjectInstructions(workspace, { targetPath: args.instructionPath });
-  const skills = discoverSkills(workspace);
+  const skills = discoverSkills(workspace, { config });
   const git = await gitSummary;
   return {
     ok: true,
@@ -120,7 +120,7 @@ async function relaiReadAsync(workspace, config, args = {}, context = {}) {
     if ((Array.isArray(args.paths) && args.paths.length) || (Array.isArray(args.ranges) && args.ranges.length)) {
       throw new Error('relai_read skill cannot be combined with paths or ranges.');
     }
-    const item = readDiscoveredSkill(workspace, args.skill, { maxBytes: args.maxBytes });
+    const item = readDiscoveredSkill(workspace, args.skill, { maxBytes: args.maxBytes, config });
     return {
       ok: true,
       workspace: workspace.alias,
@@ -152,7 +152,6 @@ async function readArtifactLink(workspace, config, args, context) {
     throw new Error('relai_read asResource requires exactly one file in paths.');
   }
   const artifact = await createArtifactResourceLink(workspace, config, args.paths[0], {
-    workId: context.taskId || args.work_id,
     principal: context.principal
   });
   return {

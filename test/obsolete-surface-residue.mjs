@@ -78,6 +78,7 @@ assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'components', 'badge.js'
 assert.equal(fs.existsSync(path.join(root, 'src', 'nativeTasksProbe.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profile.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profileRegistry.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'http', 'dashboardApprovals.js')), false, 'removed dashboard approval HTTP surface must stay deleted');
 assert.equal(fs.existsSync(path.join(root, 'docs', 'TOOL_PROFILES.md')), false);
 assert.equal(fs.existsSync(path.join(root, 'skills-lock.json')), false, 'removed built-in skill management must not leave an empty skills-lock.json authority behind');
 

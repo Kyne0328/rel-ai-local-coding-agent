@@ -4,6 +4,21 @@ export function initSidebar() {
   const root = document.documentElement;
   const toggle = document.getElementById('sidebarToggle');
   const accordions = [...document.querySelectorAll('.sidebar-accordion')];
+  const mobileMore = document.querySelector('.mobile-nav-more');
+
+  mobileMore?.addEventListener('click', event => {
+    if (event.target.closest('a')) mobileMore.open = false;
+  });
+  mobileMore?.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !mobileMore.open) return;
+    event.preventDefault();
+    mobileMore.open = false;
+    mobileMore.querySelector(':scope > summary')?.focus();
+  });
+  document.addEventListener('pointerdown', event => {
+    if (mobileMore?.open && !mobileMore.contains(event.target)) mobileMore.open = false;
+  });
+
   if (!toggle) return;
 
   const syncToggle = () => {

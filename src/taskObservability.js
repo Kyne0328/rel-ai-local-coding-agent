@@ -95,18 +95,19 @@ function workflowActivityMetadata(workflow) {
   });
 }
 function buildToolActivityDetails(name, args = {}, value = null, error = null, options = {}) {
-  const ok = error == null && value?.ok !== false;
+  const toolOk = error == null && value?.ok !== false;
+  const operationOk = toolOk && !(name === OP.EXEC && value?.commandSucceeded === false);
   const category = categoryForTool(name, options);
   const operation = cleanText(options.operation, 160) || titleForTool(name, { ...args, tool: name });
   const target = targetForTool(args, value);
   const normalizedError = error ? normalizeActivityError(error) : value?.ok === false
     ? normalizeActivityError({ message: value.error || value.message || `${name} failed`, code: value.errorCode })
     : undefined;
-  const result = resultForTool(name, args, value, ok, normalizedError);
+  const result = resultForTool(name, args, value, operationOk, normalizedError);
   const summary = summaryForTool(name, args, value, normalizedError, operation, result);
-  const progress = progressForTool(name, args, value, ok, options.phase);
+  const progress = progressForTool(name, args, value, operationOk, options.phase);
   const command = name === OP.EXEC ? commandDisplayForInvocation(args) : '';
-  const status = normalizedError ? errorStatus(normalizedError) : options.phase === 'running' ? 'running' : ok ? 'succeeded' : 'failed';
+  const status = normalizedError ? errorStatus(normalizedError) : options.phase === 'running' ? 'running' : operationOk ? 'succeeded' : 'failed';
   return {
     category,
     action: actionForTool(name),
@@ -322,7 +323,7 @@ function actionForTool(name) {
 }
 
 function stageForTool(name, status) {
-  if (status === 'blocked') return 'Waiting for approval';
+  if (status === 'blocked') return 'Blocked';
   if (status === 'failed') return 'Resolving failure';
   if (/run_checks|diagnostics|validation/.test(name)) return 'Validating';
   if (/git_commit|git_push/.test(name)) return 'Publishing changes';

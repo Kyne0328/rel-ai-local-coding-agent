@@ -25,18 +25,19 @@ assert.equal(fullBootstrap.fileCount, 2);
 const cases = [
   fixture('relai_work:begin', 'relai_work', 'begin', OP.WORK_BEGIN, 'work_begin', {
     ok: true, workspace: 'repo', work_id: 'work_begin', status: 'planning', identity: 'work_session',
-    workspaceBinding: { alias: 'repo' }, title: 'Contract work', objective: 'Characterize results.', intent: 'investigation', nextAction: 'Use bootstrap.'
+    workspaceBinding: { alias: 'repo' }, title: 'Contract work', objective: 'Characterize results.', intent: 'investigation',
+    activeRelatedWork: [{ goal: 'Sibling task', status: 'running' }], nextAction: 'Use bootstrap.'
   }, {
     ok: true, workspace: 'repo', work_id: 'work_begin', status: 'planning', identity: 'work_session',
-    title: 'Contract work', objective: 'Characterize results.', intent: 'investigation'
+    title: 'Contract work', objective: 'Characterize results.', intent: 'investigation', activeRelatedWork: [{ goal: 'Sibling task', status: 'running' }]
   }),
   fixture('relai_work:status', 'relai_work', 'status', OP.WORK_STATUS, 'work_status', {
     ok: true, version: '0.24.0', runtime: 'node', tools: ['relai_read'],
     toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12, tools: [{ name: 'relai_read' }], deprecations: [] },
-    workspaceCount: 1, workspaceAliases: ['repo']
+    activeRelatedWork: [{ goal: 'Sibling task', status: 'running' }], workspaceCount: 1, workspaceAliases: ['repo']
   }, {
     ok: true, version: '0.24.0', runtime: 'node', toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12 },
-    workspaceCount: 1, workspaceAliases: ['repo'], work_id: 'work_status'
+    activeRelatedWork: [{ goal: 'Sibling task', status: 'running' }], workspaceCount: 1, workspaceAliases: ['repo'], work_id: 'work_status'
   }),
   fixture('relai_read', 'relai_read', '', OP.READ, 'work_read', {
     ok: true, workspace: 'repo', items: [{ type: 'file', path: 'README.md', bytes: 12, content: '# Project\n', cacheHit: false, writeGuidance: { recommendedMode: 'direct-write' } }], skipped: []

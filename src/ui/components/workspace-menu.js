@@ -1,5 +1,6 @@
 import { setWorkspaceFilter } from '../router.js';
 import { esc } from '../utils.js';
+import { iconHtml } from './icons.js';
 
 let closeActiveMenu = null;
 let documentListenerBound = false;
@@ -17,9 +18,9 @@ export function workspaceMenuHtml(workspaces = [], selected = '', options = {}) 
   ].join('');
   return `<div class="workspace-menu" data-workspace-menu>
     <button class="secondary workspace-menu-trigger" id="${esc(id)}Button" type="button" aria-label="Project filter: ${esc(label)}" title="Project filter" aria-haspopup="listbox" aria-expanded="false" aria-controls="${esc(id)}List">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" /></svg>
+      ${iconHtml('folder')}
       <span>${esc(label)}</span>
-      <svg class="workspace-menu-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+      ${iconHtml('chevronDown', { className: 'workspace-menu-chevron' })}
     </button>
     <div class="workspace-menu-popover" id="${esc(id)}List" role="listbox" aria-labelledby="${esc(id)}Button" hidden>${optionsHtml}</div>
   </div>`;
@@ -51,11 +52,22 @@ function bindWorkspaceMenu(menu) {
   const trigger = menu.querySelector('.workspace-menu-trigger');
   const popover = menu.querySelector('.workspace-menu-popover');
   if (!trigger || !popover) return;
+  let typeahead = '';
+  let typeaheadTimer = null;
 
+  const options = () => [...popover.querySelectorAll('[role="option"]')];
+  const focusOption = option => {
+    if (!option) return;
+    for (const item of options()) item.tabIndex = item === option ? 0 : -1;
+    option.focus({ preventScroll: true });
+  };
   const close = ({ restoreFocus = false } = {}) => {
     popover.hidden = true;
     trigger.setAttribute('aria-expanded', 'false');
     menu.classList.remove('open');
+    typeahead = '';
+    if (typeaheadTimer) clearTimeout(typeaheadTimer);
+    typeaheadTimer = null;
     if (closeActiveMenu === close) closeActiveMenu = null;
     if (restoreFocus) trigger.focus();
     window.dispatchEvent(new CustomEvent('relai:dropdown-closed'));
@@ -67,7 +79,7 @@ function bindWorkspaceMenu(menu) {
     menu.classList.add('open');
     closeActiveMenu = close;
     const selected = popover.querySelector('[aria-selected="true"]') || popover.querySelector('[role="option"]');
-    selected?.focus({ preventScroll: true });
+    focusOption(selected);
   };
 
   trigger.addEventListener('click', event => {
@@ -82,9 +94,13 @@ function bindWorkspaceMenu(menu) {
     close();
     setWorkspaceFilter(option.dataset.workspaceValue || '');
   });
+  popover.addEventListener('focusout', event => {
+    if (event.relatedTarget instanceof Node && menu.contains(event.relatedTarget)) return;
+    close();
+  });
   popover.addEventListener('keydown', event => {
-    const options = [...popover.querySelectorAll('[role="option"]')];
-    const index = options.indexOf(document.activeElement);
+    const items = options();
+    const index = items.indexOf(document.activeElement);
     if (event.key === 'Escape') {
       event.preventDefault();
       close({ restoreFocus: true });
@@ -93,17 +109,35 @@ function bindWorkspaceMenu(menu) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const direction = event.key === 'ArrowDown' ? 1 : -1;
-      const next = index < 0 ? 0 : (index + direction + options.length) % options.length;
-      options[next]?.focus();
+      const next = index < 0 ? 0 : (index + direction + items.length) % items.length;
+      focusOption(items[next]);
+      return;
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      focusOption(event.key === 'Home' ? items[0] : items.at(-1));
       return;
     }
     if ((event.key === 'Enter' || event.key === ' ') && document.activeElement?.matches('[data-workspace-value]')) {
       event.preventDefault();
       document.activeElement.click();
+      return;
+    }
+    if (event.key.length === 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      typeahead += event.key.toLocaleLowerCase();
+      if (typeaheadTimer) clearTimeout(typeaheadTimer);
+      typeaheadTimer = setTimeout(() => { typeahead = ''; typeaheadTimer = null; }, 700);
+      const start = index < 0 ? 0 : index + 1;
+      const ordered = [...items.slice(start), ...items.slice(0, start)];
+      const match = ordered.find(item => item.textContent.trim().toLocaleLowerCase().startsWith(typeahead));
+      if (match) {
+        event.preventDefault();
+        focusOption(match);
+      }
     }
   });
 }
 
 function workspaceOption(value, label, selected) {
-  return `<button class="workspace-menu-option${selected ? ' selected' : ''}" type="button" role="option" aria-selected="${selected ? 'true' : 'false'}" data-workspace-value="${esc(value)}"><span>${esc(label)}</span>${selected ? '<span aria-hidden="true">✓</span>' : ''}</button>`;
+  return `<button class="workspace-menu-option${selected ? ' selected' : ''}" type="button" role="option" tabindex="${selected ? '0' : '-1'}" aria-selected="${selected ? 'true' : 'false'}" data-workspace-value="${esc(value)}"><span>${esc(label)}</span>${selected ? iconHtml('check') : ''}</button>`;
 }

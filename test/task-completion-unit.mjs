@@ -171,6 +171,49 @@ try {
   );
 
   resetToolActivity();
+  const lowRiskTask = await startTask('low-risk-documentation-without-validation');
+  await callTool('relai_edit', {
+    workspace: 'app',
+    work_id: lowRiskTask,
+    path: 'README.md',
+    content: '# Fixture documentation\n'
+  }, { publicHttpOnly: true });
+  const lowRiskCompletion = await callTool('relai_work', { action: 'finish',
+    workspace: 'app',
+    work_id: lowRiskTask,
+    summary: 'Documentation-only task completed without ceremonial validation.'
+  }, { publicHttpOnly: true });
+  assert.equal(lowRiskCompletion.ok, true);
+  assert.equal(lowRiskCompletion.validationStatus, 'not_required');
+  assert.deepEqual(lowRiskCompletion.changedFiles, ['README.md']);
+
+  resetToolActivity();
+  const failedLowRiskTask = await startTask('low-risk-documentation-with-failed-check');
+  await callTool('relai_edit', {
+    workspace: 'app',
+    work_id: failedLowRiskTask,
+    path: 'docs/failed-check.md',
+    content: '# Documentation with an explicit failed check\n'
+  }, { publicHttpOnly: true });
+  const failedLowRiskValidation = await callTool('relai_validate', { action: 'checks',
+    workspace: 'app',
+    work_id: failedLowRiskTask,
+    check: 'node -e "process.exit(1)"'
+  }, { publicHttpOnly: true });
+  assert.equal(failedLowRiskValidation.validationStatus, 'failed');
+  await assert.rejects(
+    () => callTool('relai_work', { action: 'finish',
+      workspace: 'app',
+      work_id: failedLowRiskTask,
+      summary: 'A known failed check must still block low-risk completion.'
+    }, { publicHttpOnly: true }),
+    error => error?.code === 'TASK_VALIDATION_REQUIRED'
+  );
+  await callTool('relai_work', {
+    action: 'cancel', workspace: 'app', work_id: failedLowRiskTask, reason: 'failed validation regression complete'
+  }, { publicHttpOnly: true });
+
+  resetToolActivity();
   const unvalidatedMutationTask = await startTask('mutation-without-validation');
   await callTool('relai_edit', {
     workspace: 'app',

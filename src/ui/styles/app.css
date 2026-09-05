@@ -229,7 +229,7 @@
 
   .nav, .secondary-nav { @apply flex flex-col gap-0.5; }
   .secondary-nav { @apply mt-3 border-t pt-3; border-color: var(--ui-border-subtle); }
-  .sidebar-group-label { @apply px-2 text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+  .sidebar-group-label { @apply px-2 text-[11px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
   .nav a, .secondary-nav a, .mobile-nav a, .sidebar-accordion > summary {
     @apply flex items-center gap-2.5 rounded-md px-2.5 text-[13px] font-semibold transition-colors;
     min-height: 36px;
@@ -288,6 +288,8 @@
   .workspace-menu-option.selected { background: var(--ui-surface-raised); border-color: var(--ui-border-subtle); color: var(--ui-text-primary); }
   .workspace-menu-option > span:first-child { @apply min-w-0 flex-1 truncate; }
   .workspace-menu-option > span:last-child { @apply shrink-0; color: var(--ui-status-success-foreground); }
+
+  .ui-icon { @apply size-4 shrink-0 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
   button, .buttonlike {
     @apply inline-flex items-center justify-center gap-2 rounded-md px-3 text-[12px] font-semibold transition-[background-color,border-color,color,opacity,transform] duration-150;
@@ -414,17 +416,18 @@
   .modal-head { @apply flex min-h-14 shrink-0 items-center justify-between gap-3 px-5; }
   .drawer-head { @apply flex min-h-14 shrink-0 items-center justify-between gap-3 border-b px-4; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
   .modal-title, .drawer-title { @apply text-[16px] font-bold; }
-  .modal-close { @apply grid size-9 min-h-9 shrink-0 place-items-center rounded-lg p-0 text-xl leading-none; background: transparent; border-color: transparent; color: var(--ui-text-secondary); }
+  .modal-close { @apply grid size-9 min-h-9 shrink-0 place-items-center rounded-lg p-0 leading-none; background: transparent; border-color: transparent; color: var(--ui-text-secondary); }
+  .modal-close .ui-icon { @apply size-[18px]; }
   .modal-close:hover:not(:disabled) { background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); color: var(--ui-text-primary); }
   .modal-body { @apply min-h-0 overflow-y-auto px-5 pb-5; overscroll-behavior: contain; }
   .modal-footer { @apply mt-2 flex items-end justify-between gap-4 border-t pt-4; border-color: var(--ui-border-subtle); }
   .modal-actions { @apply flex shrink-0 flex-wrap justify-end gap-2; }
   .modal-danger-zone { @apply grid gap-1; }
-  .modal-danger-zone > span { @apply max-w-64 text-[10px] leading-4; color: var(--ui-text-tertiary); }
+  .modal-danger-zone > span { @apply max-w-64 text-[11px] leading-4; color: var(--ui-text-tertiary); }
   .modal-inline-confirm-layer { @apply absolute inset-0 z-[2] flex items-center justify-center p-5; background: var(--ui-overlay-modal); }
   .modal-inline-confirm-card { @apply grid w-full max-w-[460px] gap-3 rounded-xl p-4; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
   .modal-inline-confirm-title { @apply text-[15px] font-bold; }
-  .modal-step-list { @apply grid gap-1 pl-5 text-[11px] leading-5; list-style: decimal; color: var(--ui-text-secondary); }
+  .modal-step-list { @apply grid gap-1 pl-5 text-[13px] leading-5; list-style: decimal; color: var(--ui-text-secondary); }
   .drawer-body { @apply min-h-0 flex-1 overflow-y-auto p-5; overscroll-behavior: contain; }
   .drawer-panel { @apply fixed bottom-4 right-4 top-4 z-[51] flex w-[min(760px,calc(100vw-48px))] flex-col overflow-hidden rounded-xl; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
   .session-detail-drawer { width: min(820px, calc(100vw - 48px)); }
@@ -446,20 +449,21 @@
   .command-search { @apply min-h-12 border-0 bg-transparent pl-3 pr-14 shadow-none; }
   .command-search:focus { box-shadow: none; }
   .command-search-wrap kbd { @apply absolute right-3 rounded px-1.5 py-0.5 text-[10px]; color: var(--ui-text-tertiary); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
-  .command-help { @apply px-1 text-[10px]; color: var(--ui-text-tertiary); }
+  .command-help { @apply px-1 text-[11px]; color: var(--ui-text-tertiary); }
   .command-list { @apply max-h-[52vh] overflow-y-auto rounded-xl; border: 1px solid var(--ui-border-subtle); }
   .command-option { @apply flex cursor-pointer items-center justify-between gap-4 border-b px-3 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
   .command-option.active { background: var(--ui-surface-raised); }
   .command-option-copy { @apply min-w-0; }
   .command-option-copy strong { @apply block text-[12px]; }
-  .command-option-copy small { @apply mt-1 block truncate text-[10px]; color: var(--ui-text-secondary); }
-  .command-group { @apply shrink-0 text-[10px] font-semibold; color: var(--ui-text-tertiary); }
+  .command-option-copy small { @apply mt-1 block truncate text-[11px]; color: var(--ui-text-secondary); }
+  .command-group { @apply shrink-0 text-[11px] font-semibold; color: var(--ui-text-tertiary); }
   .command-empty { @apply p-6 text-center text-[12px]; color: var(--ui-text-secondary); }
 
   .toast { @apply grid items-center gap-3 rounded-xl px-4 py-3 text-[12px]; grid-template-columns: auto minmax(0,1fr) auto; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
   .toast-marker { @apply grid size-5 place-items-center rounded-full text-[11px] font-bold; color: var(--ui-status-neutral-foreground); background: var(--ui-status-neutral-background); border: 1px solid var(--ui-status-neutral-border); }
   .toast-copy { @apply min-w-0 break-words leading-5; }
-  .toast-dismiss { @apply size-11 min-h-11 shrink-0 rounded-lg px-0 text-base; background: transparent; border-color: transparent; color: var(--ui-text-secondary); }
+  .toast-dismiss { @apply size-11 min-h-11 shrink-0 rounded-lg px-0; background: transparent; border-color: transparent; color: var(--ui-text-secondary); }
+  .toast-dismiss .ui-icon { @apply size-[17px]; }
   .toast-dismiss:hover { color: var(--ui-text-primary); background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); }
   .toast-info .toast-marker { color: var(--ui-status-info-foreground); background: var(--ui-status-info-background); border-color: var(--ui-status-info-border); }
   .toast-success .toast-marker { color: var(--ui-status-success-foreground); background: var(--ui-status-success-background); border-color: var(--ui-status-success-border); }
@@ -579,7 +583,7 @@
   .nav a:focus-visible .nav-label, .secondary-nav a:focus-visible .nav-label, .sidebar-accordion > summary:focus-visible .nav-label {
     display: block;
     max-width: 100%;
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.15;
     text-align: center;
     white-space: normal;
@@ -594,11 +598,19 @@
   :root { --sidebar-width: 0px; }
   .sidebar { @apply hidden; }
   .main { padding: 12px 12px calc(74px + env(safe-area-inset-bottom)); }
-  .mobile-nav { @apply fixed bottom-0 left-0 right-0 z-40 grid overflow-x-auto p-2; grid-template-columns: repeat(7,minmax(52px,1fr)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); scrollbar-width: none; }
-  .mobile-nav::-webkit-scrollbar { display: none; }
-  .mobile-nav a { @apply min-h-11 flex-col justify-center gap-1 px-1 py-1 text-xs; line-height: 1.1; text-align: center; }
+  .mobile-nav { @apply fixed bottom-0 left-0 right-0 z-40 grid overflow-visible p-2; grid-template-columns: repeat(5,minmax(0,1fr)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); }
+  .mobile-nav a, .mobile-nav-more > summary { @apply min-h-11 flex-col justify-center gap-1 rounded-md px-1 py-1 text-xs; line-height: 1.1; text-align: center; color: var(--ui-text-secondary); border: 1px solid transparent; }
+  .mobile-nav-more { @apply relative min-w-0; }
+  .mobile-nav-more > summary { @apply flex cursor-pointer list-none items-center; }
+  .mobile-nav-more > summary::-webkit-details-marker { display: none; }
+  .mobile-nav-more > summary:hover, .mobile-nav-more > summary:focus-visible { color: var(--ui-text-primary); background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); }
+  .mobile-nav-more.active > summary { color: var(--ui-text-primary); background: var(--ui-surface-raised); border-color: var(--ui-border-subtle); }
+  .mobile-nav-more.active > summary .nav-icon { color: var(--ui-action-primary); }
+  .mobile-nav-more-menu { @apply absolute bottom-[calc(100%+8px)] right-0 grid min-w-[190px] overflow-hidden rounded-lg p-1.5; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-popover); }
+  .mobile-nav-more-menu a { @apply min-h-11 flex-row justify-start gap-2 px-3 text-left text-[12px]; }
+  .mobile-nav-more-menu a .nav-label { @apply text-left; }
   .mobile-nav .nav-icon { @apply size-4; }
-  .mobile-nav .nav-label { display: block; max-width: 100%; font-size: 10px; line-height: 1.1; white-space: normal; }
+  .mobile-nav .nav-label { display: block; max-width: 100%; font-size: 11px; line-height: 1.1; white-space: normal; }
   .topbar { @apply sticky top-0 px-0; }
   .page-title { @apply text-xl; }
   .page-subtitle { @apply whitespace-normal; }

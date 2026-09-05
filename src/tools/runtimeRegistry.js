@@ -33,9 +33,12 @@ function resolveExecutableToolCall(name, args = {}, _config = {}) {
   }
   const publicDefinition = getPublicMetadata(name);
   if (!publicDefinition) return null;
+  const actionExecutionDefinition = operation.catalogEntry?.behavior
+    ? Object.freeze({ ...executionDefinition, behavior: operation.catalogEntry.behavior })
+    : executionDefinition;
   return {
     publicDefinition,
-    executionDefinition,
+    executionDefinition: actionExecutionDefinition,
     operationName: operation.operationName,
     operationArgs: operation.operationArgs,
     action: operation.action || '',

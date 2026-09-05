@@ -7,7 +7,7 @@ const STATIC_PROGRESS_STATES = Object.freeze({
   expired: Object.freeze({ fallback: 'Task expired', state: 'Expired', className: 'terminal cancelled' }),
   validation_failed: Object.freeze({ fallback: 'Fix the issues and run checks again', state: 'Action required', className: 'paused failed' }),
   blocked: Object.freeze({ fallback: 'Resolve the blocker to continue', state: 'Action required', className: 'paused blocked' }),
-  waiting_for_approval: Object.freeze({ fallback: 'Approval required', state: 'Paused', className: 'paused approval' })
+  waiting_for_approval: Object.freeze({ fallback: 'Blocked', state: 'Action required', className: 'paused blocked' })
 });
 
 export function taskProgressHtml(progress = {}, status = '', options = {}) {
@@ -37,7 +37,7 @@ function staticProgressHtml(progress, state, compact) {
 
 function meaningfulLabel(value, fallback) {
   const label = String(value || '').trim();
-  if (!label || /^(progress unavailable|workload size is not yet known|planning task|waiting for the next task step)$/i.test(label)) return fallback;
+  if (!label || /^(progress unavailable|workload size is not yet known|planning task|waiting for the next task step|approval required|waiting for approval)$/i.test(label)) return fallback;
   return label;
 }
 

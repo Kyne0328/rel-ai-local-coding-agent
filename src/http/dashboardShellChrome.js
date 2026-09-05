@@ -21,6 +21,10 @@ function renderDashboardNav(items) {
   return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join('');
 }
 
+function renderDashboardMobileNav(primaryItems, moreItems) {
+  return `${renderDashboardNav(primaryItems)}<details class="mobile-nav-more"><summary aria-label="More navigation" title="More"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.25"/><circle cx="12" cy="12" r="1.25"/><circle cx="19" cy="12" r="1.25"/></svg><span class="nav-label">More</span></summary><div class="mobile-nav-more-menu">${renderDashboardNav(moreItems)}</div></details>`;
+}
+
 function renderDashboardAccordion(parent, items) {
   return `<details class="sidebar-accordion" data-nav-accordion="${parent.id}">
     <summary aria-label="${parent.label}" title="${parent.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${parent.icon}</svg><span class="nav-label">${parent.label}</span><svg class="sidebar-accordion-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></summary>
@@ -40,4 +44,4 @@ function renderDashboardWindowTitlebar() {
 </header>`;
 }
 
-export { renderDashboardAccordion, renderDashboardNav, renderDashboardShellBootstrap, renderDashboardWindowTitlebar };
+export { renderDashboardAccordion, renderDashboardMobileNav, renderDashboardNav, renderDashboardShellBootstrap, renderDashboardWindowTitlebar };

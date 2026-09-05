@@ -80,10 +80,10 @@ Tunnel-client upgrades are release changes. Rel.AI does not accept an arbitrary 
 
 ## What you still need to trust
 
-Rel.AI MCP is a trusted local coding bridge, not a sandbox.
+Rel.AI is a trusted local ChatGPT harness, not a sandbox.
 
 - Protect the OpenAI tunnel runtime API key and the local Rel.AI bearer token. Replace either credential if it is exposed.
-- Anyone with operating-system access sufficient to read process memory, user credentials, or protected application state may be able to interfere with the local bridge.
+- Anyone with operating-system access sufficient to read process memory, user credentials, or protected application state may be able to interfere with the local harness.
 - Repository-defined commands execute with the permissions of the Rel.AI process.
 - ChatGPT can modify non-sensitive files inside configured workspaces through authorized tools.
 - Git push publishes to allowlisted remotes; review the task diff before committing or pushing.

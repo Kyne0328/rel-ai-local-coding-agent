@@ -119,6 +119,21 @@ try {
   assert.ok(taskEvent.taskUpdates.some(task => task.id === taskId));
   assert.ok(Array.isArray(taskEvent.activityEntries), 'task delta must carry only changed activity entries');
   assert.equal(Object.hasOwn(taskEvent, 'release'), false, 'task delta must not rebuild unrelated release state');
+
+  const finishObserved = beginConnectorToolCall({
+    trackTask: false,
+    scopeId: 'dashboard-observed-live-test',
+    tool: 'relai_read',
+    internalOperation: 'read',
+    operation: 'Read dashboard live state',
+    workspace: 'test'
+  });
+  const observedOperationId = finishObserved.operationId;
+  finishObserved({ ok: true });
+  const observedEvent = JSON.parse((await stream.nextType('task.updated')).data);
+  assert.ok(observedEvent.activityEntries.some(entry => entry.eventId === observedOperationId), 'non-task tool activity must stream into Activity without waiting for a dashboard refresh');
+  assert.equal(observedEvent.activityEntries.find(entry => entry.eventId === observedOperationId)?.status, 'succeeded');
+  assert.equal(observedEvent.taskUpdates.length, 0, 'observed activity must not invent a task row');
   assert.equal(Object.hasOwn(taskEvent, 'tools'), false, 'task delta must not rebuild static tool data');
   assert.equal(Object.hasOwn(taskEvent, 'managedProcesses'), false, 'task delta must not include process state');
 

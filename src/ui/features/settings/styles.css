@@ -86,7 +86,7 @@
 .settings-validation-row > div { @apply grid min-w-0 gap-0.5; }
 .settings-validation-row > div span { @apply text-[12px]; overflow-wrap: anywhere; color: var(--ui-text-secondary); }
 .settings-memory-privacy { @apply max-w-4xl; }
-.settings-memory-form { @apply grid items-end gap-3 rounded-lg p-3; grid-template-columns: minmax(260px,1fr) minmax(150px,.35fr) minmax(150px,.35fr) auto; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.settings-memory-form { @apply grid items-end gap-3 rounded-lg p-3; grid-template-columns: minmax(260px,1fr) minmax(220px,.45fr) auto; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .settings-memory-field { @apply grid min-w-0 gap-1.5; }
 .settings-memory-field > span { @apply text-[12px] font-semibold; }
 .settings-memory-field input, .settings-memory-field select { @apply min-w-0; }

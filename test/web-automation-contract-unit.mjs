@@ -68,6 +68,12 @@ assert.deepEqual(uiActions.map(entry => entry.action), [
   'console', 'network', 'viewport', 'reload', 'stop'
 ]);
 assert.ok(uiActions.every(entry => entry.operationName === 'ui'));
-assert.ok(uiActions.every(entry => entry.behavior.taskScope === 'required'));
+const uiByAction = new Map(uiActions.map(entry => [entry.action, entry]));
+for (const action of ['start', 'navigate', 'interact', 'viewport', 'reload']) {
+  assert.equal(uiByAction.get(action)?.behavior.taskScope, 'required', `${action} mutates UI state and must stay task-scoped`);
+}
+for (const action of ['snapshot', 'screenshot', 'console', 'network', 'stop']) {
+  assert.equal(uiByAction.get(action)?.behavior.taskScope, 'optional', `${action} must allow principal/workspace/session recovery without resurrecting a task`);
+}
 
 console.log('Web automation contracts are bounded, local-only, and image-capable.');

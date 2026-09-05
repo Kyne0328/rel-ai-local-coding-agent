@@ -12,8 +12,8 @@ const mcpSchemas = getMcpToolSchemas();
 const canonicalByName = new Map(getToolSchemas().map(schema => [schema.name, schema]));
 const mcpByName = new Map(mcpSchemas.map(schema => [schema.name, schema]));
 
-assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact 12-tool canonical surface');
-assert.equal(mcpSchemas.length, 12, 'MCP discovery must not add an approval-card tool surface');
+assert.equal(publicSchemas.length, mcpSchemas.length, 'public and MCP discovery must expose the same canonical surface');
+assert.equal(mcpSchemas.length, canonicalByName.size, 'MCP discovery must not add app-only helper tools');
 assert.deepEqual(mcpSchemas.filter(schema => schema.name.startsWith('relai_app_')).map(schema => schema.name), []);
 for (const schema of mcpSchemas) assert.equal(ToolSchema.safeParse(schema).success, true, `${schema.name} must remain a valid MCP tool descriptor`);
 
@@ -24,9 +24,11 @@ const invocationLabels = new Map([
   ['relai_search', ['Searching repository…', 'Repository searched']],
   ['relai_inspect', ['Inspecting code…', 'Code inspected']],
   ['relai_edit', ['Applying changes…', 'Changes applied']],
+  ['relai_skill', ['Saving learned skill…', 'Learned skill saved']],
   ['relai_exec', ['Running command…', 'Command finished']],
   ['relai_process', ['Managing process…', 'Process updated']],
   ['relai_ui', ['Testing local UI…', 'Local UI tested']],
+  ['relai_computer', ['Controlling computer…', 'Computer action finished']],
   ['relai_validate', ['Validating changes…', 'Validation finished']],
   ['relai_changes', ['Reviewing changes…', 'Changes reviewed']],
   ['relai_publish', ['Publishing changes…', 'Changes published']]

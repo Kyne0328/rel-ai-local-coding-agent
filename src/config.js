@@ -42,6 +42,9 @@ function makeDefaultConfig() {
       proceduralLearning: true,
       maxBootstrapBytes: 4096
     },
+    computerControl: {
+      enabled: false
+    },
     release: {
       minimumReadinessScore: 80,
       requireHttpToken: true
@@ -175,6 +178,7 @@ function mergeConfigBase(base, input) {
     trustedBudgetMultiplier: input.trustedBudgetMultiplier ?? base.trustedBudgetMultiplier,
     productUx: { ...base.productUx, ...objectOrEmpty(input.productUx) },
     knowledge: { ...base.knowledge, ...objectOrEmpty(input.knowledge) },
+    computerControl: { ...base.computerControl, ...objectOrEmpty(input.computerControl) },
     release: { ...base.release, ...objectOrEmpty(input.release) },
     telemetry: { ...base.telemetry, ...objectOrEmpty(input.telemetry) },
     processEnvironment: { ...base.processEnvironment, ...objectOrEmpty(input.processEnvironment) },
@@ -211,6 +215,10 @@ function normalizeProductSettings(next, base, input) {
     enabled: normalizeBoolean(knowledge.enabled, base.knowledge.enabled),
     proceduralLearning: normalizeBoolean(knowledge.proceduralLearning, base.knowledge.proceduralLearning),
     maxBootstrapBytes: clampNumber(knowledge.maxBootstrapBytes, 1024, 16384, base.knowledge.maxBootstrapBytes)
+  };
+  const computerControl = { ...base.computerControl, ...objectOrEmpty(input.computerControl) };
+  next.computerControl = {
+    enabled: normalizeBoolean(computerControl.enabled, base.computerControl.enabled)
   };
   next.release = { ...base.release, ...objectOrEmpty(input.release) };
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
@@ -471,6 +479,7 @@ function publicConfigSummary(config) {
     },
     productUx: config.productUx,
     knowledge: config.knowledge,
+    computerControl: config.computerControl,
     release: config.release,
     telemetry: telemetryStatus(config),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {

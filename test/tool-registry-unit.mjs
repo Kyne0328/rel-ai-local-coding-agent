@@ -15,8 +15,8 @@ import {
 
 const config = { workspaces: {} };
 const requiredTools = [
-  'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit',
-  'relai_exec', 'relai_process', 'relai_ui', 'relai_validate', 'relai_changes', 'relai_publish'
+  'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit', 'relai_skill',
+  'relai_exec', 'relai_process', 'relai_ui', 'relai_computer', 'relai_validate', 'relai_changes', 'relai_publish'
 ];
 const removedDirectNames = [
   'relai_begin_work', 'relai_repo_snapshot', 'relai_code_inspect', 'relai_process_start',
@@ -35,8 +35,8 @@ const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
 const mcpSchemas = getMcpToolSchemas(config);
 const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
-assert.equal(publicSchemas.length, 12, 'local developer mode keeps the compact model-facing tool surface');
-assert.equal(mcpSchemas.length, 12, 'MCP discovery must match the compact model-facing tool surface');
+assert.equal(publicSchemas.length, requiredTools.length, 'local developer mode keeps the canonical model-facing tool surface');
+assert.equal(mcpSchemas.length, requiredTools.length, 'MCP discovery must match the canonical model-facing tool surface');
 assert.equal(mcpSchemas.some(item => item.name === 'relai_approval'), false, 'removed approval render tool must stay absent');
 assert.deepEqual(
   mcpSchemas.filter(item => item.name.startsWith('relai_app_')).map(item => item.name),
@@ -91,8 +91,8 @@ for (const schema of publicSchemas) {
   assert.deepEqual(schema._meta?.securitySchemes, [{ type: 'noauth' }], `${schema.name} must advertise local noauth through ChatGPT compatibility metadata`);
   assert.equal(schema._meta?.ui, undefined, `${schema.name} must stay iframe-free`);
   assert.equal(schema._meta?.['openai/outputTemplate'], undefined, `${schema.name} must not attach a ChatGPT output template`);
-  assert.match(schema.description || '', /\bUse\b/i, `${schema.name} must state when to use the tool`);
-  assert.match(schema.description || '', /\bDo not\b/i, `${schema.name} must state when not to use the tool`);
+  assert.ok(String(schema.description || '').trim().length > 0, `${schema.name} must have a concise connector description`);
+  assert.doesNotMatch(schema.description || '', /\b(?:use when|use for|use to|do not|prefer|should|must)\b/i, `${schema.name} connector description must stay declarative instead of prescribing model workflow`);
 }
 const publicWorkSchema = publicSchemas.find(item => item.name === 'relai_work')?.inputSchema;
 for (const field of ['workspace', 'title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason', 'work_id']) {
@@ -103,17 +103,18 @@ const publicSearchInputSchema = publicSchemas.find(item => item.name === 'relai_
 for (const field of ['queries', 'maxResults', 'maxFiles']) {
   assert.equal(publicSearchInputSchema?.properties?.[field]?.anyOf, undefined, `relai_search root ${field} schema must collapse bounded action variants instead of advertising a redundant union`);
 }
-assert.match(publicSearchInputSchema?.properties?.pattern?.description || '', /Action usage: text\./, 'flat discovery must identify text-only fields');
-assert.match(publicSearchInputSchema?.properties?.query?.description || '', /Action usage: semantic\./, 'flat discovery must identify semantic-only fields');
+assert.equal(publicSearchInputSchema?.properties?.pattern?.description, undefined, 'flat discovery must not repeat action ownership on individual fields');
+assert.equal(publicSearchInputSchema?.properties?.query?.description, undefined, 'flat discovery must not repeat action ownership on individual fields');
+assert.match(publicSearchInputSchema?.properties?.action?.description || '', /Action-specific fields: text\([^)]*pattern[^)]*\).*semantic\([^)]*query[^)]*\)/, 'flat discovery must summarize action-specific fields once on the action selector');
 assert.match(publicSearchInputSchema?.properties?.action?.description || '', /text: pattern or queries.*semantic: queries or query|text: pattern or queries.*semantic: query or queries/, 'flat discovery must preserve canonical alternative input forms');
-assert.match(publicSearchInputSchema?.properties?.maxFiles?.description || '', /text \[1-200\].*semantic \[1-20000\]/, 'flat discovery must preserve action-specific numeric bounds');
-assert.match(publicWorkSchema?.properties?.maxBytes?.description || '', /Action usage: status\./, 'flat discovery must identify action-specific optional fields');
+assert.match(publicSearchInputSchema?.properties?.action?.description || '', /text\([^)]*maxFiles\[1-200\][^)]*maxResults\[1-1000\].*semantic\([^)]*maxFiles\[1-20000\][^)]*maxResults\[1-100\]/, 'flat discovery must preserve action-specific numeric bounds in the compact action grammar');
+assert.match(publicWorkSchema?.properties?.action?.description || '', /status\([^)]*maxBytes[^)]*\)/, 'flat discovery must identify action-specific optional fields once on the action selector');
 const publicValidateInputSchema = publicSchemas.find(item => item.name === 'relai_validate')?.inputSchema;
 assert.equal(publicValidateInputSchema?.properties?.timeoutMs?.anyOf, undefined, 'relai_validate root timeoutMs schema must collapse bounded action variants instead of advertising a redundant union');
 const publicReadSchema = publicSchemas.find(item => item.name === 'relai_read');
 assert.equal(publicReadSchema?.inputSchema?.properties?.asResource?.type, 'boolean', 'relai_read discovery must expose private artifact transfer mode');
 assert.match(publicReadSchema?.inputSchema?.properties?.asResource?.description || '', /resource_link.*transfer or download/i, 'relai_read discovery must explain artifact transfer mode');
-assert.match(publicReadSchema?.description || '', /asResource:true.*transferred or downloaded/i, 'relai_read tool guidance must direct whole-file transfer to artifact resources');
+assert.match(publicReadSchema?.description || '', /asResource:true.*resource_link.*transfer or download/i, 'relai_read tool description must identify whole-file artifact transfer declaratively');
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
 assert.equal(publicSearchSchema?.properties?.neuralEmbeddings, undefined, 'action-specific result fields must stay out of lightweight MCP discovery');
 assert.equal(publicSearchSchema?.properties?.originalBytes, undefined, 'compaction metadata must stay out of lightweight MCP discovery');
@@ -132,14 +133,15 @@ assert.deepEqual(publicEditSchema?.inputSchema?.properties?.file?.required, ['do
 for (const field of ['download_url', 'file_id', 'mime_type', 'file_name']) {
   assert.ok(publicEditSchema?.inputSchema?.properties?.file?.properties?.[field], `native file schema must declare ${field}`);
 }
-assert.match(publicEditSchema?.inputSchema?.properties?.stage?.description || '', /only when the client transport cannot carry/i, 'public edit discovery must explain staged mode as a transport fallback');
+assert.match(publicEditSchema?.inputSchema?.properties?.stage?.description || '', /transport-size fallback/i, 'public edit discovery must explain staged mode as a transport fallback without imperative wording');
 const publicProcessSchema = publicSchemas.find(item => item.name === 'relai_process');
-assert.match(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /shell syntax.*Action usage: start/i, 'public process discovery must retain shell guidance and action ownership');
-assert.match(publicProcessSchema?.inputSchema?.properties?.processId?.description || '', /Action usage: read \(required\); write \(required\); stop \(required\)/, 'public process discovery must identify process-id actions');
-assert.match(publicExecSchema?.description || '', /Prefer executable \+ argv/i, 'ChatGPT discovery must prefer shell-free direct execution before trying a shell command');
-assert.match(publicExecSchema?.inputSchema?.description || '', /Prefer direct executable \+ argv mode by default/i);
+assert.match(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /shell syntax/i, 'public process discovery must retain shell guidance');
+assert.doesNotMatch(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /Action usage:/i, 'public process fields must not repeat action-routing prose');
+assert.match(publicProcessSchema?.inputSchema?.properties?.action?.description || '', /start\([^)]*command[^)]*\).*read\([^)]*processId![^)]*\).*write\([^)]*processId![^)]*\).*stop\([^)]*processId![^)]*\)/, 'public process discovery must summarize action ownership and required fields once');
+assert.match(publicExecSchema?.description || '', /Direct executable \+ argv and command-string forms are supported/i, 'ChatGPT discovery must describe both execution forms declaratively');
+assert.match(publicExecSchema?.inputSchema?.description || '', /direct executable \+ argv, and shell command/i);
 assert.match(publicExecSchema?.inputSchema?.description || '', /Input form: command or executable\./i, 'flat discovery must preserve canonical executable-mode alternatives');
-assert.match(publicExecSchema?.inputSchema?.properties?.command?.description || '', /Do not embed JavaScript, Python, JSON, patches/i);
+assert.match(publicExecSchema?.inputSchema?.properties?.command?.description || '', /Multiline scripts or structured text can be supplied through input/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.executable?.description || '', /shell:false/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.argv?.description || '', /without shell parsing/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.input?.description || '', /multiline scripts or structured text/i);
@@ -154,7 +156,7 @@ assert.deepEqual(schemaByName.get('relai_work').inputSchema.properties.action.en
 const processSchema = schemaByName.get('relai_process');
 assert.deepEqual(processSchema.inputSchema.properties.action.enum, ['start', 'read', 'write', 'stop', 'list']);
 assert.ok(processSchema.inputSchema.properties.kind.enum.includes('service'));
-assert.match(processSchema.description, /prefer executable \+ argv/i);
+assert.match(processSchema.description, /Direct executable \+ argv and command-string forms are supported/i);
 assert.match(processSchema.inputSchema.properties.executable.description, /shell:false/i);
 assert.match(processSchema.inputSchema.properties.argv.description, /without shell parsing/i);
 assert.match(processSchema.inputSchema.properties.input.description, /without closing the persistent stdin stream/i);
@@ -163,12 +165,12 @@ assert.equal(editSchema.inputSchema.oneOf?.length, 10, 'relai_edit executable sc
 assert.match(editSchema.description, /symbolEdit/i);
 assert.deepEqual(editSchema.inputSchema.properties.symbolEdit.properties.action.enum, ['replace', 'insert_before', 'insert_after']);
 assert.match(editSchema.description, /oldText\/newText/i);
-assert.match(editSchema.description, /content for complete-file replacement/i);
-assert.match(editSchema.description, /automatically handles large complete-file writes/i);
-assert.match(editSchema.description, /explicit staged mode only when a client transport cannot carry/i);
+assert.match(editSchema.description, /content complete-file replacement/i);
+assert.match(editSchema.description, /Large complete-file writes are staged internally/i);
+assert.match(editSchema.description, /transport-size fallback/i);
 assert.match(editSchema.inputSchema.properties.content.description, /staged internally when needed/i);
-assert.match(editSchema.inputSchema.properties.updateText.description, /one logical patch together/i);
-assert.match(editSchema.inputSchema.properties.stage.description, /only when the client transport cannot carry/i);
+assert.match(editSchema.inputSchema.properties.updateText.description, /One logical patch can contain repository-wide changes/i);
+assert.match(editSchema.inputSchema.properties.stage.description, /transport-size fallback/i);
 
 await valid('relai_work', { action: 'begin', workspace: 'repo' });
 await invalid('relai_work', { action: 'begin' });
@@ -203,6 +205,16 @@ await valid('relai_validate', { action: 'diagnostics', work_id: 'work', level: '
 await valid('relai_exec', { work_id: 'work', command: 'node -v' });
 await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-v'] });
 await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-'], input: 'process.stdout.write("ok")' });
+await valid('relai_computer', { action: 'status' });
+await valid('relai_computer', { action: 'screenshot', displayId: 'display-1' });
+await valid('relai_computer', { action: 'click', work_id: 'work', x: 10, y: 20 });
+await valid('relai_computer', { action: 'drag', work_id: 'work', x: 10, y: 20, toX: 30, toY: 40 });
+await valid('relai_computer', { action: 'scroll', work_id: 'work', direction: 'down', distance: 500 });
+await valid('relai_computer', { action: 'type', work_id: 'work', text: 'hello' });
+await valid('relai_computer', { action: 'key', work_id: 'work', key: 'enter' });
+await valid('relai_computer', { action: 'hotkey', work_id: 'work', keys: ['ctrl', 's'] });
+await invalid('relai_computer', { action: 'click', work_id: 'work', x: 10 });
+await invalid('relai_computer', { action: 'status', text: 'unexpected' });
 await invalid('relai_exec', { work_id: 'work' });
 await invalid('relai_exec', { work_id: 'work', command: 'node -v', executable: 'node' });
 await invalid('relai_exec', { work_id: 'work', command: 'node -v', argv: ['-v'] });

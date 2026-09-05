@@ -17,9 +17,9 @@ const READ_ONLY_TOOLS = new Set([
 ]);
 /** @type {Set<string>} */
 const DESTRUCTIVE_TOOLS = new Set([
-  OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.PROCESS_STOP, OP.UI,
+  OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.PROCESS_STOP, OP.UI, OP.COMPUTER,
   OP.VALIDATE_DIAGNOSTICS, OP.CHANGES_TIDY_RUN, OP.VALIDATE_CHECKS, OP.CHANGES_RESTORE,
-  OP.CHANGES_RESET, OP.EDIT
+  OP.CHANGES_RESET, OP.EDIT, OP.SKILL_MANAGE
 ]);
 /** @type {Set<string>} */
 const IDEMPOTENT_TOOLS = new Set([
@@ -28,7 +28,7 @@ const IDEMPOTENT_TOOLS = new Set([
 ]);
 /** @type {Set<string>} */
 const OPEN_WORLD_TOOLS = new Set([
-  OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.UI,
+  OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.UI, OP.COMPUTER,
   OP.VALIDATE_DIAGNOSTICS, OP.VALIDATE_CHECKS, OP.PUBLISH_PUSH
 ]);
 // These operations use Native MCP Tasks when the connected client explicitly negotiates
@@ -118,65 +118,75 @@ const PUBLIC_TOOL_VALUES = [
   {
     name: 'relai_work',
     title: 'Manage Repository Work',
-    description: 'Use when starting, inspecting, finishing, or cancelling one logical repository task. Status also returns any long operation that continued after its connector request ended. Do not use for file inspection or mutation itself.',
+    description: 'Starts, inspects, finishes, or cancels one logical repository task. Status also reports long operations that continued after a connector request ended. File inspection and mutation are provided by separate repository tools.',
     annotations: annotations(false, false, false, false),
     behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
     dashboard: { category: 'Workflow', capabilities: ['workflow'] }
   },
   {
     name: 'relai_snapshot', title: 'Repository Snapshot',
-    description: 'Use when a compact repository or bootstrap overview is needed. This read-only operation may use an authorized workspace directly without a work_id. Do not use for targeted file reads or searches.'
+    description: 'Returns a compact repository or bootstrap overview. This read-only operation may use an authorized workspace directly without a work_id.'
   },
   {
     name: 'relai_read', title: 'Read Repository',
-    description: 'Use when exact file content, ranges, directories, one discovered skill, or a task-scoped outputRef from truncated relai_exec output is known and needed. Ordinary reads may use an authorized workspace directly without a work_id; outputRef remains bound to the exact work_id that produced it. Use asResource:true with one exact file path when the file itself must be transferred or downloaded instead of read as text. Do not use for discovery across unknown locations.'
+    description: 'Reads exact file content, ranges, directories, discovered skills, or task-scoped command output. Ordinary reads may use an authorized workspace directly without a work_id; task output remains bound to its work_id. asResource:true returns one exact file as a private resource_link for transfer or download.'
   },
   {
     name: 'relai_search', title: 'Search Repository',
-    description: 'Use for lexical or semantic discovery across repository content. Do not use when the exact file and range are already known.',
+    description: 'Provides lexical or semantic discovery across repository content.',
     annotations: annotations(true, false, true, false), behavior: { taskScope: 'optional' }
   },
   {
     name: 'relai_inspect', title: 'Inspect Code Relationships',
-    description: 'Use for symbol, reference, impact, trace, diagnostic, or architecture analysis. Do not use for plain text lookup.',
+    description: 'Provides read-only symbol, reference, impact, trace, diagnostic, and architecture analysis.',
     annotations: annotations(true, false, true, false), groups: ['audit'], behavior: { taskScope: 'optional' }
   },
   {
     name: 'relai_edit', title: 'Edit Repository',
-    description: 'Use for repository file or environment mutations after evidence identifies the intended change. Do not use for reads or command execution. Use semantic for language-server-authoritative rename, symbolEdit for indexed structural symbol replacement/insertion, oldText/newText for localized changes, content for complete-file replacement, file for a native ChatGPT file import, edits for an atomic structured batch, or updateText for patch-shaped changes. Keep a repository-wide patch-shaped change in one logical updateText patch when the transport permits it. Rel.AI automatically handles large complete-file writes; use explicit staged mode only when a client transport cannot carry the intended payload in one request.',
+    description: 'Applies repository file or environment mutations. Supported forms include semantic rename, symbolEdit structural edits, oldText/newText exact replacement, content complete-file replacement, native ChatGPT file import, edits batches, updateText patch updates, and secret-safe environment changes. Large complete-file writes are staged internally; explicit chunked staging is available as a transport-size fallback.',
     dashboard: { capabilities: ['edit'] }
   },
   {
+    name: 'relai_skill', title: 'Manage Learned Skill',
+    description: 'Creates, edits, patches, or deletes one Rel.AI-managed SKILL.md. Create and update operations are task-scoped; deletion may use an authorized workspace directly without a work_id. Workspace and global scopes are supported. Rel.AI stores explicitly requested learned procedures and does not infer or merge workflow candidates automatically.',
+    annotations: annotations(false, true, false, false), behavior: { taskScope: 'optional' }, dashboard: { capabilities: ['edit'] }
+  },
+  {
     name: 'relai_exec', title: 'Run Command',
-    description: 'Use for bounded one-shot workspace commands. If a long command outlives the connector request, it continues under work_id and relai_work status returns its result. Do not use for persistent services or watchers; prefer executable + argv and use command only when command-line syntax is required.',
+    description: 'Runs bounded one-shot workspace commands. Long operations may continue under work_id after the connector request returns. Direct executable + argv and command-string forms are supported.',
     dashboard: { capabilities: ['execute'] }
   },
   {
     name: 'relai_process', title: 'Manage Process',
-    description: 'Use for persistent services, watchers, or interactive programs. Starting or writing a process stays task-scoped; listing, reading, or stopping a known process may recover by authorized principal + workspace without the original work_id. Do not use for one-shot work; use relai_exec or relai_validate for one-shot work and prefer executable + argv.',
+    description: 'Starts and manages persistent services, watchers, and interactive programs with stable process identity. Start and write are task-scoped; list, read, and stop can recover by authorized principal + workspace. Direct executable + argv and command-string forms are supported.',
     annotations: annotations(false, true, false, true),
     dashboard: { capabilities: ['execute'] }, behavior: { executionClass: 'persistent_process', taskScope: 'optional' }
   },
   {
     name: 'relai_ui', title: 'Test Local UI',
-    description: 'Use for local UI runtime evidence and interaction in a workspace-scoped session. Do not use when source inspection alone answers the question.',
+    description: 'Provides local UI runtime evidence and interaction in a workspace-scoped session. Start and mutating actions are task-scoped; snapshot, screenshot, console/network observation, and stop can recover by authenticated principal + workspace + sessionId.',
+    annotations: annotations(false, true, false, true), dashboard: { capabilities: ['execute'] }
+  },
+  {
+    name: 'relai_computer', title: 'Control Computer',
+    description: 'Provides user-authorized control of the local computer running Rel.AI, including display inspection, screenshots, pointer input, scrolling, typing, and key input. Availability is controlled by the Computer control setting in Settings > App.',
     annotations: annotations(false, true, false, true), dashboard: { capabilities: ['execute'] }
   },
   {
     name: 'relai_validate', title: 'Validate Repository',
-    description: 'Use for explicit checks, diagnostics, or HTTP validation. Checks and diagnostics stay task-scoped; read-only local HTTP probes may use an authorized workspace directly. If long checks outlive the connector request, they continue under work_id and relai_work status returns the result. Do not rerun unchanged authoritative checks without a new mutation or reason.',
+    description: 'Runs explicit repository checks, diagnostics, or local HTTP validation. Checks and diagnostics are task-scoped; read-only local HTTP probes may use an authorized workspace directly. Long checks can continue under work_id.',
     annotations: annotations(false, true, false, true), behavior: { longRunning: true, taskScope: 'optional' },
     dashboard: { capabilities: ['validate'] }
   },
   {
     name: 'relai_changes', title: 'Review or Restore Changes',
-    description: 'Use to review, checkpoint/replay a review, restore, reset, or tidy workspace changes. Read-only review/replay and explicitly scoped restore/reset may use an authorized workspace directly when their action contract allows it. Do not use to create new source edits.',
+    description: 'Reviews, checkpoints or replays reviews, restores, resets, or tidies workspace changes. Read-only review/replay and explicitly scoped restore/reset can use an authorized workspace when their action contract permits.',
     annotations: annotations(false, true, false, false), dashboard: { capabilities: ['review', 'recover'] },
     groups: ['audit', 'cleanup'], behavior: { taskScope: 'optional' }
   },
   {
     name: 'relai_publish', title: 'Publish Repository Work',
-    description: 'Use to commit, push, or draft PR text after changes are reviewed and ready. A commit with no explicit scope stays limited to current task-owned paths. Explicit paths select exactly those reviewed paths and may cross earlier/parallel task ownership without a second approval prompt; addAll:true explicitly selects all current visible workspace changes. Commit, push, and draft-PR actions may use an authorized workspace directly without resurrecting an old task. Push remains approval-gated. Do not use before the publish boundary is satisfied.',
+    description: 'Commits repository changes, pushes Git branches, or drafts PR text. Commit scope defaults to task-owned paths unless explicit paths or addAll are supplied. Commit, push, and draft-PR actions may use an authorized workspace directly. Real push remains approval-gated.',
     annotations: annotations(false, false, false, true), dashboard: { capabilities: ['git'] }, groups: ['git'], behavior: { taskScope: 'optional' }
   }
 ];
@@ -246,7 +256,8 @@ function actionBranch(action, mapping) {
 
   const publicContract = mapping.publicContract || {};
   for (const field of publicContract.omit || []) delete properties[field];
-  const taskScoped = operation.behavior?.taskScope === 'required';
+  const taskScope = mapping.behavior?.taskScope || operation.behavior?.taskScope || 'required';
+  const taskScoped = taskScope === 'required';
   const required = new Set((schema.required || [])
     .filter(field => field !== 'action' && !(taskScoped && field === 'workspace') && Object.hasOwn(properties, field)));
   for (const field of publicContract.required || []) {
@@ -337,7 +348,7 @@ function getPublicActionContract(definition, action) {
   if (!branch) throw new Error(`Public action ${definition.name}:${action} has no schema branch.`);
   const mapping = ACTION_REGISTRY[definition.name]?.[action];
   const operation = mapping ? getOperationDefinition(mapping.operationName) : null;
-  const taskScope = operation?.behavior?.taskScope || 'required';
+  const taskScope = mapping?.behavior?.taskScope || operation?.behavior?.taskScope || 'required';
   const fields = Object.keys(branch.properties || {}).filter(field => field !== 'action');
   if (taskScope !== 'none' && !fields.includes('work_id')) fields.push('work_id');
   const required = [...(branch.required || [])].filter(field => field !== 'action');

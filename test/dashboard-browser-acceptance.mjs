@@ -80,7 +80,7 @@ try {
   });
   assert.equal(result.error, undefined, result.error);
   assert.ok(result.initial.rowCount >= 9);
-  for (const label of ['queued', 'planning', 'running', 'waiting for approval', 'blocked', 'validating', 'completed', 'failed', 'cancelled']) {
+  for (const label of ['queued', 'planning', 'running', 'blocked', 'validating', 'completed', 'failed', 'cancelled']) {
     assert.ok(result.initial.rowText.some(text => text.toLowerCase().includes(label)), `Missing rendered state: ${label}`);
   }
   assert.equal(result.initial.determinateValid, true);
@@ -113,6 +113,7 @@ try {
     assert.equal(route.loadingSeen, false, `MCP activity exposed a loading placeholder on #${route.route}: ${JSON.stringify(route)}`);
     assert.deepEqual(route.mainFrameNavigationDelta, { didStartNavigation: 0, didNavigate: 0, didFinishLoad: 0 }, `MCP activity navigated the main frame on #${route.route}`);
   }
+  assert.equal(result.taskInteraction.immediate, true, 'Task summary detail must render synchronously on selection before history hydration');
   assert.equal(result.taskInteraction.inspector, true);
   assert.equal(result.taskInteraction.selectedRow, true);
   assert.equal(result.taskInteraction.tabs, 3);
@@ -124,12 +125,14 @@ try {
   assert.equal(result.activityInteraction.selectedRow, true);
   assert.equal(result.activityInteraction.copyButton, true);
   assert.equal(result.activityInteraction.errorWrapped, true);
-  assert.deepEqual(result.activityDesktopGeometry.visibleHeaders, ['Time', 'Action', 'Task', 'Status', 'Message', 'Actions'], JSON.stringify(result.activityDesktopGeometry));
+  assert.deepEqual(result.activityDesktopGeometry.visibleHeaders, ['Time', 'Activity'], JSON.stringify(result.activityDesktopGeometry));
   assert.equal(result.activityDesktopGeometry.headerVisible, true, JSON.stringify(result.activityDesktopGeometry));
   assert.equal(result.activityDesktopGeometry.cellVisible, true, JSON.stringify(result.activityDesktopGeometry));
   assert.ok(result.activityDesktopGeometry.headerWidth >= 240, JSON.stringify(result.activityDesktopGeometry));
   assert.ok(result.activityDesktopGeometry.cellWidth >= 240, JSON.stringify(result.activityDesktopGeometry));
   assert.ok(result.activityDesktopGeometry.messageText.length > 0, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityDesktopGeometry.measuredMessageRows >= 2, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityDesktopGeometry.maxMessageLeftAlignmentError <= 1, `Activity messages must share the same left edge: ${JSON.stringify(result.activityDesktopGeometry)}`);
   assert.ok(Math.abs(result.activityDesktopGeometry.tableWidth - result.activityDesktopGeometry.wrapWidth) <= 1, JSON.stringify(result.activityDesktopGeometry));
   assert.ok(Math.abs(result.activityDesktopGeometry.visibleHeaderWidth - result.activityDesktopGeometry.wrapWidth) <= 1, JSON.stringify(result.activityDesktopGeometry));
   assert.ok(result.activityDesktopGeometry.trailingWidthGap <= 1, JSON.stringify(result.activityDesktopGeometry));
@@ -142,6 +145,7 @@ try {
   assert.equal(result.activityLiveStability.resumed, true, JSON.stringify(result.activityLiveStability));
   assert.ok(result.activityLiveStability.messageAfterResume.length > 0, JSON.stringify(result.activityLiveStability));
   assert.deepEqual(result.responsive.map(item => item.name), [
+    'window-1024x768',
     'window-640x720',
     'css-320-zoom-200',
     'css-375-zoom-200',
@@ -149,6 +153,8 @@ try {
   ]);
   for (const scenario of result.responsive) {
     assert.equal(scenario.horizontalOverflow, false, `${scenario.name} has horizontal overflow`);
+    assert.equal(scenario.mobileNavScrollable, false, `${scenario.name} hides primary navigation behind horizontal scrolling`);
+    if (scenario.viewportWidth <= 760) assert.equal(scenario.mobileMoreVisible, true, `${scenario.name} does not expose the mobile More navigation control`);
     assert.equal(scenario.topbarIntersects, true, `${scenario.name} topbar is outside the visual viewport`);
     assert.equal(scenario.taskRowIntersects, true, `${scenario.name} has no visible task row`);
     assert.equal(scenario.primaryControlIntersects, true, `${scenario.name} has no reachable primary control`);
@@ -165,6 +171,15 @@ try {
     assert.ok(Number.isFinite(scenario.devicePixelRatio) && scenario.devicePixelRatio >= 1);
     assert.equal(fs.existsSync(scenario.screenshot), true, `${scenario.name} screenshot is missing`);
   }
+  const responsive1024 = result.responsive.find(item => item.name === 'window-1024x768');
+  assert.equal(responsive1024.activityStacked, true, JSON.stringify(responsive1024));
+  assert.equal(responsive1024.activityDetailVisible, true, JSON.stringify(responsive1024));
+  assert.equal(responsive1024.activityDetailFocused, true, JSON.stringify(responsive1024));
+  const responsive640 = result.responsive.find(item => item.name === 'window-640x720');
+  assert.equal(responsive640.taskDetailVisible, true, JSON.stringify(responsive640));
+  assert.equal(responsive640.taskDetailFocused, true, JSON.stringify(responsive640));
+  assert.equal(responsive640.activityDetailVisible, true, JSON.stringify(responsive640));
+  assert.equal(responsive640.activityDetailFocused, true, JSON.stringify(responsive640));
   assert.ok(result.responsive.find(item => item.name === 'css-320-zoom-200').viewportWidth <= 320);
   assert.ok(result.responsive.find(item => item.name === 'css-375-zoom-200').viewportWidth <= 375);
   assert.equal(result.responsive.find(item => item.name === 'zoom-400').zoomFactor, 4);

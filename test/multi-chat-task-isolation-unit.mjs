@@ -5,6 +5,27 @@ import path from 'node:path';
 
 import { createToolActivityTracker, runWithToolActivity } from "../src/toolActivity.js";
 import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../src/policyResolver.js";
+import { compactActiveRelatedWork } from '../src/context/activeRelatedWork.js';
+
+// Live sibling context is compact, workspace-local, principal-local, and never exposes another work_id.
+{
+  const current = { id: 'task-a', workspace: 'repo', principalFingerprint: 'principal-a' };
+  const related = compactActiveRelatedWork({ tasks: [
+    current,
+    { id: 'task-b', workspace: 'repo', principalFingerprint: 'principal-a', objective: 'Update task UI', status: 'running', currentStage: 'Editing', currentActivity: 'Updating task cards', changedFiles: ['src/ui/tasks.js'], updatedAt: '2026-09-05T07:00:00.000Z' },
+    { id: 'task-c', workspace: 'other', principalFingerprint: 'principal-a', objective: 'Other workspace', status: 'running' },
+    { id: 'task-d', workspace: 'repo', principalFingerprint: 'principal-b', objective: 'Other principal', status: 'running' },
+    { id: 'task-e', workspace: 'repo', principalFingerprint: 'principal-a', objective: 'Completed sibling', status: 'completed' }
+  ] }, current);
+  assert.deepEqual(related, [{
+    goal: 'Update task UI',
+    status: 'running',
+    current: { stage: 'Editing', activity: 'Updating task cards' },
+    changes: ['src/ui/tasks.js']
+  }]);
+  assert.equal('work_id' in related[0], false);
+  assert.equal('principalFingerprint' in related[0], false);
+}
 
 // Two logical tasks sharing one MCP transport scope must remain independent.
 {

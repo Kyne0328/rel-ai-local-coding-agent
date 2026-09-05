@@ -63,7 +63,7 @@ for (const entry of catalog) {
   assert.deepEqual(entry.inputSchema, operation.inputSchema);
   assert.deepEqual(entry.outputSchema, operation.outputSchema);
   assert.deepEqual(entry.annotations, operation.annotations);
-  assert.deepEqual(entry.behavior, operation.behavior);
+  assert.deepEqual(entry.behavior, { ...operation.behavior, ...(ACTION_REGISTRY[entry.publicTool][entry.action].behavior || {}) });
   assert.deepEqual(entry.execution, operation.execution);
   assert.deepEqual(entry.dashboard, operation.dashboard);
   assert.deepEqual(entry.groups, operation.groups);
@@ -118,6 +118,10 @@ function sampleArgs(entry) {
     case 'relai_inspect:trace': args.symbol = 'target'; break;
     case 'relai_inspect:related': args.query = 'target'; break;
     case 'relai_inspect:impact': args.paths = ['src/index.js']; break;
+    case 'relai_skill:create':
+    case 'relai_skill:edit': Object.assign(args, { name: 'catalog-skill', content: 'skill content' }); break;
+    case 'relai_skill:patch': Object.assign(args, { name: 'catalog-skill', oldText: 'old', newText: 'new' }); break;
+    case 'relai_skill:delete': args.name = 'catalog-skill'; break;
     case 'relai_exec:default': args.command = 'node --version'; break;
     case 'relai_process:start': Object.assign(args, { command: 'node server.js', kind: 'service', purpose: 'Catalog parity.' }); break;
     case 'relai_process:read':
@@ -133,9 +137,18 @@ function sampleArgs(entry) {
     case 'relai_ui:stop': args.sessionId = 'ui_abcdefghijklmnopqrst'; break;
     case 'relai_ui:interact': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', interaction: 'click', target: { by: 'text', value: 'Save' } }); break;
     case 'relai_ui:viewport': Object.assign(args, { sessionId: 'ui_abcdefghijklmnopqrst', width: 1280, height: 720 }); break;
+    case 'relai_computer:move':
+    case 'relai_computer:click':
+    case 'relai_computer:double_click':
+    case 'relai_computer:right_click': Object.assign(args, { x: 10, y: 20 }); break;
+    case 'relai_computer:drag': Object.assign(args, { x: 10, y: 20, toX: 30, toY: 40 }); break;
+    case 'relai_computer:scroll': Object.assign(args, { direction: 'down', distance: 500 }); break;
+    case 'relai_computer:type': args.text = 'hello'; break;
+    case 'relai_computer:key': args.key = 'enter'; break;
+    case 'relai_computer:hotkey': args.keys = ['ctrl', 's']; break;
     case 'relai_validate:http': args.route = '/health'; break;
     case 'relai_changes:restore': args.paths = ['README.md']; break;
-    case 'relai_changes:reset': args.confirmation = 'RESET'; break;
+    case 'relai_changes:reset': break;
     case 'relai_changes:replay': args.checkpointId = 'review_abcdefghijklmnopqrstuvwx'; break;
     case 'relai_changes:tidy_run': args.planId = 'tidy_abcdefghijklmnopqrst'; break;
     case 'relai_publish:commit': args.message = 'Catalog commit'; break;

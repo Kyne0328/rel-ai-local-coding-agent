@@ -7,6 +7,8 @@ import { repositoryIntelligence } from '../src/repository/intelligence/service.j
 
 const fileCount = integerArg('--files', 100000, 1, 500000);
 const mutationCount = Math.min(fileCount, integerArg('--mutations', 100, 1, 10000));
+const maxFullMs = optionalPositiveNumberArg('--max-full-ms');
+const maxIncrementalMs = optionalPositiveNumberArg('--max-incremental-ms');
 const json = process.argv.includes('--json');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-repository-index-benchmark-'));
 const workspaceRoot = path.join(root, 'workspace');
@@ -53,17 +55,26 @@ try {
     watcherDisabled: true,
     fullScanMode: full.scanMode,
     incrementalScanMode: incremental.scanMode,
-    incrementalCoalescedPassCount: Number(incremental.coalescedPassCount || 1)
+    incrementalCoalescedPassCount: Number(incremental.coalescedPassCount || 1),
+    thresholds: {
+      ...(maxFullMs == null ? {} : { maxFullBuildMs: maxFullMs, fullBuildPassed: fullBuildMs <= maxFullMs }),
+      ...(maxIncrementalMs == null ? {} : { maxIncrementalRefreshMs: maxIncrementalMs, incrementalRefreshPassed: incrementalRefreshMs <= maxIncrementalMs })
+    }
   };
+  const thresholdsPassed = (maxFullMs == null || fullBuildMs <= maxFullMs)
+    && (maxIncrementalMs == null || incrementalRefreshMs <= maxIncrementalMs);
 
-  if (json) process.stdout.write(`${JSON.stringify(report)}\n`);
+  if (json) process.stdout.write(`${JSON.stringify({ ...report, thresholdsPassed })}\n`);
   else {
     console.log(`Repository Intelligence benchmark (${fileCount.toLocaleString()} files)`);
     console.log(`  Full build:          ${report.fullBuildMs} ms (${report.fullFilesPerSecond} files/s)`);
     console.log(`  Incremental refresh: ${report.incrementalRefreshMs} ms for ${mutationCount} files (${report.incrementalFilesPerSecond} files/s)`);
     console.log(`  Worker isolated:     ${report.workerIsolated}`);
     console.log('  Watcher:             disabled (engine benchmark)');
+    if (maxFullMs != null) console.log(`  Full-build budget:   ${maxFullMs} ms (${fullBuildMs <= maxFullMs ? 'pass' : 'fail'})`);
+    if (maxIncrementalMs != null) console.log(`  Incremental budget:  ${maxIncrementalMs} ms (${incrementalRefreshMs <= maxIncrementalMs ? 'pass' : 'fail'})`);
   }
+  if (!thresholdsPassed) process.exitCode = 1;
 } finally {
   repositoryIntelligence.shutdown();
   if (process.env.REL_AI_MCP_BENCHMARK_KEEP !== '1') fs.rmSync(root, { recursive: true, force: true });
@@ -103,6 +114,14 @@ function integerArg(name, fallback, min, max) {
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
     throw new Error(`${name} must be an integer from ${min} to ${max}.`);
   }
+  return parsed;
+}
+
+function optionalPositiveNumberArg(name) {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return null;
+  const parsed = Number(process.argv[index + 1]);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${name} must be a positive number.`);
   return parsed;
 }
 

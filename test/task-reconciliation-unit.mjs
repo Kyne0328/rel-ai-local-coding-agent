@@ -18,7 +18,7 @@ const workspace = path.join(root, 'workspace');
 const stateDir = path.join(root, 'state');
 const configPath = path.join(root, 'config.json');
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
-const context = { principal: 'local:trusted', publicHttpOnly: true, transportType: 'test', transportSessionId: 'reconciliation-test' };
+const context = { principal: 'local:trusted', publicHttpOnly: true, transportType: 'test', transportSessionId: 'reconciliation-test', conversationId: 'reconciliation-chat' };
 
 function git(...args) {
   return execFileSync('git', args, { cwd: workspace, encoding: 'utf8' }).trim();
@@ -108,9 +108,44 @@ try {
   resetToolActivity();
   const historyAfterIdle = readTaskHistory(readConfig(), getToolActivity(), { limit: 100 });
   assert.equal(historyAfterIdle.some(session => session.id === idleTask && session.status === 'inactive'), true, 'an idle no-op task must remain stored as resumable inactive work');
-  const resumedIdle = await rawCallTool('relai_read', { workspace: 'app', work_id: idleTask, paths: ['src/index.js'] }, context);
-  assert.equal(resumedIdle.work_id, idleTask, 'a stored inactive task must resume with the same identity');
+  const differentConversation = await rawCallTool('relai_work', {
+    action: 'begin', workspace: 'app', title: 'Idle task must remain resumable', bootstrap: 'none'
+  }, { ...context, conversationId: 'different-reconciliation-chat' });
+  assert.notEqual(differentConversation.work_id, idleTask, 'durable recovery must not cross ChatGPT conversation identity');
+  await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: differentConversation.work_id, reason: 'Conversation isolation regression complete.' }, { ...context, conversationId: 'different-reconciliation-chat' });
+  resetToolActivity();
+  const recoveredBegin = await rawCallTool('relai_work', {
+    action: 'begin', workspace: 'app', title: 'Idle task must remain resumable', bootstrap: 'compact'
+  }, context);
+  assert.equal(recoveredBegin.work_id, idleTask, 'relai_work begin must recover the persisted unfinished task after live context is lost');
+  assert.equal(recoveredBegin.bootstrap?.recoveredTask?.goal, 'Idle task must remain resumable');
+  assert.equal(recoveredBegin.bootstrap?.recoveredTask?.status, 'inactive');
+  const resumedIdle = await rawCallTool('relai_read', { workspace: 'app', work_id: recoveredBegin.work_id, paths: ['src/index.js'] }, context);
+  assert.equal(resumedIdle.work_id, idleTask, 'the recovered task must continue under its original identity');
   await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: idleTask, reason: 'Idle recovery regression complete.' }, context);
+
+  resetToolActivity();
+  const statusResumeTask = await begin('Status reconnect reactivates task');
+  await flushTaskHistoryPersistence();
+  const statusResumeSession = readTaskHistorySessionRecord(readConfig(), statusResumeTask);
+  const statusResumeInactiveAt = new Date(Date.now() - DEFAULT_TASK_IDLE_MS - 5_000).toISOString();
+  writeSession(getTaskHistoryDir(readConfig()), {
+    ...statusResumeSession,
+    status: 'planning',
+    state: 'waiting',
+    updatedAt: statusResumeInactiveAt,
+    lastActivityAt: statusResumeInactiveAt,
+    events: (statusResumeSession.events || []).map(event => ({ ...event, timestamp: statusResumeInactiveAt, ts: statusResumeInactiveAt, startedAt: statusResumeInactiveAt, completedAt: statusResumeInactiveAt }))
+  });
+  resetToolActivity();
+  readTaskHistory(readConfig(), getToolActivity(), { limit: 100 });
+  assert.equal(readTaskHistorySessionRecord(readConfig(), statusResumeTask)?.status, 'inactive');
+  await rawCallTool('relai_work', { action: 'status', workspace: 'app', work_id: statusResumeTask }, { ...context, conversationId: '' });
+  assert.equal(getToolActivity().activeTaskCount, 0, 'monitor-only status reads without conversation identity must not reactivate inactive work');
+  await rawCallTool('relai_work', { action: 'status', workspace: 'app', work_id: statusResumeTask }, context);
+  assert.equal(getToolActivity().tasks.find(task => task.taskId === statusResumeTask)?.status, 'planning', 'same-conversation status recovery must reactivate the continued task');
+  assert.equal(readTaskHistorySessionRecord(readConfig(), statusResumeTask, { reconcileInactive: false })?.status, 'planning', 'reactivated status must reach durable task history for the dashboard');
+  await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: statusResumeTask, reason: 'Status reconnect regression complete.' }, context);
 
   resetToolActivity();
   const workflowOnlyTask = await begin('Workflow readiness is not completion');

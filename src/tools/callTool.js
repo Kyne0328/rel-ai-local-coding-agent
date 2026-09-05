@@ -18,7 +18,7 @@ import { describeToolOperation } from './operation.js';
 import { resolveExecutableToolCall, validateExecutableOperationInput } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
-import { assertKnownTask, assertTaskWorkspaceOwnership, findReusableActiveTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
+import { assertKnownTask, assertTaskWorkspaceOwnership, findReusableTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
 import { deterministicActionId, stableJson } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
@@ -93,7 +93,8 @@ async function callTool(name, args = {}, context = {}) {
       workspace: workspaceResolution?.alias || effectiveArgs?.workspace || knownTask?.workspace || ''
     });
     if (operationName === OP.WORK_BEGIN) {
-      const reusableTask = findReusableActiveTask(
+      const reusableTask = findReusableTask(
+        config,
         effectiveArgs?.workspace,
         effectiveArgs,
         effectivePrincipal,
@@ -138,6 +139,10 @@ async function callTool(name, args = {}, context = {}) {
     });
     const duplicateTerminalCancellation = operationName === OP.WORK_CANCEL && knownTask?.status === 'cancelled';
     const terminalTaskReference = isTerminalTaskReference(knownTask, operationName, effectiveArgs);
+    const resumedStatusRead = operationName === OP.WORK_STATUS
+      && knownTask?.status === 'inactive'
+      && Boolean(context?.conversationId)
+      && String(knownTask?.correlation?.conversationId || '') === String(context.conversationId);
     finishActivity = beginConnectorToolCall({
       tool: name,
       internalOperation: operationName,
@@ -146,9 +151,9 @@ async function callTool(name, args = {}, context = {}) {
       taskId: requestedTaskId,
       createTask: operationName === OP.WORK_BEGIN && !knownTask,
       trackTask: context?.trackTaskActivity !== false
-        && operationName !== OP.WORK_STATUS
+        && (operationName !== OP.WORK_STATUS || resumedStatusRead)
         && !duplicateTerminalCancellation
-        && !terminalTaskReference
+        && (!terminalTaskReference || resumedStatusRead)
         && (operationName === OP.WORK_BEGIN || Boolean(requestedTaskId)),
       connector,
       operation: describeToolOperation(operationName, effectiveArgs || {}),

@@ -23,9 +23,10 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const connectionProjection = buildDashboardConnectionProjection(config, options);
   const limit = Math.max(Number(options.limit || 100), 200);
   const base = productUx.dashboardData(config, { limit });
-  const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(summarizeDashboardTask);
+  const persistedTasks = readTaskHistory(config, taskActivity, { limit: 500 });
+  const tasks = persistedTasks.map(summarizeDashboardTask);
   const liveActivityTasks = Array.isArray(taskActivity.tasks) ? taskActivity.tasks : [];
-  const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, liveActivityTasks, limit);
+  const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, [...persistedTasks, ...liveActivityTasks], limit);
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   const runtimeState = runtimeCompatibility(config, { activeTaskCount: taskActivity.activeTaskCount });
 

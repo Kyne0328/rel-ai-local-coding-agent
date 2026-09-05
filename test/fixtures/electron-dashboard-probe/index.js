@@ -141,8 +141,12 @@ app.whenReady().then(async () => {
 
   await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
   await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
-  await win.webContents.executeJavaScript(`document.querySelector('.task-row')?.click()`);
+  const taskDetailImmediate = await win.webContents.executeJavaScript(`(() => {
+    document.querySelector('.task-row')?.click();
+    return Boolean(document.querySelector('[data-session-inspector] .session-detail'));
+  })()`);
   await waitFor(win, `document.querySelector('[data-session-inspector] .session-detail')`);
+  await waitFor(win, `document.querySelectorAll('[data-session-inspector] .task-event-link').length > 0`);
   const taskInteraction = await win.webContents.executeJavaScript(`(() => {
     const inspector = document.querySelector('[data-session-inspector]');
     const detail = inspector?.querySelector('.session-detail');
@@ -156,12 +160,13 @@ app.whenReady().then(async () => {
       eventLinks: detail?.querySelectorAll('.task-event-link').length || 0
     };
   })()`);
+  taskInteraction.immediate = taskDetailImmediate;
 
   await win.webContents.setZoomFactor(1);
   win.setSize(1600, 900);
   await delay(150);
   await win.webContents.executeJavaScript(`location.hash = '#activity'`);
-  await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-button')`);
+  await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-trigger')`);
   const activityDesktopGeometry = await win.webContents.executeJavaScript(`(() => {
     const table = document.querySelector('.activity-table');
     const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
@@ -174,6 +179,15 @@ app.whenReady().then(async () => {
     const cellRect = messageCell?.getBoundingClientRect();
     const wrapRect = wrap?.getBoundingClientRect();
     const visibleHeaderWidth = headers.reduce((sum, item) => sum + item.width, 0);
+    const messageLeftErrors = [...document.querySelectorAll('.activity-data-row')].slice(0, 12).map(row => {
+      const cell = row.querySelector('.activity-message-cell');
+      const copy = row.querySelector('.activity-message-copy');
+      if (!cell || !copy) return 0;
+      const cellBox = cell.getBoundingClientRect();
+      const copyBox = copy.getBoundingClientRect();
+      const paddingLeft = parseFloat(getComputedStyle(cell).paddingLeft) || 0;
+      return Math.abs((copyBox.left - cellBox.left) - paddingLeft);
+    });
     return {
       viewportWidth: innerWidth,
       tableWidth: table?.getBoundingClientRect().width || 0,
@@ -185,7 +199,9 @@ app.whenReady().then(async () => {
       cellWidth: cellRect?.width || 0,
       headerVisible: Boolean(messageHeader && getComputedStyle(messageHeader).display !== 'none' && headerRect && wrapRect && headerRect.width > 0 && headerRect.right > wrapRect.left && headerRect.left < wrapRect.right),
       cellVisible: Boolean(messageCell && getComputedStyle(messageCell).display !== 'none' && cellRect && wrapRect && cellRect.width > 0 && cellRect.right > wrapRect.left && cellRect.left < wrapRect.right),
-      messageText: messageCell?.querySelector('.activity-message-copy')?.textContent.trim() || ''
+      messageText: messageCell?.querySelector('.activity-message-copy')?.textContent.trim() || '',
+      measuredMessageRows: messageLeftErrors.length,
+      maxMessageLeftAlignmentError: messageLeftErrors.length ? Math.max(...messageLeftErrors) : 0
     };
   })()`);
   const activityLiveStability = await win.webContents.executeJavaScript(`(async () => {
@@ -226,7 +242,7 @@ app.whenReady().then(async () => {
   win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'TAB' });
   await delay(50);
   const afterFocus = await win.webContents.executeJavaScript(`({tag: document.activeElement?.tagName || '', className: document.activeElement?.className || ''})`);
-  await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .activity-row-button')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .activity-row-trigger')?.click()`);
   await waitFor(win, `document.querySelector('[data-activity-inspector] .activity-detail-head')`);
   const activityInteraction = await win.webContents.executeJavaScript(`(() => {
     const inspector = document.querySelector('[data-activity-inspector]');
@@ -252,6 +268,7 @@ app.whenReady().then(async () => {
   await delay(200);
   const responsive = [];
   for (const scenario of [
+    { name: 'window-1024x768', width: 1024, height: 768, zoom: 1, theme: 'dark' },
     { name: 'window-640x720', width: 640, height: 720, zoom: 1, theme: 'dark' },
     { name: 'css-320-zoom-200', width: 640, height: 720, zoom: 2, theme: 'light' },
     { name: 'css-375-zoom-200', width: 750, height: 720, zoom: 2, theme: 'dark' },
@@ -283,6 +300,9 @@ app.whenReady().then(async () => {
       const visibleRow = rows.find(intersects) || rows[0];
       const status = visibleRow?.querySelector('.status-pill');
       const primaryControls = [...document.querySelectorAll('.top-controls button, .top-controls a, .task-row')];
+      const mobileNav = document.querySelector('.mobile-nav');
+      const mobileMore = document.querySelector('.mobile-nav-more > summary');
+      const mobileNavVisible = Boolean(mobileNav && getComputedStyle(mobileNav).display !== 'none');
       const active = document.activeElement;
       const activeStyle = active && active !== document.body ? getComputedStyle(active) : null;
       const focusVisible = Boolean(activeStyle && ((activeStyle.outlineStyle !== 'none' && activeStyle.outlineWidth !== '0px') || activeStyle.boxShadow !== 'none'));
@@ -291,6 +311,8 @@ app.whenReady().then(async () => {
         viewportHeight: innerHeight,
         devicePixelRatio: window.devicePixelRatio,
         horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        mobileNavScrollable: Boolean(mobileNavVisible && mobileNav.scrollWidth > mobileNav.clientWidth + 1),
+        mobileMoreVisible: Boolean(mobileNavVisible && intersects(mobileMore)),
         topbarIntersects: intersects(topbar),
         taskRowIntersects: rows.some(intersects),
         primaryControlIntersects: primaryControls.some(intersects),
@@ -308,9 +330,21 @@ app.whenReady().then(async () => {
         forcedColorsSupported: CSS.supports('forced-color-adjust', 'none')
       };
     })()`);
+    if (measurement.viewportWidth <= 760) {
+      await win.webContents.executeJavaScript(`document.querySelector('.task-row')?.click()`);
+      await waitFor(win, `document.querySelector('[data-session-inspector] .task-detail-header h2')`);
+      Object.assign(measurement, await win.webContents.executeJavaScript(`(() => {
+        const heading = document.querySelector('[data-session-inspector] .task-detail-header h2');
+        const rect = heading?.getBoundingClientRect();
+        return {
+          taskDetailFocused: document.activeElement === heading,
+          taskDetailVisible: Boolean(rect && rect.bottom > 0 && rect.top < innerHeight)
+        };
+      })()`));
+    }
     await win.webContents.executeJavaScript(`location.hash = '#activity'`);
     try {
-      await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-button')`);
+      await waitFor(win, `document.querySelector('.activity-table tbody .activity-row-trigger')`);
     } catch (error) {
       const activityDebug = await win.webContents.executeJavaScript(`(() => ({
         hash: location.hash,
@@ -324,7 +358,7 @@ app.whenReady().then(async () => {
     const activityMeasurement = await win.webContents.executeJavaScript(`(() => {
       const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
       if (wrap) wrap.scrollLeft = 0;
-      const cell = document.querySelector('.activity-table tbody .activity-row-button')?.closest('tr')?.querySelector('.activity-message-cell');
+      const cell = document.querySelector('.activity-table tbody .activity-row-trigger')?.closest('tr')?.querySelector('.activity-message-cell');
       const rect = cell?.getBoundingClientRect();
       const wrapRect = wrap?.getBoundingClientRect();
       return {
@@ -335,6 +369,27 @@ app.whenReady().then(async () => {
       };
     })()`);
     Object.assign(measurement, activityMeasurement);
+    if (measurement.viewportWidth <= 1140) {
+      Object.assign(measurement, await win.webContents.executeJavaScript(`(() => {
+        const list = document.querySelector('.activity-list-pane');
+        const inspector = document.querySelector('[data-activity-inspector]');
+        const listRect = list?.getBoundingClientRect();
+        const inspectorRect = inspector?.getBoundingClientRect();
+        return {
+          activityStacked: Boolean(listRect && inspectorRect && Math.abs(listRect.left - inspectorRect.left) <= 1 && inspectorRect.top >= listRect.bottom - 1)
+        };
+      })()`));
+      await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .activity-row-trigger')?.click()`);
+      await waitFor(win, `document.querySelector('[data-activity-inspector] .activity-inspector-head h2')`);
+      Object.assign(measurement, await win.webContents.executeJavaScript(`(() => {
+        const heading = document.querySelector('[data-activity-inspector] .activity-inspector-head h2');
+        const rect = heading?.getBoundingClientRect();
+        return {
+          activityDetailFocused: document.activeElement === heading,
+          activityDetailVisible: Boolean(rect && rect.bottom > 0 && rect.top < innerHeight)
+        };
+      })()`));
+    }
     await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
     await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
     measurement.name = scenario.name;

@@ -1,10 +1,9 @@
-import { knowledgeSettings, searchKnowledge, searchVerifiedProcedures } from '../knowledgeStore.js';
+import { knowledgeSettings, searchKnowledge } from '../knowledgeStore.js';
 import { readConversationContinuity, readCrossWorkspaceTaskEpisodes } from '../taskHistoryStore.js';
 import { matchingRelevanceTerms, relevanceTerms } from './relevance.js';
 
 const SOURCE_PRIORITY = Object.freeze({
-  suggestedProcedures: 6,
-  suggestedSkills: 5.5,
+  suggestedSkills: 6,
   relevantKnowledge: 5,
   conversationContinuity: 4.5,
   relatedTasks: 4,
@@ -21,7 +20,6 @@ function buildTaskContinuity(config, options = {}) {
   const conversationId = String(options.conversationId || '').trim();
   return rankBootstrapGroups(query, {
     relevantKnowledge: safeList(() => searchKnowledge(config, query, { workspace, limit: 4, maxBytes: settings.maxBootstrapBytes })),
-    suggestedProcedures: safeList(() => searchVerifiedProcedures(config, query, { workspace, limit: 4, maxBytes: settings.maxBootstrapBytes })),
     conversationContinuity: conversationId ? safeList(() => readConversationContinuity(config, conversationId, { excludeTaskId, limit: 4 })) : [],
     crossWorkspaceTasks: safeList(() => readCrossWorkspaceTaskEpisodes(config, workspace, query, { excludeTaskId, limit: 3 }))
   }, settings.maxBootstrapBytes);

@@ -44,17 +44,9 @@ const { child, base } = await startHttpTestServer({ root, configPath, token, sta
 let client;
 try {
   client = await createHttpMcpSession(base, { token, clientName: 'relai-artifact-resource-test' });
-  const started = await client.request('tools/call', {
-    name: 'relai_work',
-    arguments: { action: 'begin', workspace: 'artifact', bootstrap: 'none' }
-  });
-  assert.equal(started.body.result?.isError, false, JSON.stringify(started.body));
-  const workId = started.body.result?.structuredContent?.work_id;
-  assert.match(workId || '', /^[0-9a-f-]{36}$/i);
-
   const linked = await client.request('tools/call', {
     name: 'relai_read',
-    arguments: { work_id: workId, paths: ['round-trip.zip'], asResource: true }
+    arguments: { workspace: 'artifact', paths: ['round-trip.zip'], asResource: true }
   });
   assert.equal(linked.response.status, 200, JSON.stringify(linked.body));
   assert.equal(linked.body.result?.isError, false, JSON.stringify(linked.body));
@@ -79,15 +71,10 @@ try {
   const tampered = await client.request('resources/read', { uri: tamperedUri });
   assert.ok(tampered.body.error, 'tampered artifact tokens must be rejected');
 
-  const cancelled = await client.request('tools/call', {
-    name: 'relai_work',
-    arguments: { action: 'cancel', work_id: workId, reason: 'Artifact resource test completed.' }
-  });
-  assert.equal(cancelled.body.result?.isError, false, JSON.stringify(cancelled.body));
 } finally {
   if (client) await client.close().catch(() => {});
   await stopHttpTestServer(child);
   fs.rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('Task-bound MCP artifact resource_link and binary resources/read round-trip passed.');
+console.log('Principal/workspace-bound taskless artifact resource_link and binary resources/read round-trip passed.');

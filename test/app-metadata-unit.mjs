@@ -17,7 +17,7 @@ assert.deepEqual(getApplicationMetadata(), {
     username: 'Kyne0328',
     profileUrl: 'https://github.com/Kyne0328'
   },
-  repositoryUrl: 'https://github.com/Kyne0328/rel-ai-local-coding-agent',
+  repositoryUrl: 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness',
   license: 'MIT'
 });
 assert.deepEqual(rootPackage.author, { name: 'Kyne', url: 'https://github.com/Kyne0328' });
@@ -26,7 +26,7 @@ assert.deepEqual(electronPackage.author, {
   email: 'Kyne0328@users.noreply.github.com',
   url: 'https://github.com/Kyne0328'
 });
-assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-local-coding-agent');
+assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness');
 assert.equal(rootPackage.productName, 'Rel.AI MCP');
 assert.match(readme, /## Developer\s+Rel\.AI MCP is developed by \[Kyne\]\(https:\/\/github\.com\/Kyne0328\)\./);
 assert.doesNotMatch(JSON.stringify(electronPackage), /Kyne Anthony/);

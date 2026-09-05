@@ -5,8 +5,7 @@ import { resolvePolicy } from '../policyResolver.js';
 import { clampNumber } from './limits.js';
 import { getCurrentTaskAbortSignal, getCurrentToolActivityContext } from '../toolActivity.js';
 import { readTaskIntegrity, readWorkspaceIntegrity, taskOwnedChangedFiles } from '../taskIntegrity.js';
-import { readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordWorkflowEvidenceBatch } from '../taskHistoryStore.js';
-import { recordProcedureFailure } from '../knowledgeStore.js';
+import { readRecentWorkflowEvidence, recordWorkflowEvidenceBatch } from '../taskHistoryStore.js';
 import { buildWorkflowEvidenceReceipt, checkEvidenceReusable } from '../workflow/evidence.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { combineAbortSignals } from '../abortSignals.js';
@@ -294,17 +293,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     ...(validationPlan ? { planId: validationPlan.planId, planSelection, planCreatedAt: validationPlan.createdAt } : {}),
     ...(fullOutput ? { fullOutput: true } : {})
   };
-  if (!ok) {
-    if (currentTaskId && validationStatus === 'failed') {
-      try {
-        const learningSession = readTaskHistorySessionRecord(config, currentTaskId, { reconcileInactive: false }) || {};
-        recordProcedureFailure(config, workspace, learningSession, validationResult);
-      } catch (error) {
-        if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] procedure failure learning:', error);
-      }
-    }
-    return validationResult;
-  }
+  if (!ok) return validationResult;
   if (!complete) return validationResult;
   return finalizeValidationResult(config, workspace, validationResult, completionSummary);
 }

@@ -9,6 +9,7 @@ import { recordRecentWorkspace, renameRecentWorkspace } from './recents.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import { deriveWorkspaceAlias, isValidWorkspaceAlias, normalizeWorkspacePath } from '../../workspace-input.js';
 import { workspaceOperationalHtml } from './details.js';
+import { iconHtml } from '../../components/icons.js';
 
 function debounce(fn, ms) {
   let timer = 0;
@@ -60,11 +61,11 @@ function renderPathsStatus(element, paths, infos) {
   element.classList.add(unavailableCount || nonGitCount ? 'warn' : 'success');
 }
 
-export async function openWorkspaceForm({ mode = 'add', workspace = null, onSaved, onRemove } = {}) {
+export async function openWorkspaceForm({ mode = 'add', workspace = null, configuredWorkspaces = null, onSaved, onRemove } = {}) {
   const ws = workspace || {};
   const isEdit = mode === 'edit';
   const originalAlias = String(ws.alias || '').trim();
-  const configured = await loadConfiguredWorkspaces();
+  const configured = Array.isArray(configuredWorkspaces) ? configuredWorkspaces : await loadConfiguredWorkspaces();
   const initialPaths = sourcePathsFromWorkspace(ws);
   const form = document.createElement('form');
   form.className = 'ws-form ws-project-form';
@@ -73,7 +74,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     <section class="ws-project-name-section">
       <label class="ws-form-label" for="workspaceAliasInput">Project name</label>
       <div class="ws-project-name-field">
-        <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+        <span class="ws-folder-icon" aria-hidden="true">${iconHtml('folder')}</span>
         <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="Project name" autocomplete="off" aria-describedby="workspaceAliasHelp workspaceAliasError">
       </div>
       <div class="ws-form-help" id="workspaceAliasHelp">This is the project name ChatGPT uses when selecting a folder.</div>
@@ -87,7 +88,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
         <div data-source-picker-wrap ${isDesktop ? '' : 'hidden'}>
           <ul class="ws-source-folder-list" data-source-folder-list>${renderSourceFolderRows(initialPaths)}</ul>
           <button type="button" class="ws-source-folder-empty" data-source-empty data-add-source aria-describedby="workspaceSourceError" ${initialPaths.length ? 'hidden' : ''}>
-            <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+            <span class="ws-folder-icon" aria-hidden="true">${iconHtml('folder')}</span>
             <span>Choose a source folder</span>
           </button>
           <button type="button" class="ws-source-folder-add" data-source-add data-add-source ${initialPaths.length ? '' : 'hidden'}>+ Add source folder</button>
@@ -365,14 +366,14 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
 function renderSourceFolderRows(paths) {
   return paths.map((value, index) => `
     <li class="ws-source-folder-row" data-source-index="${index}">
-      <span class="ws-folder-icon" aria-hidden="true">${folderIconSvg()}</span>
+      <span class="ws-folder-icon" aria-hidden="true">${iconHtml('folder')}</span>
       <span class="ws-source-folder-copy">
         <span class="ws-source-folder-title"><strong>${esc(folderDisplayName(value))}</strong>${index === 0 ? '<small class="ws-source-primary">Primary</small>' : ''}</span>
         <small>${esc(value)}</small>
       </span>
       <span class="ws-source-folder-actions">
-        <button type="button" class="ws-source-folder-change" data-change-source>Change</button>
-        <button type="button" class="ws-source-folder-remove" data-remove-source>Remove</button>
+        <button type="button" class="ws-source-folder-change" data-change-source aria-label="Change source folder ${esc(value)}">Change</button>
+        <button type="button" class="ws-source-folder-remove" data-remove-source aria-label="Remove source folder ${esc(value)}">Remove</button>
       </span>
     </li>`).join('');
 }
@@ -405,9 +406,6 @@ function folderDisplayName(value) {
   return parts.at(-1) || normalized;
 }
 
-function folderIconSvg() {
-  return '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.75 6.75A1.75 1.75 0 0 1 5.5 5h4l2 2h7A1.75 1.75 0 0 1 20.25 8.75v8A2.25 2.25 0 0 1 18 19H6a2.25 2.25 0 0 1-2.25-2.25z"/></svg>';
-}
 
 async function loadConfiguredWorkspaces() {
   const dashboard = await fetchJson(DASHBOARD_DATA_URL, { cache: 'no-store' });

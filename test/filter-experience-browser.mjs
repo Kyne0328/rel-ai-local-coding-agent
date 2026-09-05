@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getTaskHistoryDir, writeSession } from '../src/taskHistoryStorage.js';
-import { availablePort } from './helpers/available-port.mjs';
+import { startHttpTestServer, stopHttpTestServer } from './helpers/http-test-server.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-filter-browser-'));
@@ -16,7 +15,6 @@ const workspace = path.join(temp, 'workspace');
 const configPath = path.join(temp, 'config.json');
 const outputPath = path.join(temp, 'probe.json');
 const token = 'filter-browser-token';
-const port = await availablePort();
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ name: 'filter-fixture', version: '1.0.0', scripts: { test: 'node -e "process.exit(0)"' } }));
 const config = {
@@ -27,16 +25,9 @@ const config = {
 };
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 seedSessions(getTaskHistoryDir(config));
-const server = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
-  cwd: root,
-  stdio: ['ignore', 'pipe', 'pipe'],
-  env: { ...process.env, REL_AI_MCP_CONFIG: configPath, REL_AI_MCP_TOKEN: token, REL_AI_MCP_STATE_DIR: stateDir }
-});
-let serverError = '';
-server.stderr.on('data', chunk => { serverError += chunk.toString('utf8'); });
+const { child: server, port } = await startHttpTestServer({ root, configPath, token, stateDir });
 let child;
 try {
-  await waitForHealth(`http://127.0.0.1:${port}/health`);
   const electronBinary = process.env.RELAI_ELECTRON_BINARY || path.resolve(root, 'electron', 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
   assert.equal(fs.existsSync(electronBinary), true, `Electron binary not found at ${electronBinary}`);
   child = spawn(electronBinary, ['--no-sandbox', '--disable-gpu', '--disable-software-rasterizer', `--user-data-dir=${path.join(temp, 'profile')}`, path.join(root, 'test', 'fixtures', 'electron-filter-probe')], {
@@ -93,7 +84,7 @@ try {
   assert.equal(result.diagnostics.applied.badge, 'Filters (2)');
   assert.match(result.diagnostics.applied.summary, /findings.*log entries shown/);
   assert.equal(result.diagnostics.applied.liveTailPressed, 'false');
-  assert.deepEqual(result.diagnostics.applied.reportActions, ['Copy report', 'Export support information', 'Open support folder — desktop app only']);
+  assert.deepEqual(result.diagnostics.applied.reportActions, ['Copy report', 'Export support information', 'Support folder — desktop app only']);
   assert.match(result.tools.applied.chip, /Validate/);
   assert.equal(result.tools.applied.badge, 'Filters (1)');
   assert.match(result.tools.applied.summary, /tools shown/);
@@ -122,7 +113,12 @@ try {
     aliasValidationCleared: true,
     redundantProjectActionsRemoved: true,
     focusChipLabel: 'Clear selected project filter: app',
-    scopeName: 'Project filter: All projects'
+    scopeName: 'Project filter: All projects',
+    menuSingleTabStop: true,
+    menuArrowNavigation: true,
+    menuHomeEndNavigation: true,
+    menuTypeahead: true,
+    menuEscapeRestoresFocus: true
   });
   assert.equal(result.connection.primaryCount, 1);
   assert.ok(result.connection.primaryLabel.length > 0);
@@ -160,8 +156,7 @@ try {
   console.log('Rendered filter, settings, workspace, connection, and responsive experience passed.');
 } finally {
   if (child && child.exitCode == null) child.kill('SIGKILL');
-  if (server.exitCode == null) server.kill('SIGKILL');
-  server.unref();
+  await stopHttpTestServer(server);
   fs.rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 process.exit(0);
@@ -178,21 +173,4 @@ function seedSessions(directory) {
       events: [{ eventId: `${id}-event`, taskId: id, timestamp: new Date(now - index * 1000).toISOString(), category: 'validation', action: 'check', status: status === 'failed' ? 'failed' : status === 'running' ? 'running' : 'succeeded', title: 'Acceptance check', summary: status === 'failed' ? 'Acceptance validation failure' : 'Acceptance validation result', tool: 'relai_validate', workspace: 'app' }]
     });
   }
-}
-async function waitForHealth(url) {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (await healthRequest(url)) return;
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  throw new Error('HTTP server did not become healthy. ' + serverError);
-}
-function healthRequest(url) {
-  return new Promise(resolve => {
-    const request = http.get(url, { agent: false, headers: { connection: 'close' } }, response => {
-      response.resume();
-      response.once('end', () => resolve(response.statusCode >= 200 && response.statusCode < 300));
-    });
-    request.once('error', () => resolve(false));
-    request.setTimeout(1000, () => { request.destroy(); resolve(false); });
-  });
 }

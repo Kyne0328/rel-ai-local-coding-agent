@@ -3,6 +3,7 @@ import { requestDashboardRefresh } from '../../api.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import { field, numberControl } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
+import { iconActionHtml, iconHtml } from '../../components/icons.js';
 
 let state = null;
 let savedState = '';
@@ -43,7 +44,7 @@ function render(container, { expanded = false } = {}) {
   disclosure.className = 'card connector-details connection-settings-disclosure';
   disclosure.id = 'tunnelSettings';
   disclosure.open = Boolean(expanded || tunnelCredentialError(state));
-  disclosure.innerHTML = '<summary class="connector-details-summary"><span><strong>Connection settings</strong><small>Secure tunnel credentials and local port</small></span><span aria-hidden="true">›</span></summary>';
+  disclosure.innerHTML = `<summary class="connector-details-summary"><span><strong>Connection settings</strong><small>Secure tunnel credentials and local port</small></span>${iconHtml('chevronRight')}</summary>`;
 
   const disclosureBody = document.createElement('div');
   disclosureBody.className = 'card-body settings-panel-body';
@@ -210,8 +211,8 @@ function accountWorkspaceSwitch() {
         <li>In ChatGPT, update the existing Rel.AI connector if it is available in that workspace. Create one connector only if the workspace does not have it.</li>
       </ol>
       <div class="connection-account-switch-actions">
-        <a class="buttonlike secondary compact-button" href="https://platform.openai.com/settings/organization/tunnels" target="_blank" rel="noopener noreferrer">Open OpenAI Tunnels</a>
-        <a class="buttonlike secondary compact-button" href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Open OpenAI API Keys</a>
+        <a class="buttonlike secondary compact-button" href="https://platform.openai.com/settings/organization/tunnels" target="_blank" rel="noopener noreferrer">${iconActionHtml('externalLink', 'OpenAI Tunnels')}</a>
+        <a class="buttonlike secondary compact-button" href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">${iconActionHtml('externalLink', 'OpenAI API Keys')}</a>
       </div>
     </div>`;
   return details;

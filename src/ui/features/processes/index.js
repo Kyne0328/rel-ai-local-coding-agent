@@ -4,6 +4,7 @@ import { EmptyState } from '../../components/empty-state.js';
 import { pillHtml } from '../../components/pill.js';
 import { nativeTaskCollection, processOutputView, processStateView } from '../../task-identity.js';
 import { esc, formatDuration, timeAgo } from '../../utils.js';
+import { iconActionHtml } from '../../components/icons.js';
 
 export function mountProcesses(container, data = {}) {
   const nativeTasks = nativeTaskCollection(data).tasks;
@@ -21,7 +22,7 @@ export function mountProcesses(container, data = {}) {
     <section class="card processes-card">
       <div class="card-head">
         <h3>Running commands</h3>
-        <a class="section-action" href="#activity">Open activity</a>
+        <a class="section-action" href="#activity">${iconActionHtml('chevronRight', 'Activity', { position: 'end' })}</a>
       </div>
       <div class="card-body" data-process-list></div>
     </section>`;

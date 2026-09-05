@@ -43,6 +43,9 @@ let _refreshLiveEventOverflow = false;
 let _renderRevisionKey = '';
 let _renderFrame = 0;
 let _renderWaiters = [];
+let _liveViewFrame = 0;
+let _liveViewSyncing = false;
+let _liveViewPending = false;
 let _deferredViewRender = false;
 let _recoveryNoticeTimer = null;
 let _hiddenViewDirty = false;
@@ -515,7 +518,28 @@ async function liveOnEvent(event) {
   const data = getStore();
   updateShell(data);
   if (!_routerReady) activateRouter();
-  await syncLiveView(data);
+  scheduleLiveViewSync();
+}
+
+function scheduleLiveViewSync() {
+  _liveViewPending = true;
+  if (_liveViewFrame || _liveViewSyncing) return;
+  _liveViewFrame = window.requestAnimationFrame(async () => {
+    _liveViewFrame = 0;
+    if (dashboardHidden()) {
+      _liveViewPending = false;
+      _hiddenViewDirty = true;
+      return;
+    }
+    _liveViewPending = false;
+    _liveViewSyncing = true;
+    try {
+      await syncLiveView(getStore());
+    } finally {
+      _liveViewSyncing = false;
+      if (_liveViewPending) scheduleLiveViewSync();
+    }
+  });
 }
 
 async function syncLiveView(data) {

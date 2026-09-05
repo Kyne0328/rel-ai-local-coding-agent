@@ -1,14 +1,17 @@
 import { readConfig, writeConfig } from '../config.js';
-import { addKnowledgeItem, clearKnowledge, deleteKnowledgeItem, knowledgeSummary, listKnowledge, listProcedures, setProcedureStatus } from '../knowledgeStore.js';
+import { addKnowledgeItem, clearKnowledge, deleteKnowledgeItem, knowledgeSummary, listKnowledge } from '../knowledgeStore.js';
+import { clearManagedSkills, deleteManagedSkill, listManagedSkills } from '../skillManager.js';
 import { readJsonBody, sendJson } from './io.js';
 
 function handleApiKnowledge(ctx) {
   const config = readConfig();
+  const managedSkills = listManagedSkills(config);
   sendJson(ctx.res, 200, {
     ok: true,
     ...knowledgeSummary(config),
+    learnedSkillCount: managedSkills.length,
     items: listKnowledge(config, { limit: 200 }),
-    procedures: listProcedures(config, { limit: 100 })
+    managedSkills
   });
 }
 
@@ -31,11 +34,11 @@ async function handleApiKnowledgeAction(ctx) {
       result = { ok: true, item: addKnowledgeItem(config, payload) };
     } else if (action === 'delete') {
       result = deleteKnowledgeItem(config, payload.id);
-    } else if (action === 'dismiss_procedure') {
-      result = { ok: true, procedure: setProcedureStatus(config, payload.id, 'rejected') };
+    } else if (action === 'delete_skill') {
+      result = deleteManagedSkill(config, { name: payload.name, scope: payload.scope, workspace: payload.workspace });
     } else if (action === 'clear') {
       if (payload.confirm !== true) throw new Error('Clearing knowledge requires confirm=true.');
-      result = clearKnowledge(config);
+      result = { ...clearKnowledge(config), ...clearManagedSkills(config) };
     } else {
       throw new Error('Unknown knowledge action.');
     }

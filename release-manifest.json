@@ -1,8 +1,8 @@
 {
   "schemaVersion": 7,
-  "applicationVersion": "0.27.5",
+  "applicationVersion": "0.28.0",
   "protocolVersion": "2026-07-28",
-  "toolSurfaceVersion": 63,
-  "toolCount": 12,
-  "manifestHash": "2PULzeR-QX0z_s9nhZehvdoR"
+  "toolSurfaceVersion": 68,
+  "toolCount": 14,
+  "manifestHash": "JLJkMo7_uYZ6SLr-9esElO5v"
 }

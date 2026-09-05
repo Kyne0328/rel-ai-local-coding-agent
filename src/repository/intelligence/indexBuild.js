@@ -33,6 +33,7 @@ async function executeRepositoryIndexJob(job, signal) {
   const kind = normalizeJobKind(job?.kind);
   const databaseFile = String(job?.databaseFile || '');
   if (!databaseFile) throw new Error('Repository Intelligence worker requires databaseFile.');
+  if (kind === 'zoekt') return refreshZoektFromManifest(job, signal);
   if (kind === 'recover') {
     discardRepositoryIndex(databaseFile);
     const result = await refreshRepositoryIndex({ ...job, kind, paths: null }, signal);
@@ -51,6 +52,51 @@ async function executeRepositoryIndexJob(job, signal) {
     const result = await refreshRepositoryIndex({ ...job, kind: 'recover', paths: null }, signal);
     return { ...result, rebuilt: true, recovered: true, recoveryReason };
   }
+}
+
+async function refreshZoektFromManifest(job, signal) {
+  throwIfAborted(signal);
+  const workspace = normalizeWorkspace(job?.workspace);
+  const databaseFile = String(job?.databaseFile || '');
+  let db = null;
+  let generation;
+  let manifest;
+  try {
+    db = openIndexDatabase(databaseFile, { readonly: true });
+    generation = currentGeneration(db);
+    if (!generation) {
+      const error = new Error('Repository Intelligence cannot refresh Zoekt before a committed graph generation exists.');
+      error.code = 'INDEX_NOT_READY';
+      throw error;
+    }
+    manifest = listManifest(db);
+  } finally {
+    try { db?.close(); } catch {}
+  }
+
+  const root = realRootOf(workspace.path);
+  const candidates = manifest.map(item => {
+    const absolutePath = path.resolve(root, item.path);
+    if (!isPathInside(absolutePath, root)) {
+      const error = new Error(`Repository Intelligence manifest path escaped the workspace: ${item.path}`);
+      error.code = 'INDEX_MANIFEST_PATH_INVALID';
+      throw error;
+    }
+    return { path: item.path, absolutePath };
+  });
+  const graphIndex = {
+    generation: Number(generation.id || 0),
+    fingerprint: `generation:${Number(generation.id || 0)}`
+  };
+  const zoekt = await rebuildZoektIndex(
+    workspace,
+    databaseFile,
+    job?.zoektSettings || {},
+    graphIndex,
+    candidates,
+    { signal }
+  );
+  return { ...graphIndex, sourceFileCount: candidates.length, zoekt };
 }
 
 async function refreshRepositoryIndex(job, signal) {
@@ -311,17 +357,10 @@ function candidateFromStat(relativePath, absolutePath, stat) {
 
 function candidateChanged(candidate, previous) {
   if (!previous) return true;
-  if (previous.sizeBytes !== candidate.size
+  return previous.sizeBytes !== candidate.size
     || previous.mtimeMs !== candidate.mtimeMs
     || previous.ctimeMs !== candidate.ctimeMs
-    || previous.parserVersion !== PARSER_VERSION) return true;
-  try {
-    const data = fs.readFileSync(candidate.absolutePath);
-    candidate.contentHash = crypto.createHash('sha256').update(data).digest('hex');
-    return candidate.contentHash !== previous.contentHash;
-  } catch {
-    return true;
-  }
+    || previous.parserVersion !== PARSER_VERSION;
 }
 
 async function parseCandidate(candidate) {
@@ -430,7 +469,7 @@ function normalizeRelativePath(value) {
 
 function normalizeJobKind(value) {
   const kind = String(value || 'refresh').toLowerCase();
-  return ['build', 'refresh', 'rebuild', 'recover'].includes(kind) ? kind : 'refresh';
+  return ['build', 'refresh', 'rebuild', 'recover', 'zoekt'].includes(kind) ? kind : 'refresh';
 }
 
 function normalizeGenerationKind(value) {

@@ -3,20 +3,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { buildTaskContinuity } from '../src/context/taskContinuity.js';
-import {
-  addKnowledgeItem,
-  knowledgeSummary,
-  learnFromCompletedTask,
-  learnedValidationChecks,
-  listProcedures,
-  recordProcedureFailure,
-  searchKnowledge,
-  searchVerifiedProcedures,
-  setProcedureStatus,
-  syncProcedureSkill
-} from '../src/knowledgeStore.js';
+import { addKnowledgeItem, knowledgeDatabasePath, learnedValidationChecks, listKnowledge, searchKnowledge } from '../src/knowledgeStore.js';
+import { listManagedSkills, managedSkillRoots } from '../src/skillManager.js';
 import { flushTaskHistoryPersistence, readTaskHistorySessionRecord } from '../src/taskHistoryStore.js';
 import { resetToolActivity } from '../src/toolActivity.js';
 import { callTool as rawCallTool } from '../src/tools.js';
@@ -29,10 +20,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-knowledge-continuity-'
 const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
-const skillRoot = path.join(temp, 'skills');
-const projectSkillRoot = path.join(workspace, '.agents', 'skills');
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
-const previousSkillRoot = process.env.REL_AI_MCP_USER_SKILLS_DIR;
 const previousReducedBackgroundWork = process.env.REL_AI_REDUCED_BACKGROUND_WORK;
 
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
@@ -53,16 +41,11 @@ const config = {
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
   knowledge: { enabled: true, proceduralLearning: true, maxBootstrapBytes: 1024 },
   workspaces: {
-    app: {
-      path: workspace,
-      commands: { check: 'node --check src/index.js' },
-      testCommands: {}
-    }
+    app: { path: workspace, commands: { check: 'node --check src/index.js' }, testCommands: {} }
   }
 };
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;
-process.env.REL_AI_MCP_USER_SKILLS_DIR = skillRoot;
 process.env.REL_AI_REDUCED_BACKGROUND_WORK = '1';
 resetToolActivity();
 
@@ -76,20 +59,26 @@ try {
   assert(scoped.some(item => item.content.includes('app fact')));
   assert(!scoped.some(item => item.content.includes('other project')));
 
+  const transactionConfig = { ...config, stateDir: path.join(temp, 'transaction-state') };
+  addKnowledgeItem(transactionConfig, { id: 'mem_seed', content: 'transaction seed', scope: 'global' });
+  const transactionDb = new DatabaseSync(knowledgeDatabasePath(transactionConfig));
+  transactionDb.exec('DROP TABLE knowledge_fts; CREATE TABLE knowledge_fts(id TEXT, content TEXT);');
+  transactionDb.close();
+  assert.throws(
+    () => addKnowledgeItem(transactionConfig, { id: 'mem_atomic', content: 'must roll back with failed FTS sync', scope: 'global' }),
+    /no column named kind/
+  );
+  assert.equal(listKnowledge(transactionConfig).some(item => item.id === 'mem_atomic'), false,
+    'knowledge row and FTS mutation must roll back together when FTS synchronization fails');
+
   for (let index = 0; index < 8; index += 1) {
     addKnowledgeItem(config, { content: `alpha bounded ${index} ${'x'.repeat(160)}`, scope: 'global' });
   }
   const bounded = buildTaskContinuity(config, { workspace: 'app', query: 'alpha' });
   assert(Buffer.byteLength(JSON.stringify(bounded), 'utf8') <= 1024, 'continuity bootstrap must respect the configured byte cap');
 
-  const portableSource = {
-    ...config,
-    stateDir: path.join(temp, 'portable-source')
-  };
-  const portableRestored = {
-    ...config,
-    stateDir: path.join(temp, 'portable-restored')
-  };
+  const portableSource = { ...config, stateDir: path.join(temp, 'portable-source') };
+  const portableRestored = { ...config, stateDir: path.join(temp, 'portable-restored') };
   addKnowledgeItem(portableSource, { content: 'portable sqlite marker', scope: 'global' });
   const statePayload = stateExport(portableSource).export;
   const sqliteExport = statePayload.files.find(item => item.path === 'knowledge/knowledge.sqlite');
@@ -100,22 +89,12 @@ try {
 
   const context = { publicHttpOnly: true, conversationId: 'knowledge-continuity-chat' };
   const first = await callTool('relai_work', {
-    action: 'begin',
-    workspace: 'app',
-    title: 'Remember continuity marker',
-    objective: 'Remember continuity marker',
-    contextSummary: 'Host capsule alpha',
-    bootstrap: 'compact'
+    action: 'begin', workspace: 'app', title: 'Remember continuity marker', objective: 'Remember continuity marker',
+    contextSummary: 'Host capsule alpha', bootstrap: 'compact'
   }, context);
   assert.equal(first.bootstrap.hostContextSummary, 'Host capsule alpha');
-  await callTool('relai_work', {
-    action: 'finish',
-    workspace: 'app',
-    work_id: first.work_id,
-    summary: 'Continuity marker stored.'
-  }, context);
+  await callTool('relai_work', { action: 'finish', workspace: 'app', work_id: first.work_id, summary: 'Continuity marker stored.' }, context);
   await flushTaskHistoryPersistence();
-
   const stored = readTaskHistorySessionRecord(config, first.work_id, { reconcileInactive: false });
   assert.equal(stored?.contextSummary, 'Host capsule alpha');
   assert.equal(stored?.correlation?.conversationId, 'knowledge-continuity-chat');
@@ -123,112 +102,78 @@ try {
   assert.equal(status.task?.hostContextSummary, 'Host capsule alpha');
 
   const second = await callTool('relai_work', {
-    action: 'begin',
-    workspace: 'app',
-    title: 'Continue continuity marker',
-    objective: 'Continue continuity marker',
-    contextSummary: 'Host capsule beta',
-    bootstrap: 'compact'
+    action: 'begin', workspace: 'app', title: 'Continue continuity marker', objective: 'Continue continuity marker',
+    contextSummary: 'Host capsule beta', bootstrap: 'compact'
   }, context);
   assert.equal(second.bootstrap.hostContextSummary, 'Host capsule beta');
   assert(second.bootstrap.conversationContinuity?.some(item => item.goal?.includes('Remember continuity marker')));
   assert(second.bootstrap.conversationContinuity?.every(item => !('workId' in item) && !('workspace' in item)));
   await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: second.work_id, reason: 'continuity regression complete' }, context);
 
-  async function runProcedureTask(from, to) {
-    const task = await callTool('relai_work', {
-      action: 'begin',
-      workspace: 'app',
-      title: 'Fix alpha syntax flow',
-      objective: 'Fix alpha syntax flow safely',
-      bootstrap: 'none'
-    }, context);
-    await callTool('relai_search', { action: 'text', workspace: 'app', work_id: task.work_id, pattern: 'value', glob: 'src/**', maxResults: 10 }, context);
-    await callTool('relai_read', { workspace: 'app', work_id: task.work_id, paths: ['src/index.js'] }, context);
-    await callTool('relai_edit', {
-      workspace: 'app',
-      work_id: task.work_id,
-      path: 'src/index.js',
-      oldText: `export const value = ${from};`,
-      newText: `export const value = ${to};`
-    }, context);
-    const completed = await callTool('relai_validate', {
-      action: 'checks',
-      workspace: 'app',
-      work_id: task.work_id,
-      check: 'node --check src/index.js',
-      complete: true,
-      summary: `Updated value from ${from} to ${to} and validated syntax.`
-    }, context);
-    assert.equal(completed.completionKnown, true);
-    assert.equal(completed.validationStatus, 'passed');
-    await flushTaskHistoryPersistence();
-    return { task, completed };
-  }
+  const peerAContext = { publicHttpOnly: true, conversationId: 'peer-worker-a' };
+  const peerBContext = { publicHttpOnly: true, conversationId: 'peer-worker-b' };
+  const peerA = await callTool('relai_work', {
+    action: 'begin', workspace: 'app', title: 'Backend continuation worker', objective: 'Update backend continuation contract', bootstrap: 'none'
+  }, peerAContext);
+  const peerB = await callTool('relai_work', {
+    action: 'begin', workspace: 'app', title: 'Task UI worker', objective: 'Update task UI for continuation state', bootstrap: 'none'
+  }, peerBContext);
+  assert(peerB.activeRelatedWork?.some(item => item.goal?.includes('backend continuation contract')), 'a newly started peer must receive compact active sibling work');
+  assert(peerB.activeRelatedWork?.every(item => !('work_id' in item) && !('principalFingerprint' in item) && !('hostContextSummary' in item)));
+  const peerAStatus = await callTool('relai_work', { action: 'status', workspace: 'app', work_id: peerA.work_id }, peerAContext);
+  assert(peerAStatus.activeRelatedWork?.some(item => item.goal?.includes('task UI for continuation state')), 'status must refresh active sibling work');
+  await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: peerA.work_id, reason: 'peer coordination regression complete' }, peerAContext);
+  await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: peerB.work_id, reason: 'peer coordination regression complete' }, peerBContext);
 
-  const collisionConfig = {
-    ...config,
-    stateDir: path.join(temp, 'collision-state')
-  };
-  const collisionBase = {
-    workspace: 'app',
-    intent: 'bugfix',
-    events: [{ operation: 'search.text' }, { operation: 'read' }, { operation: 'edit' }],
-    workflowEvidence: [{ command: 'node --check src/index.js' }],
-    changedFiles: ['src/index.js']
-  };
-  learnFromCompletedTask(collisionConfig, 'app', { ...collisionBase, id: 'collision-a', objective: 'Fix login redirect bug' }, {
-    work_id: 'collision-a', validationStatus: 'passed', changedFiles: ['src/index.js']
-  });
-  learnFromCompletedTask(collisionConfig, 'app', { ...collisionBase, id: 'collision-b', objective: 'Update invoice rounding behavior' }, {
-    work_id: 'collision-b', validationStatus: 'passed', changedFiles: ['src/index.js']
-  });
-  const collisionProcedures = listProcedures(collisionConfig);
-  assert.equal(collisionProcedures.length, 2, 'unrelated objectives must not merge only because their tool sequences match');
-  assert(collisionProcedures.every(item => item.status === 'candidate' && item.successCount === 1));
-  const unvalidatedMutation = learnFromCompletedTask(collisionConfig, 'app', {
-    ...collisionBase,
-    id: 'unvalidated-code',
-    objective: 'Fix code without a validating check'
-  }, {
-    work_id: 'unvalidated-code', validationStatus: 'not_required', changedFiles: ['src/index.js']
-  });
-  assert.equal(unvalidatedMutation, null, 'source mutations without passed validation must remain ineligible for automatic procedural learning');
+  const task = await callTool('relai_work', {
+    action: 'begin', workspace: 'app', title: 'Fix alpha syntax flow', objective: 'Fix alpha syntax flow safely', bootstrap: 'none'
+  }, context);
+  await callTool('relai_edit', {
+    workspace: 'app', work_id: task.work_id, path: 'src/index.js',
+    oldText: 'export const value = 1;', newText: 'export const value = 2;'
+  }, context);
 
-  resetToolActivity();
-  await runProcedureTask(1, 2);
-  let procedures = listProcedures(config);
-  assert.equal(procedures.length, 1);
-  assert.equal(procedures[0].status, 'candidate');
-  assert.equal(procedures[0].successCount, 1);
-  assert.equal(discoverSkills({ path: workspace }, { userRoot: skillRoot }).length, 0, 'a first successful observation must not create an active learned skill');
+  const skillContent = `---\nname: alpha-syntax-workflow\ndescription: "Reuse the validated alpha syntax update workflow for this repository when the same maintenance pattern applies."\n---\n\n# Alpha syntax workflow\n\n1. Inspect the current export before editing.\n2. Make the smallest intended source change.\n3. Run \`node --check src/index.js\` before completion.\n`;
+  await assert.rejects(
+    callTool('relai_skill', { action: 'create', workspace: 'app', work_id: task.work_id, name: 'alpha-syntax-workflow', content: skillContent }, context),
+    /Validate the current repository changes before creating or updating a learned skill/
+  );
 
-  resetToolActivity();
-  await runProcedureTask(2, 3);
-  procedures = listProcedures(config);
-  assert.equal(procedures.length, 1);
-  assert.equal(procedures[0].status, 'verified');
-  assert.equal(procedures[0].successCount, 2);
-  assert.equal(knowledgeSummary(config).verifiedProcedureCount, 1);
-  assert.equal(searchVerifiedProcedures(config, 'alpha syntax').length, 0, 'repository-scoped learned procedures must not leak without an active workspace');
-  assert(searchVerifiedProcedures(config, 'alpha syntax', { workspace: 'app' }).length >= 1, 'learned procedure must remain retrievable inside its repository');
+  const validation = await callTool('relai_validate', {
+    action: 'checks', workspace: 'app', work_id: task.work_id, check: 'node --check src/index.js'
+  }, context);
+  assert.equal(validation.validationStatus, 'passed');
 
-  let learnedSkills = discoverSkills({ path: workspace }, { userRoot: skillRoot });
-  assert.equal(learnedSkills.length, 1, 'the second independent success must create one managed learned skill automatically');
-  const learnedSkill = learnedSkills[0];
-  assert.equal(learnedSkill.source, 'project', 'a procedure learned in one repository must stay project-scoped');
-  const learnedSkillPath = path.join(projectSkillRoot, learnedSkill.name, 'SKILL.md');
-  const provenancePath = path.join(projectSkillRoot, learnedSkill.name, 'PROVENANCE.md');
-  assert(fs.existsSync(learnedSkillPath));
-  assert(fs.existsSync(provenancePath));
-  let learnedSkillSource = fs.readFileSync(learnedSkillPath, 'utf8');
-  const descriptionLine = learnedSkillSource.split(/\r?\n/).find(line => line.startsWith('description: '));
-  assert(descriptionLine?.startsWith('description: "'), 'generated skill descriptions must be YAML-safe quoted scalars');
-  assert.doesNotThrow(() => JSON.parse(descriptionLine.slice('description: '.length)));
-  assert.equal(learnedSkill.description, procedures[0].description, 'Rel.AI discovery must decode the generated YAML-safe description exactly');
-  assert.match(fs.readFileSync(provenancePath, 'utf8'), /Successful runs: 2/, 'managed skill provenance must record the evidence that caused automatic learning');
+  const created = await callTool('relai_skill', {
+    action: 'create', workspace: 'app', work_id: task.work_id, name: 'alpha-syntax-workflow', scope: 'workspace', content: skillContent
+  }, context);
+  assert.equal(created.ok, true);
+  assert.equal(created.scope, 'workspace');
+  assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 1);
+
+  const learnedRoot = managedSkillRoots(config, 'app').find(item => item.source === 'learned')?.root;
+  assert(learnedRoot, 'workspace learned-skill root must be discoverable');
+  const learnedDirectory = path.join(learnedRoot, 'alpha-syntax-workflow');
+  const backupDirectory = path.join(learnedRoot, '.alpha-syntax-workflow.backup');
+  const pendingDirectory = path.join(learnedRoot, '.alpha-syntax-workflow.pending');
+  fs.renameSync(learnedDirectory, backupDirectory);
+  fs.mkdirSync(pendingDirectory, { recursive: true });
+  fs.writeFileSync(path.join(pendingDirectory, 'partial.tmp'), 'interrupted write');
+  assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 1,
+    'managed skill discovery must recover the last complete skill after an interrupted directory swap');
+  assert.equal(fs.existsSync(learnedDirectory), true);
+  assert.equal(fs.existsSync(backupDirectory), false);
+  assert.equal(fs.existsSync(pendingDirectory), false);
+
+  const discovered = discoverSkills({ alias: 'app', path: workspace }, { config });
+  assert(discovered.some(item => item.name === 'alpha-syntax-workflow' && item.source === 'learned'), 'agent-managed skills must participate in normal skill discovery');
+  const readSkill = await callTool('relai_read', { workspace: 'app', work_id: task.work_id, skill: 'alpha-syntax-workflow' }, context);
+  assert.match(readSkill.items?.[0]?.content || '', /Run `node --check src\/index\.js` before completion/);
+
+  await callTool('relai_work', { action: 'finish', workspace: 'app', work_id: task.work_id, summary: 'Updated alpha syntax flow and saved the proven workflow.' }, context);
+  await flushTaskHistoryPersistence();
   const learnedChecks = learnedValidationChecks(config, 'app', ['src/index.js']);
-  assert(learnedChecks.some(item => item.command === 'node --check src/index.js' && item.successCount >= 2), 'successful learning must retain a repository-scoped file-to-validation affinity');
+  assert(learnedChecks.some(item => item.command === 'node --check src/index.js'), 'successful completion must retain repository-scoped validation affinity without inventing a procedure candidate');
 
   await repositoryIntelligence.ensure({ alias: 'app', path: workspace, context: {} }, config, { watch: false });
   const compactWithRepositorySummary = await callTool('relai_work', {
@@ -237,72 +182,34 @@ try {
   assert.equal(compactWithRepositorySummary.bootstrap?.repositoryIntelligence?.summaryOnly, true, 'compact task bootstrap must reuse the cheap cached Repository Intelligence summary when available');
   await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: compactWithRepositorySummary.work_id, reason: 'compact bootstrap regression complete' }, context);
 
-  const conflictRoot = path.join(temp, 'conflict-skills');
-  const initialConflictSync = syncProcedureSkill(config, procedures[0].id, { userRoot: conflictRoot });
-  assert.equal(initialConflictSync.ok, true);
-  const conflictDirectory = path.join(conflictRoot, initialConflictSync.name);
-  fs.rmSync(conflictDirectory, { recursive: true, force: true });
-  fs.mkdirSync(conflictDirectory, { recursive: true });
-  const manualSkillPath = path.join(conflictDirectory, 'SKILL.md');
-  fs.writeFileSync(manualSkillPath, 'manual user skill\n');
-  const conflictSync = syncProcedureSkill(config, procedures[0].id, { userRoot: conflictRoot });
-  assert.equal(conflictSync.ok, false);
-  assert.equal(conflictSync.reason, 'skill_conflict');
-  assert.equal(fs.readFileSync(manualSkillPath, 'utf8'), 'manual user skill\n', 'automatic learning must never overwrite an unowned user skill directory');
+  const reuse = await callTool('relai_work', {
+    action: 'begin', workspace: 'app', title: 'Reuse alpha syntax workflow', objective: 'Reuse alpha syntax workflow', bootstrap: 'compact'
+  }, context);
+  assert(reuse.bootstrap.suggestedSkills?.some(item => item.name === 'alpha-syntax-workflow'), 'agent-authored learned skills must be suggested through the ordinary skill bootstrap path');
+  await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: reuse.work_id, reason: 'learned skill regression complete' }, context);
 
-  resetToolActivity();
-  const thirdRun = await runProcedureTask(3, 4);
-  procedures = listProcedures(config);
-  assert.equal(procedures[0].status, 'verified');
-  assert.equal(procedures[0].successCount, 3);
-  learnedSkills = discoverSkills({ path: workspace }, { userRoot: skillRoot });
-  assert.equal(learnedSkills.length, 1, 'later matching evidence must update the same managed skill instead of creating duplicates');
-  assert.equal(learnedSkills[0].name, learnedSkill.name);
-  learnedSkillSource = fs.readFileSync(learnedSkillPath, 'utf8');
-  assert.match(learnedSkillSource, /## Verification rule/);
-  assert.match(fs.readFileSync(provenancePath, 'utf8'), /Successful runs: 3/, 'later successful runs must refresh the managed skill provenance');
+  assert.equal(Object.hasOwn(buildTaskContinuity(config, { workspace: 'app', query: 'alpha syntax' }), 'suggestedProcedures'), false,
+    'the removed candidate/procedure inference model must not remain in task continuity');
 
-  const thirdSession = readTaskHistorySessionRecord(config, thirdRun.task.work_id, { reconcileInactive: false });
-  const staleProcedure = recordProcedureFailure(config, 'app', thirdSession, {
-    changedFiles: ['src/index.js'], failedCheck: 'node --check src/index.js'
-  });
-  assert.equal(staleProcedure?.status, 'superseded', 'a matching failed validation must pause a learned procedure instead of continuing to suggest it');
-  assert.equal(staleProcedure?.failureCount, 1);
-  assert.equal(fs.existsSync(path.join(projectSkillRoot, learnedSkill.name)), false, 'stale learned behavior must remove its active managed skill');
+  const deleted = await callTool('relai_skill', {
+    action: 'delete', workspace: 'app', name: 'alpha-syntax-workflow', scope: 'workspace'
+  }, context);
+  assert.equal(deleted.ok, true, 'forgetting a Rel.AI-managed skill must not require an unrelated active task');
+  assert.equal(deleted.deleted, true);
+  assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 0);
 
-  const relearned = learnFromCompletedTask(config, 'app', {
-    ...thirdSession,
-    id: 'relearn-alpha-procedure',
-    taskId: 'relearn-alpha-procedure',
-    workspace: 'app'
-  }, {
-    work_id: 'relearn-alpha-procedure',
-    workspace: 'app',
-    validationStatus: 'passed',
-    validationFingerprint: 'independent-relearn-fingerprint',
-    validationAt: new Date().toISOString(),
-    changedFiles: ['src/index.js'],
-    summary: 'Revalidated the known alpha syntax workflow against current repository evidence.'
-  });
-  assert.equal(relearned?.status, 'verified', 'a later independently validated matching run must relearn stale procedural behavior');
-  assert.equal(fs.existsSync(path.join(projectSkillRoot, learnedSkill.name)), true, 'relearned procedural behavior must restore its managed project skill');
-  procedures = listProcedures(config);
-
-  setProcedureStatus(config, procedures[0].id, 'rejected');
-  assert.equal(searchVerifiedProcedures(config, 'alpha syntax', { workspace: 'app' }).length, 0, 'forgotten procedures must stop participating in task continuity');
-  assert.equal(fs.existsSync(path.join(projectSkillRoot, learnedSkill.name)), false, 'forgetting a learned procedure must remove only its Rel.AI-managed project skill');
-  assert.equal(fs.readFileSync(manualSkillPath, 'utf8'), 'manual user skill\n', 'forgetting learned behavior must leave unrelated user-owned skill content untouched');
-
-  console.log('Knowledge continuity and procedural learning regression checks passed.');
+  console.log('Knowledge continuity and agent-managed learning regression checks passed.');
 } finally {
   await flushTaskHistoryPersistence();
   await repositoryIntelligence.shutdown();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
-  if (previousSkillRoot == null) delete process.env.REL_AI_MCP_USER_SKILLS_DIR;
-  else process.env.REL_AI_MCP_USER_SKILLS_DIR = previousSkillRoot;
   if (previousReducedBackgroundWork == null) delete process.env.REL_AI_REDUCED_BACKGROUND_WORK;
   else process.env.REL_AI_REDUCED_BACKGROUND_WORK = previousReducedBackgroundWork;
   fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }
+
+// Nested raw tool calls can leave Windows piped stdio referenced after app resources close.
+// Teardown above is complete, so exit explicitly to keep this isolated integration test deterministic.
+process.exit(0);

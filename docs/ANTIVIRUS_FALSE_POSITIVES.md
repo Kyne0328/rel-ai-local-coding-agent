@@ -28,7 +28,7 @@ Submit the exact release candidate rather than a renamed or locally rebuilt copy
 - SHA-256 for every submitted file;
 - public release URL when available;
 - the OpenAI tunnel-client version and source repository recorded by the manifest;
-- a concise explanation that Rel.AI is a local MCP bridge and intentionally bundles the tunnel client for a user-configured OpenAI Secure MCP Tunnel;
+- a concise explanation that Rel.AI is a local ChatGPT Web harness with an embedded MCP service and intentionally bundles the tunnel client for a user-configured OpenAI Secure MCP Tunnel;
 - separate scan results showing which component receives the detection; and
 - reproduction steps and the affected antivirus product/version.
 

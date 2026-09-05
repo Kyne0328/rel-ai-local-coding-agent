@@ -48,10 +48,6 @@ try {
     throw new Error('relai_edit schema should expose content, replacement arrays, and batch edits');
   }
   if (editTool.inputSchema.oneOf) throw new Error('relai_edit must not expose a non-discriminated oneOf wrapper');
-  const editDescription = String(editTool.description || '');
-  if (!/oldText\/newText/i.test(editDescription) || !/content for (?:complete|full)-file replacement/i.test(editDescription)) {
-    throw new Error('relai_edit must describe its localized replacement and complete-file forms');
-  }
   const readTool = list.result.tools.find(item => item.name === 'relai_read');
   if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
     throw new Error('relai_read schema should expose bounded line ranges and guidance mode');

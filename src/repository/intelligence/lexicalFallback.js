@@ -7,7 +7,7 @@ const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
 async function searchGitCandidates(workspace, terms, maxResults = 1000, options = {}) {
   const cleanTerms = [...new Set((terms || []).map(String).map(term => term.trim()).filter(Boolean))].slice(0, 20);
-  if (!cleanTerms.length) return [];
+  if (!cleanTerms.length) return { available: true, results: [] };
   const args = ['grep', '-l', '-I', '--untracked', '--no-color', '-i', '-F'];
   for (const term of cleanTerms) args.push('-e', term);
   const result = await runProcess('git', args, {
@@ -16,7 +16,13 @@ async function searchGitCandidates(workspace, terms, maxResults = 1000, options 
     maxOutputBytes: MAX_OUTPUT_BYTES,
     signal: options.signal
   });
-  if (result.spawnError || result.timedOut || (result.exitCode !== 0 && result.exitCode !== 1)) return [];
+  if (result.spawnError || result.timedOut || (result.exitCode !== 0 && result.exitCode !== 1)) {
+    return {
+      available: false,
+      reason: String(result.error || result.stderr || `git grep exited ${result.exitCode ?? -1}`).trim().slice(0, 1000),
+      results: []
+    };
+  }
   const results = [];
   for (const raw of String(result.stdout || '').split(/\r?\n/)) {
     const relativePath = raw.trim().replaceAll('\\', '/');
@@ -30,7 +36,7 @@ async function searchGitCandidates(workspace, terms, maxResults = 1000, options 
     });
     if (results.length >= maxResults) break;
   }
-  return results;
+  return { available: true, results };
 }
 
 export { searchGitCandidates };

@@ -1,7 +1,7 @@
 import { closeModal, openModal } from './components/modal.js';
 import { toast } from './components/toast.js';
 
-const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-local-coding-agent/releases';
+const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness/releases';
 
 function supportPolicyModalView(policy) {
   const state = String(policy?.state || '');

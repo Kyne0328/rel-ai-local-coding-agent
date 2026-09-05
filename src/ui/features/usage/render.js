@@ -59,12 +59,12 @@ function wireMetricHelp(content) {
       help.classList.toggle('is-open', open);
       metric.classList.toggle('help-open', open);
     };
-    button.addEventListener('pointerenter', () => setOpen(true));
-    button.addEventListener('pointerleave', () => {
-      if (document.activeElement !== button) setOpen(false);
+    help.addEventListener('pointerenter', () => setOpen(true));
+    help.addEventListener('pointerleave', () => setOpen(false));
+    help.addEventListener('focusin', () => setOpen(true));
+    help.addEventListener('focusout', event => {
+      if (!help.contains(event.relatedTarget)) setOpen(false);
     });
-    button.addEventListener('focus', () => setOpen(true));
-    button.addEventListener('blur', () => setOpen(false));
     button.addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
       setOpen(false);

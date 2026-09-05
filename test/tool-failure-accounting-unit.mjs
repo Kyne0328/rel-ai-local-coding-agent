@@ -1,5 +1,5 @@
 import { callTool as rawCallTool } from "../src/tools.js";
-import { getToolActivity, resetToolActivity } from "../src/toolActivity.js";
+import { getToolActivity, onToolActivity, resetToolActivity } from "../src/toolActivity.js";
 import { flushAuditWrites, readAudit } from "../src/audit.js";
 import { readConfig } from "../src/config.js";
 import assert from 'node:assert/strict';
@@ -24,11 +24,10 @@ fs.writeFileSync(configPath, JSON.stringify({
 }));
 process.env.REL_AI_MCP_CONFIG = configPath;
 
+const activityEvents = [];
+const unsubscribeActivity = onToolActivity(event => activityEvents.push(event));
+
 try {
-
-
-
-
   resetToolActivity();
   const context = { publicHttpOnly: true };
   const task = await callTool('relai_work', { action: 'begin', workspace: 'app' }, context);
@@ -40,10 +39,14 @@ try {
   assert.equal(result.commandSucceeded, false);
   assert.equal(result.exitCode, 1);
   assert.equal(getToolActivity().failures, 0, 'a nonzero child-process exit must not count as an MCP tool failure');
+  const liveEvent = [...activityEvents].reverse().find(event => event.phase === 'finished' && event.activityEvent?.metadata?.exitCode === 1);
+  assert.equal(liveEvent?.activityEvent?.status, 'failed', 'Activity must show a nonzero command outcome as failed even when the MCP tool call completed normally');
   await flushAuditWrites();
   const event = readAudit(readConfig(), { limit: 20 }).entries.find(entry => entry.publicTool === 'relai_exec');
   assert.equal(event.ok, true, 'the audit event must record successful tool execution separately from command outcome');
+  assert.equal(event.status, 'failed', 'persisted Activity history must retain the failed command outcome');
 } finally {
+  unsubscribeActivity();
   if (previous == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previous;
   fs.rmSync(temp, { recursive: true, force: true });

@@ -1,8 +1,15 @@
 import { esc as escapeHtml } from '../../utils.js';
+import { iconActionHtml } from '../../components/icons.js';
 
 const CHATGPT_CONNECTOR_CREATE_URL = 'https://chatgpt.com/plugins#settings/Connectors?create-connector=true';
 const RELAI_CONNECTOR_ICON_URL = '/assets/favicon.png';
 const RELAI_CONNECTOR_ICON_FILENAME = 'relai-mcp.png';
+const CHATGPT_REFRESH_STEPS = Object.freeze([
+  'Enterprise/Edu: Open Workspace settings → Apps.',
+  'Find Rel.AI MCP, open its menu, and choose Action control.',
+  'Click Refresh to load new or changed actions, review the changes, then publish or apply the update.'
+]);
+const CHATGPT_REFRESH_BUSINESS_NOTE = 'Business: published custom apps currently cannot update tools or metadata in place. Recreate and republish the app when the Rel.AI tool surface changes.';
 
 export function chatGptFirstPrompt(workspaceAlias = 'myapp') {
   const alias = String(workspaceAlias || 'myapp').trim() || 'myapp';
@@ -61,7 +68,7 @@ function connectorHandoffHtml(tunnelId) {
         <dt>Authentication</dt><dd>No authentication</dd>
       </dl>
       <div class="chatgpt-connector-actions" role="group" aria-label="ChatGPT connector setup actions">
-        <button class="primary" type="button" data-open-chatgpt-setup>Open ChatGPT connector setup</button>
+        <button class="primary" type="button" data-open-chatgpt-setup>${iconActionHtml('externalLink', 'ChatGPT setup')}</button>
         <button class="secondary" type="button" data-save-relai-icon>Save optional Rel.AI icon <span>PNG · under 10 KB</span></button>
       </div>
       <p class="chatgpt-connector-note" data-chatgpt-handoff-note>Open ChatGPT now. You can add the Rel.AI icon after the connector works.</p>
@@ -90,6 +97,8 @@ function bindConnectorHandoff(guide) {
 
 export {
   CHATGPT_CONNECTOR_CREATE_URL,
+  CHATGPT_REFRESH_BUSINESS_NOTE,
+  CHATGPT_REFRESH_STEPS,
   RELAI_CONNECTOR_ICON_FILENAME,
   RELAI_CONNECTOR_ICON_URL
 };

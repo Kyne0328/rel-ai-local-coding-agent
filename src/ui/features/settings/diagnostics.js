@@ -12,6 +12,7 @@ import { getWorkspaceFilter } from '../../router.js';
 import { get as getStore } from '../../store.js';
 import { restartConnection } from './connection-recovery.js';
 import { clientCapabilityViews } from '../../task-identity.js';
+import { iconActionHtml, iconHtml } from '../../components/icons.js';
 
 const LIVE_TAIL_REFRESH_DELAY_MS = 160;
 let currentReport = null;
@@ -36,7 +37,7 @@ export function mountDiagnostics(container) {
         <div class="section-head-actions diagnostic-page-actions">
           <button class="secondary" type="button" data-copy-report disabled>Copy report</button>
           <button class="secondary" type="button" data-export-report disabled>Export support information</button>
-          <button class="secondary" type="button" data-open-diagnostics-folder>Open support folder</button>
+          <button class="secondary" type="button" data-open-diagnostics-folder>${iconActionHtml('folder', 'Support folder')}</button>
         </div>
       </div>
       <div id="diagnosticFilterHost"></div>
@@ -171,11 +172,11 @@ function bindHeaderActions(container) {
   const folderButton = container.querySelector('[data-open-diagnostics-folder]');
   const canOpenFolder = typeof window.relaiDesktop?.openDiagnosticsFolder === 'function';
   folderButton.disabled = !canOpenFolder;
-  if (!canOpenFolder) folderButton.textContent = 'Open support folder — desktop app only';
+  if (!canOpenFolder) folderButton.textContent = 'Support folder — desktop app only';
   folderButton.onclick = async () => {
     if (!canOpenFolder) return;
     const result = await runButtonAction(folderButton, {
-      idleText: 'Open support folder', loadingText: 'Opening folder…', successText: 'Folder opened', errorText: 'Open failed'
+      idleText: 'Support folder', loadingText: 'Opening folder…', successText: 'Folder opened', errorText: 'Open failed'
     }, () => window.relaiDesktop.openDiagnosticsFolder());
     if (!result?.ok) toast(result?.error || 'Could not open the support folder.', { variant: 'error' });
   };
@@ -589,7 +590,7 @@ function clientCapabilityHtml() {
       ? 'false'
       : 'unknown';
   return `<details class="card connector-details diagnostic-client-capability" data-diagnostic-region="client-capability" data-diagnostic-detail="client-capability">
-    <summary class="connector-details-summary"><span><strong>Client capability details</strong><small>Technical MCP information for troubleshooting</small></span><span aria-hidden="true">›</span></summary>
+    <summary class="connector-details-summary"><span><strong>Client capability details</strong><small>Technical MCP information for troubleshooting</small></span>${iconHtml('chevronRight')}</summary>
     <div class="card-body connection-status-body">
       <div class="connection-status-copy">
         <strong>${esc(capability.capabilityLabel)}</strong>
@@ -628,7 +629,7 @@ function findingCard(finding) {
   const action = canRestart
     ? `<button class="secondary compact-button" type="button" data-restart-connection data-diagnostic-action="${esc(finding.code)}">${esc(finding.action.label || 'Restart connection')}</button> <a class="buttonlike secondary compact-button" href="${esc(finding.action.href || '#settings/connection')}">Review connection settings</a>`
     : finding.action?.href
-      ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
+      ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${iconActionHtml('chevronRight', finding.action.label || 'Details', { position: 'end' })}</a>`
       : '';
   return `<article class="diagnostic-finding ${esc(finding.severity)}">
     <div class="diagnostic-severity">${esc(findingSeverityLabel(finding.severity))}</div>
@@ -808,6 +809,6 @@ function unavailableHtml(report) {
   const href = report?.recovery?.href || '#settings/connection';
   return `<div class="diagnostic-clear diagnostic-unavailable">
     <strong>${esc(title)}</strong><span>${esc(message)}</span><small>${esc(recovery)}</small>
-    <a class="buttonlike secondary" href="${esc(href)}">${esc(report?.recovery?.actionLabel || 'Open Connection')}</a>
+    <a class="buttonlike secondary" href="${esc(href)}">${iconActionHtml('chevronRight', String(report?.recovery?.actionLabel || 'Connection').replace(/^Open\s+/i, ''), { position: 'end' })}</a>
   </div>`;
 }

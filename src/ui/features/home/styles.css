@@ -94,7 +94,7 @@
 .home-analytics-gridline { stroke: var(--ui-border-subtle); stroke-width: 1; stroke-dasharray: 4 6; }
 .home-analytics-area { fill: currentColor; opacity: .08; }
 .home-analytics-line { stroke: currentColor; stroke-width: 2; }
-.home-analytics-scale { @apply flex items-center justify-between text-[10px] font-medium; color: var(--ui-text-tertiary); }
+.home-analytics-scale { @apply flex items-center justify-between text-[11px] font-medium; color: var(--ui-text-tertiary); }
 .home-analytics-pulse-empty { @apply grid min-h-[112px] place-items-center rounded-xl border border-dashed text-[12px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
 .home-analytics-foot { @apply flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-4 py-2 text-[11px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
 .home-analytics-loading { @apply grid gap-0; grid-template-columns: repeat(4,minmax(0,1fr)); border-top: 1px solid var(--ui-border-subtle); }

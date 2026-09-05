@@ -94,9 +94,19 @@ try {
   const secondExpired = await api.fetchJson('/api/tools', { cache: 'no-store' });
   assert.equal(firstExpired.status, 401);
   assert.equal(secondExpired.status, 401);
+  assert.equal(firstExpired.httpStatus, 401);
   assert.deepEqual(reloadCalls, ['#activity'], 'simultaneous dashboard 401 responses must trigger one desktop reauthentication reload');
   resolveReload?.({ ok: true });
   await Promise.resolve();
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ ok: true, status: { available: true } })
+  });
+  const computerStatus = await api.fetchJson('/api/computer', { cache: 'no-store' });
+  assert.deepEqual(computerStatus.status, { available: true }, 'dashboard payload status fields must not be replaced by the HTTP status code');
+  assert.equal(computerStatus.httpStatus, 200);
 } finally {
   if (originalFetch === undefined) delete globalThis.fetch; else globalThis.fetch = originalFetch;
   if (originalWindow === undefined) delete globalThis.window; else globalThis.window = originalWindow;

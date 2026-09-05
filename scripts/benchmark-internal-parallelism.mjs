@@ -9,6 +9,7 @@ import { relaiSearch } from '../src/bridge/search.js';
 import { relaiSemanticSearch } from '../src/bridge/semanticSearch.js';
 import { relaiVerify } from '../src/bridge/validation.js';
 import { planEdit } from '../src/executionPlanner.js';
+import { QUERY_WORKER_GLOBAL_COUNT } from '../src/repository/intelligence/queryWorkerClient.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { buildCheckCatalog } from '../src/workflow/checkCatalog.js';
 import { discoverRepositoryTopology } from '../src/workflow/topology.js';
@@ -89,7 +90,7 @@ try {
   }));
 
   await relaiSemanticSearch(workspace, config, { query: 'warm repository index', maxResults: 2 }, { watch: false });
-  const semanticTerms = ['shared feature one', 'shared feature two'];
+  const semanticTerms = ['shared feature one', 'shared feature two', 'shared feature three', 'shared feature four'];
   const semanticSerial = await timed(async () => {
     for (const query of semanticTerms) {
       await relaiSemanticSearch(workspace, config, { query, maxResults: 3, maxBytes: 6000 }, { watch: false });
@@ -97,11 +98,11 @@ try {
   });
   const semanticBatch = await timed(() => relaiSemanticSearch(workspace, config, {
     queries: semanticTerms,
-    maxResults: 6,
-    maxBytes: 12000
+    maxResults: 12,
+    maxBytes: 24000
   }, { watch: false }));
-  assert.equal(semanticBatch.value.execution.maxConcurrentSteps, 2,
-    'semantic batch metrics must match the bounded repository query read pool');
+  assert.equal(semanticBatch.value.execution.maxConcurrentSteps, QUERY_WORKER_GLOBAL_COUNT,
+    'semantic batch metrics must match the bounded global repository query worker budget');
 
   const catalog = buildCheckCatalog(discoverRepositoryTopology(root));
   const lint = catalog.find(item => item.id.endsWith(':lint'));
@@ -146,7 +147,7 @@ try {
         batchWallMs: semanticBatch.wallMs,
         wallDeltaMs: round(semanticSerial.wallMs - semanticBatch.wallMs),
         execution: semanticBatch.value.execution,
-        workerModel: 'two-reader-pool-per-repository'
+        workerModel: `bounded-global-${QUERY_WORKER_GLOBAL_COUNT}-worker-pool`
       },
       validation: {
         serialWallMs: validationSerial.wallMs,

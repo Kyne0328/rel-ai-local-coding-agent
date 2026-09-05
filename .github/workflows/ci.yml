@@ -31,14 +31,14 @@ jobs:
       - name: Verify Electron test binary
         run: test -x electron/node_modules/electron/dist/electron
       - run: npm run test:native-tasks-release-gate
-      - name: Verify release and generated-asset consistency
-        run: npm run release:check
-      - name: Enforce lightweight MCP manifest reuse budget
-        run: node test/mcp-manifest-performance-unit.mjs
-      - name: Enforce lightweight dashboard update budget
-        run: node test/dashboard-update-budget-unit.mjs
-      - name: Verify Repository Intelligence worker lifecycle
-        run: node test/repository-intelligence-worker-unit.mjs
+      - name: Run Repository Intelligence regression suite
+        run: node test/run-repository-intelligence-tests.mjs
+      - name: Enforce MCP startup performance budget
+        run: npm run benchmark:mcp-startup
+      - name: Enforce Repository Intelligence performance budget
+        run: node scripts/repository-intelligence-benchmark.mjs --files 5000 --mutations 50 --json --max-full-ms 30000 --max-incremental-ms 5000
+      - name: Test frontend browser experience
+        run: xvfb-run --auto-servernum npm run test:frontend-browser
       - run: xvfb-run --auto-servernum npm run test:all
 
   packaged-windows:
@@ -75,6 +75,9 @@ jobs:
       - name: Verify packaged application layout
         shell: pwsh
         run: npm run verify:packaged -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged computer runtime
+        shell: pwsh
+        run: node scripts/verify-packaged-computer-runtime.mjs --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify hardened Electron fuses
         shell: pwsh
         run: npm run verify:fuses -- --platform win32
@@ -116,6 +119,8 @@ jobs:
           echo "path=$package_directory" >> "$GITHUB_OUTPUT"
       - name: Verify packaged application layout
         run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged computer runtime
+        run: xvfb-run --auto-servernum node scripts/verify-packaged-computer-runtime.mjs --platform linux --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify hardened Electron fuses
         run: npm run verify:fuses -- --platform linux
       - name: Verify packaged MCP connector flow

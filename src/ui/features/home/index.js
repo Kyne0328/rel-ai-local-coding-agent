@@ -8,6 +8,7 @@ import { buildTaskSemanticProgress } from '../../../taskSemanticProgress.js';
 import { completeDesktopSetup, createDesktopSetupChecklist, desktopSetupItems } from '../onboarding/index.js';
 import { routeMetadata } from '../../navigation-catalog.js';
 import { loadAnalyticsData } from '../usage/data.js';
+import { iconActionHtml } from '../../components/icons.js';
 
 let homeAnalyticsGeneration = 0;
 
@@ -418,7 +419,7 @@ function homeAnalyticsUnavailableHtml(workspace = '') {
   return `
     <div class="card-head home-analytics-head">
       <div><h3>Activity</h3><p>Activity could not be loaded.</p></div>
-      <a class="buttonlike secondary compact-button" href="${routeHref('usage', workspace ? { workspace } : {})}">Open analytics</a>
+      <a class="buttonlike secondary compact-button" href="${routeHref('usage', workspace ? { workspace } : {})}">${iconActionHtml('chevronRight', 'Analytics', { position: 'end' })}</a>
     </div>`;
 }
 

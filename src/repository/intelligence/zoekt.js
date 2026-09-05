@@ -112,7 +112,7 @@ function currentZoektIndex(databaseFile, graphIndex) {
   const paths = zoektPaths(databaseFile);
   const meta = readJson(paths.metaFile);
   if (meta?.fingerprint !== graphIndex?.fingerprint || !fs.existsSync(paths.indexDir)) {
-    return { available: true, current: false, reason: 'Zoekt index is not current; using the lexical fallback until the next full Repository Intelligence refresh.' };
+    return { available: true, current: false, reason: 'Zoekt index is not current; using the lexical fallback until the background Zoekt refresh completes.' };
   }
   return { available: true, current: true, indexDir: paths.indexDir, fingerprint: meta.fingerprint };
 }

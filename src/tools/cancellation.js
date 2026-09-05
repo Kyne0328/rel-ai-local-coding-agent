@@ -1,6 +1,7 @@
 'use strict';
 
 import { cancelFallbackExecution } from '../mcp/fallbackExecutions.js';
+import { clearSessionPolicy } from '../policyResolver.js';
 import { requestCurrentTaskCancellation, taskError } from '../toolActivity.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
@@ -13,7 +14,9 @@ async function cancelTask(config, args = {}) {
   cancelFallbackExecution(taskId, { config, reason });
 
   const session = readTaskHistorySession(config, taskId);
+  const workspace = String(args.workspace || session?.workspace || '').trim();
   if (session?.status === 'cancelled') {
+    if (workspace) clearSessionPolicy(config, workspace, taskId);
     return {
       ok: true,
       work_id: taskId,
@@ -31,6 +34,7 @@ async function cancelTask(config, args = {}) {
     reason,
     initiator: 'connector_client'
   });
+  if (workspace) clearSessionPolicy(config, workspace, taskId);
 
   return {
     ok: true,

@@ -8,7 +8,7 @@
 function makeSentinel(observer) {
   const sentinel = document.createElement('tr');
   const cell = document.createElement('td');
-  cell.colSpan = 99;
+  cell.colSpan = 1;
   cell.className = 'table-virtual-sentinel-cell';
   sentinel.appendChild(cell);
   observer.observe(sentinel);

@@ -3,6 +3,7 @@ import { header, panel } from './shared.js';
 import { applicationUpdatesPanel } from './desktop-updates.js';
 import { desktopLocalDataPanel } from './desktop-local-data.js';
 import { desktopStartupPanel } from './desktop-startup.js';
+import { computerControlPanel } from './computer-control.js';
 
 export function mountApplication(container) {
   container.innerHTML = '<div class="settings-loading">Loading app settings…</div>';
@@ -18,6 +19,7 @@ async function loadAndRender(container) {
   container.innerHTML = '';
   container.appendChild(header('App', 'Startup, background behavior, updates, and local storage.'));
   container.appendChild(desktopStartupPanel(lifecycle).el);
+  container.appendChild(await computerControlPanel());
   container.appendChild(applicationUpdatesPanel(lifecycle).el);
   container.appendChild(desktopLocalDataPanel().el);
 

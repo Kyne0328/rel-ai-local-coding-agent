@@ -55,7 +55,22 @@ function compactPublicInputSchema(name, inputSchema, catalogTool) {
   const schema = importSafeInputSchema(inputSchema || {});
   const compact = stripPublicDescriptions(schema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
   const withInputForm = annotateInputForm(compact, inputSchema);
-  return annotateActionFieldUsage(withInputForm, catalogTool);
+  if (name === 'relai_computer') return compactComputerInputSchema(withInputForm);
+  return annotateActionGrammar(withInputForm, catalogTool);
+}
+
+function compactComputerInputSchema(schema) {
+  if (!schema?.properties?.action) return schema;
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      action: {
+        ...schema.properties.action,
+        description: 'Actions: status/displays; screenshot(displayId?); move/click/double_click/right_click(x,y,displayId?); drag(x,y,toX,toY,displayId?); scroll(direction,distance?,x?,y?,displayId?); type(text); key(key); hotkey(keys).'
+      }
+    }
+  };
 }
 
 function importSafeInputSchema(inputSchema) {
@@ -85,32 +100,26 @@ function stripPublicDescriptions(value, retained, path = '') {
   return compact;
 }
 
-function annotateActionFieldUsage(schema, catalogTool) {
+function annotateActionGrammar(schema, catalogTool) {
   const actions = (catalogTool?.actions || []).filter(entry => entry.action !== 'default');
-  if (!actions.length || !schema?.properties) return schema;
+  if (!actions.length || !schema?.properties?.action) return schema;
 
-  const properties = { ...schema.properties };
-  if (properties.action) {
-    const formHints = actions.map(actionInputFormHint).filter(Boolean);
-    properties.action = {
-      ...properties.action,
-      description: [
-        `Choose one action: ${actions.map(entry => entry.action).join(', ')}. Use only fields for the selected action.`,
-        formHints.length ? `Input forms: ${formHints.join('; ')}.` : ''
-      ].filter(Boolean).join(' ')
-    };
-  }
-
-  for (const [field, fieldSchema] of Object.entries(properties)) {
-    if (field === 'action') continue;
-    const hint = actionFieldHint(actions, field);
-    if (!hint) continue;
-    properties[field] = {
-      ...fieldSchema,
-      description: [fieldSchema?.description, hint].filter(Boolean).join(' ')
-    };
-  }
-  return { ...schema, properties };
+  const formHints = actions.map(actionInputFormHint).filter(Boolean);
+  const actionGrammar = compactActionGrammar(actions);
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      action: {
+        ...schema.properties.action,
+        description: [
+          `Actions: ${actions.map(entry => entry.action).join(', ')}.`,
+          actionGrammar,
+          formHints.length ? `Input forms: ${formHints.join('; ')}.` : ''
+        ].filter(Boolean).join(' ')
+      }
+    }
+  };
 }
 
 function annotateInputForm(schema, inputSchema) {
@@ -138,22 +147,34 @@ function inputFormAlternatives(schema) {
   return labels.join(' or ');
 }
 
-function actionFieldHint(actions, field) {
-  const owners = actions.filter(entry => entry.fields?.includes(field));
-  if (!owners.length) return '';
-  const requiredOwners = new Set(owners.filter(entry => entry.required?.includes(field)).map(entry => entry.action));
-  const constraintSignatures = owners.map(entry => fieldConstraintSignature(entry.inputSchema?.properties?.[field]));
-  const includeConstraints = new Set(constraintSignatures).size > 1;
-  const ownedByAll = owners.length === actions.length;
-  const uniformRequirement = requiredOwners.size === 0 || requiredOwners.size === owners.length;
-  if (ownedByAll && uniformRequirement && !includeConstraints) return '';
+function compactActionGrammar(actions) {
+  const fields = [...new Set(actions.flatMap(entry => entry.fields || []))].filter(field => field !== 'action');
+  const actionSpecific = new Map();
 
-  const usage = owners.map((entry, index) => {
-    const required = requiredOwners.has(entry.action) ? ' (required)' : '';
-    const constraint = includeConstraints && constraintSignatures[index] ? ` ${constraintSignatures[index]}` : '';
-    return `${entry.action}${required}${constraint}`;
-  });
-  return `Action usage: ${usage.join('; ')}.`;
+  for (const field of fields) {
+    const owners = actions.filter(entry => entry.fields?.includes(field));
+    const requirements = owners.map(entry => entry.required?.includes(field) === true);
+    const constraints = owners.map(entry => fieldConstraintSignature(entry.inputSchema?.properties?.[field]));
+    const varyingConstraint = new Set(constraints).size > 1;
+    if (owners.length !== actions.length || new Set(requirements).size > 1 || varyingConstraint) {
+      actionSpecific.set(field, { varyingConstraint });
+    }
+  }
+
+  const parts = actions.map(entry => {
+    const fieldsForAction = (entry.fields || [])
+      .filter(field => actionSpecific.has(field))
+      .map(field => {
+        const required = entry.required?.includes(field) ? '!' : '';
+        const constraint = actionSpecific.get(field).varyingConstraint
+          ? fieldConstraintSignature(entry.inputSchema?.properties?.[field])
+          : '';
+        return `${field}${required}${constraint}`;
+      });
+    return fieldsForAction.length ? `${entry.action}(${fieldsForAction.join(',')})` : '';
+  }).filter(Boolean);
+
+  return parts.length ? `Action-specific fields: ${parts.join('; ')}. ! = required.` : '';
 }
 
 function fieldConstraintSignature(schema) {

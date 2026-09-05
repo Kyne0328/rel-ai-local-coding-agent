@@ -4,6 +4,7 @@ import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
 import { hydrateWorkspaceAnalytics } from './analytics.js';
+import { iconActionHtml } from '../../components/icons.js';
 
 function buildWorkspaces(data, options = {}) {
   const config = data.config || {};
@@ -172,7 +173,7 @@ function workspaceActivityNotice(view) {
 
 function workspacePrimaryActions(view) {
   const openFolder = document.documentElement.dataset.surface === 'desktop'
-    ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>`
+    ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">${iconActionHtml('folder', 'Project folder')}</button>`
     : '';
   return `
     ${openFolder}

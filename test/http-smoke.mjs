@@ -111,7 +111,7 @@ try {
   assert.ok(listedToolBytes > 0, 'HTTP tools/list must serialize to a non-empty response');
   const names = listed.body.result.tools.map(tool => tool.name);
   const publicNames = listed.body.result.tools.filter(tool => activeToolNames.includes(tool.name)).map(tool => tool.name);
-  assert.deepEqual(publicNames, activeToolNames, 'HTTP discovery must retain the canonical 12-tool model surface');
+  assert.deepEqual(publicNames, activeToolNames, 'HTTP discovery must retain the canonical model-facing tool surface');
   const listedByName = new Map(listed.body.result.tools.map(tool => [tool.name, tool]));
   for (const name of activeToolNames) {
     assert.deepEqual(listedByName.get(name)?._meta?.securitySchemes, [{ type: 'noauth' }], `${name} must advertise noauth through ChatGPT compatibility metadata`);

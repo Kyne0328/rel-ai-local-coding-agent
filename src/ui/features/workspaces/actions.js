@@ -1,4 +1,5 @@
-import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '../../api.js';
+import { postJson, requestDashboardRefresh } from '../../api.js';
+import { get as getStore } from '../../store.js';
 import { toast } from '../../components/toast.js';
 import { openWorkspaceForm } from './form.js';
 import { openWorkspaceRepair } from './repair.js';
@@ -36,10 +37,16 @@ async function handleWorkspaceClick(event) {
 
 async function editWorkspaceFromTrigger(trigger) {
   const alias = trigger.dataset.editWorkspace || '';
-  const workspace = await loadWorkspace(alias);
-  if (workspace) await openWorkspaceForm({
+  const configuredWorkspaces = currentConfiguredWorkspaces();
+  const workspace = configuredWorkspaces.find(item => item.alias === alias) || null;
+  if (!workspace) {
+    toast(`Project not found: ${alias}`, { variant: 'error' });
+    return;
+  }
+  await openWorkspaceForm({
     mode: 'edit',
     workspace,
+    configuredWorkspaces,
     onRemove: () => removeWorkspaceFlow(alias)
   });
 }
@@ -61,7 +68,7 @@ async function openFolderFromTrigger(trigger) {
   const alias = trigger.dataset.openFolder || '';
   recordRecentWorkspace(alias);
   const result = await runButtonAction(trigger, {
-    idleText: 'Open folder',
+    idleText: 'Project folder',
     loadingText: 'Opening…',
     successText: 'Folder opened',
     errorText: 'Open failed'
@@ -95,11 +102,13 @@ async function removeWorkspaceFlow(alias) {
   return false;
 }
 
-async function loadWorkspace(alias) {
-  const dashboard = await fetchJson(DASHBOARD_DATA_URL, { cache: 'no-store' });
-  const workspace = Array.isArray(dashboard?.config?.workspaces)
-    ? dashboard.config.workspaces.find(item => item.alias === alias)
-    : null;
+function loadWorkspace(alias) {
+  const workspace = currentConfiguredWorkspaces().find(item => item.alias === alias) || null;
   if (!workspace) toast(`Project not found: ${alias}`, { variant: 'error' });
   return workspace;
+}
+
+function currentConfiguredWorkspaces() {
+  const workspaces = getStore()?.config?.workspaces;
+  return Array.isArray(workspaces) ? workspaces : [];
 }

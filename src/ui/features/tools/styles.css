@@ -1,28 +1,24 @@
 @layer components {
 .tools-grid { @apply grid gap-2; grid-template-columns: repeat(auto-fit,minmax(340px,1fr)); }
-.tool-card { @apply flex flex-col p-3; }
+.tool-card { @apply flex min-h-0 flex-col gap-2 p-3; border-color: var(--ui-border-default); }
 .tool-card:hover { border-color: var(--ui-border-control); background: var(--ui-surface-secondary); }
-.tool-card h3 { @apply text-[13px]; }
-.tool-card p { @apply mt-2 text-[11px] leading-5; color: var(--ui-text-secondary); }
-.tool-card-actions { @apply mt-auto pt-4; }
-
-.tool-card { @apply gap-2; min-height: 0; }
 .tool-card-head { @apply flex items-center justify-between gap-3; }
-.tool-capability { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-secondary); }
+.tool-capability { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-primary); }
 .tool-parameter-count { @apply text-[11px]; color: var(--ui-text-tertiary); }
 .tool-card-title { @apply grid gap-1; }
-.tool-card-title h3 { @apply text-[14px]; }
+.tool-card-title h3 { @apply text-[14px]; color: var(--ui-text-primary); }
 .tool-card-title code { @apply w-fit max-w-full break-words text-[11px]; color: var(--ui-text-secondary); }
 .tool-card p { @apply m-0 text-[12px] leading-5; color: var(--ui-text-secondary); }
 .tool-parameters { @apply mt-auto border-t pt-3; border-color: var(--ui-border-default); }
-.tool-parameters summary { @apply flex min-h-11 cursor-pointer items-center text-[12px] font-semibold; color: var(--ui-text-secondary); }
+.tool-parameters summary { @apply flex min-h-11 cursor-pointer items-center text-[12px] font-semibold; color: var(--ui-text-primary); }
 .tool-parameter-list { @apply flex flex-wrap gap-1.5 pt-2; }
 .tool-parameter-list code { @apply rounded-md px-2 py-1 text-[11px]; background: var(--ui-surface-secondary); }
-.tool-parameters-empty { @apply mt-auto border-t pt-3 text-[12px]; border-color: var(--ui-border-default); color: var(--ui-text-tertiary); }
+.tool-parameters-empty { @apply mt-auto border-t pt-3 text-[12px]; border-color: var(--ui-border-default); color: var(--ui-text-secondary); }
+.capability-inspect .tool-capability { color: var(--ui-status-info-foreground); }
 .capability-edit .tool-capability { color: var(--ui-action-primary); }
+.capability-execute .tool-capability { color: var(--ui-status-warning-foreground); }
 .capability-validate .tool-capability { color: var(--ui-status-success-foreground); }
-.capability-git .tool-capability { color: var(--ui-text-primary); }
-.capability-recover .tool-capability { color: var(--ui-text-secondary); }
+.capability-recover .tool-capability { color: var(--ui-status-warning-foreground); }
 }
 
 @media (max-width: 760px) { .tools-grid { grid-template-columns: 1fr; } }

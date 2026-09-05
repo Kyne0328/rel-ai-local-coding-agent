@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { repoSnapshot, relaiReadAsync } from '../src/localRepoBridge.js';
 import { relaiSearch } from '../src/bridge/search.js';
+import { repositoryQueryWorkerStats } from '../src/repository/intelligence/queryWorkerClient.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 import { repositoryIndexPath } from '../src/repository/intelligence/database.js';
 import { sourceWorkspace, workspaceSourceEntries } from '../src/workspaceSources.js';
@@ -64,6 +65,10 @@ try {
   }, { watch: false });
   assert.ok(semantic.results.some(item => item.path === 'source:2/src/secondary.js'),
     'semantic search must fan out across attached source roots');
+  assert.equal(Array.isArray(semantic.retrieval?.sources), true,
+    'multi-source semantic search must preserve per-source retrieval degradation metadata');
+  assert.ok(repositoryQueryWorkerStats().liveWorkerCount <= 4,
+    'attached source roots must share the global query worker budget');
 
   const symbol = await repositoryIntelligence.codeInspect(workspace, config, {
     action: 'symbol', symbol: 'secondaryMarker', maxResults: 20

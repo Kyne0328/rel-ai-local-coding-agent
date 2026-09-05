@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const RELEASES_API_URL = 'https://api.github.com/repos/Kyne0328/rel-ai-local-coding-agent/releases/latest';
-const RELEASE_DOWNLOAD_PREFIX = '/Kyne0328/rel-ai-local-coding-agent/releases/download/';
+const RELEASES_API_URL = 'https://api.github.com/repos/Kyne0328/rel-ai-chatgpt-web-harness/releases/latest';
+const RELEASE_DOWNLOAD_PREFIX = '/Kyne0328/rel-ai-chatgpt-web-harness/releases/download/';
 const CHECKSUM_ASSET_NAME = 'SHA256SUMS.txt';
 const MAX_CHECKSUM_BYTES = 1024 * 1024;
 
@@ -168,7 +168,7 @@ async function fetchTrusted(url, label, fetchImpl, options = {}) {
 function assertTrustedUrl(value) {
   const url = new URL(String(value || ''));
   if (url.protocol !== 'https:') throw new Error('Update URLs must use HTTPS.');
-  if (url.hostname === 'api.github.com' && url.pathname === '/repos/Kyne0328/rel-ai-local-coding-agent/releases/latest') return;
+  if (url.hostname === 'api.github.com' && url.pathname === '/repos/Kyne0328/rel-ai-chatgpt-web-harness/releases/latest') return;
   if (url.hostname === 'github.com' && url.pathname.startsWith(RELEASE_DOWNLOAD_PREFIX)) return;
   throw new Error(`Untrusted update URL: ${url.hostname}${url.pathname}`);
 }

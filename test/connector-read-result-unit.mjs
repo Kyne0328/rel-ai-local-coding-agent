@@ -52,6 +52,15 @@ try {
   assert.equal(tasklessRead.ok, true, 'ordinary authorized workspace reads must not require a live work_id');
   assert.equal(tasklessRead.items[0].content, `${largeLines[0]}\n`);
 
+  const computerStatus = await callTool('relai_computer', {
+    action: 'status',
+    workspace: 'repo'
+  }, { publicHttpOnly: true, requestId: 'computer-status', transportType: 'test' });
+  assert.equal(computerStatus.ok, true, 'computer status must survive the public connector dispatch path');
+  assert.equal(computerStatus.action, 'status');
+  assert.equal(computerStatus.enabled, false);
+  assert.equal(typeof computerStatus.available, 'boolean');
+
   const output = await callTool('relai_read', {
     work_id: task.work_id,
     paths: ['big.txt'],

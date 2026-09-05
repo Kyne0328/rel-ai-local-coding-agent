@@ -4,6 +4,7 @@ import { confirmAction } from '../../components/confirm-dialog.js';
 import { toast } from '../../components/toast.js';
 import { formatBytes, panel } from './shared.js';
 import { esc } from '../../utils.js';
+import { iconActionHtml } from '../../components/icons.js';
 
 export function desktopLocalDataPanel() {
   const section = panel('Local data & storage');
@@ -45,7 +46,7 @@ function render(body, usage) {
     <div class="local-data-actions">
       <button class="secondary" type="button" data-clear-temporary ${active > 0 ? 'disabled' : ''}>Clear temporary output</button>
       <button class="secondary danger" type="button" data-clear-history ${active > 0 ? 'disabled' : ''}>Clear task & activity history</button>
-      <button class="secondary" type="button" data-open-data-folder>Open data folder</button>
+      <button class="secondary" type="button" data-open-data-folder>${iconActionHtml('folder', 'Data folder')}</button>
     </div>
     ${active > 0 ? `<p class="settings-help">Finish the ${active === 1 ? 'active task' : `${active} active tasks`} before clearing local task data.</p>` : ''}`;
   bindActions(body);
@@ -102,7 +103,7 @@ function bindActions(body) {
   const folder = body.querySelector('[data-open-data-folder]');
   if (folder) folder.onclick = async () => {
     const result = await runButtonAction(folder, {
-      idleText: 'Open data folder', loadingText: 'Opening…', successText: 'Folder opened', errorText: 'Open failed'
+      idleText: 'Data folder', loadingText: 'Opening…', successText: 'Folder opened', errorText: 'Open failed'
     }, () => window.relaiDesktop.openLocalDataFolder());
     if (!result?.ok) toast(result?.error || 'The Rel.AI data folder could not be opened.', { variant: 'error' });
   };

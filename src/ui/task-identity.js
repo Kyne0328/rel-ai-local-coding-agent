@@ -227,7 +227,7 @@ export function workSessionStateView(value = {}) {
     validating: ['Validating', false, true, 'working'],
     waiting: ['Open', false, false, 'working'],
     settling: ['Settling', false, true, 'working'],
-    waiting_for_approval: ['Approval required', false, false, 'warn'],
+    waiting_for_approval: ['Blocked', false, false, 'warn'],
     blocked: validationRequired ? ['Final validation required', false, false, 'warn'] : ['Blocked', false, false, 'bad'],
     validation_failed: ['Validation failed', false, false, 'bad'],
     completed: ['Completed', true, false, 'ok'],

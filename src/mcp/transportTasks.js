@@ -100,7 +100,8 @@ async function handleTransportTaskRequest(config, message, options = {}) {
       return runFallbackToolExecution(config, message, validated.value, {
         ...options,
         capabilities,
-        execute
+        execute,
+        bounds
       });
     }
     return errorFromPolicy(message.id, selection.error);
@@ -189,6 +190,19 @@ function synchronousEstimate(_name, args, bounds, options = {}) {
 async function runFallbackToolExecution(config, message, args, options = {}) {
   const name = String(message.params?.name || '');
   const workId = String(args.work_id || '').trim();
+  if (!workId) {
+    const bounded = await runBoundedExecution(
+      signal => options.execute(config, name, args, {
+        ...options,
+        signal,
+        requestId: message.id,
+        message
+      }),
+      { bounds: options.bounds || DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS, signal: options.signal }
+    );
+    if (!bounded.ok) return toolExecutionErrorResponse(message.id, bounded.error);
+    return successResponse(message.id, bounded.value);
+  }
   const graceMs = Math.max(0, Number(options.synchronousFallbackGraceMs ?? DEFAULT_FALLBACK_GRACE_MS));
   let started;
   try {

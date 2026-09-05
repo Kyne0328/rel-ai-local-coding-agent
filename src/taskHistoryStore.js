@@ -274,7 +274,9 @@ function crossWorkspaceEpisodeScore(session, workspaceAlias, queryTerms, exclude
   if (session.status !== 'completed' || session.completionKnown !== true) return 0;
   const primary = matchingRelevanceTerms(queryTerms, `${session.objective || ''} ${session.title || ''}`);
   const secondary = matchingRelevanceTerms(queryTerms, `${session.resultSummary || ''} ${session.summary || ''}`);
-  return (primary.length * 3) + secondary.length;
+  const score = (primary.length * 3) + secondary.length;
+  const distinctMatches = new Set([...primary, ...secondary]).size;
+  return distinctMatches >= 2 && score >= 4 ? score : 0;
 }
 
 function taskEpisodeScore(session, workspaceAlias, queryTerms, excludeTaskId) {

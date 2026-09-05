@@ -1,5 +1,6 @@
 import { activateOverlay } from './overlay-focus.js';
 import { hasUnsavedChanges } from '../interaction-safety.js';
+import { iconHtml } from './icons.js';
 
 const MODAL_SIZES = new Set(['compact', 'standard', 'wide']);
 let _state = null;
@@ -41,7 +42,7 @@ export function openModal({
     closeButton.type = 'button';
     closeButton.className = 'modal-close';
     closeButton.setAttribute('aria-label', title ? `Close ${title}` : 'Close dialog');
-    closeButton.textContent = '×';
+    closeButton.innerHTML = iconHtml('close');
     header.appendChild(closeButton);
   }
 

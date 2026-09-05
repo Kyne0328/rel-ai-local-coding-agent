@@ -1,14 +1,7 @@
 import { openModal } from './components/modal.js';
+import { CHATGPT_REFRESH_BUSINESS_NOTE, CHATGPT_REFRESH_STEPS } from './features/settings/connection-guidance.js';
 
-const DISMISS_DELAY_MS = 5000;
 const STORAGE_PREFIX = 'relai_connector_refresh';
-const REFRESH_STEPS = Object.freeze([
-  'Open Settings.',
-  'Open Plugins.',
-  'Select the Rel.AI MCP connector.',
-  'Scroll to the bottom and open Information.',
-  'Click Refresh.'
-]);
 
 function prepareConnectorRefreshNotice(lifecycle = {}, storage) {
   const currentVersion = cleanVersion(lifecycle.currentVersion);
@@ -35,9 +28,9 @@ function prepareConnectorRefreshNotice(lifecycle = {}, storage) {
     acknowledgedKey,
     pendingKey,
     title: 'Refresh Rel.AI MCP in ChatGPT',
-    description: `Rel.AI MCP ${currentVersion} changed the connector details or tool definitions. Refresh the connector so ChatGPT loads the latest Rel.AI tools.`,
-    steps: REFRESH_STEPS,
-    dismissDelayMs: DISMISS_DELAY_MS
+    description: `Rel.AI MCP ${currentVersion} changed its ChatGPT action definitions. ChatGPT keeps an approved snapshot, so review the updated actions before using the new tool surface.`,
+    steps: CHATGPT_REFRESH_STEPS,
+    businessNote: CHATGPT_REFRESH_BUSINESS_NOTE
   };
 }
 
@@ -50,13 +43,9 @@ function acknowledgeConnectorRefreshNotice(view, storage) {
 function initConnectorRefreshModal(options = {}) {
   const bridge = options.bridge || window.relaiDesktop;
   const storage = options.storage || window.localStorage;
-  const now = options.now || Date.now;
-  const setIntervalFn = options.setInterval || window.setInterval.bind(window);
-  const clearIntervalFn = options.clearInterval || window.clearInterval.bind(window);
   if (!bridge?.getLifecycleStatus) return () => {};
 
   let cancelled = false;
-  let countdownTimer = null;
 
   void bridge.getLifecycleStatus().then(lifecycle => {
     if (cancelled) return;
@@ -82,62 +71,34 @@ function initConnectorRefreshModal(options = {}) {
     });
     steps.append(heading, list);
 
+    const businessNote = document.createElement('p');
+    businessNote.className = 'muted';
+    businessNote.textContent = view.businessNote;
+
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'You only need to acknowledge this notice once for this Rel.AI update.';
+    note.textContent = 'You can dismiss this notice now. It will not appear again for this Rel.AI action revision.';
 
     const actions = document.createElement('div');
     actions.className = 'modal-actions';
     const dismiss = document.createElement('button');
     dismiss.type = 'button';
     dismiss.className = 'primary';
-    dismiss.disabled = true;
+    dismiss.textContent = 'Done';
     actions.appendChild(dismiss);
-    content.append(description, steps, note, actions);
+    content.append(description, steps, businessNote, note, actions);
 
-    const unlockAt = now() + view.dismissDelayMs;
-    let unlocked = false;
-    let modal = null;
-    const updateCountdown = () => {
-      const remainingMs = Math.max(0, unlockAt - now());
-      if (remainingMs > 0) {
-        dismiss.disabled = true;
-        dismiss.textContent = `Continue (${Math.ceil(remainingMs / 1000)}s)`;
-        return;
-      }
-      unlocked = true;
-      dismiss.disabled = false;
-      dismiss.textContent = 'Continue';
-      modal?.setDismissEnabled(true);
-      if (countdownTimer) clearIntervalFn(countdownTimer);
-      countdownTimer = null;
-    };
-
-    modal = openModal({
+    const modal = openModal({
       title: view.title,
       content,
       size: 'compact',
-      escDisabled: true,
-      onClose: () => {
-        if (countdownTimer) clearIntervalFn(countdownTimer);
-        countdownTimer = null;
-        if (unlocked) acknowledgeConnectorRefreshNotice(view, storage);
-      }
+      onClose: () => acknowledgeConnectorRefreshNotice(view, storage)
     });
-    dismiss.addEventListener('click', () => {
-      if (dismiss.disabled) return;
-      acknowledgeConnectorRefreshNotice(view, storage);
-      modal.close();
-    });
-
-    updateCountdown();
-    if (dismiss.disabled) countdownTimer = setIntervalFn(updateCountdown, 250);
+    dismiss.addEventListener('click', () => modal.close());
   }).catch(() => {});
 
   return () => {
     cancelled = true;
-    if (countdownTimer) clearIntervalFn(countdownTimer);
-    countdownTimer = null;
   };
 }
 
@@ -166,8 +127,6 @@ function cleanRevision(value) {
 }
 
 export {
-  DISMISS_DELAY_MS,
-  REFRESH_STEPS,
   acknowledgeConnectorRefreshNotice,
   initConnectorRefreshModal,
   prepareConnectorRefreshNotice

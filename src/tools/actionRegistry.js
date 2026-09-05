@@ -14,6 +14,7 @@ const READ = 'repository:read';
 const WRITE = 'repository:write';
 const EXECUTE = 'command:execute';
 const PROCESS = 'process:manage';
+const COMPUTER = 'computer:control';
 const PUBLISH = 'git:publish';
 
 const INSPECT_LOCATION_OR_SYMBOL = Object.freeze({
@@ -34,6 +35,22 @@ const INSPECT_FIELDS = Object.freeze({
   trace: contract({ required: ['symbol'], omit: ['query', 'paths', 'path', 'line', 'column'] }),
   diagnostics: contract({ omit: ['symbol', 'query', 'paths', 'maxResults', 'maxDepth', 'path', 'line', 'column'] }),
   architecture: contract({ omit: ['symbol', 'query', 'paths', 'maxDepth', 'path', 'line', 'column'] })
+});
+
+const COMPUTER_FIELDS = Object.freeze(['displayId', 'x', 'y', 'toX', 'toY', 'direction', 'distance', 'text', 'key', 'keys']);
+const COMPUTER_OMIT = Object.freeze({
+  status: COMPUTER_FIELDS,
+  displays: COMPUTER_FIELDS,
+  screenshot: COMPUTER_FIELDS.filter(field => field !== 'displayId'),
+  move: COMPUTER_FIELDS.filter(field => ['toX', 'toY', 'direction', 'distance', 'text', 'key', 'keys'].includes(field)),
+  click: COMPUTER_FIELDS.filter(field => ['toX', 'toY', 'direction', 'distance', 'text', 'key', 'keys'].includes(field)),
+  double_click: COMPUTER_FIELDS.filter(field => ['toX', 'toY', 'direction', 'distance', 'text', 'key', 'keys'].includes(field)),
+  right_click: COMPUTER_FIELDS.filter(field => ['toX', 'toY', 'direction', 'distance', 'text', 'key', 'keys'].includes(field)),
+  drag: COMPUTER_FIELDS.filter(field => ['direction', 'distance', 'text', 'key', 'keys'].includes(field)),
+  scroll: COMPUTER_FIELDS.filter(field => ['toX', 'toY', 'text', 'key', 'keys'].includes(field)),
+  type: COMPUTER_FIELDS.filter(field => field !== 'text'),
+  key: COMPUTER_FIELDS.filter(field => field !== 'key'),
+  hotkey: COMPUTER_FIELDS.filter(field => field !== 'keys')
 });
 
 const UI_OMIT = Object.freeze({
@@ -64,6 +81,12 @@ const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
   [OP.INSPECT]: Object.entries(INSPECT_FIELDS).map(([action, publicContract]) =>
     expose('relai_inspect', action, { capability: READ, keepAction: true, publicContract })),
   [OP.EDIT]: [expose('relai_edit', 'default', { capability: WRITE })],
+  [OP.SKILL_MANAGE]: [
+    expose('relai_skill', 'create', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['content'], omit: ['oldText', 'newText'] }) }),
+    expose('relai_skill', 'edit', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['content'], omit: ['oldText', 'newText'] }) }),
+    expose('relai_skill', 'patch', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['oldText', 'newText'], omit: ['content'] }) }),
+    expose('relai_skill', 'delete', { capability: WRITE, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ omit: ['content', 'oldText', 'newText'] }) })
+  ],
   [OP.EXEC]: [expose('relai_exec', 'default', { capability: EXECUTE })],
   [OP.PROCESS_START]: [expose('relai_process', 'start', { capability: PROCESS })],
   [OP.PROCESS_READ]: [expose('relai_process', 'read', { capability: READ })],
@@ -73,25 +96,39 @@ const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
   [OP.UI]: [
     expose('relai_ui', 'start', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['port'], omit: UI_OMIT.start }) }),
     expose('relai_ui', 'navigate', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'route'], omit: UI_OMIT.navigate }) }),
-    expose('relai_ui', 'snapshot', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.snapshot }) }),
+    expose('relai_ui', 'snapshot', { capability: PROCESS, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.snapshot }) }),
     expose('relai_ui', 'interact', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'interaction', 'target'], omit: UI_OMIT.interact }) }),
-    expose('relai_ui', 'screenshot', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.screenshot }) }),
-    expose('relai_ui', 'console', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.console }) }),
-    expose('relai_ui', 'network', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.network }) }),
+    expose('relai_ui', 'screenshot', { capability: PROCESS, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.screenshot }) }),
+    expose('relai_ui', 'console', { capability: PROCESS, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.console }) }),
+    expose('relai_ui', 'network', { capability: PROCESS, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.network }) }),
     expose('relai_ui', 'viewport', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId', 'width', 'height'], omit: UI_OMIT.viewport }) }),
     expose('relai_ui', 'reload', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.reload }) }),
-    expose('relai_ui', 'stop', { capability: PROCESS, keepAction: true, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.stop }) })
+    expose('relai_ui', 'stop', { capability: PROCESS, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ required: ['sessionId'], omit: UI_OMIT.stop }) })
+  ],
+  [OP.COMPUTER]: [
+    expose('relai_computer', 'status', { capability: COMPUTER, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ omit: COMPUTER_OMIT.status }) }),
+    expose('relai_computer', 'displays', { capability: COMPUTER, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ omit: COMPUTER_OMIT.displays }) }),
+    expose('relai_computer', 'screenshot', { capability: COMPUTER, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ omit: COMPUTER_OMIT.screenshot }) }),
+    expose('relai_computer', 'move', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['x', 'y'], omit: COMPUTER_OMIT.move }) }),
+    expose('relai_computer', 'click', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['x', 'y'], omit: COMPUTER_OMIT.click }) }),
+    expose('relai_computer', 'double_click', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['x', 'y'], omit: COMPUTER_OMIT.double_click }) }),
+    expose('relai_computer', 'right_click', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['x', 'y'], omit: COMPUTER_OMIT.right_click }) }),
+    expose('relai_computer', 'drag', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['x', 'y', 'toX', 'toY'], omit: COMPUTER_OMIT.drag }) }),
+    expose('relai_computer', 'scroll', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['direction'], omit: COMPUTER_OMIT.scroll }) }),
+    expose('relai_computer', 'type', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['text'], omit: COMPUTER_OMIT.type }) }),
+    expose('relai_computer', 'key', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['key'], omit: COMPUTER_OMIT.key }) }),
+    expose('relai_computer', 'hotkey', { capability: COMPUTER, keepAction: true, publicContract: contract({ required: ['keys'], omit: COMPUTER_OMIT.hotkey }) })
   ],
   [OP.VALIDATE_CHECKS]: [expose('relai_validate', 'checks', { capability: EXECUTE })],
   [OP.VALIDATE_DIAGNOSTICS]: [expose('relai_validate', 'diagnostics', { capability: EXECUTE })],
   [OP.VALIDATE_HTTP]: [expose('relai_validate', 'http', { capability: READ })],
   [OP.CHANGES_DIFF]: [expose('relai_changes', 'diff', { capability: READ })],
-  [OP.CHANGES_CHECKPOINT]: [expose('relai_changes', 'checkpoint', { capability: READ })],
+  [OP.CHANGES_CHECKPOINT]: [expose('relai_changes', 'checkpoint', { capability: READ, behavior: { taskScope: 'optional' } })],
   [OP.CHANGES_REPLAY]: [expose('relai_changes', 'replay', { capability: READ })],
   [OP.CHANGES_RESTORE]: [expose('relai_changes', 'restore', { capability: WRITE })],
   [OP.CHANGES_RESET]: [expose('relai_changes', 'reset', {
     capability: WRITE,
-    approval: args => ({ message: `Discard workspace changes using ${args.removeUntracked ? 'RESET_AND_CLEAN' : 'RESET'}?` })
+    approval: args => ({ message: `Discard tracked workspace changes${args.removeUntracked ? ' and remove untracked files and directories' : ''}?` })
   })],
   [OP.CHANGES_TIDY_PLAN]: [expose('relai_changes', 'tidy_plan', { capability: READ })],
   [OP.CHANGES_TIDY_RUN]: [expose('relai_changes', 'tidy_run', { capability: WRITE })],
@@ -128,6 +165,7 @@ function expose(publicName, action, options = {}) {
     keepAction: options.keepAction === true,
     capability: String(options.capability || ''),
     approval: typeof options.approval === 'function' ? options.approval : null,
+    behavior: options.behavior ? Object.freeze({ ...options.behavior }) : null,
     publicContract: options.publicContract || null
   });
 }
@@ -165,6 +203,7 @@ function buildActionRegistry(bindingsByOperation) {
         keepAction: exposure.keepAction,
         capability: exposure.capability,
         approval: exposure.approval,
+        behavior: exposure.behavior,
         publicContract: exposure.publicContract
       }));
     }

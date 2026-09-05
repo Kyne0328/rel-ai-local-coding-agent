@@ -5,6 +5,7 @@ import { checkEvidenceReusable, repeatFailureCount } from './evidence.js';
 import { classifyTaskIntent, normalizeTaskIntent } from './intent.js';
 import { classifyWorkflowRisk } from './risk.js';
 import { discoverRepositoryTopology, packageForPath } from './topology.js';
+import { taskValidationReadiness } from './completionReadiness.js';
 
 async function buildWorkflowSnapshot(input = {}) {
   const integrity = input.taskIntegrity || {};
@@ -56,9 +57,14 @@ function summarizeEvidence(receipts, integrity) {
 }
 function normalizeCompletion(explicit, integrity, changedFiles) {
   if (explicit && typeof explicit === 'object') return { hardReady: explicit.hardReady === true, blockers: unique(explicit.blockers || []), recommendations: unique(explicit.recommendations || []) };
-  if (!changedFiles.length) return { hardReady: true, blockers: [], recommendations: [] };
-  const currentValidation = integrity.validationResult === 'passed' && Number(integrity.latestValidatedMutationGeneration || 0) === Number(integrity.mutationGeneration || 0);
-  return { hardReady: currentValidation, blockers: currentValidation ? [] : ['current mutation generation has no passed authoritative validation'], recommendations: [] };
+  const readiness = taskValidationReadiness(integrity, changedFiles);
+  if (readiness.ready) return { hardReady: true, blockers: [], recommendations: [] };
+  const blocker = readiness.knownValidationFailure
+    ? 'current task has a known failed validation'
+    : readiness.validatedMutationGeneration !== readiness.mutationGeneration && integrity.hasPassedValidation === true
+      ? 'current mutation generation changed after the last passed authoritative validation'
+      : 'current mutation generation has no passed authoritative validation';
+  return { hardReady: false, blockers: [blocker], recommendations: [] };
 }
 function unique(values) { return [...new Set((Array.isArray(values) ? values : []).map(item => String(item || '').trim().replaceAll('\\', '/')).filter(Boolean))]; }
 

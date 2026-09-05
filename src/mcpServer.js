@@ -83,7 +83,7 @@ function createRelaiMcpServer(options = {}) {
     'Rel.AI Artifact',
     new ResourceTemplate(ARTIFACT_RESOURCE_TEMPLATE, { list: undefined }),
     {
-      description: 'Private task-scoped workspace artifact returned by relai_read asResource.',
+      description: 'Private principal- and workspace-bound artifact returned by relai_read asResource.',
       mimeType: 'application/octet-stream',
       cacheHint: { ttlMs: 0, cacheScope: 'private' }
     },

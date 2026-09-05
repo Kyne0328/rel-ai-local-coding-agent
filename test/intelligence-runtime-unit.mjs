@@ -14,6 +14,7 @@ const zoektSource = fs.readFileSync(new URL('../src/repository/intelligence/zoek
 const indexBuildSource = fs.readFileSync(new URL('../src/repository/intelligence/indexBuild.js', import.meta.url), 'utf8');
 const queryServiceSource = fs.readFileSync(new URL('../src/repository/intelligence/queryService.js', import.meta.url), 'utf8');
 const queryWorkerClientSource = fs.readFileSync(new URL('../src/repository/intelligence/queryWorkerClient.js', import.meta.url), 'utf8');
+const queryWorkerSource = fs.readFileSync(new URL('../src/repository/intelligence/queryWorker.js', import.meta.url), 'utf8');
 const repositoryServiceSource = fs.readFileSync(new URL('../src/repository/intelligence/service.js', import.meta.url), 'utf8');
 const lexicalFallbackSource = fs.readFileSync(new URL('../src/repository/intelligence/lexicalFallback.js', import.meta.url), 'utf8');
 assert.doesNotMatch(zoektSource, /spawnSync/, 'Zoekt subprocesses must never block the MCP event loop');
@@ -24,6 +25,10 @@ assert.match(indexBuildSource, /await rebuildZoektIndex\(/, 'full Zoekt rebuilds
 assert.match(queryServiceSource, /await searchZoekt\(/, 'query-time Zoekt search must remain asynchronous');
 assert.match(queryServiceSource, /options\.sourceCache \|\| new Map\(\)/, 'repository queries must accept a generation-aware shared source cache');
 assert.match(queryWorkerClientSource, /new Worker\(new URL\('\.\/queryWorker\.js'/, 'repository query work must execute in a dedicated worker');
+assert.doesNotMatch(queryWorkerClientSource, /warmIdleReaders|type: 'warm'/,
+  'one query must not eagerly warm every reader slot');
+assert.match(queryWorkerSource, /SOURCE_CACHE_MAX_FILES/, 'query worker source caching must have a file-count bound');
+assert.match(queryWorkerSource, /SOURCE_CACHE_MAX_BYTES/, 'query worker source caching must have a byte bound');
 assert.match(repositoryServiceSource, /runRepositoryQuery/, 'the repository service must route query work through the worker client');
 assert.doesNotMatch(repositoryServiceSource, /queryCodeInspect|querySemanticSearch/, 'the main repository service must not execute synchronous query implementations directly');
 
@@ -79,6 +84,9 @@ try {
   assert.equal(indexStatus.metadata?.runtimeStale, false);
   assert.equal(semantic.privacy.includes('No source text'), true);
   assert.equal(semantic.neuralEmbeddings, false);
+  assert.equal(typeof semantic.retrieval?.degraded, 'boolean');
+  assert.equal(semantic.retrieval?.fallback?.used, true,
+    'semantic search must report when Zoekt is unavailable and source-authoritative fallback is used');
   assert.match(semantic.strategy, /graph-diffusion$/);
   assert.equal(semantic.results[0].path, 'src/attendanceService.js');
 
@@ -89,7 +97,7 @@ try {
   }, { watch: false });
   assert.equal(batchedSemantic.ok, true);
   assert.equal(batchedSemantic.execution.maxConcurrentSteps, 2,
-    'semantic batches must report the repository query pool\'s bounded read concurrency');
+    'two-query semantic batches should report the two units that actually ran concurrently');
   assert.ok(batchedSemantic.resultCount <= 3, 'semantic batch maxResults must be an aggregate cap');
   assert.ok(batchedSemantic.returnedBytes <= 4000, 'semantic batch maxBytes must be an aggregate cap');
   assert.match(batchedSemantic.strategy, /read-pool$/);

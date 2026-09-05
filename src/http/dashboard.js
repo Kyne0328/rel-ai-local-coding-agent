@@ -10,7 +10,7 @@ import * as configEditor from "../configEditor.js";
 import { packageMetadata as pkg, resolvePackagePath } from '../packageMetadata.js';
 import * as connection from "../connectionProfile.js";
 import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
-import { renderDashboardAccordion, renderDashboardNav, renderDashboardShellBootstrap, renderDashboardWindowTitlebar } from "./dashboardShellChrome.js";
+import { renderDashboardAccordion, renderDashboardMobileNav, renderDashboardNav, renderDashboardShellBootstrap, renderDashboardWindowTitlebar } from "./dashboardShellChrome.js";
 import { getOnboardingStatus, writeOnboardingState } from "../onboardingState.js";
 import { getVersion } from "../version.js";
 import { resolveRequireHttpToken } from "./auth.js";
@@ -23,7 +23,7 @@ import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, j
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
-import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS } from '../ui/navigation-catalog.js';
+import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS, MOBILE_PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS } from '../ui/navigation-catalog.js';
 import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
 import { listManagedProcesses, managedProcessStateRevision, onManagedProcessChange } from '../processManager.js';
 import { readCachedStaticAsset } from './dashboardAssets.js';
@@ -445,7 +445,7 @@ ${renderDashboardWindowTitlebar()}
     <div class="sidebar-note">Live status from this computer.</div>
   </aside>
   <main id="main" class="main" tabindex="-1" aria-labelledby="pageTitle">
-    <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardNav(MOBILE_NAV_ITEMS)}</nav>
+    <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardMobileNav(MOBILE_PRIMARY_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS)}</nav>
     <header class="topbar">
       <div class="title-wrap">
         <h1 class="page-title" id="pageTitle">Overview</h1>

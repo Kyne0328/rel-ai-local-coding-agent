@@ -64,6 +64,7 @@ function compactForConnector(name, value, args = {}) {
         workspace,
         work_id: value.work_id,
         task: value.task,
+        activeRelatedWork: value.activeRelatedWork,
         backgroundOperation: value.backgroundOperation,
         state: workspace && value.workspace ? policySentence(value.workspace.policy) : null,
         workspaceCount: value.workspaceCount,

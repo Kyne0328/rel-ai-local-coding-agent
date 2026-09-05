@@ -15,6 +15,7 @@ import { relaiExec } from '../bridge/exec.js';
 import { startTask, taskBootstrapFromSnapshot } from './task.js';
 import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from '../processManager.js';
 import { runUiAction } from '../webAutomationManager.js';
+import { runComputerAction } from '../computerManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
@@ -23,14 +24,22 @@ import { readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistorySe
 import { selectRelevantSkills } from '../skillDiscovery.js';
 import { buildTaskContinuity, rankBootstrapGroups } from '../context/taskContinuity.js';
 import { knowledgeSettings } from '../knowledgeStore.js';
+import { manageSkill } from '../skillManager.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 import { createReviewCheckpoint, replayReviewCheckpoint } from '../reviewCheckpoints.js';
+import { compactSessionSummary } from '../context/session-compactor.js';
+import { compactActiveRelatedWork } from '../context/activeRelatedWork.js';
+import { getToolActivity } from '../toolActivity.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args, context) => {
   const task = startTask(workspace, args);
+  const taskActivity = getToolActivity();
+  const currentTask = taskActivity.tasks.find(item => String(item.id || item.taskId || '') === task.work_id) || null;
+  const activeRelatedWork = compactActiveRelatedWork(taskActivity, currentTask || {});
+  const taskResult = activeRelatedWork.length ? { ...task, activeRelatedWork } : task;
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
   if (bootstrapMode === 'none') {
     scheduleIntelligenceWarmup(workspace, config);
-    return task;
+    return taskResult;
   }
   const snapshot = await repoSnapshot(workspace, config, {
     maxEntries: bootstrapMode === 'full' ? undefined : 64,
@@ -39,6 +48,10 @@ const startTaskHandler = inWorkspace(async (workspace, config, args, context) =>
   });
   const taskQuery = [task.objective, task.title].filter(Boolean).join(' ');
   const hostContextSummary = String(args.contextSummary || '').trim().slice(0, 3000);
+  const recoveredSession = context?.requestTaskContext?.session;
+  const recoveredTask = recoveredSession && String(recoveredSession.id || recoveredSession.taskId || '') === task.work_id
+    ? compactSessionSummary(recoveredSession)
+    : null;
   const suggestedSkills = selectRelevantSkills(snapshot.skills, taskQuery, { limit: 3 });
   const relatedTasks = readRelevantTaskEpisodes(config, workspace.alias, taskQuery, { excludeTaskId: task.work_id, limit: 3 });
   const continuity = buildTaskContinuity(config, {
@@ -62,15 +75,16 @@ const startTaskHandler = inWorkspace(async (workspace, config, args, context) =>
   const bootstrap = {
     ...baseBootstrap,
     ...supplemental,
+    ...(recoveredTask ? { recoveredTask } : {}),
     ...(hostContextSummary ? { hostContextSummary } : {}),
     ...(cachedIntelligence ? { repositoryIntelligence: cachedIntelligence } : {})
   };
   if (bootstrapMode === 'full') {
-    const result = { ...task, bootstrap };
+    const result = { ...taskResult, bootstrap };
     scheduleIntelligenceWarmup(workspace, config);
     return result;
   }
-  const result = { ...task, bootstrap };
+  const result = { ...taskResult, bootstrap };
   scheduleIntelligenceWarmup(workspace, config);
   return result;
 });
@@ -104,6 +118,7 @@ const HANDLERS = Object.freeze({
   processStop: (config, args, context) => stopManagedProcess(config, args, context),
   processList: (config, args, context) => listManagedProcesses(config, args, context),
   ui: inWorkspace((workspace, config, args, context) => runUiAction(workspace, config, args, context)),
+  computer: inWorkspace((workspace, config, args, context) => runComputerAction(workspace, config, args, context)),
   semanticSearch: inWorkspace((workspace, config, args, context) => relaiSemanticSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context)),
   diagnosticsRun: inWorkspace((workspace, config, args, context) => relaiDiagnosticsRun(workspace, config, args, context)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
@@ -112,7 +127,13 @@ const HANDLERS = Object.freeze({
   httpProbe: inWorkspace((workspace, config, args) => relaiHttpProbe(workspace, config, args)),
   diff: inWorkspace((workspace, config, args, context) => relaiDiff(workspace, config, withTaskOwnedReviewContext(config, workspace, args, context))),
   reviewCheckpoint: inWorkspace(async (workspace, config, args, context) => {
-    const review = await relaiDiff(workspace, config, withTaskOwnedReviewContext(config, workspace, args, context));
+    const scope = String(args.scope || '').trim();
+    const taskId = String(context.taskId || args.work_id || '').trim();
+    if (scope === 'task' && !taskId) throw new Error("relai_changes action 'checkpoint' with scope:'task' requires work_id.");
+    const reviewArgs = scope === 'workspace' || !taskId
+      ? { ...args, scope: 'workspace' }
+      : withTaskOwnedReviewContext(config, workspace, args, context);
+    const review = await relaiDiff(workspace, config, reviewArgs);
     return createReviewCheckpoint(workspace, config, review);
   }),
   reviewReplay: inWorkspace((workspace, config, args) => replayReviewCheckpoint(workspace, config, args.checkpointId)),
@@ -130,6 +151,7 @@ const HANDLERS = Object.freeze({
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args, context) => planEdit(workspace, config, args, context)),
+  skillManage: inWorkspace((workspace, config, args, context) => manageSkill(workspace, config, args, context)),
   cancelTask,
   completeTask
 });

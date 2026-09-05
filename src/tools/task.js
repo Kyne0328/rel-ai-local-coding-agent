@@ -1,7 +1,7 @@
 
 import * as crypto from 'node:crypto';
 import { getCurrentToolActivityContext, getToolActivity, taskError } from '../toolActivity.js';
-import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { readTaskHistory, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { principalFingerprint } from '../mcp/principal.js';
 import { isTerminalTaskStatus } from '../taskState.js';
 import { classifyTaskIntent } from '../workflow/intent.js';
@@ -10,22 +10,49 @@ import { OPERATION_IDS as OP } from './operationIds.js';
 
 const TERMINAL_REFERENCE_OPERATIONS = new Set([OP.PROCESS_LIST, OP.PROCESS_READ, OP.PROCESS_STOP, OP.WORK_STATUS]);
 
-function findReusableActiveTask(workspace, args = {}, principal, conversationId = '') {
+function findReusableTask(config, workspace, args = {}, principal, conversationId = '') {
   const conversation = String(conversationId || '').trim();
   const workspaceAlias = String(workspace || '').trim();
   const objective = normalizeTaskGoal(args.objective);
   const title = normalizeTaskGoal(args.title);
   if (!conversation || !workspaceAlias || (!objective && !title)) return null;
   const expectedPrincipal = principalFingerprint(principal || 'anonymous');
-  return getToolActivity().tasks.find(session => {
-    if (!session || session.status === 'inactive' || isTerminalTaskStatus(session.status)) return false;
+  const matches = session => {
+    if (!session || isTerminalTaskStatus(session.status)) return false;
     if (String(session.workspace || '') !== workspaceAlias) return false;
     if (String(session.correlation?.conversationId || '') !== conversation) return false;
     const sessionPrincipal = String(session.principalFingerprint || '');
     if (!sessionPrincipal || !safeEqual(sessionPrincipal, expectedPrincipal)) return false;
     if (objective) return normalizeTaskGoal(session.objective) === objective;
     return normalizeTaskGoal(session.title) === title;
-  }) || null;
+  };
+  const activity = getToolActivity();
+  const live = activity.tasks.find(matches);
+  if (live) return live;
+  const persisted = readTaskHistory(config, activity, { limit: 500 })
+    .filter(session => !isTerminalTaskStatus(session?.status))
+    .filter(session => String(session?.workspace || '') === workspaceAlias)
+    .filter(session => String(session?.correlation?.conversationId || '') === conversation)
+    .filter(session => objective
+      ? normalizeTaskGoal(session?.objective) === objective
+      : normalizeTaskGoal(session?.title) === title)
+    .map(session => readTaskHistorySessionRecord(config, session.id, { reconcileInactive: false }))
+    .filter(matches);
+  if (persisted.length > 1) {
+    throw taskError(
+      'TASK_RECOVERY_AMBIGUOUS',
+      'Multiple unfinished Rel.AI work sessions match this ChatGPT conversation, project, and goal. Rel.AI will not create another duplicate task automatically.',
+      {
+        retryable: false,
+        candidateCount: persisted.length,
+        allowedAlternatives: [
+          'Open Rel.AI Tasks and continue one of the matching unfinished work sessions by its work_id.',
+          'Cancel obsolete matching tasks, then retry relai_work begin for this goal.'
+        ]
+      }
+    );
+  }
+  return persisted[0] || null;
 }
 
 function normalizeTaskGoal(value) {
@@ -138,4 +165,4 @@ function withTaskIdentity(value, taskId) {
   return { ok: true, value, work_id: identity };
 }
 
-export { startTask, taskBootstrapFromSnapshot, assertKnownTask, assertTaskWorkspaceOwnership, findReusableActiveTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity };
+export { startTask, taskBootstrapFromSnapshot, assertKnownTask, assertTaskWorkspaceOwnership, findReusableTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity };

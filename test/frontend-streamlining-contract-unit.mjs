@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS, WORK_NAV_ITEMS, desktopNavigationOwner } from '../src/ui/navigation-catalog.js';
+import { APPLICATION_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS, MOBILE_NAV_ITEMS, MOBILE_PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS, WORK_NAV_ITEMS, desktopNavigationOwner } from '../src/ui/navigation-catalog.js';
 import { workspaceMenuHtml } from '../src/ui/components/workspace-menu.js';
 import { canonicalPathFor, normalizeRouteKey } from '../src/ui/route-policy.js';
-import { CHATGPT_CONNECTOR_CREATE_URL, RELAI_CONNECTOR_ICON_FILENAME, RELAI_CONNECTOR_ICON_URL, chatGptFirstPrompt, chatGptGuideSteps } from '../src/ui/features/settings/connection-guidance.js';
+import { CHATGPT_CONNECTOR_CREATE_URL, CHATGPT_REFRESH_BUSINESS_NOTE, CHATGPT_REFRESH_STEPS, RELAI_CONNECTOR_ICON_FILENAME, RELAI_CONNECTOR_ICON_URL, chatGptFirstPrompt, chatGptGuideSteps } from '../src/ui/features/settings/connection-guidance.js';
 import { connectionLayerViews, hasObservedMcpConnection, hasObservedMcpToolCall } from '../src/ui/connection-state.js';
 import { connectionPrimaryAction } from '../src/ui/features/settings/connector.js';
 import { connectionRestartResult } from '../src/ui/features/settings/connection-recovery.js';
@@ -21,6 +21,8 @@ assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['processes', 'diagnosti
 assert.equal(SYSTEM_NAV_ITEMS.find(item => item.id === 'usage')?.label, 'Analytics', 'the dedicated analytics page must use the same name as Overview links');
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'code', 'workspaces', 'activity', 'system', 'settings']);
+assert.deepEqual(MOBILE_PRIMARY_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity']);
+assert.deepEqual(MOBILE_MORE_NAV_ITEMS.map(item => item.id), ['code', 'system', 'settings']);
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Connection', 'Preferences', 'Memory & learning', 'App', 'About']);
 assert.equal(APPLICATION_NAV_ITEMS.find(item => item.id === 'system')?.label, 'System');
 assert.equal(desktopNavigationOwner('connection'), 'settings');
@@ -56,6 +58,8 @@ assert.match(createSteps, /Rel\.AI MCP/i);
 assert.equal(CHATGPT_CONNECTOR_CREATE_URL, 'https://chatgpt.com/plugins#settings/Connectors?create-connector=true');
 assert.equal(RELAI_CONNECTOR_ICON_URL, '/assets/favicon.png');
 assert.equal(RELAI_CONNECTOR_ICON_FILENAME, 'relai-mcp.png');
+assert.match(CHATGPT_REFRESH_STEPS.join(' '), /Enterprise\/Edu.*Workspace settings.*Apps.*Action control.*Refresh/i, 'refresh guidance must use the current Enterprise/Edu action-review flow');
+assert.match(CHATGPT_REFRESH_BUSINESS_NOTE, /Business.*recreate and republish/i, 'refresh guidance must explain the current Business republish limitation');
 assert.match(onboardingSource, /createChatGptSetupGuide/, 'Overview onboarding must reuse the canonical ChatGPT connector guide after tunnel setup');
 assert.match(onboardingSource, /actionType:\s*'guide'/, 'the ChatGPT onboarding step must render guidance inline instead of routing back to Connection');
 assert.match(onboardingSource, /includeFirstPrompt:\s*false/, 'ChatGPT connector setup must not show a fake project prompt before a project exists');
@@ -151,7 +155,10 @@ assert.match(wizard, /id="runtimeKeyToggle"[^>]*aria-controls="tunnelApiKeyInput
 assert.doesNotMatch(wizard, /ngrok|Cloud gateway|Direct connection|approval token/i);
 
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-validation.js')), false);
-assert.match(workspaceMenuHtml([], ''), /aria-label="Project filter: All projects"/);
+const workspaceMenuMarkup = workspaceMenuHtml([{ alias: 'app' }], '');
+assert.match(workspaceMenuMarkup, /aria-label="Project filter: All projects"/);
+assert.equal((workspaceMenuMarkup.match(/tabindex="0"/g) || []).length, 1, 'project listbox must expose one roving tab stop');
+assert.equal((workspaceMenuMarkup.match(/tabindex="-1"/g) || []).length, 1, 'inactive project options must stay out of the page tab sequence');
 const diagnosticsSource = read('src/ui/features/settings/diagnostics.js');
 const statusRendererSource = read('electron/renderer/status.js');
 assert.doesNotMatch(statusRendererSource, /setInterval\(renderTemporalText/, 'fallback status clock must not run a permanent one-second interval');
@@ -183,7 +190,7 @@ assert.match(toolsSource, /Tool catalog unavailable/);
 assert.match(toolsSource, /cta: 'Retry'/);
 assert.match(toolsSource, /result\?\.ok === false \|\| tools == null/, 'tool API failures must not masquerade as an empty catalog');
 const appCss = read('src/ui/styles/app.css');
-assert.match(appCss, new RegExp(`mobile-nav[^}]*grid-template-columns:\\s*repeat\\(${MOBILE_NAV_ITEMS.length},`, 's'), 'mobile navigation must allocate one grid column per current top-level destination');
+assert.match(appCss, /mobile-nav-more-menu/, 'mobile navigation must keep lower-frequency destinations in an explicit More menu');
 for (const selector of ['.settings-shell', '.connection-page', '.tools-grid', '.diagnostic-page', '.workspace-grid', '.processes-card']) {
   assert.doesNotMatch(appCss, new RegExp(selector.replace('.', '\\.')), `app.css still owns feature selector ${selector}`);
 }
@@ -244,7 +251,8 @@ assert.doesNotMatch(interactionSafetySource, /window\.confirm/, 'Rel.AI interact
 assert.match(read('src/ui/command-palette.js'), /showClose: false/, 'Quick navigation remains the intentional close-button exception');
 const connectorRefreshModalSource = read('src/ui/connector-refresh-modal.js');
 assert.match(connectorRefreshModalSource, /createElement\('ol'\)/, 'connector refresh instructions must use an ordered list');
-assert.match(connectorRefreshModalSource, /setDismissEnabled\(true\)/, 'connector refresh notices must unlock normal modal dismissal after the reading delay');
+assert.doesNotMatch(connectorRefreshModalSource, /setInterval|dismissDelayMs|escDisabled:\s*true/, 'connector refresh notices must be immediately dismissible without a reading lockout');
+assert.match(connectorRefreshModalSource, /CHATGPT_REFRESH_STEPS/, 'connector refresh modal must reuse the canonical ChatGPT refresh guidance');
 assert.match(read('src/ui/update-available-modal.js'), /actions\.appendChild\(later\)[\s\S]*actions\.appendChild\(primaryAction\)/, 'update dialogs must place Later before the primary update action');
 assert.match(workspaceFormSource, /data-source-picker-wrap[\s\S]*isDesktop/, 'project forms must gate the native source-folder picker to the desktop surface');
 assert.match(workspaceFormSource, /ws-source-manual-only/, 'browser project forms must keep the manual source-folder path as the single fallback control');
@@ -261,6 +269,13 @@ assert.doesNotMatch(connectorSource, /connection-status-body[\s\S]{0,600}field-c
 assert.match(connectorSource, /action\.href===['"]#diagnostics['"]/, 'connection recovery must not render a duplicate Troubleshooting link beside the primary recovery action');
 assert.match(connectorSource, /data-restart-connection/, 'a retryable Secure MCP Tunnel failure must expose the desktop retry operation directly');
 assert.match(connectorSource, /relai:desktop-status-refresh/, 'manual Connection refresh must apply authoritative Electron status before the aggregate dashboard refresh');
+assert.match(connectorSource, /EmptyState/, 'Connection load failures must use the shared recoverable empty state');
+assert.match(connectorSource, /cta:'Retry'|cta:\s*'Retry'/, 'Connection load failures must expose a direct Retry action');
+const sessionsSource = read('src/ui/features/sessions/index.js');
+const httpServerSource = read('src/httpServer.js');
+assert.doesNotMatch(sessionsSource, /pending-approvals|APPROVALS_URL|APPROVAL_DECISION_URL|approvalCardHtml|decideDashboardApproval/, 'Tasks must not retain the removed dashboard approval surface');
+assert.doesNotMatch(httpServerSource, /dashboardApprovals|\/api\/approvals/, 'the HTTP server must not retain dashboard approval endpoints');
+assert.equal(fs.existsSync(path.join(root, 'src/http/dashboardApprovals.js')), false, 'removed dashboard approval HTTP module must stay deleted');
 assert.match(diagnosticsSource, /data-restart-connection/, 'Troubleshooting must offer a direct tunnel restart instead of only routing back to Connection');
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/advanced.js')), false, 'technical Advanced settings must not remain in the product surface');
 

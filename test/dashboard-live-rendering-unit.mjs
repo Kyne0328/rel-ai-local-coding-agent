@@ -60,6 +60,38 @@ async function exerciseSyncLiveView(updateBehavior) {
   return { calls, result, revisionKey: context.testApi.readFingerprint() };
 }
 
+async function exerciseLiveViewScheduler() {
+  const frames = [];
+  const calls = [];
+  let state = { revision: 1 };
+  const context = {
+    window: {
+      requestAnimationFrame(callback) {
+        frames.push(callback);
+        return frames.length;
+      }
+    },
+    dashboardHidden: () => false,
+    getStore: () => state,
+    syncLiveView: async data => { calls.push(data); }
+  };
+  vm.runInNewContext(`
+    let _liveViewFrame = 0;
+    let _liveViewSyncing = false;
+    let _liveViewPending = false;
+    let _hiddenViewDirty = false;
+    ${functionSource(dashboard, 'scheduleLiveViewSync')}
+    globalThis.testApi = { scheduleLiveViewSync };
+  `, context);
+  context.testApi.scheduleLiveViewSync();
+  state = { revision: 2 };
+  context.testApi.scheduleLiveViewSync();
+  assert.equal(frames.length, 1, 'live events in one frame must share one UI synchronization');
+  await frames[0]();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].revision, 2, 'the coalesced UI update must use the latest dashboard state');
+}
+
 function exerciseRuntimeLogDelta(runtime, change) {
   const calls = [];
   const context = {
@@ -106,11 +138,14 @@ assert.doesNotMatch(
   /renderViewIfChanged|rerender/,
   'tool-call snapshots must not remount the active route directly'
 );
+assert.match(functionSource(dashboard, 'liveOnEvent'), /scheduleLiveViewSync\(\)/, 'live event bursts must defer route DOM synchronization to the frame scheduler');
+assert.doesNotMatch(functionSource(dashboard, 'liveOnEvent'), /await syncLiveView/, 'individual SSE events must not synchronously block on route DOM work');
 assert.equal(dashboard.includes('return updateHomeLiveState(root, data);'), true);
 assert.equal(dashboard.includes('module.updateTaskSessions(root, data)'), true);
 assert.equal(dashboard.includes('module.updateActivityLiveState(data)'), true, 'Activity live updates must receive the full dashboard snapshot for session correlation');
 assert.equal(dashboard.includes('module.updateWorkspacesLiveState(root, data)'), true, 'Projects must apply live operational state without a manual refresh');
 assert.equal(dashboard.includes('module.updateSystemLiveState(root, currentSection(), data)'), true);
+await exerciseLiveViewScheduler();
 {
   const supported = await exerciseSyncLiveView(true);
   assert.deepEqual(supported.calls.map(call => call[0]), ['update']);
@@ -140,36 +175,40 @@ assert.doesNotMatch(desktopStatusSource, /renderViewIfChanged/, 'desktop status 
 assert.match(home, /export function updateHomeLiveState/);
 assert.match(sessions, /export function updateTaskSessions/);
 assert.match(activity, /export function updateActivityLiveState/, 'Activity must expose session-aware live synchronization');
-assert.match(activity, /<th scope="col" class="activity-tool-column">(?:Tool|Action)<\/th>/, 'Activity must preserve the tool/action column');
-assert.match(activity, /<th scope="col" class="activity-task-column">Task<\/th>/, 'Activity must identify the task that owns each event');
+assert.match(activity, /<th scope="col" class="activity-message-column">Activity<\/th>/, 'Activity must use one consolidated primary activity column');
+assert.doesNotMatch(activity, /activity-tool-column|activity-task-column|activity-status-column|activity-action-column/, 'Activity must not split scan context across redundant desktop columns');
 assert.match(activity, /activitySessionView\(entry, _sessionIndex\)/, 'Activity rows must resolve task titles from the current session index');
-assert.match(activity, /session\.workspace, session\.shortId/, 'Activity task cells must retain project context and a short stable task identifier');
-assert.match(activity, /<th scope="col" class="activity-message-column">Message<\/th>/, 'Activity must preserve the Message column');
+assert.match(activity, /activity-row-task[\s\S]*activity-row-project/, 'Activity rows must retain task and project context as supporting metadata');
+assert.match(activity, /activity-row-trigger/, 'Activity rows must retain one native keyboard-focusable detail trigger');
 assert.match(activity, /routeHref\('tasks'/, 'Activity details must deep-link back to Sessions');
 assert.match(sessions, /data-session-fingerprint/, 'session rows must carry semantic fingerprints for keyed reconciliation');
 assert.match(functionSource(sessions, 'timingHtml'), /data-clock-relative/, 'ended and inactive task rows must show relative age instead of total duration');
 assert.match(functionSource(sessions, 'updateTaskSessions'), /syncSessionWorkspaceMenu\(current, data\.config\?\.workspaces \|\| \[\], workspace\)/, 'task live updates must keep the project filter synchronized with current configuration');
 assert.match(functionSource(sessions, 'updateTaskSessions'), /refreshOpenSession\(data\)/, 'live task updates must refresh an already-open task inspector');
 const refreshOpenSessionSource = functionSource(sessions, 'refreshOpenSession');
-assert.match(refreshOpenSessionSource, /data-session-inspector/, 'live task detail refreshes must target the persistent task inspector');
-assert.match(refreshOpenSessionSource, /activeTab/, 'live task detail refreshes must preserve the selected inspector tab');
-assert.match(refreshOpenSessionSource, /setSessionTab\(content, activeTab\)/, 'live task detail refreshes must restore the selected inspector tab');
-assert.match(refreshOpenSessionSource, /replaceChildren\(content\)/, 'open task details must update the inspector in place');
+assert.match(refreshOpenSessionSource, /renderOpenSessionDetail\(next, \{ preserveTab: true, fingerprint \}\)/, 'live task detail refreshes must use the shared in-place inspector renderer');
+const renderOpenSessionDetailSource = functionSource(sessions, 'renderOpenSessionDetail');
+assert.match(renderOpenSessionDetailSource, /data-session-inspector/, 'task detail rendering must target the persistent task inspector');
+assert.match(renderOpenSessionDetailSource, /activeTab/, 'task detail rendering must preserve the selected inspector tab when hydrating or refreshing');
+assert.match(renderOpenSessionDetailSource, /setSessionTab\(content, activeTab\)/, 'task detail rendering must restore the selected inspector tab');
+assert.match(renderOpenSessionDetailSource, /replaceChildren\(content\)/, 'open task details must update the inspector in place');
 const technicalDetailsSource = functionSource(sessions, 'technicalDetailsSection');
 assert.match(technicalDetailsSource, /<h3>Identifiers<\/h3>/, 'session diagnostics must group task identifiers separately from runtime state');
 assert.match(technicalDetailsSource, /<h3>Runtime<\/h3>/, 'session diagnostics must group runtime state separately from identifiers');
 assert.doesNotMatch(technicalDetailsSource, /Request ID/, 'session diagnostics must not present the client protocol request ID as a task identifier');
 assert.doesNotMatch(technicalDetailsSource, /Trace ID/, 'session diagnostics must not present per-call trace IDs as stable task identifiers');
 assert.match(drawer, /export function updateDrawer/, 'shared drawers must support in-place content refreshes');
-const sessionFactsSource = functionSource(sessions, 'sessionFacts');
-assert.match(sessionFactsSource, /toolCallCount/, 'session rows must show their tool-call count');
-assert.match(sessionFactsSource, /tool call/, 'session rows must label tool-call counts accurately');
-assert.match(sessionFactsSource, /project file/, 'session rows must label project-file counts without product terminology');
-assert.doesNotMatch(sessionFactsSource, /risk/, 'session row facts must not surface workflow risk labels');
+const sessionRowSource = functionSource(sessions, 'sessionRow');
+assert.match(sessionRowSource, /toolCallCount/, 'session rows must keep the tool-call count visible in the scan-first list');
+assert.match(sessionRowSource, /project file/, 'session rows must keep the project-file count visible in the scan-first list');
+assert.doesNotMatch(sessionRowSource, /support artifact|sessionFacts/, 'session rows must keep unrelated secondary counters out of the scan-first list');
+assert.match(functionSource(sessions, 'buildSessionDetail'), /detail\('Tool calls'/, 'task inspector must retain tool-call counts after list simplification');
+assert.match(functionSource(sessions, 'buildSessionDetail'), /detail\('Project files'/, 'task inspector must retain project-file counts after list simplification');
 assert.doesNotMatch(functionSource(sessions, 'workflowTechnicalHtml'), /risk/, 'session details must not surface workflow risk labels');
 assert.doesNotMatch(sessions, /taskProgressHtml/, 'Sessions must not present per-tool progress as whole-task completion');
 assert.doesNotMatch(sessions, /Key activity/, 'session details must not duplicate the task trace with a second activity summary');
 const taskTraceSource = functionSource(sessions, 'taskTraceSection');
+assert.match(taskTraceSource, /mergeSessionEvents\(traceEvents, fallbackEvents\)/, 'open task Activity must merge new live events with the persisted trace instead of pinning the first loaded trace');
 assert.match(taskTraceSource, /data-show-older-events/, 'older task events must expand from the existing trace instead of opening a second event list');
 assert.doesNotMatch(taskTraceSource, /task-detail-overflow/, 'older task events must not render in a disconnected nested list');
 const eventRowSource = functionSource(sessions, 'eventRow');

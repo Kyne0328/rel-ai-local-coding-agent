@@ -5,9 +5,11 @@ const TOOL_INVOCATION_STATUS = Object.freeze({
   relai_search: ['Searching repository…', 'Repository searched'],
   relai_inspect: ['Inspecting code…', 'Code inspected'],
   relai_edit: ['Applying changes…', 'Changes applied'],
+  relai_skill: ['Saving learned skill…', 'Learned skill saved'],
   relai_exec: ['Running command…', 'Command finished'],
   relai_process: ['Managing process…', 'Process updated'],
   relai_ui: ['Testing local UI…', 'Local UI tested'],
+  relai_computer: ['Controlling computer…', 'Computer action finished'],
   relai_validate: ['Validating changes…', 'Validation finished'],
   relai_changes: ['Reviewing changes…', 'Changes reviewed'],
   relai_publish: ['Publishing changes…', 'Changes published']

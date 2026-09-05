@@ -61,7 +61,7 @@ assert.equal(electronPackage.build.mac.identity, null, 'macOS builds remain unsi
 assert.match(electronPackage.build.dmg.artifactName, /\$\{version\}[\s\S]*\$\{arch\}[\s\S]*\$\{ext\}/);
 assert.equal(electronPackage.build.nsis.deleteAppDataOnUninstall, false,
   'normal uninstall must not enable electron-builder app-data deletion');
-assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-local-coding-agent');
+assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-chatgpt-web-harness');
 assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
 assert.match(electronPackage.build.appImage.artifactName, /\$\{version\}[\s\S]*\$\{ext\}/);
 assert.match(electronPackage.build.deb.artifactName, /\$\{version\}[\s\S]*\$\{ext\}/);

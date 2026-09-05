@@ -15,7 +15,7 @@ const config = createWindowsUpdaterConfig(manifest);
 assert.deepEqual(config, {
   provider: 'github',
   owner: 'Kyne0328',
-  repo: 'rel-ai-mcp',
+  repo: 'rel-ai-chatgpt-web-harness',
   releaseType: 'release',
   updaterCacheDirName: 'rel-ai-mcp-launcher-updater'
 });
@@ -32,7 +32,7 @@ try {
   assert.equal(fs.readFileSync(result, 'utf8'), [
     'provider: github',
     'owner: Kyne0328',
-    'repo: rel-ai-mcp',
+    'repo: rel-ai-chatgpt-web-harness',
     'releaseType: release',
     'updaterCacheDirName: rel-ai-mcp-launcher-updater',
     ''

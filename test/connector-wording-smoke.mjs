@@ -14,7 +14,9 @@ const scannedFiles = [
   'README.md',
   'docs/SECURITY.md',
   'docs/WORKFLOW_RELIABILITY.md',
-  'public/dashboard.js'
+  'public/dashboard.js',
+  'src/ui/features/settings/connection-guidance.js',
+  'src/ui/connector-refresh-modal.js'
 ];
 
 const riskyPatterns = [
@@ -43,6 +45,10 @@ const allowlist = [
   { file: 'README.md', pattern: /Advanced connection settings/i },
   { file: 'README.md', pattern: /Preferences, Application, Advanced, and About/i },
   { file: 'README.md', pattern: /advanced port setting/i },
+  // Neutral product-boundary explanations are not connector capability claims.
+  { file: 'README.md', pattern: /Settings and diagnostics.*advanced controls/i },
+  { file: 'README.md', pattern: /does not grant ChatGPT unrestricted filesystem access/i },
+  { file: 'README.md', pattern: /does not bypass ChatGPT plan limits/i },
   { file: 'docs/WORKFLOW_RELIABILITY.md', pattern: /cannot widen access or bypass a denial/i }
 ];
 
@@ -74,7 +80,7 @@ if (findings.length) {
 }
 
 // Check compact validation wording from the authoritative registry.
-import { getToolDefinitions } from "../src/tools/schema.js";
+import { getPublicToolSchemas, getToolDefinitions } from "../src/tools/schema.js";
 const toolDefinitions = getToolDefinitions();
 const runChecksDescription = toolDefinitions.find((definition) => definition.name === 'relai_validate')?.description || '';
 
@@ -136,7 +142,38 @@ if (surfaceFindings.length) {
   process.exit(1);
 }
 
+const directivePatterns = [
+  { label: 'use when', pattern: /\buse when\b/i },
+  { label: 'use for', pattern: /\buse for\b/i },
+  { label: 'use to', pattern: /\buse to\b/i },
+  { label: 'do not', pattern: /\bdo not\b/i },
+  { label: 'prefer', pattern: /\bprefer\b/i },
+  { label: 'use only', pattern: /\buse only\b/i },
+  { label: 'keep one', pattern: /\bkeep one\b/i }
+];
+const directiveFindings = [];
+for (const tool of getPublicToolSchemas()) collectDirectiveDescriptions(tool, tool.name, directiveFindings);
+if (directiveFindings.length) {
+  console.error('Connector wording smoke test failed. Public MCP descriptions contain model-prescriptive workflow wording:');
+  for (const msg of directiveFindings) console.error(`  ${msg}`);
+  process.exit(1);
+}
+
 console.log(`Connector wording smoke test passed. Scanned ${scannedFiles.length} files and ${toolCount} tool definitions.`);
+
+function collectDirectiveDescriptions(value, path, findings) {
+  if (!value || typeof value !== 'object') return;
+  if (typeof value.description === 'string') {
+    for (const directive of directivePatterns) {
+      if (directive.pattern.test(value.description)) findings.push(`${path}: directive "${directive.label}" — "${value.description}"`);
+    }
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectDirectiveDescriptions(item, `${path}[${index}]`, findings));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) collectDirectiveDescriptions(child, `${path}.${key}`, findings);
+}
 
 function isAllowed(file, lineText) {
   return allowlist.some((item) => item.file === file && item.pattern.test(lineText));
