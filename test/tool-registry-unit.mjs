@@ -52,10 +52,10 @@ assert.deepEqual(
 );
 assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8') > 0, 'connector instructions must serialize to a non-empty payload');
 assert.match(connectorInstructions(config), /work_id is optional durable attribution/i, 'global instructions must make durable task identity optional');
-assert.match(connectorInstructions(config), /never infer an omitted task/i, 'global instructions must prohibit ambiguous implicit task attribution');
+assert.match(connectorInstructions(config), /omit it for workspace\/resource work and never infer one/i, 'global instructions must prohibit ambiguous implicit task attribution');
 assert.match(connectorInstructions(config), /approval/i, 'global instructions retain approval safety where defined');
 assert.match(connectorInstructions(config), /authoritative evidence/i, 'global instructions retain truthful evidence semantics');
-assert.match(connectorInstructions(config), /factual validation state/i, 'global instructions must describe validation as evidence rather than permission');
+assert.match(connectorInstructions(config), /validation is factual evidence, not execution permission/i, 'global instructions must describe validation as evidence rather than permission');
 assert.match(connectorInstructions(config), /brief normal assistant progress messages/i, 'global instructions must keep user-visible progress in normal assistant messages');
 assert.match(connectorInstructions(config), /Native tool invocation labels are supplemental status only/i, 'native status chrome must not suppress user-visible progress messages');
 assert.match(connectorInstructions(config), /Do not poll relai_work status merely to refresh UI/i, 'global instructions must avoid redundant UI-only status polling');

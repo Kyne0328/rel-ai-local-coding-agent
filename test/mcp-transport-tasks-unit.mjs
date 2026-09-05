@@ -124,7 +124,7 @@ try {
     }, {}), {
       principal: owner,
       transportType: 'streamable-http',
-      synchronousFallbackGraceMs: 0,
+      synchronousFallbackGraceMs: 100,
       executeToolResult: async (_config, calledName, calledArgs) => ({
         isError: false,
         structuredContent: { ok: true, tool: calledName, workspace: calledArgs.workspace }

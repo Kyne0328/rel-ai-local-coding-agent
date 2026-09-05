@@ -31,7 +31,7 @@ assert.ok(DESKTOP_NAV_ITEMS.every(item => String(item.label || '').trim()), 'eve
 assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.href, '#processes');
 assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.label, 'System');
 const settingsNavIds = SETTINGS_NAV_ITEMS.map(item => item.id);
-for (const required of ['connection', 'preferences', 'memory', 'application', 'about']) assert.ok(settingsNavIds.includes(required), `${required} settings must remain reachable`);
+for (const required of ['connection', 'preferences', 'learning', 'application', 'about']) assert.ok(settingsNavIds.includes(required), `${required} settings must remain reachable`);
 assert.equal(SETTINGS_NAV_ITEMS.find(item => item.id === 'connection')?.href, '#settings/connection');
 assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_MORE_NAV_ITEMS, MOBILE_PRIMARY_NAV_ITEMS/);
 assert.match(shellChrome, /renderDashboardMobileNav/);
@@ -45,7 +45,7 @@ assert.match(dashboard, /mountSettings\(element, settingsSubPage\(\)\)/);
 assert.match(dashboard, /settings\/connection/);
 assert.doesNotMatch(dashboard, /settings\/diagnostics/);
 assert.match(settings, /mountConnector/);
-assert.match(settings, /mountKnowledge/);
+assert.match(settings, /mountLearning/);
 assert.match(settings, /mountApplication/);
 assert.match(settingsShared, /<h2>\$\{esc\(title\)\}<\/h2>/, 'Settings pages must continue the shell H1 with an H2');
 assert.match(settingsAbout, /document\.createElement\('h4'\)/, 'About product identity must remain below the panel H3');

@@ -223,7 +223,7 @@ try {
 
   const recoveredRead = await mcp(reconnectSession, 31, 'tools/call', {
     name: 'relai_read',
-    arguments: { workspace: 'acceptance', work_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
+    arguments: { workspace: 'acceptance', paths: ['acceptance.txt'], guidanceMode: 'none' }
   });
   assert.equal(recoveredRead.result?.isError, false, JSON.stringify(recoveredRead));
   assert.equal(recoveredRead.result?.structuredContent?.items?.[0]?.content, 'packaged connector acceptance verified\n');
