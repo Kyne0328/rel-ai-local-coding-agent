@@ -33,6 +33,7 @@ function describeToolOperation(name, args = {}) {
       if (args.updateText) return `Applying a workspace patch${suffix}`;
       return `Editing the workspace${suffix}`;
     }
+    case OP.MEMORY_MANAGE: return `${String(args.action || 'Managing').replace(/^./, value => value.toUpperCase())} long-term memory${suffix}`;
     case OP.CHANGES_TIDY_PLAN: return `Reviewing generated artifacts${suffix}`;
     case OP.CHANGES_TIDY_RUN: return `Removing approved generated artifacts${suffix}`;
     case OP.VALIDATE_CHECKS: return `Running ${String(args.level || 'standard')} validation${suffix}`;

@@ -23,7 +23,7 @@ import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } f
 import { readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { selectRelevantSkills } from '../skillDiscovery.js';
 import { buildTaskContinuity, rankBootstrapGroups } from '../context/taskContinuity.js';
-import { knowledgeSettings } from '../knowledgeStore.js';
+import { knowledgeSettings, manageMemory } from '../knowledgeStore.js';
 import { manageSkill } from '../skillManager.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 import { createReviewCheckpoint, replayReviewCheckpoint } from '../reviewCheckpoints.js';
@@ -151,6 +151,7 @@ const HANDLERS = Object.freeze({
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args, context) => planEdit(workspace, config, args, context)),
+  memoryManage: inWorkspace((workspace, config, args, context) => manageMemory(config, workspace, args, context)),
   skillManage: inWorkspace((workspace, config, args, context) => manageSkill(workspace, config, args, context)),
   cancelTask,
   completeTask

@@ -197,6 +197,9 @@ function sampleArgs(entry) {
     case 'relai_inspect:trace': args.symbol = 'target'; break;
     case 'relai_inspect:related': args.query = 'target'; break;
     case 'relai_inspect:impact': args.paths = ['src/index.js']; break;
+    case 'relai_memory:save': args.content = 'Use pnpm for this project'; break;
+    case 'relai_memory:update': Object.assign(args, { id: 'mem_contract', content: 'Use pnpm for this project' }); break;
+    case 'relai_memory:delete': args.id = 'mem_contract'; break;
     case 'relai_skill:create':
     case 'relai_skill:edit': Object.assign(args, { name: 'contract-skill', content: 'skill content' }); break;
     case 'relai_skill:patch': Object.assign(args, { name: 'contract-skill', oldText: 'old', newText: 'new' }); break;

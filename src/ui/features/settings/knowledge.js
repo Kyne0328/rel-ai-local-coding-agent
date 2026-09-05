@@ -17,7 +17,7 @@ async function loadAndRender(container) {
     container.innerHTML = '';
     container.appendChild(header(
       'Memory & learning',
-      'Manage local memories and reusable skills ChatGPT saves through Rel.AI.'
+      'Manage local memories and reusable skills you or ChatGPT save through Rel.AI.'
     ));
     const status = document.createElement('p');
     status.className = 'settings-help settings-memory-status';
@@ -43,8 +43,13 @@ function memoryPanel(container, data) {
   section.body.appendChild(toggleRow(
     'Long-term memory',
     toggleControl(data.settings?.enabled !== false, value => { void updateSettings(container, { enabled: value }); }),
-    'Use relevant facts and preferences saved for all projects or for one project when new Rel.AI work starts.'
+    'Use relevant facts and preferences saved manually or by ChatGPT for all projects or one project when new Rel.AI work starts.'
   ));
+
+  const explanation = document.createElement('div');
+  explanation.className = 'settings-learning-explanation';
+  explanation.innerHTML = '<strong>ChatGPT can remember stable facts</strong><span>During active Rel.AI work, ChatGPT can save high-confidence reusable facts or preferences. Project scope is the default; all-project memory is explicit. Transient task details and speculative inferences are not long-term memory.</span>';
+  section.body.appendChild(explanation);
 
   const privacy = document.createElement('p');
   privacy.className = 'settings-help settings-memory-privacy';
@@ -226,8 +231,9 @@ function shownCount(shown, total) {
 }
 
 function memoryRow(item) {
+  const source = item.source === 'agent' ? ' · Saved by ChatGPT' : '';
   return `<div class="settings-memory-row">
-    <div><span>${esc(item.content)}</span><small>${esc(item.scope === 'workspace' ? `Project: ${item.workspace}` : 'All projects')}</small></div>
+    <div><span>${esc(item.content)}</span><small>${esc(item.scope === 'workspace' ? `Project: ${item.workspace}${source}` : `All projects${source}`)}</small></div>
     <button type="button" class="secondary compact-button" data-delete-memory="${esc(item.id)}">Remove</button>
   </div>`;
 }

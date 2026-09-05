@@ -246,6 +246,8 @@ const FIELD_SCHEMAS = Object.freeze({
   shell: STRING,
   lifecycle: STRING,
   kind: STRING,
+  content: STRING,
+  confidence: NUMBER,
   purpose: STRING,
   metadataRevision: STRING,
   originatingTaskId: STRING_NULL,
@@ -418,6 +420,7 @@ const TOOL_FIELDS = Object.freeze({
   [OP.PUBLISH_PUSH]: ['ok', 'workspace', 'work_id', 'remote', 'branch', 'dryRun', 'setUpstream', 'push'],
   [OP.PUBLISH_DRAFT_PR]: ['ok', 'workspace', 'work_id', 'base', 'head', 'title', 'body', 'changedFiles', 'changedFileCount', 'emptyDiff', 'draftOnly', 'remoteChanged', 'warning', 'diff'],
   [OP.EDIT]: ['ok', 'workspace', 'work_id', 'dryRun', 'operationId', 'operation', 'path', 'changed', 'changedFiles', 'oldSha256', 'newSha256', 'shaMismatch', 'replacements', 'verified', 'bytes', 'sha256', 'fileId', 'fileName', 'mimeType', 'plannerPath', 'plannerReason', 'semantic', 'semanticTarget', 'result', 'writeId', 'chunks', 'cleared', 'staged', 'editCount', 'appliedCount', 'preflightAtomic', 'rollbackAtomic', 'batchInputBytes', 'replacementCount', 'snapshotBytes', 'resultDetailsCompacted', 'rollback', 'preflight', 'results', 'touchedPaths', 'patchBytes', 'sourceFormat', 'converted', 'verify', 'apply', 'check', 'diagnostics', 'checks', 'diff', 'execution', 'summary', 'validationStatus', 'error', 'next'],
+  [OP.MEMORY_MANAGE]: ['ok', 'workspace', 'work_id', 'action', 'id', 'content', 'kind', 'scope', 'confidence', 'created', 'updated', 'deleted', 'error'],
   [OP.SKILL_MANAGE]: ['ok', 'workspace', 'work_id', 'action', 'name', 'description', 'scope', 'path', 'created', 'updated', 'deleted', 'error'],
   [OP.WORK_CANCEL]: ['ok', 'workspace', 'work_id', 'status', 'duplicate', 'endReason', 'terminalReason', 'endedAt', 'cancelledAt', 'progress'],
   [OP.WORK_FINISH]: ['ok', 'workspace', 'work_id', 'duplicate', 'completionKnown', 'endReason', 'completionSource', 'summary', 'validationStatus', 'validationLevel', 'validationAt', 'validationFingerprint', 'changedFiles', 'residualChangedFiles', 'residualState', 'message']
