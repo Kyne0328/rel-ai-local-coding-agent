@@ -23,7 +23,8 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { app } = require('electron');
 
-const resourcesRoot = process.argv[2];
+const resourcesRoot = process.env.RELAI_PACKAGED_RESOURCES_ROOT;
+if (!resourcesRoot) throw new Error('RELAI_PACKAGED_RESOURCES_ROOT is required.');
 
 app.whenReady().then(async () => {
   const moduleUrl = pathToFileURL(path.join(resourcesRoot, 'src', 'computerManager.js')).href;
@@ -40,10 +41,14 @@ app.whenReady().then(async () => {
 
 try {
   fs.writeFileSync(probe, source, 'utf8');
-  const electronArgs = platform === 'linux' ? ['--no-sandbox', probe, resourcesRoot] : [probe, resourcesRoot];
+  const electronArgs = platform === 'linux' ? ['--no-sandbox', probe] : [probe];
   const result = spawnSync(electronBinary, electronArgs, {
     cwd: root,
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' },
+    env: {
+      ...process.env,
+      ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+      RELAI_PACKAGED_RESOURCES_ROOT: resourcesRoot
+    },
     encoding: 'utf8',
     windowsHide: true,
     timeout: 30_000
