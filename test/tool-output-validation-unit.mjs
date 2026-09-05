@@ -219,9 +219,6 @@ function requiredArgs(entry) {
     case 'relai_inspect:trace': return { symbol: 'target' };
     case 'relai_inspect:related': return { query: 'target' };
     case 'relai_inspect:impact': return { paths: ['src/index.js'] };
-    case 'relai_memory:save': return { content: 'Use pnpm for this project' };
-    case 'relai_memory:update': return { id: 'mem_output', content: 'Use pnpm for this project' };
-    case 'relai_memory:delete': return { id: 'mem_output' };
     case 'relai_skill:create':
     case 'relai_skill:edit': return { name: 'output-skill', content: 'skill content' };
     case 'relai_skill:patch': return { name: 'output-skill', oldText: 'old', newText: 'new' };

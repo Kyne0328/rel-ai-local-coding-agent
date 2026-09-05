@@ -19,7 +19,7 @@ const READ_ONLY_TOOLS = new Set([
 const DESTRUCTIVE_TOOLS = new Set([
   OP.EXEC, OP.PROCESS_START, OP.PROCESS_WRITE, OP.PROCESS_STOP, OP.UI, OP.COMPUTER,
   OP.VALIDATE_DIAGNOSTICS, OP.CHANGES_TIDY_RUN, OP.VALIDATE_CHECKS, OP.CHANGES_RESTORE,
-  OP.CHANGES_RESET, OP.EDIT, OP.MEMORY_MANAGE, OP.SKILL_MANAGE
+  OP.CHANGES_RESET, OP.EDIT, OP.SKILL_MANAGE
 ]);
 /** @type {Set<string>} */
 const IDEMPOTENT_TOOLS = new Set([
@@ -145,11 +145,6 @@ const PUBLIC_TOOL_VALUES = [
     name: 'relai_edit', title: 'Edit Repository',
     description: 'Applies repository file or environment mutations. Supported forms include semantic rename, symbolEdit structural edits, oldText/newText exact replacement, content complete-file replacement, native ChatGPT file import, edits batches, updateText patch updates, and secret-safe environment changes. Large complete-file writes are staged internally; explicit chunked staging is available as a transport-size fallback.',
     dashboard: { capabilities: ['edit'] }
-  },
-  {
-    name: 'relai_memory', title: 'Manage Long-Term Memory',
-    description: 'Stores, updates, or deletes explicit long-term facts and preferences in Rel.AI local memory. Saves and updates are task-scoped, project scope is the default, global scope is explicit, and deletion can operate on an authorized visible memory without an active work_id. Stable reusable information with high confidence is within this memory contract; transient task state, speculative inference, and secrets are outside it.',
-    annotations: annotations(false, true, false, false), behavior: { taskScope: 'optional' }, dashboard: { capabilities: ['edit'] }
   },
   {
     name: 'relai_skill', title: 'Manage Learned Skill',

@@ -124,94 +124,6 @@ function addKnowledgeItem(config, input = {}) {
   } finally { db.close(); }
 }
 
-function manageMemory(config, workspace, input = {}, context = {}) {
-  const action = clean(input.action, 24).toLowerCase();
-  const workspaceAlias = clean(workspace?.alias || workspace, 120);
-  const taskId = clean(context.taskId || input.work_id, 200);
-  if (!['save', 'update', 'delete'].includes(action)) throw new Error(`Unsupported memory action '${action}'.`);
-  if (action !== 'delete' && !taskId) throw new Error('Saving or updating long-term memory requires the active work_id.');
-
-  if (action === 'save') {
-    const scope = input.scope === 'global' ? 'global' : 'workspace';
-    const item = addKnowledgeItem(config, {
-      content: input.content,
-      scope,
-      workspace: scope === 'workspace' ? workspaceAlias : '',
-      kind: memoryKind(input.kind),
-      source: 'agent',
-      confidence: memoryConfidence(input.confidence),
-      workId: taskId
-    });
-    return memoryActionResult(item, { action, created: true, workId: taskId });
-  }
-
-  const existing = getKnowledgeItem(config, input.id);
-  if (!existing) throw new Error(`Unknown saved memory: ${clean(input.id, 160) || '(missing id)'}.`);
-  assertMemoryVisible(existing, workspaceAlias);
-  if (action === 'delete') {
-    const deleted = deleteKnowledgeItem(config, existing.id);
-    return { ok: true, workspace: workspaceAlias, action, id: existing.id, deleted: deleted.deleted };
-  }
-
-  const item = addKnowledgeItem(config, {
-    id: existing.id,
-    content: input.content,
-    scope: existing.scope,
-    workspace: existing.workspace,
-    kind: input.kind ? memoryKind(input.kind) : existing.kind,
-    source: 'agent',
-    confidence: input.confidence == null ? existing.confidence : memoryConfidence(input.confidence),
-    workId: taskId,
-    repositoryFingerprint: existing.repositoryFingerprint,
-    evidence: existing.evidence
-  });
-  return memoryActionResult(item, { action, updated: true, workId: taskId });
-}
-
-function getKnowledgeItem(config, id) {
-  const key = clean(id, 160);
-  if (!key) throw new Error('Knowledge id is required.');
-  const db = openKnowledgeDatabase(config, { readonly: true });
-  if (!db) return null;
-  try { return knowledgeItem(db.prepare("SELECT * FROM knowledge_items WHERE id=? AND status='active'").get(key)); }
-  finally { db.close(); }
-}
-
-function assertMemoryVisible(item, workspaceAlias) {
-  if (item.scope === 'workspace' && item.workspace !== workspaceAlias) {
-    throw new Error(`Saved memory '${item.id}' belongs to another project scope.`);
-  }
-}
-
-function memoryKind(value) {
-  const kind = clean(value || 'fact', 80).toLowerCase();
-  if (!['fact', 'preference', 'note'].includes(kind)) throw new Error(`Unsupported memory kind '${kind}'.`);
-  return kind;
-}
-
-function memoryConfidence(value) {
-  if (value == null || value === '') return 1;
-  const confidence = Number(value);
-  if (!Number.isFinite(confidence) || confidence < 0.8 || confidence > 1) throw new Error('Agent-saved memory confidence must be between 0.8 and 1.');
-  return confidence;
-}
-
-function memoryActionResult(item, flags = {}) {
-  return {
-    ok: true,
-    workspace: item.workspace,
-    work_id: flags.workId || '',
-    action: flags.action,
-    id: item.id,
-    content: item.content,
-    kind: item.kind,
-    scope: item.scope,
-    confidence: item.confidence,
-    created: flags.created === true,
-    updated: flags.updated === true
-  };
-}
-
 function deleteKnowledgeItem(config, id) {
   const key = clean(id, 160);
   if (!key) throw new Error('Knowledge id is required.');
@@ -426,7 +338,6 @@ export {
   knowledgeSummary,
   learnedValidationChecks,
   listKnowledge,
-  manageMemory,
   recordTaskValidationAffinity,
   searchKnowledge
 };

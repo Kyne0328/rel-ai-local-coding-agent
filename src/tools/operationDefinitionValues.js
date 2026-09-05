@@ -253,15 +253,6 @@ const OPERATION_DEFINITION_VALUES = [
     behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit","longRunning":true,"concurrencyScope":"mutation"},
   },
   {
-    name: OP.MEMORY_MANAGE,
-    title: "Manage Long-Term Memory",
-    description: "Save, update, or delete one explicit long-term fact or preference. Agent-authored saves and updates are tied to the active task; project scope is the default and global scope is explicit. The memory contract is limited to stable reusable information with high confidence rather than transient task state or speculative inference.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["save","update","delete"]},"id":{"type":"string","minLength":1,"maxLength":160},"content":{"type":"string","minLength":1,"maxLength":4000},"scope":{"type":"string","enum":["workspace","global"]},"kind":{"type":"string","enum":["fact","preference","note"]},"confidence":{"type":"number","minimum":0.8,"maximum":1}},"required":["workspace","action"],"additionalProperties":false},
-    handlerName: 'memoryManage',
-    behavior: {"audit":"edit","summary":"edit","concurrencyScope":"task"},
-    dashboard: {"category":"Memory & learning"}
-  },
-  {
     name: OP.SKILL_MANAGE,
     title: "Manage Agent-Learned Skill",
     description: "Create, edit, patch, or delete one Rel.AI-managed reusable SKILL.md chosen by the active agent. Create/edit/patch validate ownership, scope, skill format, and current task evidence; delete validates Rel.AI provenance and scope without requiring an unrelated active task. Rel.AI does not infer candidate workflows or decide conceptual similarity.",

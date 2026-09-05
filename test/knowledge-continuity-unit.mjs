@@ -128,20 +128,6 @@ try {
   const task = await callTool('relai_work', {
     action: 'begin', workspace: 'app', title: 'Fix alpha syntax flow', objective: 'Fix alpha syntax flow safely', bootstrap: 'none'
   }, context);
-
-  const savedMemory = await callTool('relai_memory', {
-    action: 'save', workspace: 'app', work_id: task.work_id, kind: 'preference', content: 'Prefer alpha syntax for this project'
-  }, context);
-  assert.equal(savedMemory.ok, true);
-  assert.equal(savedMemory.scope, 'workspace', 'agent memory should default to the active project scope');
-  assert.equal(listKnowledge(config).find(item => item.id === savedMemory.id)?.source, 'agent');
-  assert(searchKnowledge(config, 'alpha syntax', { workspace: 'app', maxBytes: 4096 }).some(item => item.id === savedMemory.id), 'agent-saved memory must participate in normal bootstrap retrieval');
-
-  const updatedMemory = await callTool('relai_memory', {
-    action: 'update', workspace: 'app', work_id: task.work_id, id: savedMemory.id, content: 'Prefer validated alpha syntax for this project'
-  }, context);
-  assert.equal(updatedMemory.updated, true);
-  assert.match(listKnowledge(config).find(item => item.id === savedMemory.id)?.content || '', /validated alpha syntax/);
   await callTool('relai_edit', {
     workspace: 'app', work_id: task.work_id, path: 'src/index.js',
     oldText: 'export const value = 1;', newText: 'export const value = 2;'
@@ -211,10 +197,6 @@ try {
   assert.equal(deleted.ok, true, 'forgetting a Rel.AI-managed skill must not require an unrelated active task');
   assert.equal(deleted.deleted, true);
   assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 0);
-
-  const deletedMemory = await callTool('relai_memory', { action: 'delete', workspace: 'app', id: savedMemory.id }, context);
-  assert.equal(deletedMemory.deleted, true, 'forgetting saved memory must not require an unrelated active task');
-  assert.equal(listKnowledge(config).some(item => item.id === savedMemory.id), false);
 
   console.log('Knowledge continuity and agent-managed learning regression checks passed.');
 } finally {

@@ -9,7 +9,6 @@ const OPERATION_IDS = Object.freeze({
   SEARCH_SEMANTIC: 'search.semantic',
   INSPECT: 'inspect',
   EDIT: 'edit',
-  MEMORY_MANAGE: 'memory.manage',
   SKILL_MANAGE: 'skill.manage',
   EXEC: 'exec',
   PROCESS_START: 'process.start',

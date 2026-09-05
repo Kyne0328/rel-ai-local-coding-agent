@@ -81,11 +81,6 @@ const PUBLIC_BINDINGS_BY_OPERATION = Object.freeze({
   [OP.INSPECT]: Object.entries(INSPECT_FIELDS).map(([action, publicContract]) =>
     expose('relai_inspect', action, { capability: READ, keepAction: true, publicContract })),
   [OP.EDIT]: [expose('relai_edit', 'default', { capability: WRITE })],
-  [OP.MEMORY_MANAGE]: [
-    expose('relai_memory', 'save', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['content'], omit: ['id'] }) }),
-    expose('relai_memory', 'update', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['id', 'content'], omit: ['scope'] }) }),
-    expose('relai_memory', 'delete', { capability: WRITE, keepAction: true, behavior: { taskScope: 'optional' }, publicContract: contract({ required: ['id'], omit: ['content', 'scope', 'kind', 'confidence'] }) })
-  ],
   [OP.SKILL_MANAGE]: [
     expose('relai_skill', 'create', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['content'], omit: ['oldText', 'newText'] }) }),
     expose('relai_skill', 'edit', { capability: WRITE, keepAction: true, publicContract: contract({ required: ['content'], omit: ['oldText', 'newText'] }) }),

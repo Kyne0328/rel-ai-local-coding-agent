@@ -15,7 +15,7 @@ import {
 
 const config = { workspaces: {} };
 const requiredTools = [
-  'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit', 'relai_memory', 'relai_skill',
+  'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit', 'relai_skill',
   'relai_exec', 'relai_process', 'relai_ui', 'relai_computer', 'relai_validate', 'relai_changes', 'relai_publish'
 ];
 const removedDirectNames = [
