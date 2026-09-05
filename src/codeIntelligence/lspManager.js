@@ -516,13 +516,10 @@ async function shutdownLspSessions() {
 }
 
 export {
-  IDLE_EVICT_MS,
-  MAX_SEMANTIC_EDIT_FILES,
   disposeLspWorkspace,
   inspectWithLsp,
   noteLspMutation,
   planSemanticRename,
-  providerForPath,
   providerStatuses,
   shutdownLspSessions
 };

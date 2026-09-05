@@ -44,7 +44,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
     description: 'One primary edit form is accepted per call. Rel.AI validates the selected form before touching the workspace.',
     properties: {
       ...properties,
-      workspace: describe('workspace', 'Optional workspace ownership assertion. The work_id already identifies the bound workspace.'),
+      workspace: describe('workspace', 'Authorized workspace for this edit. It may be omitted only when an explicitly supplied valid work_id already identifies the workspace.'),
       semantic: describe('semantic', 'Language-server-authoritative rename at an exact file position. Rel.AI validates and applies the proposed WorkspaceEdit.'),
       symbolEdit: describe('symbolEdit', 'Indexed structural symbol edit. Supports replace, insert_before, and insert_after; pass path or a qualified symbol when the name is ambiguous.'),
       path: describe('path', 'Workspace-relative target path. Required for full-file content and exact replacement forms.'),
@@ -54,7 +54,7 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       replacements: describe('replacements', 'Several exact oldText/newText replacements in one file.'),
       content: describe('content', 'Complete replacement content as text for one file. Large complete-file text writes are staged internally when needed.'),
       file: describe('file', 'Native ChatGPT file reference to stream into path without overwrite.'),
-      expectedSha256: describe('expectedSha256', 'Optional stale-write guard for direct, staged, batch, symbol, and environment edits.'),
+      expectedSha256: describe('expectedSha256', 'Optional stale-write guard for direct, batch, symbol, and environment edits.'),
       updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes. One logical patch can contain repository-wide changes when transport capacity permits.'),
       envAction: describe('envAction', 'Secret-safe environment operation: list, set, remove, or compare.'),
       key: describe('key', 'Environment key used by envAction set or remove.'),
@@ -65,8 +65,8 @@ function publicEditInputSchema(inputSchema, maxBatchEdits) {
       level: describe('level', 'Validation level used when runChecks is true.'),
       returnDiff: describe('returnDiff', 'Return a bounded diff after a successful edit.'),
       dryRun: describe('dryRun', 'Validate and preview the edit without changing files.'),
-      stage: describe('stage', 'Explicit chunked content or updateText lifecycle: start, append, commit, or abort. This is a transport-size fallback; normal large complete-file writes are staged internally.'),
-      writeId: describe('writeId', 'Opaque staged-write ID returned by stage start.')
+      stage: properties.stage,
+      writeId: properties.writeId
     }
   };
 }

@@ -8,7 +8,6 @@
     "enableStateExport": true
   },
   "knowledge": {
-    "enabled": true,
     "proceduralLearning": true,
     "maxBootstrapBytes": 4096
   },

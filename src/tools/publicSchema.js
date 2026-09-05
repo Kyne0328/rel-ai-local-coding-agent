@@ -22,9 +22,7 @@ const PUBLIC_INPUT_DESCRIPTIONS = Object.freeze({
     'properties.runChecks.description',
     'properties.level.description',
     'properties.returnDiff.description',
-    'properties.dryRun.description',
-    'properties.stage.description',
-    'properties.writeId.description'
+    'properties.dryRun.description'
   ]),
   relai_exec: new Set([
     'description',
@@ -53,10 +51,17 @@ function compactPublicInputSchema(name, inputSchema, catalogTool) {
   // valid fields (for example batched search queries) or collapse a tool to an
   // untyped argument object.
   const schema = importSafeInputSchema(inputSchema || {});
-  const compact = stripPublicDescriptions(schema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
+  const discoverySchema = name === 'relai_edit' ? hideInternalEditTransportFields(schema) : schema;
+  const compact = stripPublicDescriptions(discoverySchema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
   const withInputForm = annotateInputForm(compact, inputSchema);
   if (name === 'relai_computer') return compactComputerInputSchema(withInputForm);
   return annotateActionGrammar(withInputForm, catalogTool);
+}
+
+function hideInternalEditTransportFields(schema) {
+  if (!schema?.properties) return schema;
+  const { stage: _stage, writeId: _writeId, ...properties } = schema.properties;
+  return { ...schema, properties };
 }
 
 function compactComputerInputSchema(schema) {

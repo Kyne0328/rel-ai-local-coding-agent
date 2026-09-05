@@ -12,9 +12,8 @@ import { repositoryFreshness } from '../src/repository/intelligence/state.js';
 import { parseSourceFile } from '../src/repository/intelligence/treeSitter.js';
 import { searchZoekt } from '../src/repository/intelligence/zoekt.js';
 import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
-import { buildWorkflowEvidenceReceipt, repeatFailureCount } from '../src/workflow/evidence.js';
+import { buildWorkflowEvidenceReceipt, checkEvidenceReusable, repeatFailureCount } from '../src/workflow/evidence.js';
 import { classifyTaskIntent } from '../src/workflow/intent.js';
-import { buildWorkflowSnapshot } from '../src/workflow/runtime.js';
 import { classifyWorkflowRisk } from '../src/workflow/risk.js';
 import { clearTopologyCache, discoverRepositoryTopology } from '../src/workflow/topology.js';
 
@@ -136,28 +135,17 @@ assert.equal(structuralRisk.boundary.level, 'cross_package');
 assert.equal(structuralRisk.risk.level, 'high');
 assert.ok(structuralRisk.risk.reasons.includes('structural impact crosses package boundaries'));
 
-const workflow = await buildWorkflowSnapshot({
-  workspace: { path: process.cwd() },
-  taskIntegrity: {
-    taskOwnedChangedFiles: ['src/example.js'],
-    mutationGeneration: 2,
-    latestValidatedMutationGeneration: 2,
-    validationResult: 'passed',
-    validatedRepositoryFingerprint: 'fingerprint-current'
-  },
-  recentEvidence: [
-    {
-      kind: 'check', outcome: 'passed', mutationGeneration: 2,
-      commandId: 'test:unit', command: 'npm test', cwd: '.', repositoryFingerprint: 'fingerprint-stale'
-    },
-    {
-      kind: 'check', outcome: 'passed', mutationGeneration: 2,
-      commandId: 'test:unit', command: 'npm test', cwd: '.', repositoryFingerprint: 'fingerprint-current'
-    }
-  ]
-});
-assert.equal(workflow.evidence.fresh, 2);
-assert.equal(workflow.evidence.reusable, 1, 'workflow reuse count must use the same strict fingerprint semantics as validation');
+const staleEvidence = {
+  kind: 'check', outcome: 'passed', mutationGeneration: 2,
+  commandId: 'test:unit', command: 'npm test', cwd: '.', repositoryFingerprint: 'fingerprint-stale'
+};
+const currentEvidence = { ...staleEvidence, repositoryFingerprint: 'fingerprint-current' };
+assert.equal(checkEvidenceReusable(staleEvidence, {
+  commandId: 'test:unit', command: 'npm test', cwd: '.', repositoryFingerprint: 'fingerprint-current'
+}), false, 'validation reuse must reject stale repository fingerprints');
+assert.equal(checkEvidenceReusable(currentEvidence, {
+  commandId: 'test:unit', command: 'npm test', cwd: '.', repositoryFingerprint: 'fingerprint-current'
+}), true, 'validation reuse must accept the exact current repository fingerprint');
 
 const failureA = buildWorkflowEvidenceReceipt({
   tool: OP.VALIDATE_CHECKS,

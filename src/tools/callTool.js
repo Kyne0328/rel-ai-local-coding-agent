@@ -5,9 +5,8 @@ import { principalFingerprint, principalForContext } from '../mcp/principal.js';
 import { assertAuthorizedToolCall } from '../mcp/authorizationPolicy.js';
 import { clearSessionPolicy } from '../policyResolver.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
-import { activeProcessesForWorkSession } from '../processManager.js';
-import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, readTaskHistorySessionRecord, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
-import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
+import { bindTaskHistoryActivityPersistence, recordWorkflowEvidence } from '../taskHistoryStore.js';
+import { buildToolActivityDetails } from '../taskObservability.js';
 import { beginConnectorToolCall, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
 import { serializeConnectorResult } from './connector.js';
 import { enhanceToolError } from './errors.js';
@@ -19,24 +18,14 @@ import { resolveExecutableToolCall, validateExecutableOperationInput } from './r
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
 import { assertKnownTask, assertTaskWorkspaceOwnership, findReusableTask, isTerminalTaskReference, taskAuditContext, withTaskIdentity } from './task.js';
-import { deterministicActionId, stableJson } from '../workflow/contracts.js';
+import { deterministicActionId } from '../workflow/contracts.js';
 import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
-import { buildWorkflowSnapshot } from '../workflow/runtime.js';
 import { invalidateRepositoryTopology } from '../workflow/topology.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 import { observeRepeatCall } from './repeatCallGuard.js';
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
-
-const WORKFLOW_PASSIVE_OPERATIONS = new Set([
-  OP.WORK_STATUS,
-  OP.SNAPSHOT,
-  OP.READ,
-  OP.SEARCH_TEXT,
-  OP.SEARCH_SEMANTIC,
-  OP.INSPECT
-]);
 
 async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
@@ -72,17 +61,7 @@ async function callTool(name, args = {}, context = {}) {
       throw taskError('TASK_ID_REQUIRED', `${name} requires the work_id returned by relai_work action begin.`);
     }
     if (requestedTaskId && operationName !== OP.WORK_BEGIN) {
-      try {
-        knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal, effectiveArgs);
-      } catch (error) {
-        const canIgnoreStaleOptionalTask = taskScope === 'optional'
-          && Boolean(String(effectiveArgs?.workspace || '').trim())
-          && ['TASK_NOT_FOUND', 'INVALID_TASK_STATE'].includes(String(error?.code || ''));
-        if (!canIgnoreStaleOptionalTask) throw error;
-        requestedTaskId = '';
-        effectiveArgs = { ...effectiveArgs };
-        delete effectiveArgs.work_id;
-      }
+      knownTask = assertKnownTask(config, requestedTaskId, '', operationName, effectivePrincipal, effectiveArgs);
       if (knownTask && taskAware && !String(effectiveArgs?.workspace || '').trim()) effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
     }
     workspaceResolution = resolveConfiguredWorkspaceArgument(config, effectiveArgs?.workspace);
@@ -111,10 +90,11 @@ async function callTool(name, args = {}, context = {}) {
       // resolved alias without re-reading task history a second time.
       assertTaskWorkspaceOwnership(knownTask, effectiveArgs?.workspace);
       const integrity = readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace);
-      if (!integrity && taskScoped) {
+      const lifecycleWithoutIntegrity = operationName === OP.WORK_FINISH || operationName === OP.WORK_CANCEL;
+      if (!integrity && !lifecycleWithoutIntegrity && (taskScoped || taskAttributionRequiresIntegrity(operationName))) {
         throw taskError(
           'TASK_INTEGRITY_STATE_MISSING',
-          'Authoritative integrity state is missing for this logical task. Start a new logical task; no task-scoped operation was executed.',
+          'Durable task attribution state is missing for this work_id. Omit work_id to run at workspace scope, or start a new durable work session.',
           { retryable: false }
         );
       }
@@ -122,7 +102,6 @@ async function callTool(name, args = {}, context = {}) {
         taskId: requestedTaskId,
         session: knownTask,
         integrity: integrity || null,
-        recentEvidence: null,
         workflowContextEvidence: null,
         topology: null
       };
@@ -221,33 +200,29 @@ async function callTool(name, args = {}, context = {}) {
       ...(valueOk ? {} : { error: activityResult.error })
     }, { strictIntegrity: true });
     refreshRequestTaskIntegrity(requestTaskContext, auditEntry);
-    const workflowReceipt = workId && evidenceDraft && auditEntry
-      ? await persistWorkflowEvidence(config, effectiveArgs, operationName, resolved.action, value || {}, auditEntry, workId, evidenceDraft)
-      : null;
-    const workflowState = workId
-      ? await buildAndPersistWorkflow(config, effectiveArgs, operationName, value || {}, workId, workflowReceipt, requestTaskContext)
-      : null;
-    const workflow = workflowState?.workflow || null;
-    if (workflow && activityResult.activity) {
-      activityResult.activity.metadata = {
-        ...(activityResult.activity.metadata || {}),
-        ...workflowActivityMetadata(workflow)
-      };
+    if (workId && evidenceDraft && auditEntry) {
+      await persistWorkflowEvidence(
+        config,
+        effectiveArgs,
+        operationName,
+        resolved.action,
+        value || {},
+        auditEntry,
+        workId,
+        evidenceDraft,
+        { persist: true }
+      );
     }
-    const responseWorkflow = workflowState?.unchanged ? compactUnchangedWorkflow(workflow) : workflow;
-    const valueWithWorkflow = responseWorkflow && value && typeof value === 'object'
-      ? { ...value, workflow: responseWorkflow }
-      : value;
     const responseValue = connector && resolved.compact
       ? serializeConnectorResult({
         publicName: name,
         action: resolved.action,
         operationName,
-        value: valueWithWorkflow,
+        value,
         args: effectiveArgs || {},
         workId
       })
-      : withTaskIdentity(valueWithWorkflow, workId);
+      : withTaskIdentity(value, workId);
     const responseWithRepeatWarning = repeatCall && responseValue && typeof responseValue === 'object'
       ? { ...responseValue, warning: repeatCall.warning }
       : responseValue;
@@ -317,6 +292,10 @@ async function callTool(name, args = {}, context = {}) {
   }
 }
 
+function taskAttributionRequiresIntegrity(operationName) {
+  return operationName === OP.EDIT || operationName === OP.EXEC;
+}
+
 function analyticsErrorCodeFromValue(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
   if (typeof value.errorCode === 'string') return value.errorCode;
@@ -348,63 +327,6 @@ async function persistWorkflowEvidence(config, args, operationName, action, valu
   }
 }
 
-async function buildAndPersistWorkflow(config, args, operationName, value, workId, receipt = null, requestState = null) {
-  try {
-    const workspace = resolveWorkspace(config, args?.workspace);
-    const integrity = requestState?.integrity || readTaskIntegrity(config, workId, workspace.alias);
-    if (!integrity) return null;
-    const session = requestState?.session || readTaskHistorySessionRecord(config, workId) || {};
-    if (requestState && !requestState.session) requestState.session = session;
-    if (canReuseWorkflowSnapshot(session, integrity, operationName, value)) {
-      if (receipt) recordVolatileWorkflowEvidence(workId, receipt);
-      return { workflow: session.workflow, unchanged: true, reused: true };
-    }
-    const recentEvidence = requestState?.recentEvidence
-      ? [...requestState.recentEvidence]
-      : readRecentWorkflowEvidence(config, workId, 100);
-    if (receipt) recentEvidence.push(receipt);
-    if (requestState) requestState.recentEvidence = recentEvidence.slice(-100);
-    const processes = activeProcessesForWorkSession(config, workspace.alias, workId).map(item => ({
-      processId: item.processId,
-      status: item.status,
-      workSessionId: item.workSessionId || '',
-      reused: value?.reused === true && value?.processId === item.processId,
-      matchesCurrent: Boolean(value?.processId && value.processId === item.processId && item.workSessionId === workId)
-    }));
-    const workflow = await buildWorkflowSnapshot({
-      workspace,
-      taskId: workId,
-      taskIntegrity: integrity,
-      topology: requestState?.topology || undefined,
-      objective: session.objective || args?.objective || '',
-      intent: session.intent || '',
-      recentEvidence,
-      currentResult: value,
-      impactedPaths: Array.isArray(value?.impactedPaths) ? value.impactedPaths : [],
-      affectedTests: Array.isArray(value?.affectedTests) ? value.affectedTests : [],
-      processes,
-      operation: { kind: operationName === OP.VALIDATE_CHECKS && args?.migration === true ? 'migration' : '' }
-    });
-    const unchanged = Boolean(session.workflow && stableJson(session.workflow) === stableJson(workflow));
-    recordWorkflowState(config, workId, { receipt, workflow: unchanged ? null : workflow }, { defer: true });
-    return { workflow, unchanged };
-  } catch (error) {
-    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow snapshot:', error);
-    return null;
-  }
-}
-
-function canReuseWorkflowSnapshot(session, integrity, operationName, value) {
-  const workflow = session?.workflow;
-  if (!workflow || !WORKFLOW_PASSIVE_OPERATIONS.has(operationName)) return false;
-  if (Array.isArray(value?.changedFiles) && value.changedFiles.length) return false;
-  if (Array.isArray(value?.impactedPaths) && value.impactedPaths.length) return false;
-  if (Array.isArray(value?.affectedTests) && value.affectedTests.length) return false;
-  const evidence = workflow.evidence || {};
-  return Number(evidence.lastMutationGeneration || 0) === Number(integrity.mutationGeneration || 0)
-    && Number(evidence.lastValidatedMutationGeneration || 0) === Number(integrity.latestValidatedMutationGeneration || 0);
-}
-
 function refreshRequestTaskIntegrity(requestState, auditEntry) {
   if (!requestState?.integrity || !auditEntry) return;
   const currentMutation = Number(requestState.integrity.mutationGeneration || 0);
@@ -412,18 +334,6 @@ function refreshRequestTaskIntegrity(requestState, auditEntry) {
   const nextMutation = Number(auditEntry.taskMutationGeneration ?? currentMutation);
   const nextValidated = Number(auditEntry.taskValidatedMutationGeneration ?? currentValidated);
   if (nextMutation !== currentMutation || nextValidated !== currentValidated) requestState.integrity = null;
-}
-
-function compactUnchangedWorkflow(workflow) {
-  if (!workflow || typeof workflow !== 'object') return workflow;
-  return {
-    version: workflow.version,
-    stage: workflow.stage,
-    intent: workflow.intent,
-    unchanged: true,
-    recommendedActions: workflow.recommendedActions,
-    completion: workflow.completion
-  };
 }
 
 function workflowCommandId(operationName, action, args = {}) {

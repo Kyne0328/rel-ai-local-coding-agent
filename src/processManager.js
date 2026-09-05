@@ -625,13 +625,14 @@ function assertProcessAccess(config, record, args = {}, context = {}, options = 
     throw taskError('PROCESS_WORKSPACE_MISMATCH', 'Managed process belongs to a different workspace.');
   }
   if (!callerWorkspace && context.connector === true) {
-    throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process access requires a workspace-bound logical task.');
+    throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process access requires an authorized workspace.');
   }
 
   if (options.requireSession !== false) {
-    const workSessionId = String(context.taskId || args.work_id || '').trim();
-    if (String(record.workSessionId || '').trim() !== workSessionId) {
-      throw taskError('PROCESS_SESSION_MISMATCH', 'Managed process belongs to a different work session.');
+    const suppliedWorkId = String(context.taskId || args.work_id || '').trim();
+    const owningWorkId = String(record.workSessionId || '').trim();
+    if (suppliedWorkId && owningWorkId && suppliedWorkId !== owningWorkId) {
+      throw taskError('PROCESS_SESSION_MISMATCH', 'The supplied work_id does not match this managed process attribution.');
     }
   }
 }
@@ -654,7 +655,7 @@ function assertRequestedWorkspaceBoundary(config, args, context, requestedWorksp
     throw taskError('PROCESS_WORKSPACE_MISMATCH', 'Requested process workspace differs from the logical task workspace.');
   }
   if (context.connector === true && !requestedWorkspace) {
-    throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process listing requires a workspace-bound logical task.');
+    throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process listing requires an authorized workspace.');
   }
 }
 

@@ -5,19 +5,19 @@ description: Use when work must inspect, read, edit, test, build, debug, validat
 
 # Rel.AI Workflow
 
-This is the routing skill and the only work-session owner for a repository objective. Open one `work_id` and keep using it until that objective is completed or explicitly cancelled. Specialized Rel.AI skills reuse the same work session.
+This is the routing skill for repository work. A durable `work_id` is optional: open one when ownership, recovery, task-scoped review/publication, or durable history is useful. Otherwise use supported tools directly against the authorized workspace or resource. Specialized Rel.AI skills reuse an existing work session when one is already active; they do not create one merely to satisfy a tool call.
 
-## Runtime-calibrated workflow
+## Evidence-driven workflow
 
-Call `relai_work` with `action: "begin"` exactly once. After each successful work-scoped call, treat `workflow.recommendedActions` as the runtime-calibrated default for what is useful next and `workflow.avoidActions` as a guard against redundant or over-broad work. Hard runtime errors, authorization, containment, task integrity, and completion gates remain authoritative.
+Rel.AI supplies repository facts, execution results, optional durable task evidence, and hard runtime constraints; the agent chooses the next action and appropriate validation. Authorization, containment, resource ownership, stale-write/collision protection, sensitive-path controls, and defined destructive approvals remain authoritative. Validation and durable task state are evidence and coordination features, not generic permission gates.
 
 Do not mechanically execute every possible stage. Choose the shortest sufficient path that proves the user's objective:
 
-- Documentation: `begin -> targeted read -> edit -> task-owned review if useful -> finish`.
-- Bugfix: `begin -> reproduce/inspect -> coherent fix -> directly affected check -> task-owned review -> finish`.
-- Feature: `begin -> inspect/design only as needed -> implement coherent slice -> risk-matched checks -> review -> finish`.
-- Investigation: `begin -> search/inspect -> targeted evidence -> report/finish`; do not edit unless implementation is requested.
-- Release: `begin -> inspect release boundary -> focused regression proof -> release-required checks/build/package gates -> review -> finish`.
+- Documentation: `targeted read -> edit -> review if useful`; add a durable work session only when its ownership/recovery benefits matter.
+- Bugfix: `reproduce/inspect -> coherent fix -> directly affected check -> review`.
+- Feature: `inspect/design only as needed -> implement coherent slice -> risk-matched checks -> review`.
+- Investigation: `search/inspect -> targeted evidence -> report`; do not edit unless implementation is requested.
+- Release: `inspect release boundary -> focused regression proof -> release-required checks/build/package gates -> review/publish`; a durable work session is useful when publication must be task-scoped.
 
 If fresh evidence already proves a recommendation, use the next distinct recommendation instead of repeating the same read, check, review, or process start.
 
@@ -46,7 +46,7 @@ Stop mid-plan only for a genuine blocker, a material design change that invalida
 
 ## Definition of done
 
-Runtime policy remains authoritative. Done means the requested behavior is implemented, required risk-based evidence is current, material task-owned changes are understood, and the shared work session is explicitly completed or cancelled. Runtime workflow guidance calibrates the route; it never overrides hard safety or completion authority.
+The agent decides when the requested behavior is complete from current evidence. Rel.AI reports what was changed, what validation passed/failed/is stale/not run, and any real hard-boundary violations. If a durable work session was opened, close or cancel that session when appropriate; its lifecycle must not force validation that the objective does not require.
 
 Load [references/workflows.md](references/workflows.md) for uncommon publishing, recovery, migration, process, and plan-execution details.
 Load [references/safety.md](references/safety.md) before restore/reset, commit/push, sensitive authorization, or any other destructive or approval-gated operation.

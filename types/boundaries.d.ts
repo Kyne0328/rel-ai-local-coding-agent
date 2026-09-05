@@ -4,40 +4,6 @@ type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit' | 'exec' 
 type CacheKind = '' | 'paths' | 'edit' | 'workspace';
 type SummaryKind = '' | 'checks' | 'diff' | 'edit' | 'completion';
 
-type WorkflowStage = 'understand' | 'investigate' | 'design' | 'implement' | 'verify' | 'review' | 'repair' | 'complete' | 'blocked';
-type WorkflowIntent = 'auto' | 'investigation' | 'bugfix' | 'feature' | 'refactor' | 'migration' | 'documentation' | 'review' | 'release';
-type WorkflowRiskLevel = 'low' | 'medium' | 'high' | 'critical';
-type WorkflowBoundaryLevel = 'file' | 'package' | 'cross_package' | 'repository' | 'release';
-
-interface WorkflowAction {
-  id: string;
-  priority: number;
-  tool: string;
-  action: string;
-  reason: string;
-  blocking: boolean;
-  estimatedCost: 'small' | 'medium' | 'large';
-  args: Record<string, unknown>;
-}
-
-interface WorkflowRisk { level: WorkflowRiskLevel; reasons: string[]; }
-interface WorkflowBoundary { level: WorkflowBoundaryLevel; packageIds: string[]; changedFiles: string[]; impactedPaths: string[]; affectedTests: string[]; }
-interface WorkflowEvidenceSummary { fresh: number; stale: number; reusable: number; lastMutationGeneration: number; lastValidatedMutationGeneration: number; }
-interface WorkflowCompletionReadiness { hardReady: boolean; blockers: string[]; recommendations: string[]; }
-interface WorkflowSnapshot {
-  version: 1;
-  stage: WorkflowStage;
-  intent: WorkflowIntent;
-  confidence: 'low' | 'medium' | 'high';
-  boundary: WorkflowBoundary;
-  risk: WorkflowRisk;
-  evidence: WorkflowEvidenceSummary;
-  recommendedActions: WorkflowAction[];
-  avoidActions: Array<{ action: string; reason: string }>;
-  completion: WorkflowCompletionReadiness;
-  repeatCount?: number;
-}
-
 export interface JsonSchema {
   type?: string | string[];
   description?: string;
@@ -219,7 +185,6 @@ export interface ToolResult extends Record<string, unknown> {
   returnedRangeCount?: number;
   returnedBytes?: number;
   contextTruncated?: boolean;
-  workflow?: WorkflowSnapshot;
 }
 
 

@@ -82,9 +82,10 @@ try {
   taskCall(3, 'relai_snapshot', { workspace: 'smoke', maxEntries: 100 });
   const snapshot = structuredContentOf(await client.waitFor(3));
   if (!snapshot.files.includes('README.md')) throw new Error('Snapshot missing README.md.');
-  for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'workspace-tidy']) {
+  for (const mode of ['exact-replace', 'direct-write', 'apply-update', 'workspace-tidy']) {
     if (!snapshot.writeGuidance?.modes?.[mode]) throw new Error(`Snapshot guidance missing ${mode}.`);
   }
+  if (snapshot.writeGuidance?.modes?.['staged-write']) throw new Error('Internal staged-write fallback must not be advertised in normal guidance.');
   if (snapshot.writeGuidance?.modes?.['apply-bundle']) throw new Error('Obsolete bundle guidance remains.');
 
   taskCall(4, 'relai_read', { workspace: 'smoke', paths: ['README.md', 'src/index.js'] });

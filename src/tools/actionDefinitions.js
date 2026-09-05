@@ -129,7 +129,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_read', title: 'Read Repository',
-    description: 'Reads exact file content, ranges, directories, discovered skills, or task-scoped command output. Ordinary reads may use an authorized workspace directly without a work_id; task output remains bound to its work_id. asResource:true returns one exact file as a private resource_link for transfer or download.'
+    description: 'Reads exact file content, ranges, directories, discovered skills, or execution-scoped command output. Ordinary reads may use an authorized workspace directly without a work_id; outputRef access remains bound to the originating authorized task or workspace/principal execution scope. asResource:true returns one exact file as a private resource_link for transfer or download.'
   },
   {
     name: 'relai_search', title: 'Search Repository',
@@ -143,28 +143,28 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_edit', title: 'Edit Repository',
-    description: 'Applies repository file or environment mutations. Supported forms include semantic rename, symbolEdit structural edits, oldText/newText exact replacement, content complete-file replacement, native ChatGPT file import, edits batches, updateText patch updates, and secret-safe environment changes. Large complete-file writes are staged internally; explicit chunked staging is available as a transport-size fallback.',
+    description: 'Applies repository file or environment mutations. Supported forms include semantic rename, symbolEdit structural edits, oldText/newText exact replacement, content complete-file replacement, native ChatGPT file import, edits batches, updateText patch updates, and secret-safe environment changes. Large complete-file writes are staged internally when needed.',
     dashboard: { capabilities: ['edit'] }
   },
   {
     name: 'relai_skill', title: 'Manage Learned Skill',
-    description: 'Creates, edits, patches, or deletes one Rel.AI-managed SKILL.md. Create and update operations are task-scoped; deletion may use an authorized workspace directly without a work_id. Workspace and global scopes are supported. Rel.AI stores explicitly requested learned procedures and does not infer or merge workflow candidates automatically.',
+    description: 'Creates, edits, patches, or deletes one Rel.AI-managed SKILL.md. Authorized workspace/global operations may run directly; work_id optionally records task provenance. Rel.AI stores explicitly requested learned procedures and does not infer or merge workflow candidates automatically.',
     annotations: annotations(false, true, false, false), behavior: { taskScope: 'optional' }, dashboard: { capabilities: ['edit'] }
   },
   {
     name: 'relai_exec', title: 'Run Command',
-    description: 'Runs bounded one-shot workspace commands. Long operations may continue under work_id after the connector request returns. Direct executable + argv and command-string forms are supported.',
+    description: 'Runs bounded one-shot workspace commands. work_id optionally adds durable task attribution; direct executable + argv and command-string forms are supported.',
     dashboard: { capabilities: ['execute'] }
   },
   {
     name: 'relai_process', title: 'Manage Process',
-    description: 'Starts and manages persistent services, watchers, and interactive programs with stable process identity. Start and write are task-scoped; list, read, and stop can recover by authorized principal + workspace. Direct executable + argv and command-string forms are supported.',
+    description: 'Starts and manages persistent services, watchers, and interactive programs with stable process identity. Process access is authorized by principal + workspace + processId; work_id is optional attribution. Direct executable + argv and command-string forms are supported.',
     annotations: annotations(false, true, false, true),
     dashboard: { capabilities: ['execute'] }, behavior: { executionClass: 'persistent_process', taskScope: 'optional' }
   },
   {
     name: 'relai_ui', title: 'Test Local UI',
-    description: 'Provides local UI runtime evidence and interaction in a workspace-scoped session. Start and mutating actions are task-scoped; snapshot, screenshot, console/network observation, and stop can recover by authenticated principal + workspace + sessionId.',
+    description: 'Provides local UI runtime evidence and interaction in a workspace-scoped session. Session access is authorized by authenticated principal + workspace + sessionId; work_id is optional attribution.',
     annotations: annotations(false, true, false, true), dashboard: { capabilities: ['execute'] }
   },
   {
@@ -174,7 +174,7 @@ const PUBLIC_TOOL_VALUES = [
   },
   {
     name: 'relai_validate', title: 'Validate Repository',
-    description: 'Runs explicit repository checks, diagnostics, or local HTTP validation. Checks and diagnostics are task-scoped; read-only local HTTP probes may use an authorized workspace directly. Long checks can continue under work_id.',
+    description: 'Runs explicit repository checks, diagnostics, or local HTTP validation. Validation is factual repository evidence and may run directly against an authorized workspace; work_id optionally records task provenance.',
     annotations: annotations(false, true, false, true), behavior: { longRunning: true, taskScope: 'optional' },
     dashboard: { capabilities: ['validate'] }
   },

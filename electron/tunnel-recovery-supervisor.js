@@ -132,4 +132,4 @@ function isTerminalTunnelCode(value) {
   return TERMINAL_TUNNEL_CODES.has(String(value || ''));
 }
 
-export { DEFAULT_RETRY_DELAYS_MS, TERMINAL_TUNNEL_CODES, createTunnelRecoverySupervisor, isTerminalTunnelCode };
+export { createTunnelRecoverySupervisor };

@@ -1,13 +1,13 @@
 import { mountConnector } from './connector.js';
 import { mountPreferences } from './general.js';
-import { mountKnowledge } from './knowledge.js';
+import { mountLearning } from './learning.js';
 import { mountApplication } from './application.js';
 import { mountAbout } from './about.js';
 
 const MOUNTS = {
   connection: mountConnector,
   preferences: mountPreferences,
-  memory: mountKnowledge,
+  learning: mountLearning,
   application: mountApplication,
   about: mountAbout
 };

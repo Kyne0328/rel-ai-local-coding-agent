@@ -16,7 +16,7 @@ export function chatGptFirstPrompt(workspaceAlias = 'myapp') {
   return `Use Rel.AI MCP with project "${alias.replaceAll('"', '\\"')}". Look through its files and folders and summarize the project structure. Do not change any files yet.`;
 }
 
-export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
+function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
   const tunnel = String(tunnelId || '').trim();
   const name = 'Rel.AI MCP';
   if (mode === 'reconnect') {
@@ -96,9 +96,6 @@ function bindConnectorHandoff(guide) {
 }
 
 export {
-  CHATGPT_CONNECTOR_CREATE_URL,
   CHATGPT_REFRESH_BUSINESS_NOTE,
-  CHATGPT_REFRESH_STEPS,
-  RELAI_CONNECTOR_ICON_FILENAME,
-  RELAI_CONNECTOR_ICON_URL
+  CHATGPT_REFRESH_STEPS
 };

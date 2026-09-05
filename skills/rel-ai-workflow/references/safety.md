@@ -2,7 +2,7 @@
 
 ## General rules
 
-Work only inside an authorized configured workspace. Keep one `work_id` for operations whose correctness depends on logical-task ownership, but do not create or resurrect a task merely to perform an authorized read, observation, artifact transfer, or resource recovery action whose public contract is task-optional. Inspect relevant files before editing. Treat pre-existing changes as user-owned unless the task explicitly includes them. Use bounded reads, outputs, patches, and process logs.
+Work only inside an authorized configured workspace. Use `work_id` only when behavior genuinely depends on durable task identity or when its ownership/recovery benefits are useful. Do not create or resurrect a task merely to edit, execute, validate, observe, transfer an artifact, or access a resource when the public contract supports workspace/resource scope. Inspect relevant files before editing. Treat pre-existing changes as user-owned unless the task explicitly includes them. Use bounded reads, outputs, patches, and process logs.
 
 ## Approval-gated operations
 
@@ -14,7 +14,7 @@ Prefer focused edits or `relai_changes` action `restore` for listed tracked path
 
 ## Command execution
 
-Use `relai_exec` for bounded one-shot development commands and `relai_process` for persistent or interactive commands. Do not use either as an unrestricted command router. Respect configured workspace, environment, timeout, output, cancellation, and process-tree limits. A successful command is not final validation unless it ran through the validation operation.
+Use `relai_exec` for bounded one-shot development commands and `relai_process` for persistent or interactive commands. Do not use either as an unrestricted command router. Respect configured workspace, environment, timeout, output, cancellation, and process-tree limits. A successful command and a validation result are different evidence types. Use `relai_validate` when structured validation evidence is useful; neither is a universal permission prerequisite for completion.
 
 ## Commit, push, and pull requests
 
@@ -22,4 +22,4 @@ Review changes before publishing. Commit only the intended paths. Sensitive file
 
 ## Uncertainty
 
-When scope, ownership, or approval is unclear, inspect status and return the uncertainty. Do not broaden paths, infer consent, weaken validation, or replace a refused operation with a more destructive one.
+When scope, ownership, or approval is unclear, inspect status and return the uncertainty. Do not broaden paths, infer consent, falsify validation freshness, or replace a refused operation with a more destructive one.

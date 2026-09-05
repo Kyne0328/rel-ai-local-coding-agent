@@ -82,10 +82,10 @@ try {
   assert.equal(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.name, 'rel-ai-mcp');
   assert.match(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.version || '', /^0\./);
   const serverInstructions = discovery.body.result?.instructions || '';
-  assert.match(serverInstructions, /task-ownership/i);
+  assert.match(serverInstructions, /work_id is optional durable attribution/i);
   assert.match(serverInstructions, /approval/i);
   assert.match(serverInstructions, /authoritative evidence/i);
-  assert.match(serverInstructions, /explicit task-completion contract/i);
+  assert.match(serverInstructions, /validation is factual evidence, not execution permission/i);
   assert.match(serverInstructions, /brief normal assistant progress messages/i);
   assert.match(serverInstructions, /Native tool invocation labels are supplemental status only/i);
   assert.match(serverInstructions, /Do not poll relai_work status merely to refresh UI/i);

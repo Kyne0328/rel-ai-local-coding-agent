@@ -631,7 +631,6 @@ function failureHistorySection(session) {
 }
 
 function technicalDetailsSection(session, identities, state, operationValue) {
-  const workflow = workflowTechnicalHtml(session);
   return `<div class="task-detail-technical is-expanded">
     <section class="task-detail-section">
       <div class="task-detail-heading"><h3>Identifiers</h3></div>
@@ -651,16 +650,8 @@ function technicalDetailsSection(session, identities, state, operationValue) {
         ${detail('Completion confirmed', session.completionKnown ? 'Yes' : 'No')}
       </div>
     </section>
-    ${workflow}
     ${currentOperations(session)}
   </div>`;
-}
-
-function workflowTechnicalHtml(session = {}) {
-  const workflow = session.workflow;
-  if (!workflow || typeof workflow !== 'object' || !workflow.stage) return '';
-  const next = workflow.recommendedAction || 'No additional action is recorded.';
-  return `<div class="task-detail-workflow"><strong>Workflow ${esc(workflow.stage)}</strong><span>${esc(next)}</span></div>`;
 }
 
 function changedFilesSection(files) {

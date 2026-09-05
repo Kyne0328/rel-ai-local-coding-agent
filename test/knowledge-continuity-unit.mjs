@@ -6,7 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { buildTaskContinuity } from '../src/context/taskContinuity.js';
-import { addKnowledgeItem, knowledgeDatabasePath, learnedValidationChecks, listKnowledge, searchKnowledge } from '../src/knowledgeStore.js';
+import { ensureLearningState, knowledgeDatabasePath, learnedValidationChecks, recordTaskValidationAffinity } from '../src/knowledgeStore.js';
 import { listManagedSkills, managedSkillRoots } from '../src/skillManager.js';
 import { flushTaskHistoryPersistence, readTaskHistorySessionRecord } from '../src/taskHistoryStore.js';
 import { resetToolActivity } from '../src/toolActivity.js';
@@ -39,7 +39,7 @@ const config = {
   version: 2,
   stateDir,
   auditLogPath: path.join(stateDir, 'audit.jsonl'),
-  knowledge: { enabled: true, proceduralLearning: true, maxBootstrapBytes: 1024 },
+  knowledge: { proceduralLearning: true, maxBootstrapBytes: 1024 },
   workspaces: {
     app: { path: workspace, commands: { check: 'node --check src/index.js' }, testCommands: {} }
   }
@@ -50,42 +50,25 @@ process.env.REL_AI_REDUCED_BACKGROUND_WORK = '1';
 resetToolActivity();
 
 try {
-  addKnowledgeItem(config, { content: 'alpha shared global fact', scope: 'global' });
-  addKnowledgeItem(config, { content: 'alpha app fact', scope: 'workspace', workspace: 'app' });
-  addKnowledgeItem(config, { content: 'alpha other project fact', scope: 'workspace', workspace: 'other' });
-
-  const scoped = searchKnowledge(config, 'alpha', { workspace: 'app', limit: 6, maxBytes: 4096 });
-  assert(scoped.some(item => item.content.includes('shared global')));
-  assert(scoped.some(item => item.content.includes('app fact')));
-  assert(!scoped.some(item => item.content.includes('other project')));
-
-  const transactionConfig = { ...config, stateDir: path.join(temp, 'transaction-state') };
-  addKnowledgeItem(transactionConfig, { id: 'mem_seed', content: 'transaction seed', scope: 'global' });
-  const transactionDb = new DatabaseSync(knowledgeDatabasePath(transactionConfig));
-  transactionDb.exec('DROP TABLE knowledge_fts; CREATE TABLE knowledge_fts(id TEXT, content TEXT);');
-  transactionDb.close();
-  assert.throws(
-    () => addKnowledgeItem(transactionConfig, { id: 'mem_atomic', content: 'must roll back with failed FTS sync', scope: 'global' }),
-    /no column named kind/
-  );
-  assert.equal(listKnowledge(transactionConfig).some(item => item.id === 'mem_atomic'), false,
-    'knowledge row and FTS mutation must roll back together when FTS synchronization fails');
-
-  for (let index = 0; index < 8; index += 1) {
-    addKnowledgeItem(config, { content: `alpha bounded ${index} ${'x'.repeat(160)}`, scope: 'global' });
-  }
-  const bounded = buildTaskContinuity(config, { workspace: 'app', query: 'alpha' });
-  assert(Buffer.byteLength(JSON.stringify(bounded), 'utf8') <= 1024, 'continuity bootstrap must respect the configured byte cap');
-
-  const portableSource = { ...config, stateDir: path.join(temp, 'portable-source') };
-  const portableRestored = { ...config, stateDir: path.join(temp, 'portable-restored') };
-  addKnowledgeItem(portableSource, { content: 'portable sqlite marker', scope: 'global' });
-  const statePayload = stateExport(portableSource).export;
-  const sqliteExport = statePayload.files.find(item => item.path === 'knowledge/knowledge.sqlite');
-  assert.equal(statePayload.version, 2);
-  assert.equal(sqliteExport?.encoding, 'base64', 'binary knowledge databases must be exported losslessly');
-  stateImport(portableRestored, { confirm: true, payload: statePayload });
-  assert(searchKnowledge(portableRestored, 'portable sqlite', { workspace: 'app', maxBytes: 4096 }).some(item => item.content.includes('portable sqlite marker')));
+  const legacyConfig = { ...config, stateDir: path.join(temp, 'legacy-learning-state') };
+  const legacyDbPath = knowledgeDatabasePath(legacyConfig);
+  fs.mkdirSync(path.dirname(legacyDbPath), { recursive: true });
+  const legacyDb = new DatabaseSync(legacyDbPath);
+  legacyDb.exec(`
+    CREATE TABLE knowledge_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
+    INSERT INTO knowledge_meta(key,value) VALUES('schema_version','3');
+    CREATE TABLE knowledge_items(id TEXT PRIMARY KEY, content TEXT NOT NULL) STRICT;
+    CREATE TABLE knowledge_fts(id TEXT, content TEXT);
+    CREATE TABLE validation_affinity(workspace TEXT NOT NULL, path_prefix TEXT NOT NULL, command TEXT NOT NULL, success_count INTEGER NOT NULL DEFAULT 1, last_seen_at TEXT NOT NULL, PRIMARY KEY(workspace,path_prefix,command)) WITHOUT ROWID, STRICT;
+    INSERT INTO knowledge_items(id,content) VALUES('legacy-memory','removed generic memory');
+  `);
+  legacyDb.close();
+  ensureLearningState(legacyConfig);
+  const migratedDb = new DatabaseSync(legacyDbPath, { readOnly: true });
+  assert.equal(migratedDb.prepare("SELECT count(*) AS count FROM sqlite_master WHERE name IN ('knowledge_items','knowledge_fts')").get().count, 0,
+    'schema v4 must hard-cut the duplicate generic Saved Memory tables');
+  assert.equal(migratedDb.prepare("SELECT value FROM knowledge_meta WHERE key='schema_version'").get().value, '4');
+  migratedDb.close();
 
   const context = { publicHttpOnly: true, conversationId: 'knowledge-continuity-chat' };
   const first = await callTool('relai_work', {
@@ -134,22 +117,17 @@ try {
   }, context);
 
   const skillContent = `---\nname: alpha-syntax-workflow\ndescription: "Reuse the validated alpha syntax update workflow for this repository when the same maintenance pattern applies."\n---\n\n# Alpha syntax workflow\n\n1. Inspect the current export before editing.\n2. Make the smallest intended source change.\n3. Run \`node --check src/index.js\` before completion.\n`;
-  await assert.rejects(
-    callTool('relai_skill', { action: 'create', workspace: 'app', work_id: task.work_id, name: 'alpha-syntax-workflow', content: skillContent }, context),
-    /Validate the current repository changes before creating or updating a learned skill/
-  );
+  const created = await callTool('relai_skill', {
+    action: 'create', workspace: 'app', work_id: task.work_id, name: 'alpha-syntax-workflow', scope: 'workspace', content: skillContent
+  }, context);
+  assert.equal(created.ok, true, 'agent-managed skill creation must not require repository validation as permission');
+  assert.equal(created.scope, 'workspace');
+  assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 1);
 
   const validation = await callTool('relai_validate', {
     action: 'checks', workspace: 'app', work_id: task.work_id, check: 'node --check src/index.js'
   }, context);
   assert.equal(validation.validationStatus, 'passed');
-
-  const created = await callTool('relai_skill', {
-    action: 'create', workspace: 'app', work_id: task.work_id, name: 'alpha-syntax-workflow', scope: 'workspace', content: skillContent
-  }, context);
-  assert.equal(created.ok, true);
-  assert.equal(created.scope, 'workspace');
-  assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 1);
 
   const learnedRoot = managedSkillRoots(config, 'app').find(item => item.source === 'learned')?.root;
   assert(learnedRoot, 'workspace learned-skill root must be discoverable');
@@ -175,6 +153,23 @@ try {
   const learnedChecks = learnedValidationChecks(config, 'app', ['src/index.js']);
   assert(learnedChecks.some(item => item.command === 'node --check src/index.js'), 'successful completion must retain repository-scoped validation affinity without inventing a procedure candidate');
 
+  const portableSource = { ...config, stateDir: path.join(temp, 'portable-source') };
+  const portableRestored = { ...config, stateDir: path.join(temp, 'portable-restored') };
+  recordTaskValidationAffinity(portableSource, 'app', {
+    changedFiles: ['src/index.js'],
+    workflowEvidence: [{ kind: 'check', command: 'node --check src/index.js' }]
+  }, {
+    validationStatus: 'passed',
+    changedFiles: ['src/index.js']
+  });
+  const statePayload = stateExport(portableSource).export;
+  const sqliteExport = statePayload.files.find(item => item.path === 'knowledge/knowledge.sqlite');
+  assert.equal(statePayload.version, 2);
+  assert.equal(sqliteExport?.encoding, 'base64', 'the validation-affinity SQLite database must export losslessly');
+  stateImport(portableRestored, { confirm: true, payload: statePayload });
+  assert(learnedValidationChecks(portableRestored, 'app', ['src/index.js']).some(item => item.command === 'node --check src/index.js'),
+    'state import must preserve validated path-to-command affinity');
+
   await repositoryIntelligence.ensure({ alias: 'app', path: workspace, context: {} }, config, { watch: false });
   const compactWithRepositorySummary = await callTool('relai_work', {
     action: 'begin', workspace: 'app', title: 'Inspect alpha syntax', objective: 'Inspect alpha syntax', bootstrap: 'compact'
@@ -188,7 +183,10 @@ try {
   assert(reuse.bootstrap.suggestedSkills?.some(item => item.name === 'alpha-syntax-workflow'), 'agent-authored learned skills must be suggested through the ordinary skill bootstrap path');
   await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: reuse.work_id, reason: 'learned skill regression complete' }, context);
 
-  assert.equal(Object.hasOwn(buildTaskContinuity(config, { workspace: 'app', query: 'alpha syntax' }), 'suggestedProcedures'), false,
+  const continuity = buildTaskContinuity(config, { workspace: 'app', query: 'alpha syntax' });
+  assert.equal(Object.hasOwn(continuity, 'relevantKnowledge'), false,
+    'the removed generic Saved Memory store must not remain in task continuity');
+  assert.equal(Object.hasOwn(continuity, 'suggestedProcedures'), false,
     'the removed candidate/procedure inference model must not remain in task continuity');
 
   const deleted = await callTool('relai_skill', {
@@ -198,7 +196,7 @@ try {
   assert.equal(deleted.deleted, true);
   assert.equal(listManagedSkills(config, { workspace: 'app' }).length, 0);
 
-  console.log('Knowledge continuity and agent-managed learning regression checks passed.');
+  console.log('Task continuity and agent-managed learning regression checks passed.');
 } finally {
   await flushTaskHistoryPersistence();
   await repositoryIntelligence.shutdown();

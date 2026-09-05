@@ -7,7 +7,7 @@ import path from 'node:path';
 import { flushAuditWrites } from '../src/audit.js';
 import { readConfig } from '../src/config.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
-import { flushTaskHistoryPersistence, readTaskHistory, readTaskHistorySessionRecord, recordWorkflowState } from '../src/taskHistoryStore.js';
+import { flushTaskHistoryPersistence, readTaskHistory, readTaskHistorySessionRecord } from '../src/taskHistoryStore.js';
 import { taskCommitOwnership } from '../src/taskIntegrity.js';
 import { ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, writeSession } from '../src/taskHistoryStorage.js';
 import { DEFAULT_TASK_IDLE_MS, getToolActivity, resetToolActivity } from '../src/toolActivity.js';
@@ -147,19 +147,6 @@ try {
   assert.equal(readTaskHistorySessionRecord(readConfig(), statusResumeTask, { reconcileInactive: false })?.status, 'planning', 'reactivated status must reach durable task history for the dashboard');
   await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: statusResumeTask, reason: 'Status reconnect regression complete.' }, context);
 
-  resetToolActivity();
-  const workflowOnlyTask = await begin('Workflow readiness is not completion');
-  recordWorkflowState(readConfig(), workflowOnlyTask, {
-    workflow: { stage: 'complete', completion: { hardReady: true, blockers: [] } }
-  });
-  await flushTaskHistoryPersistence();
-  resetToolActivity();
-  const workflowOnlySession = readTaskHistorySessionRecord(readConfig(), workflowOnlyTask, { reconcileInactive: true, activeTaskIds: new Set() });
-  assert.notEqual(workflowOnlySession.status, 'completed', 'workflow readiness must never substitute for an explicit lifecycle completion');
-  const resumedWorkflowOnly = await rawCallTool('relai_read', { workspace: 'app', work_id: workflowOnlyTask, paths: ['src/index.js'] }, context);
-  assert.equal(resumedWorkflowOnly.work_id, workflowOnlyTask);
-  await rawCallTool('relai_work', { action: 'cancel', workspace: 'app', work_id: workflowOnlyTask, reason: 'Workflow readiness regression complete.' }, context);
-
   const pruneStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-open-history-prune-'));
   const pruneConfig = { stateDir: pruneStateDir };
   ensureCurrentHistory(pruneConfig);
@@ -182,7 +169,7 @@ try {
   console.log('Task commit, inactivity recovery, cleanup retention, explicit completion, and residual-state tests passed.');
 } finally {
   await flushAuditWrites();
-  repositoryIntelligence.shutdown();
+  await repositoryIntelligence.shutdown();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;

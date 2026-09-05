@@ -151,4 +151,4 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.floor(number)));
 }
 
-export { SKILL_SECURITY_BOUNDARY, discoverSkills, readDiscoveredSkill, selectRelevantSkills };
+export { discoverSkills, readDiscoveredSkill, selectRelevantSkills };

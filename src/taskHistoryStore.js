@@ -17,8 +17,6 @@ const TASK_HISTORY_RETRY_MAX_MS = 15_000;
 const pendingSessions = new Map();
 const pendingFlushTimers = new Map();
 const pendingPrunes = new Map();
-const volatileWorkflowEvidence = new Map();
-const MAX_VOLATILE_TASKS = 200;
 let activityPersistenceBound = false;
 let taskHistoryPersistenceState = { lastError: '', lastFailureAt: null, retryCount: 0 };
 
@@ -89,32 +87,6 @@ function recordWorkflowEvidenceBatch(config, taskId, receipts, options = {}) {
   return validReceipts;
 }
 
-function recordVolatileWorkflowEvidence(taskId, receipt) {
-  const id = cleanTaskId(taskId);
-  if (!id || !receipt || typeof receipt !== 'object') return null;
-  const evidence = [...(volatileWorkflowEvidence.get(id) || []), receipt].slice(-100);
-  volatileWorkflowEvidence.delete(id);
-  volatileWorkflowEvidence.set(id, evidence);
-  while (volatileWorkflowEvidence.size > MAX_VOLATILE_TASKS) {
-    volatileWorkflowEvidence.delete(volatileWorkflowEvidence.keys().next().value);
-  }
-  return receipt;
-}
-
-function recordWorkflowState(config, taskId, { receipt = null, workflow = null } = {}, options = {}) {
-  const id = cleanTaskId(taskId);
-  if (!id || (!receipt && !workflow)) return null;
-  ensureCurrentHistory(config);
-  const directory = getTaskHistoryDir(config);
-  const session = readWorkingSession(directory, id);
-  if (!session) return null;
-  const next = { ...session };
-  if (receipt && typeof receipt === 'object') next.workflowEvidence = [...(Array.isArray(session.workflowEvidence) ? session.workflowEvidence : []), receipt].slice(-100);
-  if (workflow && typeof workflow === 'object') next.workflow = JSON.parse(JSON.stringify(workflow));
-  persistSession(directory, next, options);
-  return workflow || receipt;
-}
-
 function recordTaskBackgroundOperation(config, taskId, operation, options = {}) {
   const id = cleanTaskId(taskId);
   if (!id) return null;
@@ -149,8 +121,7 @@ function readRecentWorkflowEvidence(config, taskId, limit = 50) {
     ensureCurrentHistory(config);
     const session = readWorkingSession(getTaskHistoryDir(config), id);
     const durableEvidence = Array.isArray(session?.workflowEvidence) ? session.workflowEvidence : [];
-    const volatileEvidence = volatileWorkflowEvidence.get(id) || [];
-    return [...durableEvidence, ...volatileEvidence]
+    return durableEvidence
       .slice(-clamp(limit, 1, 100))
       .map(item => ({ ...item }));
   } catch {
@@ -646,7 +617,6 @@ function clearTaskHistory(config) {
   const pruneTimer = pendingPrunes.get(directory);
   if (pruneTimer) clearTimeout(pruneTimer);
   pendingPrunes.delete(directory);
-  volatileWorkflowEvidence.clear();
   clearStoredTaskHistory(config);
   recordTaskHistoryPersistenceSuccess();
 }
@@ -693,4 +663,4 @@ function emptySession(id) {
   };
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readConversationContinuity, readCrossWorkspaceTaskEpisodes, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidence, recordWorkflowEvidenceBatch, recordWorkflowState, taskHistoryPersistenceSnapshot };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readConversationContinuity, readCrossWorkspaceTaskEpisodes, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskBackgroundOperation, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskBackgroundOperation, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowEvidenceBatch, taskHistoryPersistenceSnapshot };

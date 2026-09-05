@@ -68,10 +68,6 @@ async function readTaskCodeDiff(config, payload = {}) {
   throw new Error(`The selected file is not recorded as a change for this task: ${requestedPath}`);
 }
 
-function resolveTaskCodeWorkspacePath(config, taskId) {
-  return resolveTaskCodeContext(config, taskId).executionPath;
-}
-
 function resolveTaskCodeContext(config, taskIdValue) {
   const taskId = String(taskIdValue || '').trim();
   if (!taskId) throw new Error('A task ID is required for the changes viewer.');
@@ -503,8 +499,6 @@ function sha256(value) {
 }
 
 export {
-  MAX_DIFF_FILE_BYTES,
   describeTaskCodeWorkspace,
-  readTaskCodeDiff,
-  resolveTaskCodeWorkspacePath
+  readTaskCodeDiff
 };

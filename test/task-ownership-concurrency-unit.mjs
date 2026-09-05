@@ -124,18 +124,32 @@ try {
   assert.equal(fs.existsSync(path.join(workspacePath, 'src', 'task-b.js')), true, 'cancellation must preserve already-visible task B changes');
 
   fs.writeFileSync(path.join(workspacePath, 'src', 'stale-task.js'), 'export const staleTask = true;\n');
+  await assert.rejects(
+    () => callTool('relai_publish', {
+      action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit after old task ended', paths: ['src/stale-task.js']
+    }),
+    error => error?.code === 'INVALID_TASK_STATE',
+    'an explicitly supplied terminal work_id must be rejected instead of silently becoming taskless'
+  );
   const staleOptionalPublish = await callTool('relai_publish', {
-    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit after old task ended', paths: ['src/stale-task.js']
+    action: 'commit', workspace: 'app', message: 'commit after old task ended', paths: ['src/stale-task.js']
   });
-  assert.equal(staleOptionalPublish.ok, true, 'a stale work_id must not block a task-optional explicitly scoped commit when workspace authorization is available');
+  assert.equal(staleOptionalPublish.ok, true, 'omitting work_id must allow the explicitly scoped workspace commit');
   assert.deepEqual(staleOptionalPublish.paths, ['src/stale-task.js']);
   assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'src/stale-task.js');
 
   fs.writeFileSync(path.join(workspacePath, 'src', 'stale-add-all.js'), 'export const staleAddAll = true;\n');
+  await assert.rejects(
+    () => callTool('relai_publish', {
+      action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit all requested workspace changes after old task ended', addAll: true
+    }),
+    error => error?.code === 'INVALID_TASK_STATE',
+    'addAll must not silently discard an explicitly supplied terminal work_id'
+  );
   const staleAddAllPublish = await callTool('relai_publish', {
-    action: 'commit', workspace: 'app', work_id: taskA.work_id, message: 'commit all requested workspace changes after old task ended', addAll: true
+    action: 'commit', workspace: 'app', message: 'commit all requested workspace changes after old task ended', addAll: true
   });
-  assert.equal(staleAddAllPublish.ok, true, 'explicit addAll must execute without resurrecting an ended work_id or requiring a dashboard approval');
+  assert.equal(staleAddAllPublish.ok, true, 'taskless addAll must execute from explicit workspace scope without a dashboard approval');
   assert.equal(staleAddAllPublish.addAll, true);
   assert.deepEqual(staleAddAllPublish.paths, ['src/stale-add-all.js']);
   assert.equal(git('show', '--name-only', '--format=', 'HEAD').trim(), 'src/stale-add-all.js');

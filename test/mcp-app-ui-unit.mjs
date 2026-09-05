@@ -54,7 +54,7 @@ for (const schema of publicSchemas) {
 assert.deepEqual(mcpByName.get('relai_publish')?.annotations, { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true });
 
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /brief normal assistant progress messages/i, 'server instructions must preserve visible progress around tool use');
-assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /Native tool invocation labels are supplemental status only and must not replace those progress messages/i);
+assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /Native tool invocation labels are supplemental status only/i);
 assert.match(PUBLIC_MCP_SERVER_INSTRUCTIONS, /do not expose private chain-of-thought/i);
 
 const openAiEnvelope = { 'openai/session': 'chat-session-regression' };

@@ -5,10 +5,10 @@ description: Use for non-trivial repository features, refactors, migrations, or 
 
 # Rel.AI Planning
 
-Reuse the active `work_id` opened by `rel-ai-workflow`. Do not call `relai_work` with `action: "begin"` when the same objective already has a work session.
+Reuse an active `work_id` when the objective already benefits from durable task tracking. Planning itself does not require a work session; open one only when persistent ownership, recovery, or task-scoped execution will materially help the approved plan.
 
 Use this skill only when architecture or sequencing is genuinely non-trivial. Do not trigger for small localized changes whose implementation path is already clear after targeted inspection.
-Planning defines architecture, dependencies, completion conditions, and meaningful risks; it does not prescribe a fixed tool ritual. During execution, runtime workflow guidance (`workflow.recommendedActions` and `workflow.avoidActions`) calibrates the exact next repository action for the current evidence and boundary.
+Planning defines architecture, dependencies, completion conditions, and meaningful risks; it does not prescribe a fixed tool ritual. During execution, choose the next repository action from current evidence, the demonstrated boundary, and hard runtime constraints.
 
 ## Planning workflow
 

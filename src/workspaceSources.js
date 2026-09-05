@@ -92,23 +92,11 @@ function collectWorkspaceTextFiles(workspace, overrides = {}) {
   return { files, skipped, truncated };
 }
 
-function sourceForWorkspacePath(workspace, value) {
-  return parseWorkspaceSourcePath(workspace, value).source;
-}
-
-function stripWorkspaceSourcePrefix(workspace, value, source) {
-  const parsed = parseWorkspaceSourcePath(workspace, value);
-  if (parsed.source.number !== source.number) return null;
-  return parsed.relativePath;
-}
-
 export {
   collectWorkspaceTextFiles,
   parseWorkspaceSourcePath,
   qualifyWorkspaceSourcePath,
   resolveWorkspaceSourcePath,
-  sourceForWorkspacePath,
   sourceWorkspace,
-  stripWorkspaceSourcePrefix,
   workspaceSourceEntries
 };

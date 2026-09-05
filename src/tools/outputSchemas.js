@@ -384,8 +384,7 @@ const FIELD_SCHEMAS = Object.freeze({
   registeredClients: NUMBER,
   aliasNormalizations: NUMBER,
   policy: OBJECT,
-  task: OBJECT,
-  workflow: OBJECT
+  task: OBJECT
 });
 
 const TOOL_FIELDS = Object.freeze({
@@ -413,7 +412,7 @@ const TOOL_FIELDS = Object.freeze({
   [OP.CHANGES_REPLAY]: ['ok', 'workspace', 'work_id', 'checkpointId', 'payloadSha256', 'createdAt', 'replayed', 'staged', 'redactSensitive', 'path', 'reviewScope', 'reviewedScope', 'reviewHash', 'reviewedFiles', 'excludedWorkspaceFiles', 'status', 'branch', 'aheadBehind', 'statusEntries', 'sessionChangedFiles', 'baselineChangedFiles', 'untrackedSessionFiles', 'untrackedBaselineFiles', 'baselineSource', 'diff', 'sensitiveReview', 'sensitiveValuesReturned', 'exitCode', 'stderr'],
   [OP.CHANGES_RESTORE]: ['ok', 'workspace', 'work_id', 'mode', 'paths', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error'],
   [OP.CHANGES_RESET]: ['ok', 'workspace', 'work_id', 'mode', 'removeUntracked', 'reset', 'clean'],
-  [OP.WORK_STATUS]: ['ok', 'version', 'workspace', 'work_id', 'workspaceAliases', 'workspaceCount', 'toolSurface', 'tools', 'toolGroups', 'scripts', 'ci', 'runtime', 'repositoryRuntime', 'runtimeCompatibility', 'repository', 'readiness', 'state', 'task', 'activeRelatedWork', 'backgroundOperation'],
+  [OP.WORK_STATUS]: ['ok', 'version', 'workspace', 'work_id', 'operationId', 'workspaceAliases', 'workspaceCount', 'toolSurface', 'tools', 'toolGroups', 'scripts', 'ci', 'runtime', 'repositoryRuntime', 'runtimeCompatibility', 'repository', 'readiness', 'state', 'task', 'activeRelatedWork', 'backgroundOperation'],
   [OP.PUBLISH_COMMIT]: ['ok', 'workspace', 'work_id', 'dryRun', 'message', 'addAll', 'paths', 'sensitiveAuthorization', 'statusBefore', 'add', 'commit', 'statusAfter', 'secretStagedFiles', 'unauthorizedSecretPaths', 'indexRestored', 'error'],
   [OP.PUBLISH_PUSH]: ['ok', 'workspace', 'work_id', 'remote', 'branch', 'dryRun', 'setUpstream', 'push'],
   [OP.PUBLISH_DRAFT_PR]: ['ok', 'workspace', 'work_id', 'base', 'head', 'title', 'body', 'changedFiles', 'changedFileCount', 'emptyDiff', 'draftOnly', 'remoteChanged', 'warning', 'diff'],
@@ -446,8 +445,7 @@ const COMPACT_RESULT_FIELDS = Object.freeze([
 function outputSchemaFor(name) {
   const fields = [...new Set([
     ...(TOOL_FIELDS[name] || ['ok', 'workspace', 'work_id', 'message', 'error', 'errorCode', 'nextAction']),
-    ...COMPACT_RESULT_FIELDS,
-    'workflow'
+    ...COMPACT_RESULT_FIELDS
   ])];
   const properties = Object.fromEntries(fields.map(field => [field, FIELD_SCHEMAS[field] || OBJECT]));
   const successRequired = ['ok', ...(SUCCESS_REQUIRED_FIELDS[name] || [])];

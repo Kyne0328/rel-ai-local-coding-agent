@@ -1,6 +1,6 @@
 import { requestDashboardRefresh } from '../../api.js';
 
-export function connectionRestartResult(status = {}) {
+function connectionRestartResult(status = {}) {
   const tunnelStatus = String(status?.tunnelStatus || '');
   if (status?.serverRunning === false) {
     return {

@@ -16,8 +16,6 @@ function manageSkill(workspace, config, args = {}, context = {}) {
   const name = validateRequestedName(args.name);
   if (action === 'delete') return deleteManagedSkill(config, { workspace: workspace.alias, scope, name });
   const taskId = String(context.taskId || args.work_id || '').trim();
-  if (!taskId) throw new Error('Creating or updating an agent-managed skill requires the active work_id.');
-  assertTaskEvidence(config, workspace, taskId);
   if (action === 'create') return createManagedSkill(config, workspace, taskId, scope, name, args.content);
   if (action === 'edit') return editManagedSkill(config, workspace, taskId, scope, name, args.content);
   if (action === 'patch') return patchManagedSkill(config, workspace, taskId, scope, name, args.oldText, args.newText);
@@ -224,18 +222,8 @@ function validateRequestedName(value) {
   return identity.name;
 }
 
-function assertTaskEvidence(config, workspace, taskId) {
-  const authority = readTaskIntegrity(config, taskId, workspace.alias);
-  if (!authority) throw new Error('Agent-managed skill changes require authoritative task evidence.');
-  const mutationGeneration = Number(authority.mutationGeneration || 0);
-  if (mutationGeneration <= 0) return;
-  if (authority.validationResult !== 'passed' || Number(authority.latestValidatedMutationGeneration || 0) !== mutationGeneration) {
-    throw new Error('Validate the current repository changes before creating or updating a learned skill. Run relai_validate checks without complete:true, then call relai_skill.');
-  }
-}
-
 function provenance({ workspace, taskId, scope, name, existing, config }) {
-  const authority = readTaskIntegrity(config, taskId, workspace);
+  const authority = taskId ? readTaskIntegrity(config, taskId, workspace) : null;
   const now = new Date().toISOString();
   return {
     schemaVersion: 1,
@@ -246,8 +234,8 @@ function provenance({ workspace, taskId, scope, name, existing, config }) {
     workspace: scope === 'workspace' ? workspace : '',
     createdAt: String(existing?.createdAt || now),
     updatedAt: now,
-    lastWorkId: taskId,
-    validationStatus: String(authority?.validationResult || 'not_required'),
+    lastWorkId: taskId || '',
+    validationStatus: String(authority?.validationResult || 'not_run'),
     validationFingerprint: String(authority?.validatedRepositoryFingerprint || authority?.validationFingerprint || '')
   };
 }

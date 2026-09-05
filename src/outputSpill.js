@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getStateDir } from './statePaths.js';
+import { principalFingerprint } from './mcp/principal.js';
 
 const OUTPUT_SPILL_DIR = 'output-spills';
 const OUTPUT_REF_PATTERN = /^spill_[A-Za-z0-9_-]{20,80}$/;
@@ -10,8 +11,16 @@ const MAX_TOTAL_SPILL_BYTES = 256 * 1024 * 1024;
 const MAX_SPILL_FILES = 100;
 const SPILL_TTL_MS = 24 * 60 * 60 * 1000;
 
-function createOutputSpillWriter(config = {}, taskId = '') {
-  const owner = String(taskId || '').trim();
+function outputSpillOwner({ taskId = '', workspace = '', principal = '' } = {}) {
+  const task = String(taskId || '').trim();
+  if (task) return task;
+  const workspaceId = String(workspace || '').trim();
+  if (!workspaceId) return '';
+  return `workspace:${workspaceId}:principal:${principalFingerprint(principal || 'local:trusted')}`;
+}
+
+function createOutputSpillWriter(config = {}, ownerId = '') {
+  const owner = String(ownerId || '').trim();
   let fd = null;
   let file = '';
   let outputRef = '';
@@ -57,16 +66,16 @@ function createOutputSpillWriter(config = {}, taskId = '') {
   return { start, append, finish };
 }
 
-function readOutputSpill(config = {}, taskId = '', outputRef = '') {
-  const owner = String(taskId || '').trim();
+function readOutputSpill(config = {}, ownerId = '', outputRef = '') {
+  const owner = String(ownerId || '').trim();
   const ref = String(outputRef || '').trim();
-  if (!owner) throw new Error('relai_read outputRef requires an active work_id.');
+  if (!owner) throw new Error('relai_read outputRef requires an authorized workspace execution scope.');
   if (!OUTPUT_REF_PATTERN.test(ref)) throw new Error('Invalid Rel.AI outputRef.');
   const file = path.join(spillRoot(config), taskDirectoryName(owner), `${ref}.log`);
   let stat;
   try { stat = fs.statSync(file); }
   catch (error) {
-    if (error?.code === 'ENOENT') throw new Error('Rel.AI outputRef was not found for this work_id.', { cause: error });
+    if (error?.code === 'ENOENT') throw new Error('Rel.AI outputRef was not found for this authorized execution scope.', { cause: error });
     throw error;
   }
   if (!stat.isFile()) throw new Error('Rel.AI outputRef does not identify a readable spill.');
@@ -122,4 +131,4 @@ function pruneOutputSpills(root) {
   }
 }
 
-export { createOutputSpillWriter, readOutputSpill };
+export { createOutputSpillWriter, outputSpillOwner, readOutputSpill };

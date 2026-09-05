@@ -165,7 +165,7 @@ Each tool invocation owns one stable `operationId`, which is also the activity `
 Audit events with the same operation ID enrich the canonical lifecycle record but do not increment task call counts a second time.
 
 Permitted event data includes bounded category, action, state, title, summary, timing, tool name, workspace-relative target, sanitized resource URI, result status, affected-item count, warning count, normalized error, and allow-listed metadata. Raw arguments, unrestricted command output, file contents, environment values, and raw headers are not part of the dashboard activity projection.
-Workflow observability follows the same projection rule. Task-scoped results may carry the full bounded workflow snapshot, while the dashboard receives only workflow stage, risk level, boundary level, top recommended-action text, fresh/stale evidence counts, and repeat count. Raw evidence receipts are not part of dashboard task records, and recommendation arguments, command output, unrestricted paths, environment values, or secrets are not copied into the UI projection.
+Rel.AI observability follows the same projection rule. Explicit durable work sessions receive bounded task history and factual validation/ownership state; taskless workspace/resource operations still appear in Activity without manufacturing task rows. Raw evidence receipts, command output, unrestricted paths, environment values, headers, and secrets are not copied into the dashboard projection.
 
 ## Completion-summary privacy
 

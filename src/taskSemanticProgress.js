@@ -290,6 +290,5 @@ function buildTaskSemanticProgress(task = {}, options = {}) {
 export {
   buildTaskSemanticProgress,
   classifyTaskChangedFiles,
-  isSupportArtifactPath,
   semanticMilestoneForEvent
 };

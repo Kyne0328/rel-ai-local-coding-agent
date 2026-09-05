@@ -1,22 +1,21 @@
 # Workflow reliability
 
-Rel.AI exposes one canonical public tool surface and derives bounded workflow guidance from the repository facts it already owns. There is no mandatory numbered workflow. The correct path is the shortest path that proves the current objective without weakening safety, integrity, or completion authority.
+Rel.AI exposes one canonical public tool surface and supplies repository facts, execution results, optional durable evidence, and hard runtime constraints. It does not maintain a second planner for ChatGPT. The agent chooses the shortest path and appropriate validation for the objective without weakening authorization, containment, resource ownership, collision protection, sensitive-path controls, or defined destructive approvals.
 
-## Runtime calibration
+## Runtime authority
 
-Start one logical repository objective with `relai_work` using `action:"begin"`, then reuse the returned `work_id`. Successful work-scoped results may include a bounded `workflow` snapshot. Treat `workflow.recommendedActions` as the default calibration for what is useful next and `workflow.avoidActions` as a warning against redundant or over-broad work.
+Use tools directly against an authorized workspace by default. Start `relai_work` with `action:"begin"` when durable ownership, recovery, task-scoped review/publication, or task history is useful, then supply that `work_id` only on operations that should belong to the durable task. Omitted task identity is never guessed. Rel.AI records factual evidence such as tool outcomes, validation fingerprints, workspace/task mutations, and process state. It does not return advisory `recommendedActions`, `avoidActions`, or synthetic workflow stages.
 
-Workflow guidance is advisory. Authorization, workspace containment, sensitive-file policy, stale-write checks, task-integrity generations, workspace conflicts, Git safety, and explicit completion remain authoritative. A recommendation never bypasses a hard runtime error.
-### Hybrid authority table
+Authorization, workspace containment, sensitive-file policy, stale-write checks, workspace/task mutation generations, resource ownership, workspace conflicts, Git safety, and defined destructive approvals remain authoritative.
 
-| Concern | Authority | Workflow role |
-| --- | --- | --- |
-| Authorization, principal identity, workspace containment, sensitive-file policy | Existing runtime safety/authorization modules | Advisory only; cannot widen access or bypass a denial |
-| Task-owned mutations, mutation generations, validation freshness, workspace conflicts, completion readiness | `src/taskIntegrity.js` and existing completion gates | Reads current facts and recommends the cheapest useful next action |
-| Repository topology, package boundaries, check catalog | `src/workflow/topology.js` and `src/workflow/checkCatalog.js` | Derived discovery used to calibrate scope/cost; not a safety boundary |
-| Safe evidence receipts and workflow snapshots | Existing durable task history | Observational/advisory persistence; never a second completion authority |
-| Process ownership and lifecycle | Existing managed-process runtime | May reuse only an exact same-task process; cannot cross principal/workspace/task boundaries |
-| Dashboard workflow stage/risk/next action | Sanitized projection only | Informational UI; raw receipts and recommendation args remain internal |
+| Concern | Authority |
+| --- | --- |
+| Authorization, principal identity, workspace containment, sensitive-file policy | Existing runtime safety/authorization modules |
+| Workspace/task mutations, mutation generations, validation freshness, and workspace conflicts | `src/taskIntegrity.js` |
+| Repository topology, package boundaries, check catalog | `src/workflow/topology.js` and `src/workflow/checkCatalog.js` |
+| Safe evidence receipts | Existing durable task history |
+| Process ownership and lifecycle | Existing managed-process runtime |
+| Next repository action | The agent, based on current evidence and hard runtime constraints |
 
 ## Shortest-path examples
 
@@ -24,31 +23,31 @@ These are shapes, not required sequences. Skip any stage that current evidence a
 
 ### Docs-only
 
-`begin -> targeted read -> edit -> task-owned review if useful -> finish`
+`targeted read -> edit -> review if useful`; add `begin ... finish` only when durable task identity is useful.
 
 Documentation-only work normally does not justify package builds, repository-wide tests, Knip, security scans, or release checks unless repository policy or the changed documentation specifically requires them.
 
 ### Local bug fix
 
-`begin -> reproduce or inspect -> coherent fix -> directly affected check -> task-owned review -> finish`
+`reproduce or inspect -> coherent fix -> directly affected check -> review`; optionally attribute the flow to a durable work session.
 
 Prefer the smallest check that proves the defect is fixed. Broaden only when the affected boundary or risk justifies it.
 
 ### Feature slice
 
-`begin -> inspect/design only as needed -> implement coherent slice -> package-relevant checks -> review -> finish`
+`inspect/design only as needed -> implement coherent slice -> package-relevant checks -> review`; use a durable work session when ownership/recovery helps.
 
 Do not validate after every tiny edit. Validate at a meaningful implementation boundary and reuse exact fresh evidence when nothing relevant has changed.
 
 ### Investigation
 
-`begin -> search/inspect -> targeted reads or measurements -> report -> finish`
+`search/inspect -> targeted reads or measurements -> report`; read-only investigation does not need a synthetic task.
 
 Investigation does not imply mutation or validation. Read and inspection evidence can be sufficient when the objective is explanatory.
 
 ### Risky release
 
-`begin -> inspect release boundary -> focused regression proof -> required release/build/package checks -> review -> finish`
+`inspect release boundary -> focused regression proof -> required release/build/package checks -> review/publish`; a durable work session is useful when publication should default to task-owned paths.
 
 Release-wide validation is reserved for release, repository, cross-package, migration, dependency, contract, or other genuinely high-risk boundaries. It is not the default conclusion of a local source edit.
 
@@ -64,7 +63,7 @@ Topology discovery is bounded by depth, manifest count, and excluded generated/s
 
 Validation breadth is derived from the changed boundary and risk, not from file count alone. Many files inside one package can still be package-local. Shared contracts, dependency manifests, security/configuration surfaces, release workflows, migrations, and cross-package changes can widen the boundary or raise risk.
 
-The workflow model uses the shared boundary/risk classifier for advisory decisions. Existing task-integrity and safety owners remain the hard authorities.
+Boundary/risk helpers provide factual context for validation selection and reporting. The agent chooses what to run; existing integrity and safety owners enforce only their concrete runtime boundaries.
 
 ## Evidence reuse and freshness
 
@@ -87,7 +86,7 @@ Read evidence may also record bounded file hashes and line ranges. Search/contex
 
 Edit shape and validation cadence are separate decisions. Use `relai_edit` for repository mutations and choose exact replacement, content replacement, patch text, or a bounded multi-file batch according to the change shape.
 
-`runChecks` remains explicit. Rel.AI may recommend validation after a behavior-changing edit, but it does not universally force validation after every edit. Documentation-only or otherwise low-risk changes can proceed directly to review or completion when hard repository policy permits it.
+`runChecks` remains explicit. Rel.AI does not universally force validation after edits. The agent selects risk-matched checks when they are useful, and Rel.AI records the resulting evidence as passed, failed, stale, or not run.
 
 For changed source, prefer directly affected tests first, then the cheapest package-relevant lint/type/test/build evidence needed for the boundary. Migration commands are never auto-selected as validation checks.
 
@@ -101,13 +100,11 @@ Sensitive-file review keeps the existing redaction rules. Workflow guidance does
 
 Use `relai_process` only for persistent services, watchers, previews, or interactive programs. One-shot tests, builds, linters, and scripts belong in `relai_exec` or `relai_validate`.
 
-Rel.AI may reuse an active managed process only when the workspace, logical `work_id`, principal, normalized command, `cwd`, and environment key set match exactly. A reused result returns `reused:true` and current readiness state. Process reuse never crosses logical tasks, workspaces, principals, commands, directories, or environment-key shapes.
+Rel.AI may reuse an active managed process only when its existing reuse fingerprint is compatible. Process access itself is authorized by principal + workspace + `processId`; `work_id` is optional attribution, and an explicitly supplied mismatched work_id is rejected rather than ignored. A reused result returns `reused:true` and current readiness state.
 
 ## Repeated failures
 
-Rel.AI fingerprints safe failure facts such as tool/action identity, normalized command, `cwd`, error code, and safe target. If the same failure repeats within one mutation generation, workflow guidance switches from blind retry to a `repair` strategy such as impact inspection or root-cause diagnosis.
-
-After a new mutation, the retry epoch resets and the smallest relevant check can become appropriate again.
+Rel.AI fingerprints safe failure facts such as tool/action identity, normalized command, `cwd`, error code, and safe target so repeated evidence can be recognized without persisting sensitive output. The agent decides whether repetition calls for diagnosis, repair, or another action. A new mutation starts a new evidence epoch.
 
 ## Inactivity and resumption
 
@@ -121,22 +118,22 @@ A valid same-`work_id` call from the authorized principal in the bound workspace
 
 Historical records that used `inactivity_window` as cancellation/failure are normalized to resumable `inactive` when there is no explicit terminal action. Terminal sessions never reopen through inactivity handling.
 
-## Completion authority
+## Completion and validation evidence
 
-Validation evidence and workflow stage do not complete a task by themselves. `src/taskIntegrity.js` remains the authority for task-owned mutations, validation freshness, and workspace conflicts.
+Validation evidence does not decide whether the agent may consider its objective complete. `src/taskIntegrity.js` remains the factual authority for task/workspace mutations, ownership/conflicts, and whether recorded validation is current for the repository state.
 
-After the last relevant mutation, use current structured validation only when the boundary requires it. Do not rerun an unchanged exact check simply to create a second "final" verification. For work that changed repository content, make the final validating call with `complete:true` and a non-empty summary so validation and completion happen atomically. Use `relai_work` with `action:"finish"` for read-only work, or when validation already passed without `complete:true` and no repository content changed afterward.
+Use current structured validation when it helps prove the objective. Do not rerun an unchanged exact check merely to create ceremonial "final" verification. If a durable work session exists, `relai_validate` with `complete:true` remains an optional convenience to validate and close that exact session atomically; `relai_work` with `action:"finish"` may also close it while truthfully reporting validation as passed, failed, stale, not run, or not required.
 
-`relai_exec { command:"npm test" }`, a running development process, a completed plan checklist, or an advisory `workflow.stage === "complete"` does not independently satisfy hard completion requirements.
+A completed plan checklist or model statement cannot falsify Rel.AI's recorded evidence. Conversely, missing/stale/failed validation is evidence for the agent to evaluate, not a generic harness veto on completion.
 
 ## Observability and privacy
 
-Workflow guidance is attached to task-scoped results and persisted as a bounded snapshot. The dashboard receives only a projection: workflow stage, risk level, boundary level, top recommended-action text, fresh/stale evidence counts, and repeat count. Raw evidence receipts, recommendation arguments, repository paths, command output, environment values, and secrets are not exposed through the dashboard projection.
+Rel.AI records bounded factual activity/evidence rather than a duplicate workflow planner. Durable task history is only created for explicit work sessions; taskless operations remain workspace/resource activity and must not manufacture "Planning" or "Inactive" tasks. Persistent evidence and dashboard projections exclude raw command output, environment values, headers, credentials, and other secret-bearing fields.
 
-Ordinary workflow assembly consumes existing authority facts and cached topology. It must not spawn a fresh global `git status` process after every read or other ordinary tool call.
+Ordinary evidence collection consumes existing authority facts and cached topology. It must not spawn a fresh global `git status` process after every read or other ordinary tool call.
 
 ## Recovery and publishing
 
-Use `relai_changes` restore/reset/tidy actions only for the requested recovery scope. Publishing remains explicit through `relai_publish`; workflow guidance never commits or pushes automatically, and push targets are validated from the repository's actual Git remotes at execution time.
+Use `relai_changes` restore/reset/tidy actions only for the requested recovery scope. Publishing remains explicit through `relai_publish`; no evidence or planning helper commits or pushes automatically, and push targets are validated from the repository's actual Git remotes at execution time.
 
-When executing an approved multi-task plan, keep the same work session, verify each completion condition, and update its checklist only when evidence proves the task complete. Consolidate accumulated implementation as the plan advances instead of layering duplicate owners or compatibility paths.
+When executing an approved multi-task plan, use a durable work session only when its persistent ownership/recovery benefits matter. Verify each completion condition and update checklists only when evidence proves it. Consolidate accumulated implementation as the plan advances instead of layering duplicate owners or compatibility paths.

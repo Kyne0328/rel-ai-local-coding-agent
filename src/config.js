@@ -38,7 +38,6 @@ function makeDefaultConfig() {
       enableStateExport: true
     },
     knowledge: {
-      enabled: true,
       proceduralLearning: true,
       maxBootstrapBytes: 4096
     },
@@ -212,7 +211,6 @@ function normalizeProductSettings(next, base, input) {
   };
   const knowledge = { ...base.knowledge, ...objectOrEmpty(input.knowledge) };
   next.knowledge = {
-    enabled: normalizeBoolean(knowledge.enabled, base.knowledge.enabled),
     proceduralLearning: normalizeBoolean(knowledge.proceduralLearning, base.knowledge.proceduralLearning),
     maxBootstrapBytes: clampNumber(knowledge.maxBootstrapBytes, 1024, 16384, base.knowledge.maxBootstrapBytes)
   };

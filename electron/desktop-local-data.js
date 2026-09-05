@@ -98,4 +98,4 @@ function activeTaskCount(activity = {}) {
   return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
 }
 
-export { createDesktopLocalDataManager, measurePaths };
+export { createDesktopLocalDataManager };

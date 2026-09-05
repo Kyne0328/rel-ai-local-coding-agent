@@ -1,5 +1,4 @@
 import { slimCompactPublicResult } from './compactResult.js';
-import { compactWorkflowContext } from '../context/session-compactor.js';
 import { OPERATION_IDS as OP } from './operationIds.js';
 import { withTaskIdentity } from './task.js';
 import {
@@ -14,10 +13,7 @@ import {
 function serializeConnectorResult({ publicName, action, operationName, value, args = {}, workId = '' }) {
   const operationResult = compactForConnector(operationName, value, args);
   const publicResult = slimCompactPublicResult(publicName, action, operationResult);
-  const resultWithWorkflow = value?.workflow && publicResult && typeof publicResult === 'object'
-    ? { ...publicResult, workflow: compactWorkflowContext(value.workflow) }
-    : publicResult;
-  return withTaskIdentity(resultWithWorkflow, workId);
+  return withTaskIdentity(publicResult, workId);
 }
 
 function compactForConnector(name, value, args = {}) {

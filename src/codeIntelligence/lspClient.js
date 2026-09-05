@@ -188,4 +188,4 @@ function clientRequestResult(method, params = {}) {
   return null;
 }
 
-export { DEFAULT_REQUEST_TIMEOUT_MS, LspClient };
+export { LspClient };

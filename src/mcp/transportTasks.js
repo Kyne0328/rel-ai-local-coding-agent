@@ -190,42 +190,34 @@ function synchronousEstimate(_name, args, bounds, options = {}) {
 async function runFallbackToolExecution(config, message, args, options = {}) {
   const name = String(message.params?.name || '');
   const workId = String(args.work_id || '').trim();
-  if (!workId) {
-    const bounded = await runBoundedExecution(
-      signal => options.execute(config, name, args, {
-        ...options,
-        signal,
-        requestId: message.id,
-        message
-      }),
-      { bounds: options.bounds || DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS, signal: options.signal }
-    );
-    if (!bounded.ok) return toolExecutionErrorResponse(message.id, bounded.error);
-    return successResponse(message.id, bounded.value);
-  }
+  const signature = fallbackSignature(name, args);
+  const scopeId = workId || `workspace:${principalIdentity(options.principal)}:${String(args.workspace || '')}:${signature}`;
   const graceMs = Math.max(0, Number(options.synchronousFallbackGraceMs ?? DEFAULT_FALLBACK_GRACE_MS));
   let started;
   try {
     started = startFallbackExecution({
       config,
       workId,
+      scopeId,
       tool: name,
       workspace: String(args.workspace || ''),
-      signature: fallbackSignature(name, args),
+      signature,
       run: signal => options.execute(config, name, args, {
         ...options,
         signal,
-        requestId: `fallback:${workId}`,
+        requestId: `fallback:${workId || scopeId}`,
         message
       })
     });
   } catch (error) {
     return successResponse(message.id, toolResult({
       ok: false,
-      work_id: workId,
+      ...(workId ? { work_id: workId } : {}),
       error: error instanceof Error ? error.message : String(error),
       errorCode: String(error?.code || 'TASK_OPERATION_IN_PROGRESS'),
-      nextAction: `Call relai_work with action "status" and work_id "${workId}" before starting another long operation.`
+      nextAction: workId
+        ? `Call relai_work with action "status" and work_id "${workId}" before starting another long operation.`
+        : 'Check the returned operationId with relai_work action "status" before retrying the same long operation.'
     }, false));
   }
 
@@ -239,36 +231,38 @@ async function runFallbackToolExecution(config, message, args, options = {}) {
       if (settled.value.ok) return successResponse(message.id, settled.value.result);
       return successResponse(message.id, toolResult({
         ok: false,
-        work_id: workId,
+        ...(workId ? { work_id: workId } : {}),
         error: settled.value.error instanceof Error ? settled.value.error.message : String(settled.value.error || 'Long-running operation failed.'),
         errorCode: 'TOOL_EXECUTION_FAILED'
       }, true));
     }
   }
 
-  const operation = fallbackExecutionStatus(workId, { config }) || {};
+  const operation = fallbackExecutionStatus(workId || started.record.operationId, { config }) || {};
   return successResponse(message.id, toolResult({
     ok: true,
     workspace: String(args.workspace || ''),
-    work_id: workId,
+    ...(workId ? { work_id: workId } : {}),
     status: 'running',
     operationId: operation.operationId,
     updatedAt: operation.updatedAt,
     revision: operation.revision,
     pollAfterMs: operation.pollAfterMs,
     message: `${name} is still running safely after this request returns.`,
-    nextAction: `Call relai_work with action "status" and work_id "${workId}" after about ${Math.max(1, Math.round(Number(operation.pollAfterMs || 1000) / 1000))} second(s) to get the result.`
+    nextAction: workId
+      ? `Call relai_work with action "status" and work_id "${workId}" after about ${Math.max(1, Math.round(Number(operation.pollAfterMs || 1000) / 1000))} second(s) to get the result.`
+      : `Call relai_work with action "status", workspace "${String(args.workspace || '')}", and operationId "${operation.operationId}" to get the result.`
   }, false));
 }
 
 function replayFallbackResult(requestId, workId, record) {
   if (record.result) return successResponse(requestId, record.result);
   if (record.persistedResult && typeof record.persistedResult === 'object') {
-    return successResponse(requestId, toolResult({ ...record.persistedResult, work_id: workId }, record.isError === true));
+    return successResponse(requestId, toolResult({ ...record.persistedResult, ...(workId ? { work_id: workId } : {}) }, record.isError === true));
   }
   return successResponse(requestId, toolResult({
     ok: false,
-    work_id: workId,
+    ...(workId ? { work_id: workId } : {}),
     status: record.status,
     error: record.error || `Previous background operation ${record.status}.`,
     errorCode: record.status === 'cancelled' ? 'CANCELLED' : 'TOOL_EXECUTION_FAILED'

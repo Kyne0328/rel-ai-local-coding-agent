@@ -144,14 +144,13 @@ try {
     error => error?.code === 'TASK_INTEGRITY_STATE_MISSING'
   );
   assert.equal(fs.existsSync(blockedMutationPath), false, 'missing authority must block mutation before handler execution');
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: missingAuthorityTask,
-      summary: 'Missing authority must not be reconstructed from the audit log.'
-    }, { publicHttpOnly: true }),
-    error => error?.code === 'TASK_INTEGRITY_STATE_MISSING'
-  );
+  const missingAuthorityCompletion = await callTool('relai_work', { action: 'finish',
+    workspace: 'app',
+    work_id: missingAuthorityTask,
+    summary: 'Missing mutation authority does not prevent closing a non-mutating durable task.'
+  }, { publicHttpOnly: true });
+  assert.equal(missingAuthorityCompletion.completionKnown, true);
+  assert.equal(missingAuthorityCompletion.validationStatus, 'not_run');
 
   resetToolActivity();
   const cancelledTask = await startTask('explicit-cancellation-terminal');
@@ -184,7 +183,7 @@ try {
     summary: 'Documentation-only task completed without ceremonial validation.'
   }, { publicHttpOnly: true });
   assert.equal(lowRiskCompletion.ok, true);
-  assert.equal(lowRiskCompletion.validationStatus, 'not_required');
+  assert.equal(lowRiskCompletion.validationStatus, 'not_run');
   assert.deepEqual(lowRiskCompletion.changedFiles, ['README.md']);
 
   resetToolActivity();
@@ -201,17 +200,13 @@ try {
     check: 'node -e "process.exit(1)"'
   }, { publicHttpOnly: true });
   assert.equal(failedLowRiskValidation.validationStatus, 'failed');
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: failedLowRiskTask,
-      summary: 'A known failed check must still block low-risk completion.'
-    }, { publicHttpOnly: true }),
-    error => error?.code === 'TASK_VALIDATION_REQUIRED'
-  );
-  await callTool('relai_work', {
-    action: 'cancel', workspace: 'app', work_id: failedLowRiskTask, reason: 'failed validation regression complete'
+  const failedLowRiskCompletion = await callTool('relai_work', { action: 'finish',
+    workspace: 'app',
+    work_id: failedLowRiskTask,
+    summary: 'The agent may finish while Rel.AI truthfully records the failed validation.'
   }, { publicHttpOnly: true });
+  assert.equal(failedLowRiskCompletion.completionKnown, true);
+  assert.equal(failedLowRiskCompletion.validationStatus, 'failed');
 
   resetToolActivity();
   const unvalidatedMutationTask = await startTask('mutation-without-validation');
@@ -221,30 +216,14 @@ try {
     path: 'src/unvalidated.js',
     content: 'console.log("unvalidated mutation");\n'
   }, { publicHttpOnly: true });
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: unvalidatedMutationTask,
-      summary: 'Mutating task must still require validation.'
-    }, { publicHttpOnly: true }),
-    error => error?.code === 'TASK_VALIDATION_REQUIRED' &&
-      /no successful final validation/i.test(error.message) &&
-      error.allowedAlternatives?.some(item => /complete:true/i.test(item))
-  );
-  const initialValidationBlock = getToolActivity().tasks.find(task => task.id === unvalidatedMutationTask);
-  assert.equal(initialValidationBlock?.status, 'blocked');
-  assert.equal(initialValidationBlock?.currentStage, 'Validation required');
-  assert.equal(initialValidationBlock?.failures, 0);
-  await callTool('relai_validate', { action: 'checks',
+  const unvalidatedMutationCompletion = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
     work_id: unvalidatedMutationTask,
-    level: 'standard'
+    summary: 'The agent finished this mutation without running repository validation.'
   }, { publicHttpOnly: true });
-  await callTool('relai_work', { action: 'finish',
-    workspace: 'app',
-    work_id: unvalidatedMutationTask,
-    summary: 'Mutating task completed after its own validation.'
-  }, { publicHttpOnly: true });
+  assert.equal(unvalidatedMutationCompletion.completionKnown, true);
+  assert.equal(unvalidatedMutationCompletion.validationStatus, 'not_run');
+  assert.equal(getToolActivity().lastTask?.status, 'completed');
 
   resetToolActivity();
   const missingSummaryTask = await startTask('atomic-completion-without-summary');
@@ -331,7 +310,7 @@ try {
   assert.equal(validation.ok, true);
   assert.equal(validation.work_id, taskId);
   assert.equal(validation.validationStatus, 'passed');
-  assert.match(validation.nextAction, /relai_work|complete:true/i);
+  assert.match(validation.nextAction, /recorded|repository state/i);
 
   const completion = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
@@ -416,22 +395,13 @@ try {
   }, { publicHttpOnly: true });
   await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: externalMutationTaskId, level: 'standard' }, { publicHttpOnly: true });
   fs.writeFileSync(path.join(workspace, 'src', 'external-fingerprint.js'), 'console.log("changed outside the task ledger");\n');
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: externalMutationTaskId,
-      summary: 'External mutation must require another validation.'
-    }, { publicHttpOnly: true }),
-    error => error?.code === 'TASK_REVALIDATION_REQUIRED' && /content changed after/i.test(error.message)
-  );
-  const externalRecovery = await callTool('relai_validate', { action: 'checks',
+  const externalCompletion = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
     work_id: externalMutationTaskId,
-    level: 'standard',
-    complete: true,
-    summary: 'Revalidated after an externally observed content mutation.'
+    summary: 'The agent finished after external content changed; Rel.AI reports validation as stale.'
   }, { publicHttpOnly: true });
-  assert.equal(externalRecovery.completionKnown, true);
+  assert.equal(externalCompletion.completionKnown, true);
+  assert.equal(externalCompletion.validationStatus, 'stale');
 
   resetToolActivity();
   const changedContext = { publicHttpOnly: true };
@@ -444,39 +414,14 @@ try {
     oldText: 'console.log("ready");',
     newText: 'console.log("changed after validation");'
   }, changedContext);
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: changedTaskId,
-      summary: 'This must pause until the final validation passes.'
-    }, changedContext),
-    error => error?.code === 'TASK_REVALIDATION_REQUIRED' &&
-      /completion is paused because code changed after/i.test(error.message) &&
-      error.retryable === true &&
-      error.allowedAlternatives?.some(item => /relai_validate.*complete:true/i.test(item))
-  );
-  const revalidationStatus = getToolActivity();
-  const revalidationTask = revalidationStatus.tasks.find(task => task.id === changedTaskId);
-  assert.equal(revalidationTask?.status, 'blocked');
-  assert.equal(revalidationTask?.currentStage, 'Validation required');
-  assert.equal(revalidationTask?.progress?.label, 'Final validation required');
-  assert.equal(revalidationTask?.lastOutcome, 'blocked');
-  assert.equal(revalidationTask?.failures, 0, 'recoverable revalidation must not count as a failed tool call');
-  assert.equal(revalidationTask?.events.at(-1)?.status, 'blocked');
-  assert.equal(revalidationTask?.events.at(-1)?.result?.outcome, 'Final validation required');
-  assert.match(revalidationTask?.events.at(-1)?.summary || '', /Task completion paused/i);
-
-  const recoveredAtomicCompletion = await callTool('relai_validate', { action: 'checks',
+  const changedCompletion = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
     work_id: changedTaskId,
-    level: 'standard',
-    complete: true,
-    summary: 'Revalidated the post-validation edit and completed atomically.'
+    summary: 'The agent finished after a post-validation edit; Rel.AI records stale evidence.'
   }, changedContext);
-  assert.equal(recoveredAtomicCompletion.ok, true);
-  assert.equal(recoveredAtomicCompletion.completionKnown, true);
-  assert.equal(recoveredAtomicCompletion.work_id, changedTaskId);
-  assert.equal(recoveredAtomicCompletion.completionSource, 'relai_validate:checks');
+  assert.equal(changedCompletion.ok, true);
+  assert.equal(changedCompletion.completionKnown, true);
+  assert.equal(changedCompletion.validationStatus, 'stale');
   assert.equal(getToolActivity().lastTask?.status, 'completed');
 
   resetToolActivity();
@@ -491,14 +436,12 @@ try {
     content: 'console.log("task b mutation");\n'
   }, sharedScope);
   await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: taskA, level: 'standard' }, sharedScope);
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: taskB,
-      summary: 'Task B must not borrow task A validation.'
-    }, sharedScope),
-    error => error?.code === 'TASK_VALIDATION_REQUIRED' && /exact work_id/i.test(error.message)
-  );
+  const unvalidatedB = await callTool('relai_work', { action: 'finish',
+    workspace: 'app',
+    work_id: taskB,
+    summary: 'Task B does not borrow task A validation; its own evidence remains not_run.'
+  }, sharedScope);
+  assert.equal(unvalidatedB.validationStatus, 'not_run');
   const completedA = await callTool('relai_work', { action: 'finish',
     workspace: 'app',
     work_id: taskA,
@@ -506,14 +449,6 @@ try {
   }, sharedScope);
   assert.equal(completedA.work_id, taskA);
   assert.deepEqual(completedA.changedFiles || [], [], 'task A must not claim task B mutations');
-  await callTool('relai_validate', { action: 'checks', workspace: 'app', work_id: taskB, level: 'standard' }, sharedScope);
-  const completedB = await callTool('relai_work', { action: 'finish',
-    workspace: 'app',
-    work_id: taskB,
-    summary: 'Task B completes independently.'
-  }, sharedScope);
-  assert.equal(completedB.work_id, taskB);
-
   resetToolActivity();
   const sharedWorkspaceScope = { publicHttpOnly: true };
   const taskE = await startTask('shared-workspace-conflict');
@@ -552,24 +487,13 @@ try {
     oldText: 'export const owner = "task-g";',
     newText: 'export const owner = "task-h";'
   }, overlapScope);
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app', work_id: taskG, summary: 'Overlapping task changes must still require reconciliation.'
-    }, overlapScope),
-    error => error?.code === 'TASK_REVALIDATION_REQUIRED' && /relevant workspace content changed/i.test(error.message)
-  );
-  await callTool('relai_edit', {
-    workspace: 'app',
-    work_id: taskG,
-    path: 'src/overlap.js',
-    oldText: 'export const owner = "task-h";',
-    newText: 'export const owner = "task-g-reconciled";'
-  }, overlapScope);
-  const completedG = await callTool('relai_validate', {
-    action: 'checks', workspace: 'app', work_id: taskG, level: 'standard', complete: true,
-    summary: 'Reconciled the overlapping change and validated the final task-owned content.'
+  const completedG = await callTool('relai_work', { action: 'finish',
+    workspace: 'app', work_id: taskG,
+    summary: 'Overlapping work made the previous validation stale; the agent may still close its durable session.'
   }, overlapScope);
   assert.equal(completedG.completionKnown, true);
+  assert.equal(completedG.validationStatus, 'stale');
+  assert.equal(getToolActivity().tasks.some(task => task.taskId === taskH), true, 'the overlapping task must remain active');
   await callTool('relai_work', {
     action: 'cancel', workspace: 'app', work_id: taskH, reason: 'Overlap reconciliation coverage complete.'
   }, overlapScope);

@@ -2,7 +2,7 @@
 
 ## Context economy
 
-Begin work once and use its bootstrap first. Escalate context only when the current decision requires it: search or inspect before broad reads, batch related reads, and reuse evidence that is still current. A handoff should carry conclusions and evidence locations so the next specialist does not restart the same investigation.
+When a durable work session is useful, begin it once and reuse its bootstrap. Otherwise start directly with the smallest workspace-scoped evidence needed. Escalate context only when the current decision requires it: search or inspect before broad reads, batch related reads, and reuse evidence that is still current. A handoff should carry conclusions and evidence locations so the next specialist does not restart the same investigation.
 
 ## Read -> edit -> validate
 
@@ -25,13 +25,13 @@ Use `relai_process` action `start` only for a program that must persist or accep
 
 Tests, builds, linters, source checks, package gates, and release validation are one-shot work and use `relai_exec` or `relai_validate`.
 
-For a browser-rendered local app, retain the development-server `processId`, then create a task-scoped `relai_ui` session against its loopback port. Start with an accessibility snapshot when locating controls, prefer semantic targets for interaction, capture a screenshot when visual evidence matters, inspect console/network failures when relevant, and stop the UI session before the persistent service is no longer needed.
+For a browser-rendered local app, retain the development-server `processId`, then create a workspace-scoped `relai_ui` session against its loopback port; `work_id` is optional attribution. Start with an accessibility snapshot when locating controls, prefer semantic targets for interaction, capture a screenshot when visual evidence matters, inspect console/network failures when relevant, and stop the UI session before the persistent service is no longer needed.
 
 Retain `processId`. Read logs with byte offsets and reuse `metadataRevision` after the first read to avoid unchanged metadata. Stop the process when it is no longer required. A process handle is separate from `work_id` and native MCP Task IDs.
 
 ## Change review and publishing
 
-Use `relai_changes` action `diff` for focused status and patch review. Use `relai_publish` action `draft_pr` to prepare pull-request text. Commit or push only when the user requested it or the objective explicitly requires it; scope publication to task-owned changes.
+Use `relai_changes` action `diff` for focused status and patch review. Use `relai_publish` action `draft_pr` to prepare pull-request text. Commit or push only when the user requested it or the objective explicitly requires it. With a durable work_id, task-owned commit scope is a safe convenience; without one, select explicit paths or `addAll:true` intentionally.
 
 ## Error recovery
 

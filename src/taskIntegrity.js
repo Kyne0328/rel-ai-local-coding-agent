@@ -38,19 +38,30 @@ class TaskIntegrityError extends Error {
 async function recordTaskIntegrityEvent(config, event = {}) {
   const taskId = clean(event.taskId);
   const workspaceAlias = clean(event.workspace);
-  if (!taskId || !workspaceAlias || Number(event.taskIdentityVersion || 0) < 2) return null;
+  if (!workspaceAlias) return null;
+  if (taskId && Number(event.taskIdentityVersion || 0) < 2) return null;
 
   try {
-    if (!integrityEventRequiresPersistence(event)) return readIntegrityProjection(config, taskId, workspaceAlias);
+    if (!integrityEventRequiresPersistence(event)) {
+      return taskId ? readIntegrityProjection(config, taskId, workspaceAlias) : null;
+    }
     const workspace = resolveWorkspace(config, workspaceAlias);
     const repository = await repositoryStateForEvent(workspace, config, event);
     return withIntegrityLock(config, () => {
+      if (!taskId) {
+        const workspaceState = normalizeWorkspaceState(readJson(workspaceFile(config, workspace.alias)) || createWorkspaceState(workspace.alias));
+        applyWorkspaceIntegrityEvent(workspaceState, event, repository.changedFiles);
+        writeJson(workspaceFile(config, workspace.alias), workspaceState);
+        return null;
+      }
       let authority = readJson(taskFile(config, taskId));
       if (!authority) {
-        if (clean(event.tool) !== OP.WORK_BEGIN) {
+        const tool = clean(event.tool);
+        if (tool === OP.WORK_FINISH || tool === OP.WORK_CANCEL) return null;
+        if (tool !== OP.WORK_BEGIN) {
           throw new TaskIntegrityError(
             'TASK_INTEGRITY_STATE_MISSING',
-            `Authoritative integrity state is missing for logical task '${taskId}'. Start a new logical task rather than reconstructing safety state from audit history.`
+            `Authoritative integrity state is missing for logical task '${taskId}'. Omit work_id to run at workspace scope, or start a new durable work session.`
           );
         }
         authority = createAuthority(taskId, workspace, event, repository.baseline);
@@ -66,7 +77,7 @@ async function recordTaskIntegrityEvent(config, event = {}) {
     if (error instanceof TaskIntegrityError) throw error;
     throw new TaskIntegrityError(
       'TASK_INTEGRITY_PERSISTENCE_FAILED',
-      `Authoritative integrity state could not be persisted for logical task '${taskId}'.`,
+      `Workspace/task integrity state could not be persisted for '${workspaceAlias}'.`,
       { cause: error }
     );
   }
@@ -202,6 +213,26 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event, reposi
   }
 
   return integrityProjection(authority, workspaceState);
+}
+
+function applyWorkspaceIntegrityEvent(workspaceState, event, repositoryChanged = null) {
+  const tool = clean(event.tool);
+  const timestamp = clean(event.ts) || new Date().toISOString();
+  const changedFiles = exactChangedFiles(event);
+  const mutation = eventMutatedCode(event) && (event.ok !== false || changedFiles.length > 0);
+  normalizeWorkspaceState(workspaceState);
+  if (Array.isArray(repositoryChanged)) reconcileWorkspaceOwners(workspaceState, repositoryChanged);
+  if (!mutation) return;
+  for (const file of changedFiles) addWorkspaceOwner(workspaceState, file, AMBIENT_OWNER);
+  workspaceState.generation += 1;
+  workspaceState.updatedAt = timestamp;
+  workspaceState.lastMutation = {
+    taskId: '',
+    generation: workspaceState.generation,
+    changedFiles,
+    tool,
+    at: timestamp
+  };
 }
 
 function integrityEventRequiresPersistence(event) {
@@ -399,6 +430,9 @@ function reconcileWorkspaceOwners(workspaceState, repositoryChanged) {
   const dirty = new Set(exactPaths(repositoryChanged));
   for (const file of Object.keys(workspaceState.uncommittedOwners)) {
     if (!dirty.has(file)) delete workspaceState.uncommittedOwners[file];
+  }
+  for (const file of dirty) {
+    if (!workspaceState.uncommittedOwners[file]?.length) addWorkspaceOwner(workspaceState, file, AMBIENT_OWNER);
   }
 }
 

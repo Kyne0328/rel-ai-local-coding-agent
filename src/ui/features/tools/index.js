@@ -221,7 +221,7 @@ function toolSortLabel(tool) {
   return String(tool?.title || tool?.displayName || tool?.name || '');
 }
 
-export function toolCapabilities(tool) {
+function toolCapabilities(tool) {
   const explicit = Array.isArray(tool?.capabilities)
     ? tool.capabilities.filter(capability => CAPABILITY_IDS.has(capability))
     : [];

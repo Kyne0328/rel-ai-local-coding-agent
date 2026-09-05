@@ -8,7 +8,7 @@ import { isDashboardAuthorized } from "./http/auth.js";
 import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleReleaseNotes, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
-import { handleApiKnowledge, handleApiKnowledgeAction } from './http/dashboardKnowledge.js';
+import { handleApiLearning, handleApiLearningAction } from './http/dashboardLearning.js';
 import { handleApiComputer, handleApiComputerAction } from './http/dashboardComputer.js';
 import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, sendMcpTransportError, shutdownMcpTransport } from "./http/mcpTransport.js";
@@ -254,7 +254,7 @@ const GET_ROUTES = {
   "/api/tasks/session": { auth: authDashboard, handler: handleTaskSession },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
-  "/api/knowledge": { auth: authDashboard, handler: handleApiKnowledge },
+  "/api/learning": { auth: authDashboard, handler: handleApiLearning },
   "/api/computer": { auth: authDashboard, handler: handleApiComputer },
   "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
   "/api/workspace/preflight": { auth: authDashboard, handler: handleWorkspacePreflight },
@@ -279,7 +279,7 @@ const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
   "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },
-  "/api/knowledge": { auth: authDashboard, handler: handleApiKnowledgeAction },
+  "/api/learning": { auth: authDashboard, handler: handleApiLearningAction },
   "/api/computer": { auth: authDashboard, handler: handleApiComputerAction },
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },

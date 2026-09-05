@@ -82,29 +82,30 @@ The task systems answer different lifecycle questions and remain separate:
 | Concern | Authority |
 | --- | --- |
 | Live logical-task activity | `src/toolActivity.js` |
-| Mutation generation and final-validation authority | `src/taskIntegrity.js` |
+| Repository mutation generations, ownership/conflicts, and validation-evidence freshness | `src/taskIntegrity.js` |
 | Durable logical-task history | `src/taskHistoryStore.js` and `src/taskHistoryStorage.js` |
 | Native MCP Task lifecycle | `src/mcp/nativeTaskService.js` |
 | Canonical status mappings | `src/taskState.js` |
 | Safe progress/event normalization | `src/taskObservability.js` and `src/taskEvents.js` |
 | Dashboard read model | `src/http/dashboardData.js` |
 
-Display state and 100% progress are never completion authority. Final completion depends on current validation evidence and explicit accepted completion.
+Display state and 100% progress are never completion authority. For an explicit durable work session, completion is an explicit lifecycle record; Rel.AI records whether validation is passed, failed, stale, not run, or not required without using that evidence as a universal permission gate.
 
-### Workflow intelligence is derived, not authoritative
+### Repository facts do not form a second planner
 
-`src/workflow/` derives bounded guidance from existing runtime facts. It may discover package topology, classify task-owned scope and risk, summarize evidence, and recommend the cheapest useful next action. It cannot override task-integrity generations, authorization, path safety, Git containment, stale-write protection, workspace conflicts, or explicit completion authority. Derived completion readiness must use the same risk-based validation predicate as authoritative completion; it must not invent a stricter second policy.
+`src/workflow/` contains reusable factual helpers for task intent, repository topology, validation checks, risk classification, and evidence freshness. These helpers support hard runtime contracts and repository inspection; they do not generate model-facing stages or next-action recommendations. ChatGPT chooses the next repository action and appropriate validation from current evidence while authorization, path safety, Git containment, resource ownership, stale-write protection, workspace mutation/conflict facts, and defined destructive approvals remain authoritative.
 
 ### Restriction and recovery policy
 
 Rel.AI restrictions must protect a concrete resource or failure mode. A `work_id`, validation gate, or approval prompt is not a general-purpose proof of safety.
 
-- Require `work_id` when behavior genuinely depends on logical-task identity: repository mutation ownership, bounded command execution, process start/write, mutating UI actions, task-scoped tidy, task-scoped checkpoints, and authoritative validation/completion.
-- Do not require a synthetic logical task for ordinary read/search/inspect/status/HTTP observation or for recovery operations whose real identity is already principal + workspace + resource ID. Artifact resource links use principal + authorized workspace + exact path + content hash + short TTL. Process read/list/stop and UI observation/stop recover from their own resource IDs under the authenticated workspace boundary.
-- Native MCP Tasks and fallback operation IDs are transport mechanisms. They must never be converted into fake logical `work_id` requirements.
+- Treat `work_id` as optional durable attribution, not a permission token. Repository edits, one-shot commands, validation, process creation/input, local UI interaction, and computer control can use their authorized workspace/resource boundary without a synthetic task. If a caller explicitly supplies `work_id`, it must identify a valid compatible durable task; Rel.AI never silently drops or guesses it.
+- Require `work_id` only when the requested semantics actually refer to a logical task: finish/cancel, `scope:"task"` review/checkpoints, session-owned tidy, task-owned default commit scope, and other explicitly task-relative operations.
+- Resource operations use the narrowest real identity: managed processes use authenticated principal + workspace + `processId`; local UI uses principal + workspace + `sessionId`; taskless large command output uses principal + workspace + `outputRef`; taskless fallback continuation uses `operationId`.
+- Native MCP Tasks and fallback operation IDs are transport/execution mechanisms. They must never be converted into fake logical `work_id` requirements.
 - Approval is reserved for the destructive/high-risk operation itself. Workspace reset and real Git push remain approval-gated. Do not add model-supplied magic confirmation strings as a second pseudo-consent layer when native approval already binds the exact request.
-- Validation is risk-proportional. Read-only work needs none; low-risk documentation/text mutations may complete without validation unless an explicit check failed; behavior-changing source/config/build/security mutations require current-generation validation. A passed check becomes stale after relevant mutation.
-- Recovery should use the narrowest real identity. Observation and cleanup should not force users to resurrect an unrelated or completed logical task when principal, workspace, and resource/session identity are sufficient.
+- Validation is factual, risk-proportional evidence. A passed check becomes stale after relevant mutation, but stale/failed/not-run evidence is reported rather than converted into a generic prohibition on agent completion.
+- Recovery should use the narrowest real identity. Observation, interaction, output recovery, and cleanup should not force users to resurrect an unrelated or completed logical task when principal, workspace, and resource/session identity are sufficient.
 - Cross-workspace continuity is supplemental context, not authority. Require multiple meaningful lexical matches before injecting portable task history; one generic overlap is insufficient.
 
 Any new restriction must document the concrete attack/failure mode it prevents and add a regression at the public action boundary. Tests must include the least-privileged successful path, not only refusal cases. If the same policy decision appears in workflow guidance and authoritative execution, share one predicate instead of maintaining stricter duplicate logic.
@@ -149,6 +150,6 @@ Compatibility code must remain isolated and tested. It must not create a second 
 
 ## Validation and release boundaries
 
-Architecture changes must preserve the public tool contract, local bearer authentication, tunnel-client provenance, work-session ownership, native Task parity, HTTP/stdio behavior, Electron sender isolation, managed-process cleanup, durable recovery, Git safeguards, and package integrity.
+Architecture changes must preserve the public tool contract, local bearer authentication, tunnel-client provenance, optional durable work-session attribution, native Task parity, HTTP/stdio behavior, Electron sender isolation, managed-process cleanup, durable recovery, Git safeguards, and package integrity.
 
 CI verifies source tests, generated assets, transport-removal contracts, tunnel-client provenance, Electron packaging, packaged bearer-authenticated MCP behavior, fuse policy, and release metadata. A real external Secure MCP Tunnel and logged-in ChatGPT integration require credentials and account state that are intentionally not embedded in CI; those remain explicit release acceptance evidence rather than something automated tests pretend to prove.

@@ -1,13 +1,4 @@
 
-
-const TERMINOLOGY = Object.freeze({
-  connection: 'Connection',
-  sessions: 'Tasks',
-  activity: 'Activity',
-  tools: 'ChatGPT tools',
-  workspace: 'Project'
-});
-
 const ERROR_CODES = Object.freeze({
   UNKNOWN: 'unknown',
   REQUEST_INVALID: 'request_invalid',
@@ -151,4 +142,4 @@ function errorPayload(code, message, extra = {}) {
   };
 }
 
-export { TERMINOLOGY, ERROR_CODES,   normalizeErrorCode, errorGuidance,  deriveConnectionState, errorPayload };
+export { ERROR_CODES, normalizeErrorCode, errorGuidance, deriveConnectionState, errorPayload };

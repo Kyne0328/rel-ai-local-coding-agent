@@ -264,4 +264,4 @@ function fileRow(row) {
 }
 function normalizePath(value) { return String(value || '').trim().replaceAll('\\', '/').replace(/^\.\//, ''); }
 function emptyResult() { return { results: [], analyzedEdgeCount: 0, seedCandidateCount: 0, expandedCandidateCount: 0, totalCandidateCount: 0, truncated: false }; }
-export { isReliableDiffusionEdge, rankWithGraphDiffusion };
+export { rankWithGraphDiffusion };

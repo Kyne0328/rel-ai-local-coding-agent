@@ -51,10 +51,11 @@ assert.deepEqual(
   'stale profile configuration must not change discovery'
 );
 assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8') > 0, 'connector instructions must serialize to a non-empty payload');
-assert.match(connectorInstructions(config), /task-ownership/i, 'global instructions retain task ownership as a universal invariant');
-assert.match(connectorInstructions(config), /approval/i, 'global instructions retain approval safety as a universal invariant');
+assert.match(connectorInstructions(config), /work_id is optional durable attribution/i, 'global instructions must make durable task identity optional');
+assert.match(connectorInstructions(config), /never infer an omitted task/i, 'global instructions must prohibit ambiguous implicit task attribution');
+assert.match(connectorInstructions(config), /approval/i, 'global instructions retain approval safety where defined');
 assert.match(connectorInstructions(config), /authoritative evidence/i, 'global instructions retain truthful evidence semantics');
-assert.match(connectorInstructions(config), /explicit task-completion contract/i, 'global instructions retain explicit completion semantics');
+assert.match(connectorInstructions(config), /factual validation state/i, 'global instructions must describe validation as evidence rather than permission');
 assert.match(connectorInstructions(config), /brief normal assistant progress messages/i, 'global instructions must keep user-visible progress in normal assistant messages');
 assert.match(connectorInstructions(config), /Native tool invocation labels are supplemental status only/i, 'native status chrome must not suppress user-visible progress messages');
 assert.match(connectorInstructions(config), /Do not poll relai_work status merely to refresh UI/i, 'global instructions must avoid redundant UI-only status polling');
@@ -133,7 +134,8 @@ assert.deepEqual(publicEditSchema?.inputSchema?.properties?.file?.required, ['do
 for (const field of ['download_url', 'file_id', 'mime_type', 'file_name']) {
   assert.ok(publicEditSchema?.inputSchema?.properties?.file?.properties?.[field], `native file schema must declare ${field}`);
 }
-assert.match(publicEditSchema?.inputSchema?.properties?.stage?.description || '', /transport-size fallback/i, 'public edit discovery must explain staged mode as a transport fallback without imperative wording');
+assert.equal(publicEditSchema?.inputSchema?.properties?.stage, undefined, 'internal staged-edit transport fallback must stay out of public discovery');
+assert.equal(publicEditSchema?.inputSchema?.properties?.writeId, undefined, 'internal staged-edit identifiers must stay out of public discovery');
 const publicProcessSchema = publicSchemas.find(item => item.name === 'relai_process');
 assert.match(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /shell syntax/i, 'public process discovery must retain shell guidance');
 assert.doesNotMatch(publicProcessSchema?.inputSchema?.properties?.command?.description || '', /Action usage:/i, 'public process fields must not repeat action-routing prose');
@@ -167,16 +169,16 @@ assert.deepEqual(editSchema.inputSchema.properties.symbolEdit.properties.action.
 assert.match(editSchema.description, /oldText\/newText/i);
 assert.match(editSchema.description, /content complete-file replacement/i);
 assert.match(editSchema.description, /Large complete-file writes are staged internally/i);
-assert.match(editSchema.description, /transport-size fallback/i);
+assert.doesNotMatch(editSchema.description, /transport-size fallback/i, 'normal edit guidance must not advertise the internal staged transport fallback');
 assert.match(editSchema.inputSchema.properties.content.description, /staged internally when needed/i);
 assert.match(editSchema.inputSchema.properties.updateText.description, /One logical patch can contain repository-wide changes/i);
-assert.match(editSchema.inputSchema.properties.stage.description, /transport-size fallback/i);
+assert.deepEqual(editSchema.inputSchema.properties.stage.enum, ['start', 'append', 'commit', 'abort'], 'canonical executable schema must retain the internal staged transport lifecycle');
 
 await valid('relai_work', { action: 'begin', workspace: 'repo' });
 await invalid('relai_work', { action: 'begin' });
 await valid('relai_work', { action: 'finish', work_id: 'work', summary: 'Done.' });
 await invalid('relai_work', { action: 'finish', work_id: 'work' });
-await valid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.', reuseExisting: true });
+await valid('relai_process', { action: 'start', workspace: 'repo', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.', reuseExisting: true });
 await valid('relai_process', { action: 'start', work_id: 'work', executable: 'node', argv: ['server.js', '--port', '3000'], input: 'ready\n', kind: 'service', purpose: 'Run the development server directly.' });
 await invalid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', executable: 'node', kind: 'service', purpose: 'Ambiguous execution mode.' });
 await invalid('relai_process', { action: 'start', work_id: 'work', argv: ['server.js'], kind: 'service', purpose: 'Missing executable.' });
@@ -200,19 +202,19 @@ await valid('relai_validate', { action: 'http', work_id: 'work', route: '/health
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
 await valid('relai_validate', { action: 'checks', work_id: 'work', level: 'standard', check: 'node -v' });
-await valid('relai_validate', { action: 'checks', work_id: 'work', level: 'standard', checks: ['node -v', 'npm -v'] });
-await valid('relai_validate', { action: 'diagnostics', work_id: 'work', level: 'quick', command: 'npm run lint' });
-await valid('relai_exec', { work_id: 'work', command: 'node -v' });
+await valid('relai_validate', { action: 'checks', workspace: 'repo', level: 'standard', checks: ['node -v', 'npm -v'] });
+await valid('relai_validate', { action: 'diagnostics', workspace: 'repo', level: 'quick', command: 'npm run lint' });
+await valid('relai_exec', { workspace: 'repo', command: 'node -v' });
 await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-v'] });
 await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-'], input: 'process.stdout.write("ok")' });
 await valid('relai_computer', { action: 'status' });
 await valid('relai_computer', { action: 'screenshot', displayId: 'display-1' });
-await valid('relai_computer', { action: 'click', work_id: 'work', x: 10, y: 20 });
-await valid('relai_computer', { action: 'drag', work_id: 'work', x: 10, y: 20, toX: 30, toY: 40 });
-await valid('relai_computer', { action: 'scroll', work_id: 'work', direction: 'down', distance: 500 });
-await valid('relai_computer', { action: 'type', work_id: 'work', text: 'hello' });
-await valid('relai_computer', { action: 'key', work_id: 'work', key: 'enter' });
-await valid('relai_computer', { action: 'hotkey', work_id: 'work', keys: ['ctrl', 's'] });
+await valid('relai_computer', { action: 'click', workspace: 'repo', x: 10, y: 20 });
+await valid('relai_computer', { action: 'drag', workspace: 'repo', x: 10, y: 20, toX: 30, toY: 40 });
+await valid('relai_computer', { action: 'scroll', workspace: 'repo', direction: 'down', distance: 500 });
+await valid('relai_computer', { action: 'type', workspace: 'repo', text: 'hello' });
+await valid('relai_computer', { action: 'key', workspace: 'repo', key: 'enter' });
+await valid('relai_computer', { action: 'hotkey', workspace: 'repo', keys: ['ctrl', 's'] });
 await invalid('relai_computer', { action: 'click', work_id: 'work', x: 10 });
 await invalid('relai_computer', { action: 'status', text: 'unexpected' });
 await invalid('relai_exec', { work_id: 'work' });
@@ -234,7 +236,7 @@ await valid('relai_edit', { work_id: 'work', stage: 'start', path: 'README.md', 
 await valid('relai_edit', { work_id: 'work', stage: 'append', writeId: 'write', content: '# Chunk\n' });
 await valid('relai_edit', { work_id: 'work', stage: 'commit', writeId: 'write' });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md' });
-await invalid('relai_edit', { path: 'README.md', content: '# Missing task\n' });
+await valid('relai_edit', { workspace: 'repo', path: 'README.md', content: '# Taskless workspace edit\n' });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: 42 });
 await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', overwrite: true });
 
@@ -244,6 +246,7 @@ await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Re
 await publicValid('relai_work', { action: 'begin', workspace: 'repo' });
 await publicValid('relai_work', { action: 'begin' });
 await publicValid('relai_work', { action: 'status', title: 'runtime-rejects-sibling-field' });
+await valid('relai_work', { action: 'status', workspace: 'repo', operationId: 'fallback_12345678901234567890' });
 await publicValid('relai_read', { work_id: 'work', paths: ['README.md'] });
 await publicValid('relai_read', { work_id: 'work', ranges: [{ path: 'README.md', startLine: 1, endLine: 2 }] });
 await publicValid('relai_search', { action: 'text', work_id: 'work', queries: ['needle', 'haystack'], maxFiles: 200 });

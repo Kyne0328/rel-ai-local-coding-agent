@@ -5,8 +5,7 @@ description: Use only when repository work requires a persistent development ser
 
 # Rel.AI Development Process
 
-Reuse the active `work_id` opened by `rel-ai-workflow`. Do not call `relai_work` with `action: "begin"` when the same objective already has a work session.
-Use runtime workflow guidance before starting another process. If `relai_process` returns `reused: true`, keep the reused same-task process and continue from its readiness/log state; do not start a duplicate process. `workflow.recommendedActions` calibrates whether more process evidence is useful or control should return to debugging/verification.
+Reuse an active `work_id` when durable attribution is already useful, but do not create one merely to start or interact with a process. Process authority comes from the authenticated principal, authorized workspace, and `processId`; an explicitly supplied work_id must still match any existing task attribution. If `relai_process` returns `reused: true`, continue from that process's readiness/log state rather than starting a duplicate.
 
 Use this process flow: `start with explicit purpose -> determine readiness -> inspect incremental output -> interact only if required -> reuse process -> stop when no longer needed`.
 

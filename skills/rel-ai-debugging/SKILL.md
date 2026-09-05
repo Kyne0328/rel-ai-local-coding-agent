@@ -5,8 +5,8 @@ description: Use when repository behavior is reproducibly wrong and needs causal
 
 # Rel.AI Debugging
 
-Reuse the active `work_id` opened by `rel-ai-workflow`. Do not call `relai_work` with `action: "begin"` when the same objective already has a work session.
-After each Rel.AI call, use runtime workflow guidance (`workflow.recommendedActions` and `workflow.avoidActions`) to calibrate the next repository action. The causal debugging method still owns root-cause judgment; runtime guidance owns whether more context, a focused check, review, or escalation is useful now.
+Reuse an active `work_id` when the objective already has a durable work session. Otherwise debug directly at workspace/resource scope; do not create a work session merely to unlock tools.
+Choose the next repository action from the observed failure, current repository evidence, and hard runtime constraints. Rel.AI supplies facts and enforcement; the agent retains debugging judgment and should stop when the demonstrated root cause is fixed and verified.
 
 Use this causal sequence: `observable failure -> smallest reproduction -> causal path -> root cause -> coherent fix -> targeted regression -> broader checks only when the changed boundary requires them`.
 

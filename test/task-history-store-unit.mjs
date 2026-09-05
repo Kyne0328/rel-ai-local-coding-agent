@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { clearTaskHistory, getTaskHistoryDir, readCrossWorkspaceTaskEpisodes, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordVolatileWorkflowEvidence, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
+import { clearTaskHistory, getTaskHistoryDir, readCrossWorkspaceTaskEpisodes, readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent, recordWorkflowEvidenceBatch } from "../src/taskHistoryStore.js";
 import { writeSession } from '../src/taskHistoryStorage.js';
 import { principalFingerprint } from '../src/mcp/principal.js';
 import { assertKnownTask } from '../src/tools/task.js';
@@ -57,11 +57,10 @@ try {
     { kind: 'check', marker: 'durable-1' },
     { kind: 'check', marker: 'durable-2' }
   ]).length, 2);
-  recordVolatileWorkflowEvidence('exact-task', { kind: 'read', marker: 'volatile-1' });
   assert.deepEqual(
     readRecentWorkflowEvidence(config, 'exact-task', 3).map(item => item.marker),
-    ['durable-1', 'durable-2', 'volatile-1'],
-    'batched durable evidence and passive volatile evidence should share one read path'
+    ['durable-1', 'durable-2'],
+    'factual evidence must use the durable task-history path without a duplicate volatile store'
   );
 
   recordTaskHistoryEvent(config, currentEvent('separate-task', {

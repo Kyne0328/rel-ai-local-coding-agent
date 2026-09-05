@@ -8,7 +8,6 @@ import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, getToolActivity, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
 import { runWorkspaceMutationBoundary } from '../workspaceOperationQueue.js';
-import { taskValidationReadiness } from '../workflow/completionReadiness.js';
 
 const WORK_FINISH_SOURCE = 'relai_work:finish';
 const VALIDATE_CHECKS_SOURCE = 'relai_validate:checks';
@@ -34,77 +33,14 @@ async function completeTask(config, args = {}) {
 
   const summary = normalizeCompletionSummary(args.summary);
   const authority = readTaskIntegrity(config, requestedTaskId, workspace.alias);
-  if (!authority) {
-    throw taskError(
-      'TASK_INTEGRITY_STATE_MISSING',
-      'Cannot complete this logical task because its authoritative integrity state is missing. Start a new logical task; do not reconstruct completion safety from audit history.',
-      { retryable: false }
-    );
-  }
-  const {
-    mutationGeneration,
-    validationRequired,
-    knownValidationFailure,
-    validatedMutationGeneration
-  } = taskValidationReadiness(authority);
-  if (validationRequired && authority.hasPassedValidation === true && validatedMutationGeneration !== mutationGeneration) {
-    throw taskError(
-      'TASK_REVALIDATION_REQUIRED',
-      'Work-session completion is paused because code changed after the last passed validation. Run relai_validate with action "checks" with complete:true, summary, and the same work_id to validate and close the work session atomically.',
-      {
-        retryable: true,
-        allowedAlternatives: [
-          'Run relai_validate with action "checks" with complete:true, summary, and the same work_id.',
-          'Cancel the task only when the remaining changes should not be completed.'
-        ]
-      }
-    );
-  }
-
-  if ((validationRequired || knownValidationFailure) && authority.validationResult !== 'passed') {
-    throw taskError(
-      'TASK_VALIDATION_REQUIRED',
-      'Work-session completion is paused because no successful final validation is recorded for this exact work_id. Run relai_validate with action "checks" with complete:true, summary, and the same work_id to validate and close the work session atomically.',
-      {
-        retryable: true,
-        allowedAlternatives: [
-          'Run relai_validate with action "checks" with complete:true, summary, and the same work_id.',
-          'Cancel the task only when the unvalidated changes should not be completed.'
-        ]
-      }
-    );
-  }
-
-  if (authority.validationResult === 'passed') {
-    const validatedFingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
-    if (validatedFingerprint) {
-      const validationScope = Array.isArray(authority.validationScope)
-        ? authority.validationScope
-        : (authority.taskOwnedChangedFiles || []);
-      const currentFingerprint = await createValidationFingerprint(workspace, config, { paths: validationScope });
-      if (currentFingerprint.fingerprint !== validatedFingerprint) {
-        throw taskError(
-          'TASK_REVALIDATION_REQUIRED',
-          'Work-session completion is paused because relevant workspace content changed after the last passed validation. Re-run validation with the same work_id against the current content.',
-          {
-            retryable: true,
-            allowedAlternatives: [
-              'Run relai_validate with action "checks" with complete:true, summary, and the same work_id.',
-              'Cancel the task only when the changed workspace should not be completed.'
-            ]
-          }
-        );
-      }
-    }
-  }
-
+  const validation = await factualValidationState(config, workspace, authority);
   return finalizeValidatedTask(config, workspace, {
     summary,
-    validationStatus: authority.validationResult === 'passed' ? 'passed' : 'not_required',
-    validationLevel: authority.validationLevel || '',
-    validationAt: authority.validationAt || '',
-    validationFingerprint: authority.validatedRepositoryFingerprint || authority.validationFingerprint || '',
-    changedFiles: authority.taskOwnedChangedFiles || [],
+    validationStatus: validation.status,
+    validationLevel: authority?.validationLevel || '',
+    validationAt: authority?.validationAt || '',
+    validationFingerprint: validation.fingerprint,
+    changedFiles: authority?.taskOwnedChangedFiles || previous?.changedFiles || [],
     completionSource: WORK_FINISH_SOURCE
   });
 }
@@ -123,7 +59,7 @@ async function finalizeValidatedTask(config, workspace, options = {}) {
     ? unique(options.changedFiles.map(String).filter(Boolean))
     : changedFilesForTask(config, workspace.alias, taskId);
   const completionSource = String(options.completionSource || WORK_FINISH_SOURCE);
-  const validationStatus = String(options.validationStatus || 'passed');
+  const validationStatus = String(options.validationStatus || 'not_run');
   const residualChangedFiles = await workspaceDirtyPaths(workspace, config, changedFiles);
   const residualState = residualChangedFiles.length ? 'preserved_uncommitted' : 'clean';
   const persistedLearningSession = readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false }) || {};
@@ -192,7 +128,7 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
   const summary = String(previous.summary || '').trim() || 'Task already completed.';
   const completion = requestCurrentTaskCompletion({
     summary,
-    validationStatus: previous.validation || 'passed',
+    validationStatus: previous.validation || 'not_run',
     validationLevel: previous.validationLevel || '',
     validationAt: previous.validationAt || previous.completedAt || '',
     changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : [],
@@ -209,7 +145,7 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
     endReason: 'explicit_completion',
     completionSource: WORK_FINISH_SOURCE,
     summary,
-    validationStatus: previous.validation || 'passed',
+    validationStatus: previous.validation || 'not_run',
     validationLevel: previous.validationLevel || '',
     validationAt: previous.validationAt || previous.completedAt || '',
     changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : [],
@@ -219,6 +155,28 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
       ? 'Duplicate task completion request accepted; the task was already completing.'
       : 'Task was already completed. The original completion result is returned idempotently.'
   };
+}
+
+async function factualValidationState(config, workspace, authority) {
+  if (!authority) return { status: 'not_run', fingerprint: '' };
+  const mutationGeneration = Number(authority.mutationGeneration || 0);
+  const validationResult = String(authority.validationResult || 'not_run');
+  const fingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
+  if (validationResult !== 'passed') {
+    if (validationResult === 'failed' || validationResult === 'stale') return { status: validationResult, fingerprint };
+    return { status: mutationGeneration > 0 ? 'not_run' : 'not_required', fingerprint };
+  }
+  if (Number(authority.latestValidatedMutationGeneration || 0) !== mutationGeneration) {
+    return { status: 'stale', fingerprint };
+  }
+  if (fingerprint) {
+    const validationScope = Array.isArray(authority.validationScope)
+      ? authority.validationScope
+      : (authority.taskOwnedChangedFiles || []);
+    const currentFingerprint = await createValidationFingerprint(workspace, config, { paths: validationScope });
+    if (currentFingerprint.fingerprint !== fingerprint) return { status: 'stale', fingerprint };
+  }
+  return { status: 'passed', fingerprint };
 }
 
 function requireMatchingTaskContext(taskId) {

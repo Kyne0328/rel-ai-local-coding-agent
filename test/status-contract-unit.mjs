@@ -53,7 +53,8 @@ try {
 
   const commitPlan = await relaiGitCommit(workspace, config, {
     message: 'status contract dry run',
-    dryRun: true
+    dryRun: true,
+    addAll: true
   });
   assert.equal(commitPlan.ok, true);
   assert.equal(commitPlan.statusBefore.deprecated, undefined, 'internal commit status must use the shared core without legacy metadata');

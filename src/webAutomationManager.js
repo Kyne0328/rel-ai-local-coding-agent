@@ -43,8 +43,7 @@ async function runUiAction(workspace, _config, args = {}, context = {}) {
 
 async function startUiSession(workspace, args = {}, context = {}) {
   const taskId = taskIdFor(args, context);
-  if (!taskId) throw taskError('TASK_ID_REQUIRED', 'UI testing requires a workspace-bound work session.');
-  const existing = [...sessions.values()].find(record => record.taskId === taskId);
+  const existing = taskId ? [...sessions.values()].find(record => record.taskId === taskId) : null;
   if (existing) {
     throw taskError('UI_SESSION_ALREADY_ACTIVE', `Work session already has an active UI test session: ${existing.sessionId}. Stop it before starting another.`);
   }
@@ -300,16 +299,13 @@ function requireSession(workspace, args = {}, context = {}) {
   const record = sessions.get(sessionId);
   if (!record) throw taskError('UI_SESSION_NOT_FOUND', `Unknown or closed UI test session: ${sessionId}.`);
   if (record.workspaceId !== workspace.alias) throw taskError('UI_SESSION_WORKSPACE_MISMATCH', 'UI test session belongs to a different workspace.');
-  const action = String(args.action || '').trim();
   const taskId = taskIdFor(args, context);
-  const observation = ['snapshot', 'screenshot', 'console', 'network', 'stop'].includes(action) && args.clear !== true;
-  if (observation) {
-    if (record.principalFingerprint !== principalFingerprint(context.principal)) {
-      throw taskError('UI_SESSION_PRINCIPAL_MISMATCH', 'UI test session belongs to a different authenticated client.');
-    }
-    return record;
+  if (record.principalFingerprint !== principalFingerprint(context.principal)) {
+    throw taskError('UI_SESSION_PRINCIPAL_MISMATCH', 'UI test session belongs to a different authenticated client.');
   }
-  if (!taskId || taskId !== record.taskId) throw taskError('UI_SESSION_TASK_MISMATCH', 'UI test session belongs to a different work session.');
+  if (taskId && record.taskId && taskId !== record.taskId) {
+    throw taskError('UI_SESSION_TASK_MISMATCH', 'The supplied work_id does not match this UI session attribution.');
+  }
   return record;
 }
 

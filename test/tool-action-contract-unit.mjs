@@ -95,6 +95,11 @@ for (const entry of catalog) {
   assert.ok(resolved, `${entry.publicTool}:${entry.action} must resolve`);
   const advertisedSchema = publicSchemaByName.get(entry.publicTool);
   for (const field of entry.fields) {
+    const internalEditTransportField = entry.publicTool === 'relai_edit' && ['stage', 'writeId'].includes(field);
+    if (internalEditTransportField) {
+      assert.equal(advertisedSchema?.properties?.[field], undefined, `${entry.publicTool}:${entry.action} internal transport field ${field} must stay out of public discovery`);
+      continue;
+    }
     assert.ok(advertisedSchema?.properties?.[field], `${entry.publicTool}:${entry.action} executable field ${field} must remain discoverable`);
   }
   if (entry.action !== 'default') {

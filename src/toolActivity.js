@@ -257,14 +257,9 @@ function createToolActivityTracker(options = {}) {
           task.currentStage = 'Validation failed';
           task.progress = incompleteProgress(task.progress, task.status, 'Fix issues and revalidate');
         } else if (current.activity.status === 'blocked') {
-          const blockedCode = String(current.activity?.error?.code || current.activity?.metadata?.errorCode || '');
-          const validationRequired = /VALIDATION_REQUIRED|TASK_PERSISTENCE_CONFLICT/.test(blockedCode);
           task.status = 'blocked';
-          task.currentStage = validationRequired ? 'Validation required' : 'Blocked';
-          task.progress = {
-            mode: 'indeterminate',
-            label: validationRequired ? 'Final validation required' : 'Blocked'
-          };
+          task.currentStage = 'Blocked';
+          task.progress = { mode: 'indeterminate', label: 'Blocked' };
         } else {
           task.status = 'planning';
           const preserveWorkflowProgress = task.progress?.mode === 'determinate';
@@ -954,8 +949,8 @@ function taskError(code, message, details = {}) {
   error.allowedAlternatives = Array.isArray(details.allowedAlternatives)
     ? details.allowedAlternatives.map(String).filter(Boolean)
     : [
-        'Call relai_work with action "begin" once for each independent task.',
-        'Pass the returned work_id on every subsequent task-scoped tool call.'
+        'Omit work_id for supported workspace- or resource-scoped operations.',
+        'Start a durable work session only when task attribution, ownership, recovery, or task-scoped review/publication is useful.'
       ];
   if (Number.isFinite(details.candidateCount)) error.candidateCount = Number(details.candidateCount);
   return error;

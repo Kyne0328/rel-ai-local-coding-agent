@@ -187,4 +187,4 @@ async function writeAll(handle, value) {
   }
 }
 
-export { MAX_ARTIFACT_BYTES, importNativeArtifact, normalizeReference, validateDownloadUrl };
+export { importNativeArtifact, normalizeReference, validateDownloadUrl };

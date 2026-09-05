@@ -5,8 +5,8 @@ description: Use for read-only repository questions that need evidence, includin
 
 # Rel.AI Investigation
 
-Reuse the active `work_id` opened by `rel-ai-workflow`. Do not call `relai_work` with `action: "begin"` when the same objective already has a work session.
-Use runtime workflow guidance after every Rel.AI call to decide whether another search, read, measurement, or broader boundary is actually useful. `workflow.recommendedActions` is the default calibration; current evidence and the investigation question determine when proof is sufficient.
+Reuse an active `work_id` if the investigation already belongs to a durable work session. Otherwise investigate directly at workspace scope; read-only evidence does not require a synthetic task.
+Decide whether another search, read, measurement, or broader boundary is useful from the investigation question and current evidence. Rel.AI supplies repository facts; the agent owns sufficiency judgment and should stop when the required proof exists.
 
 1. State the question and define what would count as sufficient proof before gathering more context.
 2. Escalate evidence in this order: `bootstrap -> search/inspect -> targeted reads -> bounded measurement -> broader reads only if required`.

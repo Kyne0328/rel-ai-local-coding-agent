@@ -79,6 +79,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     : validationScope;
   const level = String(planSelection === 'focused' ? 'quick' : (args.level || planSelection || 'standard')).toLowerCase();
   const complete = args.complete === true;
+  if (complete && !currentTaskId) throw new Error('relai_validate complete:true requires work_id because it closes a durable work session.');
   const completionSummary = complete ? normalizeCompletionSummary(args.summary) : '';
   const normalized = normalizeVerifyChecks(effectiveArgs, workspace.path, level);
   const { checks, checkUnits, skippedChecks, aliasNormalizations } = normalized;
@@ -257,12 +258,14 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   });
 
   const nextAction = ok
-    ? 'Validation is current for this work_id. Do not rerun unchanged checks. If this validation call did not complete the task atomically, review task-owned changes if needed, then call relai_work with action "finish" once.'
+    ? (currentTaskId
+      ? 'Validation passed for the current repository state and was recorded for this durable work session.'
+      : 'Validation passed for the current repository state.')
     : cancelled
-      ? 'Validation was cancelled. Review the partial result and resume only the smallest still-relevant check.'
+      ? 'Validation was cancelled; partial results are preserved as evidence.'
       : scopeChanged
-        ? 'Relevant task or validation configuration changed while checks were running. Re-run the same smallest relevant validation against the current task state.'
-        : 'Fix or diagnose the failing check, then rerun only the smallest relevant validation unless workflow guidance widens the boundary.';
+        ? 'Validation became stale because relevant repository content changed while checks were running.'
+        : 'One or more requested validation checks failed; the failing results are preserved as evidence.';
   const validationFingerprint = finalFingerprint.fingerprint;
   const validationResult = {
     ok,

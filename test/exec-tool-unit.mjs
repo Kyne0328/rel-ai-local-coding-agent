@@ -231,7 +231,7 @@ try {
       maxBytes: 50000,
       guidanceMode: 'none'
     }, context),
-    /not found for this work_id/i,
+    /not found for this authorized execution scope/i,
     'outputRef must not be readable from a different work session'
   );
   await assert.rejects(
@@ -241,7 +241,7 @@ try {
       maxBytes: 50000,
       guidanceMode: 'none'
     }, context),
-    /requires an active work_id/i,
+    /not found for this authorized execution scope/i,
     'making ordinary reads task-optional must not weaken task-private outputRef ownership'
   );
   await callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: otherTask.work_id, reason: 'Spill ownership regression complete.' }, context);
@@ -294,16 +294,12 @@ try {
     command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), '.env')
   }, plainContext);
   assert.deepEqual(sensitiveMutation.changedFiles, ['.env'], 'mutation accounting must cover sensitive filenames without reading their contents');
-  await assert.rejects(
-    () => callTool('relai_work', {
-      action: 'finish', workspace: 'plain', work_id: plainTask.work_id,
-      summary: 'A non-Git exec mutation must require validation.'
-    }, plainContext),
-    error => error?.code === 'TASK_VALIDATION_REQUIRED'
-  );
-  await callTool('relai_work', {
-    action: 'cancel', workspace: 'plain', work_id: plainTask.work_id, reason: 'Non-Git mutation regression complete.'
+  const plainCompletion = await callTool('relai_work', {
+    action: 'finish', workspace: 'plain', work_id: plainTask.work_id,
+    summary: 'Non-Git exec mutations may finish while validation truthfully remains not run.'
   }, plainContext);
+  assert.equal(plainCompletion.completionKnown, true);
+  assert.equal(plainCompletion.validationStatus, 'not_run');
 
   resetToolActivity();
   const noValidationContext = { publicHttpOnly: true };
@@ -346,14 +342,13 @@ try {
     work_id: mutationTask.work_id,
     command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'after-validation.js')
   }, mutationContext);
-  await assert.rejects(
-    () => callTool('relai_work', { action: 'finish',
-      workspace: 'app',
-      work_id: mutationTask.work_id,
-      summary: 'Mutation after validation must be rejected.'
-    }, mutationContext),
-    /code changed after the last passed validation/i
-  );
+  const staleCompletion = await callTool('relai_work', { action: 'finish',
+    workspace: 'app',
+    work_id: mutationTask.work_id,
+    summary: 'Mutation after validation completes with stale validation evidence.'
+  }, mutationContext);
+  assert.equal(staleCompletion.ok, true);
+  assert.equal(staleCompletion.validationStatus, 'stale');
 
   console.log('relai_exec unit and integration tests passed.');
 } finally {

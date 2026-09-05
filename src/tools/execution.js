@@ -20,9 +20,10 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
     spanAttributes(name, effectiveArgs, context, finishActivity),
     async () => {
       const taskId = String(finishActivity?.taskId || effectiveArgs?.work_id || '').trim();
+      const backgroundReference = String(effectiveArgs?.operationId || taskId || '').trim();
       const backgroundStatusMode = executionName === OP.WORK_STATUS
-        && Boolean(taskId)
-        && fallbackExecutionStatus(taskId, { config })?.status === 'running';
+        && Boolean(backgroundReference)
+        && fallbackExecutionStatus(backgroundReference, { config })?.status === 'running';
       const workspace = effectiveArgs?.workspace ? resolveWorkspace(config, effectiveArgs.workspace) : null;
       const branchChange = isExplicitBranchChange(executionName, effectiveArgs);
       const readOnlyExec = executionName === OP.EXEC && isClearlyReadOnlyExec(effectiveArgs);

@@ -30,7 +30,12 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;
 
+const { flushAuditWrites } = await import('../src/audit.js');
+const { flushLocalAnalytics } = await import('../src/localAnalytics.js');
+const { flushTaskHistoryPersistence } = await import('../src/taskHistoryStore.js');
+const { resetTaskHistoryCaches } = await import('../src/taskHistoryStorage.js');
 const { callTool: rawCallTool } = await import('../src/tools.js');
+const { resetToolActivity } = await import('../src/toolActivity.js');
 const { toolResult } = await import('../src/mcp/results.js');
 const { repositoryIntelligence } = await import('../src/repository/intelligence/service.js');
 const sessionCache = await import('../src/sessionCache.js');
@@ -69,7 +74,7 @@ try {
   }, { publicHttpOnly: true, requestId: 2, transportType: 'test' });
   const result = toolResult(output, false);
   assert.equal(result.isError, false);
-  assert.equal(output.workflow?.unchanged, true, 'passive reads must reuse the current workflow snapshot instead of rebuilding it');
+  assert.equal(output.workflow, undefined, 'connector reads must not carry obsolete advisory workflow state');
   assert.ok(Array.isArray(result.structuredContent?.items), 'connector result must retain the relai_read item array');
   const item = result.structuredContent.items[0];
   assert.equal(item.returnedBytes, 256 * 1024);
@@ -138,5 +143,10 @@ try {
   console.log('Connector read result limit and streamed range unit tests passed.');
 } finally {
   await repositoryIntelligence.shutdown();
-  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  await flushAuditWrites();
+  await flushTaskHistoryPersistence();
+  resetTaskHistoryCaches();
+  resetToolActivity();
+  await flushLocalAnalytics();
+  await fs.promises.rm(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

@@ -5,10 +5,11 @@ import {
   checkEvidenceReusable,
   repeatFailureCount
 } from '../src/workflow/evidence.js';
+import { OPERATION_IDS as OP } from '../src/tools/operationIds.js';
 
 const auditEntry = { ts: '2026-08-08T00:00:00.000Z', taskMutationGeneration: 3, taskWorkspaceGeneration: 8 };
 const receipt = buildWorkflowEvidenceReceipt({
-  tool: 'relai_exec',
+  tool: OP.EXEC,
   args: { command: 'npm test', cwd: 'front-end', env: { TOKEN: 'secret' } },
   result: { ok: true, exitCode: 0, stdout: 'private output', stderr: '', commandSummary: 'npm test' },
   auditEntry,
@@ -28,13 +29,13 @@ assert.equal(checkEvidenceReusable(receipt, { commandId: 'npm:front-end:test', c
 assert.equal(checkEvidenceReusable(receipt, { commandId: 'npm:front-end:test', command: 'npm test', cwd: 'front-end', repositoryFingerprint: 'fingerprint-b' }), false);
 
 const failures = [
-  buildWorkflowEvidenceReceipt({ tool: 'relai_exec', args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry, repositoryFingerprint: 'x', commandId: 'npm:front-end:test' }),
-  buildWorkflowEvidenceReceipt({ tool: 'relai_exec', args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry: { ...auditEntry, taskMutationGeneration: 4 }, repositoryFingerprint: 'y', commandId: 'npm:front-end:test' })
+  buildWorkflowEvidenceReceipt({ tool: OP.EXEC, args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry, repositoryFingerprint: 'x', commandId: 'npm:front-end:test' }),
+  buildWorkflowEvidenceReceipt({ tool: OP.EXEC, args: { command: 'npm test', cwd: 'front-end' }, result: { ok: false, exitCode: 1, errorCode: 'EXIT_1' }, auditEntry: { ...auditEntry, taskMutationGeneration: 4 }, repositoryFingerprint: 'y', commandId: 'npm:front-end:test' })
 ];
 assert.equal(repeatFailureCount(failures), 2, 'the same failure family must survive mutation-generation boundaries');
 
 const reviewReceipt = buildWorkflowEvidenceReceipt({
-  tool: 'relai_changes',
+  tool: OP.CHANGES_DIFF,
   args: { action: 'diff' },
   result: { ok: true, reviewHash: 'abc123', reviewScope: 'task' },
   auditEntry,
@@ -45,7 +46,7 @@ assert.equal(reviewReceipt.metadata.reviewHash, 'abc123');
 assert.equal(reviewReceipt.metadata.reviewScope, 'task');
 
 const uiReceipt = buildWorkflowEvidenceReceipt({
-  tool: 'relai_ui',
+  tool: OP.UI,
   args: { action: 'console' },
   result: { ok: true, action: 'console', sessionId: 'ui-1', route: '/settings', consoleErrorCount: 2, networkFailureCount: 1, evidenceId: 'shot-1' },
   auditEntry,

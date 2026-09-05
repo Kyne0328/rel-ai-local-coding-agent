@@ -2,7 +2,6 @@
 
 import * as path from "node:path";
 
-const DEFAULT_STAGED_CHUNK_BYTES = 12000;
 const STAGED_WRITE_BYTE_THRESHOLD = 8000;
 const STAGED_WRITE_LINE_THRESHOLD = 180;
 const SOURCE_LIKE_EXTENSIONS = new Set([
@@ -35,11 +34,6 @@ function workspaceWriteGuidance() {
           'several related files need coordinated text edits (pass edits: [...])'
         ]
       },
-      'staged-write': {
-        tool: 'relai_edit',
-        when: ['the MCP client or transport cannot carry the intended content/updateText payload in one request'],
-        chunkBytes: DEFAULT_STAGED_CHUNK_BYTES
-      },
       'workspace-tidy': {
         tools: ['relai_changes'],
         when: ['generated session artifacts should be tidied through a bounded plan']
@@ -49,16 +43,12 @@ function workspaceWriteGuidance() {
       'Use exact-replace for localized edits inside existing files.',
       'Use direct-write for complete replacement of one file regardless of size.',
       'Use apply-update when the change is naturally patch-shaped across files.',
-      'Use staged-write only after a client or transport payload limit prevents one-call content/updateText.',
       'Use workspace-tidy plan/run for generated session artifacts.'
     ],
     examples: {
-      exactReplace: 'relai_edit { work_id, path, expectedSha256?, oldText, newText, occurrence? }',
-      directWrite: 'relai_edit { work_id, path, expectedSha256?, content }',
-      applyUpdate: 'relai_edit { work_id, updateText, returnDiff: true }',
-      stagedWriteStart: "relai_edit { work_id, stage: 'start', path, expectedSha256?, content }",
-      stagedWriteAppend: "relai_edit { work_id, stage: 'append', writeId, content }",
-      stagedWriteCommit: "relai_edit { work_id, stage: 'commit', writeId }",
+      exactReplace: 'relai_edit { workspace, path, expectedSha256?, oldText, newText, occurrence?, work_id? }',
+      directWrite: 'relai_edit { workspace, path, expectedSha256?, content, work_id? }',
+      applyUpdate: 'relai_edit { workspace, updateText, returnDiff: true, work_id? }',
       workspaceTidyPlan: "relai_changes { action: 'tidy_plan', work_id, mode: 'session_untracked' }",
       workspaceTidyRun: "relai_changes { action: 'tidy_run', work_id, planId }"
     },

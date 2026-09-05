@@ -133,11 +133,12 @@ try {
     error => error?.code === 'PROCESS_SESSION_MISMATCH',
     'interactive process input must remain bound to the owning logical task'
   );
-  await assert.rejects(
-    () => writeManagedProcess(config, { processId: started.processId, input: 'taskless-write\n', workspace: 'app' }, workspaceRecovery),
-    error => error?.code === 'PROCESS_SESSION_MISMATCH',
-    'workspace recovery must not grant taskless process input authority'
-  );
+  const tasklessWrite = await writeManagedProcess(config, {
+    processId: started.processId,
+    input: 'taskless-write\n',
+    workspace: 'app'
+  }, workspaceRecovery);
+  assert.equal(tasklessWrite.acceptedBytes, 15, 'same-principal workspace-scoped process input must not require resurrecting the original task');
 
   const written = await writeManagedProcess(config, {
     processId: started.processId,

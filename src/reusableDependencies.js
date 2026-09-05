@@ -5,4 +5,4 @@ function isReusableDependencyPath(relativePath) {
   return REUSABLE_DEPENDENCY_ROOTS.some(root => normalized === root || normalized.startsWith(`${root}/`));
 }
 
-export { REUSABLE_DEPENDENCY_ROOTS, isReusableDependencyPath };
+export { isReusableDependencyPath };

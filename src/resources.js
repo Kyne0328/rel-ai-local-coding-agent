@@ -132,11 +132,11 @@ Rel.AI targets MCP ${MCP_PROTOCOL_VERSION}. Every request carries its own protoc
 
 ## Workflow
 
-Call \`relai_work\` with action \`begin\` once per independent objective. Use \`relai_snapshot\`, \`relai_search\`, \`relai_inspect\`, and \`relai_read\` only as needed. Use \`relai_process\` for persistent commands and \`relai_validate\` for checks, diagnostics, or local HTTP probes.
+Use Rel.AI tools directly against an authorized workspace. Start \`relai_work\` with action \`begin\` only when durable task identity, ownership, recovery, task-scoped review, or task-scoped publication is useful. Supplying \`work_id\` attributes compatible operations to that durable session; omitting it leaves supported operations workspace- or resource-scoped, and Rel.AI never guesses an omitted task. Use \`relai_snapshot\`, \`relai_search\`, \`relai_inspect\`, and \`relai_read\` only as needed. Use \`relai_process\` for persistent commands and \`relai_validate\` for checks, diagnostics, or local HTTP probes.
 
 Use \`relai_edit\` as the single file mutation tool. Destructive operations may return \`input_required\`; retry with the accepted response and integrity-protected requestState. Native asynchronous work is returned only when the current request advertises \`io.modelcontextprotocol/tasks\`, then polled with \`tasks/get\` and controlled with \`tasks/update\` or \`tasks/cancel\`.
 
-After repository mutations, make the final \`relai_validate\` action \`checks\` call with \`complete:true\` and a summary so validation and completion happen atomically. Use \`relai_work\` action \`finish\` for read-only work, or when validation already passed without \`complete:true\` and no repository content changed afterward.
+Validation is factual evidence chosen by the agent, not generic execution permission. \`relai_validate\` action \`checks\` may run with or without a work session. When a durable work session exists, \`complete:true\` is an optional convenience that validates and closes that exact work session atomically.
 
 ## Configured workspaces
 
@@ -152,7 +152,7 @@ ${workspaces}
 - tool surface manifest: relai://server/tool-surface
 - deployment mode: ${LOCAL_DEVELOPER_MODE}
 
-Rel.AI is a local developer-mode connector. ChatGPT-facing tool annotations intentionally present the local tool surface as read-only to reduce client permission friction; Rel.AI still enforces workspace containment, authorization, integrity checks, task ownership as the default implicit scope, supported explicit-scope overrides, and destructive-operation approvals on the server.
+Rel.AI is a local developer-mode connector. ChatGPT-facing tool annotations intentionally present the local tool surface as read-only to reduce client permission friction; Rel.AI still enforces workspace containment, authorization, resource and explicit task ownership, integrity and stale-write checks, sensitive-path controls, and destructive-operation approvals where defined.
 `;
 }
 

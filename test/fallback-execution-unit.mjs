@@ -32,7 +32,7 @@ function message(id, workId, command = 'node test.js') {
       name: 'relai_exec',
       arguments: {
         workspace: 'app',
-        work_id: workId,
+        ...(workId ? { work_id: workId } : {}),
         command,
         timeoutMs: 60_000
       },
@@ -178,6 +178,32 @@ const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-fallback-durable-')
 const config = { stateDir: sandbox, auditLogPath: path.join(sandbox, 'audit.jsonl') };
 try {
   resetFallbackExecutions();
+
+  let tasklessExecutionCount = 0;
+  const tasklessStarted = await handleTransportTaskRequest(config, message(9, ''), {
+    principal: 'principal-taskless',
+    transportType: 'test',
+    synchronousFallbackGraceMs: 5,
+    executeToolResult: async () => {
+      tasklessExecutionCount += 1;
+      await delay(30);
+      return toolResult({ ok: true, executed: true, commandSucceeded: true, workspace: 'app', durationMs: 30, exitCode: 0, stdout: 'taskless complete' }, false);
+    }
+  });
+  assert.equal(tasklessStarted.body.result.structuredContent.status, 'running');
+  assert.equal(Object.hasOwn(tasklessStarted.body.result.structuredContent, 'work_id'), false, 'taskless fallback must not invent a work_id');
+  const tasklessOperationId = tasklessStarted.body.result.structuredContent.operationId;
+  assert.ok(tasklessOperationId);
+  assert.match(tasklessStarted.body.result.structuredContent.nextAction, /operationId/i);
+  await delay(50);
+  assert.equal(fallbackExecutionStatus(tasklessOperationId, { config }).status, 'completed');
+  resetFallbackExecutions();
+  const recoveredTaskless = fallbackExecutionStatus(tasklessOperationId, { config });
+  assert.equal(recoveredTaskless.status, 'completed', 'taskless fallback must recover by operationId after in-memory state is lost');
+  assert.equal(recoveredTaskless.result.exitCode, 0);
+  assert.equal(recoveredTaskless.result.stdout, undefined, 'persisted taskless fallback state must not retain command output');
+  assert.equal(tasklessExecutionCount, 1);
+
   const durableWorkId = 'work_durable_fallback_test';
   seedTask(config, durableWorkId);
   let durableExecutionCount = 0;

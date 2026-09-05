@@ -160,7 +160,6 @@ function safeEqual(left, right) {
 }
 
 export {
-  ARTIFACT_MAX_BYTES,
   ARTIFACT_RESOURCE_TEMPLATE,
   createArtifactResourceLink,
   isArtifactResourceUri,

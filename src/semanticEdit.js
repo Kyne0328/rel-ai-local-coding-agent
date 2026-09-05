@@ -148,4 +148,4 @@ function semanticError(code, message) {
   return error;
 }
 
-export { MIN_SEMANTIC_CONFIDENCE, resolveSymbolEdit };
+export { resolveSymbolEdit };

@@ -1,6 +1,6 @@
 import { esc } from '../utils.js';
 
-export const ICONS = Object.freeze({
+const ICONS = Object.freeze({
   add: '<path d="M12 5v14M5 12h14"/>',
   check: '<path d="m5 12 4 4 10-10"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',

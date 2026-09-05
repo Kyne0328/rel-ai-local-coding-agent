@@ -85,37 +85,24 @@
 .settings-validation-row { @apply flex min-w-0 items-center justify-between gap-3 border-b px-3 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
 .settings-validation-row > div { @apply grid min-w-0 gap-0.5; }
 .settings-validation-row > div span { @apply text-[12px]; overflow-wrap: anywhere; color: var(--ui-text-secondary); }
-.settings-memory-privacy { @apply max-w-4xl; }
-.settings-memory-form { @apply grid items-end gap-3 rounded-lg p-3; grid-template-columns: minmax(260px,1fr) minmax(220px,.45fr) auto; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
-.settings-memory-field { @apply grid min-w-0 gap-1.5; }
-.settings-memory-field > span { @apply text-[12px] font-semibold; }
-.settings-memory-field input, .settings-memory-field select { @apply min-w-0; }
-.settings-memory-add { @apply min-h-11 whitespace-nowrap; }
-.settings-memory-section-head { @apply flex min-h-8 items-center justify-between gap-3; }
-.settings-memory-section-head > div { @apply flex items-center gap-2; }
-.settings-memory-section-head strong { @apply text-[13px]; }
+.settings-learning-section-head { @apply flex min-h-8 items-center justify-between gap-3; }
+.settings-learning-section-head > div { @apply flex items-center gap-2; }
+.settings-learning-section-head strong { @apply text-[13px]; }
 .settings-count { @apply inline-flex min-h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-[11px] font-semibold; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); }
 .settings-list-count { @apply text-[12px]; color: var(--ui-text-secondary); }
-.settings-memory-list { @apply grid gap-2; }
-.settings-memory-row { @apply flex min-w-0 items-start justify-between gap-3 rounded-lg px-3 py-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
-.settings-memory-row > div:first-child { @apply grid min-w-0 gap-1; }
-.settings-memory-row span { @apply text-[13px] leading-5; overflow-wrap: anywhere; }
-.settings-memory-row small { @apply text-[12px] leading-5; color: var(--ui-text-secondary); overflow-wrap: anywhere; }
-.settings-memory-row > button { @apply min-h-11 shrink-0; }
-.settings-memory-empty { @apply rounded-lg px-3 py-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.settings-learning-list { @apply grid gap-2; }
+.settings-learning-row { @apply flex min-w-0 items-start justify-between gap-3 rounded-lg px-3 py-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.settings-learning-row > div:first-child { @apply grid min-w-0 gap-1; }
+.settings-learning-row span { @apply text-[13px] leading-5; overflow-wrap: anywhere; }
+.settings-learning-row small { @apply text-[12px] leading-5; color: var(--ui-text-secondary); overflow-wrap: anywhere; }
+.settings-learning-row > button { @apply min-h-11 shrink-0; }
+.settings-learning-empty { @apply rounded-lg px-3 py-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .settings-learning-explanation { @apply grid max-w-4xl gap-1 rounded-lg px-3 py-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .settings-learning-explanation strong { @apply text-[13px]; }
 .settings-learning-explanation span { @apply text-[12px] leading-5; color: var(--ui-text-secondary); }
-.settings-disclosure { @apply overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); }
-.settings-disclosure > summary { @apply flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-[12px] font-semibold; }
-.settings-disclosure[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
-.settings-disclosure .settings-memory-list { @apply p-3; }
-.settings-procedure-title { @apply font-semibold; }
-.settings-procedure-details { @apply mt-1; }
-.settings-procedure-details > summary { @apply w-fit cursor-pointer text-[12px] font-semibold; color: var(--ui-text-secondary); }
-.settings-procedure-details ol { @apply ml-5 mt-2 grid gap-1 pl-0 text-[12px] leading-5; color: var(--ui-text-secondary); }
-.settings-memory-clear-row { @apply items-start; }
-.settings-memory-clear-row > button { @apply min-h-11 shrink-0; }
+.settings-skill-title { @apply font-semibold; }
+.settings-learning-clear-row { @apply items-start; }
+.settings-learning-clear-row > button { @apply min-h-11 shrink-0; }
 .settings-advanced { @apply max-w-5xl; }
 
 .appearance-preview { @apply grid gap-3 rounded-xl p-3; grid-template-columns: repeat(2,minmax(0,1fr)); background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
@@ -165,10 +152,8 @@
 @media (max-width: 520px) {
   .appearance-preview, .settings-fact-grid, .desktop-lifecycle-facts { grid-template-columns: 1fr; }
   .settings-fact-grid > div, .desktop-lifecycle-facts > div { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
-  .settings-validation-row, .application-update-summary, .settings-memory-row, .settings-memory-clear-row, .local-data-summary { @apply flex-col items-start; }
+  .settings-validation-row, .application-update-summary, .settings-learning-row, .settings-learning-clear-row, .local-data-summary { @apply flex-col items-start; }
   .local-data-summary small { @apply text-left; }
-  .settings-memory-form { grid-template-columns: 1fr; }
-  .settings-memory-add { @apply w-full; }
   .about-detail-value { @apply w-full text-left; }
   .settings-save-row { @apply flex-col items-stretch; }
   .settings-save-actions { @apply justify-end; }

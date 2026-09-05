@@ -308,4 +308,4 @@ async function pathExistsAsync(file) {
   }
 }
 
-export { DurableStateError, readJsonFile, readJsonFileAsync, writeJsonAtomic, writeJsonAtomicAsync, writeTextAtomic, writeTextAtomicAsync };
+export { DurableStateError, promoteFile, readJsonFile, readJsonFileAsync, writeJsonAtomic, writeJsonAtomicAsync, writeTextAtomic, writeTextAtomicAsync };

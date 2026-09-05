@@ -107,17 +107,13 @@ try {
   const packageJson = JSON.parse(packageBefore);
   packageJson.description = 'validation config changed after checks';
   fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
-  await assert.rejects(
-    () => callTool('relai_work', {
-      action: 'finish', workspace: 'app', work_id: configTask.work_id,
-      summary: 'Validation configuration changes must invalidate completion.'
-    }, context),
-    error => error?.code === 'TASK_REVALIDATION_REQUIRED'
-  );
-  fs.writeFileSync(packagePath, packageBefore);
-  await callTool('relai_work', {
-    action: 'cancel', workspace: 'app', work_id: configTask.work_id, reason: 'Configuration invalidation coverage complete.'
+  const staleCompletion = await callTool('relai_work', {
+    action: 'finish', workspace: 'app', work_id: configTask.work_id,
+    summary: 'Validation configuration changed after checks; completion records stale evidence instead of blocking.'
   }, context);
+  assert.equal(staleCompletion.completionKnown, true);
+  assert.equal(staleCompletion.validationStatus, 'stale');
+  fs.writeFileSync(packagePath, packageBefore);
 } finally {
   await flushAuditWrites();
   await flushTaskHistoryPersistence();

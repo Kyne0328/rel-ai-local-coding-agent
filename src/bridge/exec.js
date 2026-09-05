@@ -7,6 +7,7 @@ import { runProcess } from '../process.js';
 import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { getCurrentTaskAbortSignal } from '../toolActivity.js';
 import { combineAbortSignals } from '../abortSignals.js';
+import { outputSpillOwner } from '../outputSpill.js';
 import { runSpan } from '../telemetry.js';
 import { isReusableDependencyPath } from '../reusableDependencies.js';
 import { createCollectionPathFilter, isPathInside } from '../safety.js';
@@ -325,7 +326,11 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
       timeout: timeoutMs,
       maxOutputBytes,
       signal,
-      outputSpillTaskId: String(context.taskId || args.work_id || ''),
+      outputSpillTaskId: outputSpillOwner({
+        taskId: context.taskId || args.work_id,
+        workspace: workspace.alias,
+        principal: context.principal
+      }),
       ...(input !== undefined ? { input } : {})
     },
     config

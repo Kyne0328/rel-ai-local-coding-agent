@@ -23,7 +23,7 @@ import { readProjectInstructions } from "./projectInstructions.js";
 import { discoverSkills, readDiscoveredSkill } from './skillDiscovery.js';
 import { discoverRepositoryTopology } from "./workflow/topology.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
-import { readOutputSpill } from './outputSpill.js';
+import { outputSpillOwner, readOutputSpill } from './outputSpill.js';
 import { createArtifactResourceLink } from './artifactResources.js';
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
@@ -70,7 +70,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit for coherent repository changes; keep runChecks explicit and follow returned workflow guidance for validation cadence", "Reuse exact fresh validation evidence; when required evidence and task-owned review are current, finish the same work_id once"],
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit for coherent repository changes; validation is explicit evidence chosen by the agent", "Use work_id only when durable task attribution, recovery, or task-scoped ownership is useful"],
     writeGuidance: workspaceWriteGuidance(),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
@@ -178,7 +178,12 @@ async function readSpilledOutput(workspace, config, args, context) {
   if (args.skill || (Array.isArray(args.paths) && args.paths.length) || (Array.isArray(args.ranges) && args.ranges.length)) {
     throw new Error('relai_read outputRef cannot be combined with paths, ranges, or skill.');
   }
-  const spill = readOutputSpill(config, context.taskId || args.work_id, args.outputRef);
+  const spillOwner = outputSpillOwner({
+    taskId: context.taskId || args.work_id,
+    workspace: workspace.alias,
+    principal: context.principal
+  });
+  const spill = readOutputSpill(config, spillOwner, args.outputRef);
   const defaultMaxBytes = context.connector ? DEFAULT_CONNECTOR_READ_BYTES : DEFAULT_MAX_READ_BYTES;
   const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
   const data = await fs.promises.readFile(spill.file);

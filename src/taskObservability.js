@@ -65,35 +65,6 @@ function titleForTool(tool, details = {}) {
   return titles[String(tool || '')] || '';
 }
 
-function projectWorkflowSummary(workflow) {
-  if (!workflow || typeof workflow !== 'object') return undefined;
-  const top = Array.isArray(workflow.recommendedActions) ? workflow.recommendedActions[0] : null;
-  const stage = cleanText(workflow.stage, 40);
-  const risk = cleanText(workflow.risk?.level || workflow.risk, 20);
-  const boundary = cleanText(workflow.boundary?.level || workflow.boundary, 30);
-  const recommendedAction = cleanText(top?.reason || top?.action || workflow.recommendedAction, 300);
-  if (!stage && !risk && !boundary && !recommendedAction) return undefined;
-  return {
-    stage,
-    risk,
-    boundary,
-    recommendedAction,
-    evidenceFresh: Math.max(0, Number(workflow.evidence?.fresh ?? workflow.evidenceFresh ?? 0) || 0),
-    evidenceStale: Math.max(0, Number(workflow.evidence?.stale ?? workflow.evidenceStale ?? 0) || 0),
-    repeatCount: Math.min(99, Math.max(0, Number(workflow.repeatCount || 0) || 0))
-  };
-}
-function workflowActivityMetadata(workflow) {
-  if (!workflow || typeof workflow !== 'object') return {};
-  const top = Array.isArray(workflow.recommendedActions) ? workflow.recommendedActions[0] : null;
-  return sanitizeActivityMetadata({
-    workflowStage: cleanText(workflow.stage, 40),
-    workflowRisk: cleanText(workflow.risk?.level, 20),
-    workflowBoundary: cleanText(workflow.boundary?.level, 30),
-    workflowNextAction: cleanText(top?.reason || top?.action, 300),
-    workflowRepeatCount: Math.min(99, Math.max(0, Number(workflow.repeatCount || 0)))
-  });
-}
 function buildToolActivityDetails(name, args = {}, value = null, error = null, options = {}) {
   const toolOk = error == null && value?.ok !== false;
   const operationOk = toolOk && !(name === OP.EXEC && value?.commandSucceeded === false);
@@ -103,7 +74,7 @@ function buildToolActivityDetails(name, args = {}, value = null, error = null, o
   const normalizedError = error ? normalizeActivityError(error) : value?.ok === false
     ? normalizeActivityError({ message: value.error || value.message || `${name} failed`, code: value.errorCode })
     : undefined;
-  const result = resultForTool(name, args, value, operationOk, normalizedError);
+  const result = resultForTool(name, args, value, operationOk);
   const summary = summaryForTool(name, args, value, normalizedError, operation, result);
   const progress = progressForTool(name, args, value, operationOk, options.phase);
   const command = name === OP.EXEC ? commandDisplayForInvocation(args) : '';
@@ -114,9 +85,7 @@ function buildToolActivityDetails(name, args = {}, value = null, error = null, o
     status,
     title: operation || titleForTool(name, args) || 'Rel.AI tool operation',
     summary,
-    currentStage: isValidationBlock(normalizedError)
-      ? 'Validation required'
-      : stageForTool(name, status),
+    currentStage: stageForTool(name, status),
     currentActivity: summary,
     target,
     result,
@@ -356,13 +325,11 @@ function searchMatchCountText(value) {
   return `${qualifier}${count} match${count === 1 ? '' : 'es'}`;
 }
 
-function resultForTool(name, args, value, ok, error = null) {
+function resultForTool(name, args, value, ok) {
   const changed = changedFiles(value);
   const affectedItemCount = affectedCount(value, args, changed);
   const warningCount = Number(value?.warningCount || value?.warnings?.length || 0);
-  let outcome = isValidationBlock(error)
-    ? 'Final validation required'
-    : ok ? 'Completed successfully' : 'Failed';
+  let outcome = ok ? 'Completed successfully' : 'Failed';
   if (name === OP.READ && affectedItemCount) outcome = `Read ${affectedItemCount} item${affectedItemCount === 1 ? '' : 's'}`;
   else if ([OP.SEARCH_TEXT, OP.SEARCH_SEMANTIC].includes(name) && Number.isFinite(value?.matchCount)) outcome = `Found ${searchMatchCountText(value)}`;
   else if (changed.length) outcome = `Updated ${changed.length} file${changed.length === 1 ? '' : 's'}`;
@@ -372,9 +339,6 @@ function resultForTool(name, args, value, ok, error = null) {
 }
 
 function summaryForTool(name, args, value, error, operation, result) {
-  if (isValidationBlock(error)) {
-    return `Task completion paused: ${error.message}`;
-  }
   if (error) return `${operation || titleForTool(name, args) || 'Tool execution'} failed: ${error.message}`;
   if (name === OP.WORK_BEGIN) return args?.title
     ? `Started logical task “${sanitizeDisplayText(args.title, 120)}”.`
@@ -405,14 +369,9 @@ function summaryForTool(name, args, value, error, operation, result) {
   return cleanText(result?.outcome, MAX_SUMMARY_LENGTH) || `${operation || titleForTool(name, args) || 'Tool operation'} completed.`;
 }
 
-function isValidationBlock(error) {
-  return /VALIDATION_REQUIRED|TASK_PERSISTENCE_CONFLICT/.test(String(error?.code || ''));
-}
-
 function errorStatus(error) {
   const code = String(error?.code || '');
-  if (isValidationBlock(error)) return 'blocked';
-  if (/APPROVAL|AUTHORIZATION/.test(code)) return 'blocked';
+  if (/TASK_PERSISTENCE_CONFLICT|APPROVAL|AUTHORIZATION/.test(code)) return 'blocked';
   if (/CANCEL/.test(code)) return 'cancelled';
   return 'failed';
 }
@@ -556,6 +515,7 @@ function sanitizeTaskRecord(record) {
   if (value.semanticProgress && typeof value.semanticProgress === 'object') value.semanticProgress = sanitizeStructuredValue(value.semanticProgress, 0);
   if (value.correlation && typeof value.correlation === 'object') value.correlation = sanitizeStructuredValue(value.correlation, 0);
   if (value.backgroundOperation && typeof value.backgroundOperation === 'object') value.backgroundOperation = sanitizeStructuredValue(value.backgroundOperation, 0);
+  delete value.workflow;
   return value;
 }
 
@@ -564,7 +524,7 @@ function sanitizeTaskRecordForProjection(record) {
   if (!value || typeof value !== 'object') return value;
   const projected = { ...value };
   delete projected.workflowEvidence;
-  if (projected.workflow) projected.workflow = projectWorkflowSummary(projected.workflow);
+  delete projected.workflow;
   if (projected.backgroundOperation && typeof projected.backgroundOperation === 'object') {
     const { signature: _signature, ...backgroundOperation } = projected.backgroundOperation;
     projected.backgroundOperation = backgroundOperation;
@@ -629,8 +589,6 @@ export {
 
   buildSafeActivityProjection,
   buildToolActivityDetails,
-  workflowActivityMetadata,
-
   completeProgress,
   createActivityEvent,
   deriveTaskTitle,

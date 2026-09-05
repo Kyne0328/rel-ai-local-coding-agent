@@ -168,7 +168,6 @@ export {
   setSpanAttributes,
   shutdownTelemetry,
   telemetryStatus,
-  telemetryEnabled,
   sanitizeAttributes,
   summarizeCommandForTelemetry,
   telemetrySampleRatio,

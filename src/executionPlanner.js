@@ -86,7 +86,7 @@ function validateBatchEdits(workspace, edits) {
     throw new TypeError('relai_edit edits must contain at least one structured edit.');
   }
   if (edits.length > MAX_BATCH_EDITS) {
-    throw new Error(`relai_edit accepts at most ${MAX_BATCH_EDITS} structured batch edits. Keep a larger repository-wide change together as one updateText patch; if one request is too large, stage updateText chunks and commit once.`);
+    throw new Error(`relai_edit accepts at most ${MAX_BATCH_EDITS} structured batch edits. Keep a larger repository-wide change together as one updateText patch when it fits the request limit; otherwise split it at a coherent file or feature boundary.`);
   }
 
   let serialized;
@@ -100,7 +100,7 @@ function validateBatchEdits(workspace, edits) {
   }
   const inputBytes = Buffer.byteLength(serialized, 'utf8');
   if (inputBytes > MAX_BATCH_INPUT_BYTES) {
-    throw new Error(`relai_edit structured batch input is ${inputBytes} bytes; max is ${MAX_BATCH_INPUT_BYTES}. Keep a repository-wide change together as updateText; if one request is too large, stage updateText chunks and commit once.`);
+    throw new Error(`relai_edit structured batch input is ${inputBytes} bytes; max is ${MAX_BATCH_INPUT_BYTES}. Keep a repository-wide change together as updateText when it fits the request limit; otherwise split it at a coherent file or feature boundary.`);
   }
 
   let replacementCount = 0;
@@ -570,7 +570,7 @@ async function planEdit(workspace, config, args, context = {}) {
   return _handleSingleEdit(workspace, config, args);
 }
 
-const EDIT_FORM_GUIDANCE = 'Use exactly one form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { symbolEdit:{ action, symbol, content, path? } } for an indexed structural symbol edit, { path, content } for a complete text file, { path, file } for a native ChatGPT file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
+const EDIT_FORM_GUIDANCE = 'Use exactly one public edit form: { semantic:{ action:"rename", path, line, column, newName } } for language-server rename, { symbolEdit:{ action, symbol, content, path? } } for an indexed structural symbol edit, { path, content } for a complete text file, { path, file } for a native ChatGPT file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, or { envAction, ... } for secret-safe environment work.';
 
 function assertSupportedEditForm(args = {}) {
   const has = (field) => Object.hasOwn(args, field);

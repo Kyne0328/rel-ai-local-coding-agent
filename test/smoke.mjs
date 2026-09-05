@@ -21,8 +21,9 @@ try {
     throw new Error('stdio must advertise native Tasks support through the task-aware transport');
   }
   const serverInstructions = String(discovery.result?.instructions || '');
-  if (!/explicit task-completion contract/i.test(serverInstructions)) {
-    throw new Error('server/discover did not advertise the explicit final-completion invariant');
+  if (!/work_id is optional durable attribution/i.test(serverInstructions)
+      || !/validation is factual evidence, not execution permission/i.test(serverInstructions)) {
+    throw new Error('server/discover did not advertise the optional-task and factual-validation invariants');
   }
   if (/Inspect relevant files|Validate after changes|recovery guidance/i.test(serverInstructions)) {
     throw new Error('server/discover must not duplicate specialist workflow tactics in global instructions');

@@ -134,37 +134,6 @@ assert.equal(blockedTask?.status, 'blocked');
 assert.equal(blockedTask?.currentStage, 'Blocked');
 assert.equal(blockedTask?.events[0]?.status, 'blocked');
 
-const revalidationTracker = createToolActivityTracker({ idleMs: 60_000 });
-const finishRevalidation = revalidationTracker.beginConnectorToolCall({
-  tool: 'relai_work', internalOperation: 'work.finish',
-  workspace: 'repo',
-  scopeId: 'revalidation-test',
-  createTask: true
-});
-finishRevalidation({
-  ok: false,
-  error: 'Task completion is paused because code changed after validation.',
-  activity: {
-    status: 'blocked',
-    title: 'Finalizing logical task',
-    summary: 'Task completion paused: final validation is required.',
-    currentStage: 'Validation required',
-    currentActivity: 'Task completion paused: final validation is required.',
-    progress: { mode: 'indeterminate', label: 'Final validation required' },
-    error: { code: 'TASK_REVALIDATION_REQUIRED', message: 'Final validation is required.', retryable: true },
-    metadata: { errorCode: 'TASK_REVALIDATION_REQUIRED', retryable: true },
-    result: { outcome: 'Final validation required' }
-  }
-});
-const revalidationTask = revalidationTracker.getToolActivity().tasks[0];
-assert.equal(revalidationTask?.status, 'blocked');
-assert.equal(revalidationTask?.currentStage, 'Validation required');
-assert.equal(revalidationTask?.progress?.label, 'Final validation required');
-assert.equal(revalidationTask?.lastOutcome, 'blocked');
-assert.equal(revalidationTask?.failures, 0);
-assert.equal(revalidationTask?.events[0]?.status, 'blocked');
-assert.equal(revalidationTask?.events[0]?.result?.outcome, 'Final validation required');
-
 const volumeTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishVolumeStart = volumeTracker.beginConnectorToolCall({
   tool: 'relai_work', internalOperation: 'work.begin',
@@ -214,6 +183,19 @@ const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_work',
 assert.notEqual(secondTask.taskId, startedTask.taskId, 'separate explicit starts remain isolated even on one transport');
 secondTask();
 reconnectTracker.reset();
+
+const tasklessTracker = createToolActivityTracker({ idleMs: 60_000 });
+const tasklessEvents = [];
+tasklessTracker.onToolActivity(event => tasklessEvents.push(event));
+const tasklessEdit = tasklessTracker.beginConnectorToolCall({
+  tool: 'relai_edit', internalOperation: 'edit', workspace: 'repo', scopeId: 'workspace-edit', trackTask: false
+});
+assert.equal(tasklessEdit.taskId, '', 'taskless workspace operations must not manufacture a task identity');
+assert.equal(tasklessTracker.getToolActivity().tasks.length, 0, 'taskless workspace operations must not create Planning/Inactive task rows');
+tasklessEdit({ ok: true });
+assert.equal(tasklessEvents.some(event => event.phase === 'started' && event.activityEvent && !event.activityEvent.taskId), true, 'taskless operations must still emit live Activity events');
+assert.equal(tasklessEvents.some(event => event.phase === 'finished' && event.activityEvent?.status === 'succeeded'), true, 'taskless operations must emit completed Activity evidence');
+tasklessTracker.reset();
 
 const warningCompletionTracker = createToolActivityTracker({ idleMs: 60_000 });
 const warningStart = warningCompletionTracker.beginConnectorToolCall({

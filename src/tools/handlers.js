@@ -20,7 +20,7 @@ import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { releaseTaskChangedFiles, taskCommitOwnership, taskOwnedChangedFiles } from '../taskIntegrity.js';
-import { readRecentWorkflowEvidence, readRelevantTaskEpisodes, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { readRecentWorkflowEvidence, readRelevantTaskEpisodes } from '../taskHistoryStore.js';
 import { selectRelevantSkills } from '../skillDiscovery.js';
 import { buildTaskContinuity, rankBootstrapGroups } from '../context/taskContinuity.js';
 import { knowledgeSettings } from '../knowledgeStore.js';
@@ -164,7 +164,6 @@ function withWorkflowTaskContext(config, workspace, args, context = {}) {
     ? [...requestState.integrity.taskOwnedChangedFiles]
     : [];
   let packagePaths = [];
-  let impactedPaths = [];
   let readEvidence = [];
   try {
     if (!requestState?.integrity) owned = taskOwnedChangedFiles(config, taskId, workspace.alias);
@@ -173,20 +172,13 @@ function withWorkflowTaskContext(config, workspace, args, context = {}) {
     packagePaths = [...new Set(owned.map(file => packageForPath(topology, file)?.path).filter(value => value && value !== '.'))];
   } catch {}
   try {
-    const session = requestState?.session || readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false });
-    if (requestState && !requestState.session) requestState.session = session;
-    impactedPaths = Array.isArray(session?.workflow?.boundary?.impactedPaths)
-      ? session.workflow.boundary.impactedPaths
-      : Array.isArray(session?.workflow?.impactedPaths) ? session.workflow.impactedPaths : [];
-  } catch {}
-  try {
     const evidence = requestState?.workflowContextEvidence || readRecentWorkflowEvidence(config, taskId, 30);
     if (requestState && !requestState.workflowContextEvidence) requestState.workflowContextEvidence = evidence;
     readEvidence = evidence
       .flatMap(receipt => Array.isArray(receipt?.metadata?.reads) ? receipt.metadata.reads : [])
       .slice(-100);
   } catch {}
-  return { ...args, _workflowContext: { taskOwnedPaths: owned, packagePaths, impactedPaths, readEvidence } };
+  return { ...args, _workflowContext: { taskOwnedPaths: owned, packagePaths, readEvidence } };
 }
 
 function withTaskOwnedReviewContext(config, workspace, args, context = {}) {

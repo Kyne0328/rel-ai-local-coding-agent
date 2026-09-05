@@ -284,7 +284,7 @@ function renderInactiveSessionCard(card, task) {
   if (attention) {
     mark = '!';
     title = task.status === 'blocked'
-      ? workSessionStateView(task).label === 'Final validation required' ? 'Last task needs final validation' : 'Last task was blocked'
+      ? 'Last task was blocked'
       : task.status === 'validation_failed'
         ? 'Last task needs attention'
         : 'Last task failed';

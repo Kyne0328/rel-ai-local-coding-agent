@@ -159,9 +159,21 @@ try {
   assert.equal(unavailableTracking.mutationGeneration, 0, 'read-only exec must not become a mutation only because tracking is unavailable');
   assert.deepEqual(unavailableTracking.taskOwnedChangedFiles, []);
 
+  const beforeTaskless = readWorkspaceIntegrity(config, 'app');
+  assert.equal(beforeTaskless.generation, 8);
+  fs.writeFileSync(path.join(workspacePath, 'task-one.js'), 'export const one = "taskless";\n');
+  await recordTaskIntegrityEvent(config, {
+    workspace: 'app',
+    tool: 'edit',
+    ok: true,
+    ts: new Date().toISOString(),
+    changedFiles: ['task-one.js']
+  });
   const workspaceState = readWorkspaceIntegrity(config, 'app');
-  assert.equal(workspaceState.generation, 8);
-  assert.equal(workspaceState.lastMutation.taskId, embeddedValidationTask);
+  assert.equal(workspaceState.generation, 9, 'taskless mutations must advance the same authoritative workspace generation');
+  assert.equal(workspaceState.lastMutation.taskId, '', 'taskless mutations must not invent a logical task owner');
+  assert.ok(workspaceState.uncommittedOwners['task-one.js']?.includes('@ambient'), 'taskless mutations must remain ambient/unowned');
+  assert.ok(taskIntegrity.taskCommitOwnership(config, taskOne, 'app').conflictingFiles.includes('task-one.js'), 'taskless mutation of a task-owned path must become an ownership conflict');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

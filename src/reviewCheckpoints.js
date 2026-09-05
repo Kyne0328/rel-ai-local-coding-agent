@@ -96,4 +96,4 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-export { CHECKPOINT_ID_PATTERN, createReviewCheckpoint, replayReviewCheckpoint };
+export { createReviewCheckpoint, replayReviewCheckpoint };

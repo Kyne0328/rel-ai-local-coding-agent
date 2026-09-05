@@ -74,7 +74,7 @@ function startTask(workspace, args = {}) {
     title: String(args.title || context.title || '').trim() || undefined,
     objective: String(args.objective || context.objective || '').trim() || undefined,
     intent: classifyTaskIntent(args.objective || context.objective),
-    nextAction: 'Use the bootstrap context for the first action, then use each returned workflow recommendation as the default calibration. Pass this work_id on every work-scoped Rel.AI call. If host context is compacted or reconnected, relai_work status restores compact task state; hard runtime errors remain authoritative.'
+    nextAction: 'Use this work_id on operations that should belong to this durable session. Omit it for workspace- or resource-scoped operations; Rel.AI never guesses an omitted task. relai_work status restores compact durable task state after reconnect or context compaction.'
   };
 }
 

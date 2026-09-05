@@ -35,7 +35,8 @@ async function relaiStatus(config, args = {}, context = {}) {
   const workspaceAliases = context?.connector === true
     ? authorizedWorkspaceAliases(context.principal, configuredWorkspaceAliases)
     : configuredWorkspaceAliases;
-  const backgroundOperation = args.work_id ? fallbackExecutionStatus(args.work_id, { config }) : null;
+  const backgroundReference = String(args.operationId || args.work_id || '').trim();
+  const backgroundOperation = backgroundReference ? fallbackExecutionStatus(backgroundReference, { config }) : null;
   let selectedWorkspace = null;
   if (args.workspace) {
     try {
@@ -90,6 +91,7 @@ async function relaiStatus(config, args = {}, context = {}) {
     ...(localDiagnostics ? { scripts: sortedKeys(scripts), ci } : {}),
     workspace: selectedWorkspace,
     ...(args.work_id ? { work_id: String(args.work_id) } : {}),
+    ...(args.operationId ? { operationId: String(args.operationId) } : {}),
     ...(args.work_id ? { task: compactSessionSummary(taskSession || {}, { continuity: taskContinuity }) } : {}),
     ...(activeRelatedWork.length ? { activeRelatedWork } : {}),
     ...(backgroundOperation ? { backgroundOperation } : {}),

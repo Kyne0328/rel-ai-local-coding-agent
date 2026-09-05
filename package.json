@@ -27,8 +27,7 @@
   "bin": {
     "rel-ai-mcp": "bin/rel-ai-mcp.js",
     "relai-mcp-config": "bin/relai-mcp-config.js",
-    "rel-ai-mcp-http": "bin/rel-ai-mcp-http.js",
-    "rel-ai-mcp-doctor": "bin/relai-mcp-config.js"
+    "rel-ai-mcp-http": "bin/rel-ai-mcp-http.js"
   },
   "scripts": {
     "start": "node bin/rel-ai-mcp.js",
@@ -97,7 +96,6 @@
     "test:observability-browser": "node test/dashboard-browser-acceptance.mjs",
     "benchmark:observability": "node --expose-gc scripts/observability-benchmark.mjs",
     "benchmark:observability:strict": "node --expose-gc scripts/observability-benchmark.mjs --enforce-thresholds",
-    "benchmark:workflow": "node scripts/benchmark-workflow-intelligence.mjs",
     "benchmark:internal-parallelism": "node scripts/benchmark-internal-parallelism.mjs",
     "benchmark:repository-index": "node scripts/repository-intelligence-benchmark.mjs --files 100000 --json",
     "benchmark:tool-orchestration": "node scripts/benchmark-exec-phases.mjs",

@@ -53,14 +53,6 @@ function validateSkillDocument(source, expectedName = '') {
   return parsed;
 }
 
-function skillMarkdown({ name, description, body } = {}) {
-  const identity = validateSkillIdentity({ name, description });
-  if (!identity.ok) throw new Error(identity.errors.join(' '));
-  const content = String(body || '').trim();
-  if (!content) throw new Error('Skill body must not be empty.');
-  return `---\nname: ${identity.name}\ndescription: ${JSON.stringify(identity.description)}\n---\n\n${content}\n`;
-}
-
 function unquote(value) {
   const text = String(value || '').trim();
   if (text.length >= 2 && text.startsWith('"') && text.endsWith('"')) {
@@ -75,8 +67,6 @@ export {
   MAX_SKILL_NAME_LENGTH,
   MIN_SKILL_DESCRIPTION_LENGTH,
   SKILL_NAME_PATTERN,
-  parseSkillDocument,
-  skillMarkdown,
   validateSkillDocument,
   validateSkillIdentity
 };

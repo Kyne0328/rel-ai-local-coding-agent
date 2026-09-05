@@ -17,15 +17,7 @@ const sanitized = sanitizeTaskRecordForProjection({
     recommendedActions: [{ tool: 'relai_validate', action: 'checks', reason: 'Run affected frontend test', args: { command: 'secret command' } }]
   }
 });
-assert.deepEqual(sanitized.workflow, {
-  stage: 'verify',
-  risk: 'medium',
-  boundary: 'package',
-  recommendedAction: 'Run affected frontend test',
-  evidenceFresh: 2,
-  evidenceStale: 1,
-  repeatCount: 3
-});
+assert.equal(Object.hasOwn(sanitized, 'workflow'), false, 'obsolete advisory workflow state must not reach the dashboard projection');
 assert.equal(Object.hasOwn(sanitized, 'workflowEvidence'), false, 'dashboard-safe task records must never include raw evidence receipts');
 assert.equal(JSON.stringify(sanitized).includes('secret command'), false);
 assert.equal(JSON.stringify(sanitized).includes('secret/private.js'), false);
@@ -42,9 +34,6 @@ assert.equal(inactiveValidationFailure.terminal, false);
 assert.equal(workSessionStateView({ status: 'inactive', validation: 'failed' }).label, 'Validation failed', 'existing inactive history with failed validation must recover useful context');
 
 const ui = fs.readFileSync('src/ui/features/sessions/index.js', 'utf8');
-assert.match(ui, /workflow\.stage/);
-assert.match(ui, /workflow\.recommendedAction/);
-assert.match(ui, /medium.*high.*critical|medium.*critical.*high|high.*medium.*critical/i);
-assert.match(ui, /resumable/i);
+assert.doesNotMatch(ui, /workflow\.stage|workflow\.recommendedAction/);
 
-console.log('Dashboard workflow summary and resumable inactivity projection tests passed.');
+console.log('Dashboard strips obsolete workflow guidance while preserving resumable inactivity state.');

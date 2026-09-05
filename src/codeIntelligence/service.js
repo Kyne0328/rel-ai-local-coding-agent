@@ -190,4 +190,4 @@ function evidence(primary, supporting = [], fallbackUsed = false, status = null,
 
 const codeIntelligence = createCodeIntelligenceService();
 
-export { codeIntelligence, createCodeIntelligenceService };
+export { codeIntelligence };

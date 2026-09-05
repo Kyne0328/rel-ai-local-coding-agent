@@ -24,7 +24,7 @@ function editErrorHint(toolName, raw, append) {
     return append('Pass occurrence: N to target one match, or extend oldText with surrounding lines until it is unique.');
   }
   if (/exceeds .* bytes/i.test(raw)) {
-    return append('For one complete file, use relai_edit content. For a repository-wide change, keep it together as updateText; if one request is too large, stage updateText chunks and commit once. Use smaller exact replacements only for genuinely local edits.');
+    return append('For one complete file, use relai_edit content. For a repository-wide change, keep it together as updateText when it fits the request limit. Otherwise split the change at a coherent file or feature boundary. Use smaller exact replacements only for genuinely local edits.');
   }
   return null;
 }
