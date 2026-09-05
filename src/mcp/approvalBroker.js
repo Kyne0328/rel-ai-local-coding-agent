@@ -1,7 +1,5 @@
 import * as crypto from 'node:crypto';
 import { inputRequired, acceptedContent } from '@modelcontextprotocol/server';
-import { resolveWorkspace } from '../config.js';
-import { resolveGitPushTarget } from '../repo/gitOps.js';
 import { principalFingerprint } from './principal.js';
 import { toolResult } from './results.js';
 
@@ -14,21 +12,20 @@ function supportsNativeApproval(capabilities = {}) {
   return Object.keys(elicitation).length === 0 || Boolean(elicitation.form);
 }
 
-async function requestApproval({ name, args, requirement, context, rawContext, codec, config }) {
+async function requestApproval({ name, args, requirement, context, rawContext, codec }) {
   const response = acceptedContent(rawContext?.mcpReq?.inputResponses, 'approval');
   const state = rawContext?.mcpReq?.requestState?.();
   const digest = approvalDigest(name, args);
   if (response && state?.kind === 'relai_approval') {
     if (state.tool !== name || state.digest !== digest) return staleApprovalResult();
     if (isNonceUsed(state.nonce)) return approvalReplayResult();
-    const stale = await approvalStateMismatch(state, name, args, config, context);
+    const stale = approvalStateMismatch(state, context);
     if (stale) return stale;
     consumeNonce(state.nonce, state.expiresAt);
     if (response.approved === true) return null;
     return toolResult({ ok: false, cancelled: true, errorCode: 'APPROVAL_DECLINED', error: 'The user declined this operation.' }, true);
   }
 
-  const prepared = await prepareApproval(name, args, requirement, config);
   const expiresAt = Date.now() + APPROVAL_TTL_MS;
   const nonce = crypto.randomUUID();
   const claims = {
@@ -40,8 +37,7 @@ async function requestApproval({ name, args, requirement, context, rawContext, c
     principal: principalFingerprint(context?.principal),
     workId: String(args?.work_id || ''),
     workspace: String(args?.workspace || ''),
-    operation: String(args?.action || ''),
-    push: prepared.push || null
+    operation: String(args?.action || '')
   };
   const grant = await codec.mint(claims, rawContext);
 
@@ -69,35 +65,14 @@ async function requestApproval({ name, args, requirement, context, rawContext, c
     operation: claims.operation || name,
     workspace: claims.workspace,
     work_id: claims.workId,
-    ...(prepared.push || {}),
     nextAction: 'This client cannot show the approval required for this operation. Use a client that supports MCP approval elicitation, then request the operation again.'
   }, true);
 }
 
-async function prepareApproval(name, args, requirement, config) {
-  if (name !== 'relai_publish' || String(args?.action || '') !== 'push') {
-    return { message: requirement.message };
-  }
-  const workspace = resolveWorkspace(config, args.workspace);
-  const push = await resolveGitPushTarget(workspace, config, args);
-  return { message: requirement.message, push };
-}
-
-async function approvalStateMismatch(state, name, args, config, context) {
+function approvalStateMismatch(state, context) {
   if (Date.now() > Number(state.expiresAt || 0)) return expiredApprovalResult();
   if (state.principal !== principalFingerprint(context?.principal)) return principalMismatchResult();
-  if (name !== 'relai_publish' || String(args?.action || '') !== 'push' || !state.push) return null;
-  const workspace = resolveWorkspace(config, args.workspace);
-  const current = await resolveGitPushTarget(workspace, config, args);
-  return samePushTarget(state.push, current) ? null : staleApprovalResult();
-}
-
-function samePushTarget(left = {}, right = {}) {
-  return left.workspace === right.workspace
-    && left.remote === right.remote
-    && left.branch === right.branch
-    && left.head === right.head
-    && Boolean(left.setUpstream) === Boolean(right.setUpstream);
+  return null;
 }
 
 function consumeNonce(nonce, expiresAt) {
@@ -137,6 +112,5 @@ export {
   APPROVAL_TTL_MS,
   approvalDigest,
   requestApproval,
-  samePushTarget,
   supportsNativeApproval
 };

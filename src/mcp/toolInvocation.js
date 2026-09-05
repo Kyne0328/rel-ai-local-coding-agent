@@ -13,8 +13,7 @@ async function invokeRelaiTool(options = {}) {
         args,
         options.context || {},
         options.approvalContext,
-        options.requestStateCodec,
-        options.config
+        options.requestStateCodec
       );
       if (approval) return approval;
     }

@@ -1,7 +1,7 @@
 import { catalogApprovalRequirement } from '../tools/actionCatalog.js';
 import { approvalDigest, requestApproval } from './approvalBroker.js';
 
-async function requireApprovalIfNeeded(name, args, context, rawContext, codec, config) {
+async function requireApprovalIfNeeded(name, args, context, rawContext, codec) {
   const requirement = approvalRequirement(name, args);
   if (!requirement) return null;
   return requestApproval({
@@ -10,8 +10,7 @@ async function requireApprovalIfNeeded(name, args, context, rawContext, codec, c
     requirement,
     context,
     rawContext,
-    codec,
-    config
+    codec
   });
 }
 

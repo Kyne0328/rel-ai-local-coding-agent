@@ -175,8 +175,8 @@ assert.deepEqual(resolvedKeys.sort(), discoveredKeys.sort(), 'every discovered p
 assert.ok(approvalRequirement('relai_changes', { action: 'reset', work_id: 'work_contract' }), 'workspace reset must remain approval-gated without a duplicate confirmation token');
 const resetAction = catalog.find(entry => entry.publicTool === 'relai_changes' && entry.action === 'reset');
 assert.equal(resetAction.fields.includes('confirmation'), false, 'reset must use native approval instead of a model-supplied magic confirmation field');
-assert.ok(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract' }), 'Git push must remain approval-gated');
-assert.equal(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract', dryRun: true }), null, 'Git push dry-run must not request destructive approval');
+assert.equal(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract' }), null, 'Git push must rely on publish capability authorization without a second approval interaction');
+assert.equal(approvalRequirement('relai_publish', { action: 'push', work_id: 'work_contract', dryRun: true }), null, 'Git push dry-run must not request approval');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit' }), null, 'implicit task-owned commit should not require extra approval');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', work_id: 'work_contract', message: 'Contract commit', paths: ['src/selected.js'] }), null, 'explicit local commit scope must not require a second approval prompt');
 assert.equal(approvalRequirement('relai_publish', { action: 'commit', message: 'Taskless explicit commit', paths: ['src/selected.js'] }), null, 'taskless explicit local commits must execute without dashboard approval');
